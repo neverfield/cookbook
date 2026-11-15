@@ -159,12 +159,13 @@ describe("CLI", { concurrency: 4 }, () => {
     assert.equal(report.maturity.outcome, "blocked", "real results exist, and Level 1 still needs a clean container");
     // The .NET services have no test project, a gap no machine can unblock, so the repo is not bootable rather than unproven.
     assert.equal(report.executive.heading, "Level 0 of 4, not bootable; Level 1 is blocked on this machine");
-    const included = report.components.included as { id: string; level: number; capReasons: { state: string }[] }[];
+    const included = report.components.included as { id: string; level: number; capReasons: { state: string; condition?: string }[] }[];
     assert.deepEqual(Object.fromEntries(included.map((c) => [c.id, c.level])), { "admin-web": 0, "buyer-web": 0, "commerce-core": 0, "identity-dev": 0 });
     for (const app of ["buyer-web", "admin-web"]) assert.ok(included.find((c) => c.id === app)!.capReasons.every((x) => x.state === "blocked"), `${app} is held back only by what this machine blocks`);
+    // Whether this machine has a .NET SDK only changes why the services' own installs are blocked here
+    // (a missing tool, or host mode), not that they are.
     for (const service of ["commerce-core", "identity-dev"]) {
-      assert.ok(ev(service, "install blocked: dotnet is not installed on this machine").length > 0, `${service}'s own install is blocked by the missing .NET SDK`);
-      assert.ok(ev(service, "build not run because the install was blocked on this machine").length > 0, `${service}'s build waits on that install`);
+      assert.ok(included.find((c) => c.id === service)!.capReasons.some((x) => x.state === "blocked" && x.condition === "clean.install"), `${service}'s clean install is blocked on this machine`);
       assert.ok(ev(service, "no test command found").length > 0, `${service} has no test project`);
     }
   });

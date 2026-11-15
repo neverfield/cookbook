@@ -66,6 +66,53 @@ function globalJson(tree: string, path: string): string | null {
   return null;
 }
 
+// The one SDK each pinned image ships (`dotnet --list-sdks` at the digest in IMAGES).
+export const IMAGE_SDK: Record<number, string> = { 8: "8.0.428", 9: "9.0.321", 10: "10.0.404" };
+
+type Version = [number, number, number];
+const parse = (v: string): Version | null => {
+  const m = v.match(/^(\d+)\.(\d+)\.(\d+)/);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+};
+const atLeast = (a: Version, b: Version) => a[0] !== b[0] ? a[0] > b[0] : a[1] !== b[1] ? a[1] > b[1] : a[2] >= b[2];
+
+// Whether an installed SDK satisfies global.json's version under its rollForward policy, as the
+// .NET host decides it. The default policy is `patch`: the same feature band (8.0.1xx), at that
+// patch or later.
+export function sdkSatisfies(installed: string, requested: string, rollForward = "patch"): boolean {
+  const have = parse(installed);
+  const want = parse(requested);
+  if (!have || !want) return false;
+  const band = (v: Version) => Math.floor(v[2] / 100);
+  const sameMinor = have[0] === want[0] && have[1] === want[1];
+  switch (rollForward) {
+    case "disable":
+      return installed === requested;
+    case "patch":
+    case "latestPatch":
+      return sameMinor && band(have) === band(want) && have[2] >= want[2];
+    case "feature":
+    case "latestFeature":
+      return sameMinor && atLeast(have, want);
+    case "minor":
+    case "latestMinor":
+      return have[0] === want[0] && atLeast(have, want);
+    case "major":
+    case "latestMajor":
+      return atLeast(have, want);
+    default:
+      return false;
+  }
+}
+
+function sdkPin(tree: string, path: string): { version: string; rollForward: string } | null {
+  const pin = globalJson(tree, path);
+  if (!pin) return null;
+  const text = readText(join(tree, pin));
+  const version = text.match(/"version"\s*:\s*"([^"]+)"/)?.[1];
+  return version ? { version, rollForward: text.match(/"rollForward"\s*:\s*"([^"]+)"/)?.[1] ?? "patch" } : null;
+}
+
 // The SDK global.json pins, else the newest target framework the projects name (net8.0, net9.0).
 export function sdkFor(tree: string, path: string): number {
   const pin = globalJson(tree, path);
@@ -160,6 +207,16 @@ export const dotnet: LanguageDef = {
       return pin && /"version"\s*:/.test(readText(join(tree, pin))) ? { found: [pin], missing: [] } : { found: [], missing: ["the .NET SDK version (the sdk version in global.json)"] };
     },
     commands: (tree, comp) => dotnetCommands(tree, comp.path),
+    // A global.json that pins a feature band the image doesn't ship, such as 10.0.100 under the
+    // default `patch` policy next to the image's 10.0.404, gets that exact SDK added from Microsoft's
+    // install script, as a CI's setup-dotnet would. Where that can't be fetched the install is blocked.
+    setup: (tree, dir) => {
+      const pin = sdkPin(tree, dir);
+      if (!pin || !parse(pin.version)) return [];
+      if (sdkSatisfies(IMAGE_SDK[sdkFor(tree, dir)], pin.version, pin.rollForward)) return [];
+      const v = pin.version;
+      return [{ tool: `dotnet-sdk-${v}`, spec: `dotnet-sdk@${v}`, install: `curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && bash /tmp/dotnet-install.sh --version ${v} --install-dir /usr/share/dotnet --no-path && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet-sdk-${v}` }];
+    },
     testCounts: dotnetTestCounts,
     budget: { commandTimeoutSec: 1200, componentMinutes: 45, mutationRunTimeoutSec: 900 },
     mutation: {

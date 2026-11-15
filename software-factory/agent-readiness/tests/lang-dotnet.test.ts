@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import { discoverContract, imagePlan } from "../skill/agent-readiness/scripts/lib/contract.ts";
-import { SDKS, dotnet, dotnetTestCounts, sdkFor } from "../skill/agent-readiness/scripts/lib/languages/dotnet.ts";
+import { IMAGE_SDK, SDKS, dotnet, dotnetTestCounts, sdkFor, sdkSatisfies } from "../skill/agent-readiness/scripts/lib/languages/dotnet.ts";
 import { ecosystemOf } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
 import { targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
@@ -39,6 +39,30 @@ describe(".NET: the SDK image", () => {
   test("the toolchain condition is the sdk version in global.json", () => {
     assert.deepEqual(hooks.pins(repo({ "global.json": '{"sdk":{"version":"8.0.100"}}' }), "."), { found: ["global.json"], missing: [] });
     assert.deepEqual(hooks.pins(repo({ "A.csproj": proj("net8.0") }), ".").missing, ["the .NET SDK version (the sdk version in global.json)"]);
+  });
+});
+
+describe(".NET: an SDK global.json pins that the image doesn't ship", () => {
+  test("rollForward decides whether the image's SDK will do, as the .NET host decides it", () => {
+    assert.equal(sdkSatisfies("10.0.404", "10.0.100"), false, "the default patch policy stays in the 1xx feature band");
+    assert.equal(sdkSatisfies("10.0.404", "10.0.400"), true);
+    assert.equal(sdkSatisfies("10.0.404", "10.0.405"), false);
+    assert.equal(sdkSatisfies("8.0.428", "8.0.100", "latestFeature"), true);
+    assert.equal(sdkSatisfies("8.0.428", "8.0.100", "feature"), true);
+    assert.equal(sdkSatisfies("9.0.321", "8.0.100", "latestFeature"), false, "a feature roll-forward never changes the minor");
+    assert.equal(sdkSatisfies("9.0.321", "8.0.100", "major"), true);
+    assert.equal(sdkSatisfies("10.0.404", "10.0.404", "disable"), true);
+    assert.equal(sdkSatisfies("10.0.404", "10.0.403", "disable"), false);
+  });
+
+  test("the pinned SDK is added from Microsoft's install script only when the image's doesn't satisfy global.json", () => {
+    assert.deepEqual(IMAGE_SDK, { 8: "8.0.428", 9: "9.0.321", 10: "10.0.404" });
+    const strict = repo({ "global.json": '{"sdk":{"version":"10.0.100"}}', "A.csproj": proj("net10.0") });
+    const [t] = hooks.setup!(strict, ".");
+    assert.equal(t.spec, "dotnet-sdk@10.0.100");
+    assert.match(t.install, /dotnet-install\.sh --version 10\.0\.100 --install-dir \/usr\/share\/dotnet --no-path/);
+    assert.deepEqual(hooks.setup!(join(FIXTURES, "dotnet-xunit", "repo"), "."), [], "8.0.100 with latestFeature runs on the image's 8.0.428");
+    assert.deepEqual(hooks.setup!(repo({ "A.csproj": proj("net8.0") }), "."), [], "nothing pinned, nothing added");
   });
 });
 
