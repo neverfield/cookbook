@@ -10,10 +10,9 @@ import { IMAGE_DIGESTS, pinnedRef } from "../skill/agent-readiness/scripts/lib/i
 import { componentLevel, repoLevel } from "../skill/agent-readiness/scripts/lib/levels.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { EXAMPLE_KEYS, proxyPasswords, redact, scanText } from "../skill/agent-readiness/scripts/lib/redact.ts";
-import { ALLOW_HOST_ENV, HOST_NOT_ALLOWED, assertPlatformSupported, copyWorkTree, failingComponents, hostExecutor, killRate, newBudget, runContract, unavailableExecutor } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { ALLOW_HOST_ENV, HOST_NOT_ALLOWED, assertPlatformSupported, copyWorkTree, failingComponents, hostExecutor, newBudget, runContract, unavailableExecutor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
-import type { Rubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { ACCOUNT_CREDENTIAL, scrubbedEnv } from "../skill/agent-readiness/scripts/lib/run.ts";
 import { componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
 import type { ContractCommand } from "../skill/agent-readiness/scripts/lib/types.ts";
@@ -254,7 +253,7 @@ describe("secret scanning", () => {
   });
 
   test("local development URLs and placeholders aren't findings", () => {
-    const local = ["postgres://postgres:postgres@localhost:5432/dev", "postgresql://app:devpassword123@db:5432/app", "mongodb://root:example@mongo:27017", "amqp://guest:guest@127.0.0.1:5672", "https://user:${PASSWORD}@registry.acme-corp.io", "postgres://user:password@db.example.com/x"];
+    const local = ["postgres://postgres:postgres@localhost:5432/dev", "postgresql://app:devpassword123@db:5432/app", "mongodb://root:example@mongo:27017", "amqp://guest:guest@127.0.0.1:5672", "https://user:${PASSWORD}@registry.acme-corp.io", "postgres://user:password@db.example.com/x", "      CURSOR_API_KEY_SECRET_ARN = local.cursor_api_key_secret_arn", "CURSOR_API_KEY=replace-with-service-account-api-key", "CURSOR_API_KEY_SECRET_NAME=cursor/ec2-service-account-key", "SECRET_KEY=YOURSECRETKEYGOESHERE # comment", "AWS_ACCESS_KEY_ID_FILE=/run/secrets/aws-key-id"];
     assert.deepEqual(scanText(local.join("\n")), []);
   });
 
@@ -342,12 +341,6 @@ describe("levels: unproven is a result of its own", () => {
     const repo = repoLevel(new Map([["a", blocked], ["b", { level: 2, couldBe: null, missing: [], unknown: [] }]]), new Set(["a", "b"]));
     assert.deepEqual([repo.level, repo.unproven], [0, true]);
     assert.equal(repoLevel(new Map([["a", blocked], ["b", failed]]), new Set(["a", "b"])).unproven, undefined);
-  });
-
-  test("the kill rate defaults to every fault until a rubric sets it", () => {
-    assert.equal(killRate(rubric), 1);
-    assert.equal(killRate({ ...rubric, mutation: { ...rubric.mutation, killRate: 0.8 } } as Rubric), 0.8);
-    assert.equal(killRate({ ...rubric, mutation: { ...rubric.mutation, killRate: 7 } } as Rubric), 1, "an impossible rate falls back");
   });
 });
 

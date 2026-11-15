@@ -29,7 +29,17 @@ export const EXAMPLE_KEYS = new Set([
 
 const ASSIGNMENT = /\b(api[_-]?key|secret|token|password|passwd)\b\s*[:=]\s*["']([^"'\s]{12,})["']/gi;
 // A .env line or shell export with an unquoted value: `API_KEY=abc...`, `export DB_PASSWORD=...`.
-const ENV_ASSIGNMENT = /^(\s*(?:export\s+)?(?=[A-Z])[A-Z0-9_]*(?:API_?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE_KEY|ACCESS_KEY)[A-Z0-9_]*\s*=\s*)([^\s"'#$`{][^\s"'#]{11,})/gm;
+// Neither puts spaces around `=`; code and Terraform (`X_API_KEY = local.arn`) do.
+const ENV_ASSIGNMENT = /^(\s*(?:export\s+)?([A-Z][A-Z0-9_]*)=)([^\s"'#$`{][^\s"'#]{11,})/gm;
+const SECRET_NAME = /(API_?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE_KEY|ACCESS_KEY)/;
+// Names that point at a secret rather than hold one: CURSOR_API_KEY_SECRET_NAME, DB_PASSWORD_FILE.
+const REFERENCE_NAME = /_(NAME|ARN|ID|PATH|FILE|URL|URI|REF|VERSION|REGION)$/;
+// Placeholder text in examples and docs: replace-with-your-key, YOURSECRETKEYGOESHERE.
+const ENV_PLACEHOLDER = /replace|your|goes_?here|here$|todo|sample|redacted|<|\.\.\./i;
+
+function envSecret(name: string, value: string): boolean {
+  return SECRET_NAME.test(name) && !REFERENCE_NAME.test(name) && !PLACEHOLDER.test(value) && !ENV_PLACEHOLDER.test(value);
+}
 // The password in a URL, as connection strings and proxy settings carry it: scheme://user:password@host.
 const URL_CREDENTIAL = /\b([a-z][a-z0-9+.-]*:\/\/[^\s:/@"'`]+:)([^\s@/"'`]+)(@[^\s/"'`]+)/gi;
 const PLACEHOLDER = /example|xxx|changeme|placeholder|dummy|fake|test|<|\$\{|your[-_]/i;
@@ -69,10 +79,8 @@ export function scanText(text: string): SecretHit[] {
     if (hits.some((h) => h.line === i + 1)) return;
     ENV_ASSIGNMENT.lastIndex = 0;
     const env = ENV_ASSIGNMENT.exec(line);
-    if (env) {
-      if (EXAMPLE_KEYS.has(env[2])) hits.push({ type: "Secret assignment", line: i + 1, example: true });
-      else if (!PLACEHOLDER.test(env[2])) hits.push({ type: "Secret assignment", line: i + 1 });
-    }
+    if (env && EXAMPLE_KEYS.has(env[3])) hits.push({ type: "Secret assignment", line: i + 1, example: true });
+    else if (env && envSecret(env[2], env[3])) hits.push({ type: "Secret assignment", line: i + 1 });
     URL_CREDENTIAL.lastIndex = 0;
     while ((m = URL_CREDENTIAL.exec(line))) {
       if (realCredential(m[1], m[2], m[3])) {
@@ -93,7 +101,7 @@ export function redact(text: string, extraValues: string[] = []): string {
   out = out.replace(ASSIGNMENT, (whole, key: string, value: string) =>
     PLACEHOLDER.test(value) ? whole : whole.replace(value, "[redacted:secret]"),
   );
-  out = out.replace(ENV_ASSIGNMENT, (whole, head: string, value: string) => (PLACEHOLDER.test(value) ? whole : `${head}[redacted:secret]`));
+  out = out.replace(ENV_ASSIGNMENT, (whole, head: string, name: string, value: string) => (envSecret(name, value) ? `${head}[redacted:secret]` : whole));
   out = out.replace(URL_CREDENTIAL, (whole, head: string, password: string, rest: string) => (URL_PLACEHOLDER.test(password) ? whole : `${head}[redacted:password]${rest}`));
   return out;
 }

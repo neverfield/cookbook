@@ -7,7 +7,7 @@ import { diagnose, testCounts } from "./diagnose.ts";
 import { addEvidence } from "./evidence.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
-import { applySite, chooseSites } from "./mutate.ts";
+import { applySite, chooseSites, faultsVerdict, killRateOf } from "./mutate.ts";
 import { proxyPasswords, redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { SUDO_SHIM_MARK, runCommand, scrubbedEnv } from "./run.ts";
@@ -552,23 +552,18 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
   const caught = counted.filter((m) => m.result === "caught").length;
   const operators = [...new Set(mutants.map((m) => m.operator))].join(", ");
   const missed = mutants.filter((m) => m.result === "survived").map((m) => m.id);
-  let result: "pass" | "fail" | "not_run";
-  let summary: string;
   const cutNote = cut ? `; the time budget cut off ${cut} of ${sites.length}` : "";
-  const need = killRate(rubric);
-  if (counted.length < rubric.mutation.minForPass) {
-    result = "not_run";
-    summary = `only ${counted.length} planted faults gave a clear result; at least ${rubric.mutation.minForPass} are needed${cutNote}`;
-  } else if (caught === counted.length) {
-    result = "pass";
-    summary = `caught ${caught} of ${counted.length} planted faults (tried: ${operators})${cutNote}`;
-  } else if (caught / counted.length >= need) {
-    result = "pass";
-    summary = `caught ${caught} of ${counted.length} planted faults, at or above the ${Math.round(need * 100)}% the rubric requires (tried: ${operators})${cutNote}; missed ${missed.length}${MISSED_AFTER_SEAL}`;
-  } else {
-    result = "fail";
-    summary = `caught ${caught} of ${counted.length} planted faults${need < 1 ? `, below the ${Math.round(need * 100)}% the rubric requires` : ""}${cutNote}; missed ${missed.length}${MISSED_AFTER_SEAL}`;
-  }
+  const need = killRateOf(rubric.mutation);
+  const result = faultsVerdict(caught, counted.length, rubric.mutation);
+  const share = need < 1 ? ` the ${Math.round(need * 100)}% the rubric requires` : "";
+  const summary =
+    result === "not_run"
+      ? `only ${counted.length} planted faults gave a clear result; at least ${rubric.mutation.minForPass} are needed${cutNote}`
+      : result === "pass" && caught === counted.length
+        ? `caught ${caught} of ${counted.length} planted faults (tried: ${operators})${cutNote}`
+        : result === "pass"
+          ? `caught ${caught} of ${counted.length} planted faults, at or above${share} (tried: ${operators})${cutNote}; missed ${missed.length}${MISSED_AFTER_SEAL}`
+          : `caught ${caught} of ${counted.length} planted faults${share ? `, below${share}` : ""}${cutNote}; missed ${missed.length}${MISSED_AFTER_SEAL}`;
   log(`  faults in ${comp.id}: ${summary}`);
   // Too few results because the budget ran out is the audit's limit, not weak tests.
   const blocked = cut && result === "not_run" ? { blocked: BUDGET_OUT } : {};
@@ -576,13 +571,6 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
 }
 
 const MISSED_AFTER_SEAL = " (the sealed report says where)";
-
-// The share of planted faults the tests must catch. A rubric without mutation.killRate, every one
-// released so far, keeps the old rule: all of them.
-export function killRate(rubric: Rubric): number {
-  const rate = (rubric.mutation as { killRate?: number }).killRate;
-  return typeof rate === "number" && rate > 0 && rate <= 1 ? rate : 1;
-}
 
 // Next to the audit tree, outside the repository, and deleted with it once the seal copies it in.
 export function mutantsFile(tree: string): string {

@@ -117,7 +117,7 @@
               "unproven": true
             },
             "get-github-info": {
-              "level": 2,
+              "level": 1,
               "unproven": false
             },
             "git": {
@@ -437,7 +437,6 @@
             "software-factory/agent-readiness/AGENTS.md:39"
           ],
           "blockingSafety": [
-            "secret self-hosted-cloud-agent/ecs/terraform/main.tf:472",
             "secret software-factory/agent-readiness/evals/cases/resilience.ts:9",
             "credential_needed software-factory/agent-readiness/fixtures/needs-prod-secret/repo/test/payments.test.js:5",
             "credential_needed software-factory/agent-readiness/tests/honest-level-0.test.ts:239",
