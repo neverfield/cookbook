@@ -721,6 +721,138 @@
           "blockingSafety": []
         }
       }
+    },
+    {
+      "id": "spring-petclinic",
+      "repo": "spring-projects/spring-petclinic",
+      "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+      "runtime": "docker",
+      "review": "lang-jvm-dotnet",
+      "truth": "PENDING",
+      "egress": [
+        "repo.maven.apache.org"
+      ],
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 0,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "restricted": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": true,
+          "couldBe": 1,
+          "components": {
+            "spring-petclinic": {
+              "level": 0,
+              "unproven": true
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": []
+        }
+      }
+    },
+    {
+      "id": "mockito-kotlin",
+      "repo": "mockito/mockito-kotlin",
+      "commit": "5969d27280ea670520003c75776057b20f7f3dfb",
+      "runtime": "docker",
+      "review": "lang-jvm-dotnet",
+      "truth": "PENDING",
+      "egress": [
+        "services.gradle.org",
+        "plugins.gradle.org",
+        "repo.maven.apache.org"
+      ],
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 0,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "restricted": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": true,
+          "couldBe": 1,
+          "components": {
+            "mockito-kotlin-root": {
+              "level": 0,
+              "unproven": true
+            }
+          },
+          "notAssessed": [
+            "benchmarks"
+          ],
+          "instructionFailures": [],
+          "blockingSafety": []
+        }
+      }
+    },
+    {
+      "id": "csharp-algorithms",
+      "repo": "TheAlgorithms/C-Sharp",
+      "commit": "6d3b02a6b026abe253e942fe0d84d1244b8fbeb1",
+      "runtime": "docker",
+      "review": "lang-jvm-dotnet",
+      "truth": "PENDING",
+      "egress": [
+        "mcr.microsoft.com",
+        "api.nuget.org"
+      ],
+      "realInstructionFindings": [
+        "README.md:44",
+        "README.md:82",
+        "README.md:109",
+        "README.md:156"
+      ],
+      "falseInstructionFindings": 0,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "restricted": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": true,
+          "couldBe": 1,
+          "components": {
+            "C-Sharp": {
+              "level": 0,
+              "unproven": true
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [
+            "README.md:44",
+            "README.md:82",
+            "README.md:109",
+            "README.md:156"
+          ],
+          "blockingSafety": []
+        }
+      }
     }
   ]
 }

@@ -448,7 +448,8 @@ export const jvm: LanguageDef = {
     rootApp: { names: ["pom.xml", "build.gradle", "build.gradle.kts"], stack: "jvm", toolchain: "JVM", suffix: "jvm", rank: 50 },
     lockfiles: ["gradle.lockfile"],
     projectName: (tree, manifest, text) => {
-      if (manifest === "pom.xml") return text.match(/<artifactId>([^<]+)<\/artifactId>/)?.[1];
+      // The project's own artifactId, not its parent's, such as spring-boot-starter-parent.
+      if (manifest === "pom.xml") return text.replace(/<parent>[\s\S]*?<\/parent>/, "").match(/<artifactId>([^<]+)<\/artifactId>/)?.[1];
       if (!/^build\.gradle(\.kts)?$/.test(manifest)) return undefined;
       const settings = ["settings.gradle.kts", "settings.gradle"].map((f) => join(tree, f)).find(exists);
       return settings ? readText(settings).match(/rootProject\.name\s*=\s*["']([^"']+)["']/)?.[1] : undefined;
