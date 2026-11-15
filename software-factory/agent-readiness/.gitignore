@@ -2,5 +2,5 @@ node_modules
 .env
 .env.*
 *.local.json
-evals/runs/
+support/evals/runs/
 .agent-readiness/

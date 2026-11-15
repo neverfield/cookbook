@@ -22,7 +22,7 @@ Tools and templates for preparing repos and teams to ship work with coding agent
 
 ### [Agent readiness](software-factory/agent-readiness)
 
-A copyable Cursor skill that audits whether coding agents can work in a repository. It scores only evidence its scripts produce by running install, build, test and planted-fault checks, then reports one level for the repo and each component, with the top gaps and a proveable fix for each.
+A copyable Cursor skill that audits a repository for what would stop a coding agent: it runs install, build and test in a clean container, plants faults the tests should catch, and seals a leveled report. Copy [`skill/agent-readiness`](software-factory/agent-readiness/skill/agent-readiness) into a repo's `.cursor/skills/` to use it.
 
 ## Cursor SDK
 

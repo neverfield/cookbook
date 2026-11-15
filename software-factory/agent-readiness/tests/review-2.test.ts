@@ -12,7 +12,7 @@ import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
 import type { Audit, HistoryLine, Level } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { exportTree } from "../skill/agent-readiness/scripts/lib/workspace.ts";
-import { commitAll, materialize, readiness } from "../tools/fixture.ts";
+import { commitAll, materialize, readiness } from "../support/tools/fixture.ts";
 import { instruction, makeAudit, reportFor, stats } from "./helpers.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -41,7 +41,7 @@ describe("fixes from the second independent review", () => {
     const v = readiness(repo, ["verify-seal", "--allow-unkeyed"], { SA_READINESS_SEAL_KEY: "ci-key" });
     assert.equal(v.code, 0, v.out);
     assert.match(v.out, /accepted unkeyed because of --allow-unkeyed/);
-    assert.match(readFileSync(join(__dirname, "../examples/github-workflows/scheduled-recheck.yml"), "utf8"), /verify-seal latest .*--allow-unkeyed/);
+    assert.match(readFileSync(join(__dirname, "../support/examples/github-workflows/scheduled-recheck.yml"), "utf8"), /verify-seal latest .*--allow-unkeyed/);
   });
 
   test("with a seal key set, seal leaves out unkeyed history lines, which anyone could have written", () => {

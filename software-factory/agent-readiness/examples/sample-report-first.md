@@ -149,7 +149,7 @@ Effort against impact (impact is the share of recent changes an action unblocks)
 | Agent assets in the repo (`scope.agent_assets`) | Shows what agent setup already exists and who maintains it. Not scored. | 3 assets, 3 authors |  |
 | Setup works from a clean checkout (`bootstrap.cold_replay`) | Every agent starts from a clean checkout, so setup that only works on a prepared machine breaks every agent run. In the BootstrapAgent study, a reusable, verified setup cut later agents' token use by 25.9% and build time by 22.3%. Measured on the study's benchmark repositories. ([source](https://arxiv.org/abs/2605.15815)) | **failed: api**; passed: shared and worker | `ev-005`, `ev-006`, `ev-007`, `ev-011`, `ev-012`, `ev-013` and 1 more |
 | Build, lint, type-check and test commands pass (`verify.canonical_interface`) | Agents need one known way to check their own work. | **failed: api**; passed: shared and worker | `ev-008`, `ev-009`, `ev-010`, `ev-011`, `ev-012`, `ev-013` |
-| Tests catch planted faults (`verify.behavioral_oracle`) | Green tests aren't proof that a change is right. In DeployBench, 53.9% of failed runs passed generic checks and failed only task-specific ones. 51 research-artifact deployment tasks. ([source](https://deploybench.vercel.app/)) OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. ([source](https://openai.com/index/separating-signal-from-noise-coding-evaluations)) | api: tests must pass before faults can be planted; shared: caught 5 of 5 planted faults; worker: caught 0 of 5 planted faults | `ev-015`, `ev-016`, `ev-017` |
+| Tests catch planted faults (`verify.behavioral_oracle`) | Green tests aren't proof that a change is right. OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. ([source](https://openai.com/index/separating-signal-from-noise-coding-evaluations)) | api: tests must pass before faults can be planted; shared: caught 5 of 5 planted faults; worker: caught 0 of 5 planted faults | `ev-015`, `ev-016`, `ev-017` |
 | Agent instructions are accurate (`context.instructions_verified`) | Agents follow AGENTS.md, rules and skills literally, so a stale command costs more than a missing one. No outcome study yet measures how much these files help. | 4 of 7 instruction items check out, 3 wrong | `ev-001`, `ev-002`, `ev-003`, `ev-018`, `ev-019` |
 | Normal work needs no production access (`safety.execution_boundary`) | Agents run with whatever access setup gives them, so normal work must never need production credentials. | passed | `ev-004` |
 
@@ -257,7 +257,7 @@ Audited Oct 27, 2026 at 7070f44. Eval run with a pinned seed; not a production r
 - **Rubric:** 2026-11-alpha
 - **Permission tier:** local-exec
 - **Seal:** Scripts match the agent-readiness-v0.1.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
-- **Skill digest:** e832a2321a32
+- **Skill digest:** a3f4148e45a5
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** docker container, node:22-bookworm
 - **Stored in:** .agent-readiness/history/audits/aud-2026-10-27-7070f44-e101

@@ -11,7 +11,7 @@
         "dirtyTree": false,
         "rubric": "2026-11-alpha",
         "tier": "local-exec",
-        "scriptsDigest": "e832a2321a324d1611b9f9b13336ba2944acea9ae80f867e36d4a0f214e9512f",
+        "scriptsDigest": "a3f4148e45a559312005617065824af2fdc3f309ce9007a68089c537ff3e15bb",
         "seedPinned": true,
         "sealStatus": "Scripts match the agent-readiness-v0.1.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
         "staleCopy": null,
@@ -278,7 +278,7 @@
           "why": "The audit planted 5 faults in worker in a throwaway copy, and the tests caught 0.",
           "movesTheNeedle": "Takes shared to Level 2, worker to Level 2 together with Fix the stale agent instructions. Changes in worker get a real pass-or-fail signal, so reviewers catch less by hand.",
           "watch": "Share of agent PRs touching worker where a reviewer requested changes. Now: 2 of 3 (too few for a rate), Sep 27 to Oct 27, 2026.",
-          "research": "In DeployBench, 53.9% of failed runs passed generic checks and failed only task-specific ones. 51 research-artifact deployment tasks. https://deploybench.vercel.app/",
+          "research": "OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. https://openai.com/index/separating-signal-from-noise-coding-evaluations",
           "effortAndOwner": "Medium: tests in worker only. Component owner.",
           "decision": "What the untested behavior in packages/worker/src/retry.js should be",
           "doneWhen": "A new audit's fresh planted faults in worker are all caught.",
@@ -540,11 +540,6 @@
             "name": "Tests catch planted faults",
             "why": "Green tests aren't proof that a change is right.",
             "sources": [
-              {
-                "claim": "In DeployBench, 53.9% of failed runs passed generic checks and failed only task-specific ones.",
-                "caveat": "51 research-artifact deployment tasks.",
-                "url": "https://deploybench.vercel.app/"
-              },
               {
                 "claim": "OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass.",
                 "caveat": "An audit of one benchmark, not of customer repositories.",
@@ -995,7 +990,7 @@
           },
           {
             "label": "Skill digest",
-            "value": "e832a2321a32"
+            "value": "a3f4148e45a5"
           },
           {
             "label": "Planted faults",
@@ -1023,7 +1018,7 @@
         "dirtyTree": false,
         "rubric": "2026-11-alpha",
         "tier": "local-exec",
-        "scriptsDigest": "e832a2321a324d1611b9f9b13336ba2944acea9ae80f867e36d4a0f214e9512f",
+        "scriptsDigest": "a3f4148e45a559312005617065824af2fdc3f309ce9007a68089c537ff3e15bb",
         "seedPinned": true,
         "sealStatus": "Scripts match the agent-readiness-v0.1.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
         "staleCopy": null,
@@ -1263,7 +1258,7 @@
           "why": "The audit planted 5 faults in worker in a throwaway copy, and the tests caught 0.",
           "movesTheNeedle": "Takes worker to Level 2, covering 25% of recent changes. Changes in worker get a real pass-or-fail signal, so reviewers catch less by hand.",
           "watch": "Share of agent PRs touching worker where a reviewer requested changes. Baseline: 2 of 3 (too few for a rate), Sep 27 to Oct 27, 2026. Now: 50% (3 of 6), Oct 31 to Nov 30, 2026.",
-          "research": "In DeployBench, 53.9% of failed runs passed generic checks and failed only task-specific ones. 51 research-artifact deployment tasks. https://deploybench.vercel.app/",
+          "research": "OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. https://openai.com/index/separating-signal-from-noise-coding-evaluations",
           "effortAndOwner": "Medium: tests in worker only. Component owner.",
           "decision": "What the untested behavior in packages/worker/src/retry.js should be",
           "doneWhen": "A new audit's fresh planted faults in worker are all caught.",
@@ -1607,11 +1602,6 @@
             "name": "Tests catch planted faults",
             "why": "Green tests aren't proof that a change is right.",
             "sources": [
-              {
-                "claim": "In DeployBench, 53.9% of failed runs passed generic checks and failed only task-specific ones.",
-                "caveat": "51 research-artifact deployment tasks.",
-                "url": "https://deploybench.vercel.app/"
-              },
               {
                 "claim": "OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass.",
                 "caveat": "An audit of one benchmark, not of customer repositories.",
@@ -2128,7 +2118,7 @@
           },
           {
             "label": "Skill digest",
-            "value": "e832a2321a32"
+            "value": "a3f4148e45a5"
           },
           {
             "label": "Planted faults",

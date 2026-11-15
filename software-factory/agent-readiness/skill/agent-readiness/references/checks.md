@@ -43,9 +43,8 @@ Informational and never scored. Lists AGENTS.md and CLAUDE.md, skills (`.cursor/
 - **Passes:** every counted fault is caught, and at least 3 gave a clear result. Coverage alone never passes.
 - **Needs:** ran on host or stronger. Level 2 also needs Level 1, which needs a clean container.
 - **Why:** green tests aren't proof that a change is right.
-  - In DeployBench, 53.9% of failed runs passed generic checks and were caught only by task-specific verification, and 97 of 154 failed runs declared themselves done after validating a weaker target. Caveat: 51 research-artifact deployment tasks ([site](https://deploybench.vercel.app/)).
   - OpenAI's SWE-Bench Pro audit flagged 200 of the 731 public tasks automatically (27.4%) and found 249 in human review (34.1%), so OpenAI estimates about 30% are broken, including low-coverage tests that let incomplete fixes pass. Caveat: an audit of one benchmark ([Jul 8, 2026](https://openai.com/index/separating-signal-from-noise-coding-evaluations)). It also sets a design rule here: a planted fault must be one any correct suite catches, not one tied to a particular implementation.
-  - OpenAI's SWE-bench Verified audit found material test or description flaws in 59.4% of 138 tasks that o3 failed inconsistently. Caveat: that rate is within a selected subset of about 27.6% of the benchmark, not the whole benchmark. Secondary-confirmed: the primary page (openai.com/index/why-we-no-longer-evaluate-swe-bench-verified, Feb 23, 2026) wasn't reachable when this was written.
+  - OpenAI's SWE-bench Verified audit found material test or description flaws in 59.4% of 138 tasks that o3 failed inconsistently. Caveat: that rate is within a selected subset of about 27.6% of the benchmark, not the whole benchmark.
 - **Usual fixes:** tests that assert results and edge cases instead of only calling the code.
 
 ## `context.instructions_verified`: agent instructions are accurate

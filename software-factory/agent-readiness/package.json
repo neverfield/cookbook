@@ -11,11 +11,11 @@
     "typecheck": "tsc -p .",
     "test": "node --experimental-strip-types --no-warnings --test tests/*.test.ts",
     "check": "npm run typecheck && npm test",
-    "sample": "node --experimental-strip-types --no-warnings tools/generate-sample.ts",
-    "release-manifest": "node --experimental-strip-types --no-warnings tools/release-manifest.ts",
-    "evals": "node --experimental-strip-types --no-warnings evals/run.ts",
-    "goldens": "node --experimental-strip-types --no-warnings evals/goldens.ts",
-    "labels": "node --experimental-strip-types --no-warnings evals/labels/check.ts"
+    "sample": "node --experimental-strip-types --no-warnings support/tools/generate-sample.ts",
+    "release-manifest": "node --experimental-strip-types --no-warnings support/tools/release-manifest.ts",
+    "evals": "node --experimental-strip-types --no-warnings support/evals/run.ts",
+    "goldens": "node --experimental-strip-types --no-warnings support/evals/goldens.ts",
+    "labels": "node --experimental-strip-types --no-warnings support/evals/labels/check.ts"
   },
   "devDependencies": {
     "@cursor/sdk": "1.2.0",

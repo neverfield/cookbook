@@ -49,7 +49,7 @@ describe("no emoji anywhere", () => {
   }
 
   test("the examples, the skill (SKILL.md, references, scripts) and PRODUCT.md contain no emoji", () => {
-    const found = [...files(join(ROOT, "examples")), ...files(join(ROOT, "skill")), join(ROOT, "PRODUCT.md"), join(ROOT, "README.md")].flatMap((p) => {
+    const found = [...files(join(ROOT, "examples")), ...files(join(ROOT, "skill")), join(ROOT, "support", "PRODUCT.md"), join(ROOT, "README.md")].flatMap((p) => {
       const hits = emojiIn(readFileSync(p, "utf8"));
       return hits.length ? [`${relative(ROOT, p)}: ${[...new Set(hits)].join(", ")}`] : [];
     });

@@ -4,10 +4,10 @@ import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { cases as resilienceCases } from "../evals/cases/resilience.ts";
-import { gradeCase } from "../evals/lib/grade.ts";
-import type { Trajectory } from "../evals/lib/types.ts";
-import { caseEnv, prepare } from "../evals/lib/workspace.ts";
+import { cases as resilienceCases } from "../support/evals/cases/resilience.ts";
+import { gradeCase } from "../support/evals/lib/grade.ts";
+import type { Trajectory } from "../support/evals/lib/types.ts";
+import { caseEnv, prepare } from "../support/evals/lib/workspace.ts";
 import { addContractCommand, checkOnly, discoverContract } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { CUT_OFF, REWROTE, hostExecutor, newBudget, replayInstructions, runContract } from "../skill/agent-readiness/scripts/lib/replay.ts";
@@ -16,7 +16,7 @@ import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { repoStates } from "../skill/agent-readiness/scripts/lib/score.ts";
 import { instructionItems, vendoredSkills } from "../skill/agent-readiness/scripts/lib/static.ts";
 import type { ContractCommand, InstructionItem } from "../skill/agent-readiness/scripts/lib/types.ts";
-import { materialize, readiness } from "../tools/fixture.ts";
+import { materialize, readiness } from "../support/tools/fixture.ts";
 import { makeAudit } from "./helpers.ts";
 
 const rubric = loadRubric();

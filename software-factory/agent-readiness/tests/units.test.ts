@@ -25,7 +25,7 @@ import { ENV_KEYS, renderEnvFiles, renderVerifySkill } from "../skill/agent-read
 import { extractFromMarkdown, instructionItems, safetyScan } from "../skill/agent-readiness/scripts/lib/static.ts";
 import type { HistoryLine, PrRecord, ReportJson } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { isDirty, paths, releaseManifest, skillDigest } from "../skill/agent-readiness/scripts/lib/workspace.ts";
-import { FIXTURES, materialize } from "../tools/fixture.ts";
+import { FIXTURES, materialize } from "../support/tools/fixture.ts";
 import { makeAudit } from "./helpers.ts";
 
 const rubric = loadRubric("2026-10-alpha");

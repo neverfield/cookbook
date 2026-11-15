@@ -6,7 +6,7 @@ import { describe, test } from "node:test";
 import { detectRuntime } from "../skill/agent-readiness/scripts/lib/container.ts";
 import { saveDraft } from "../skill/agent-readiness/scripts/lib/workspace.ts";
 import { paths } from "../skill/agent-readiness/scripts/lib/workspace.ts";
-import { commitAll, materialize, readiness } from "../tools/fixture.ts";
+import { commitAll, materialize, readiness } from "../support/tools/fixture.ts";
 
 function hostAudit(fixture: string, extra: string[] = [], env: Record<string, string> = {}) {
   const repo = materialize(fixture);

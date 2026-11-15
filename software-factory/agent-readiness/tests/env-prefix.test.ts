@@ -3,8 +3,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
-import { ACCELERATOR } from "../tools/fixture.ts";
-import { unprefixedEnvVars } from "../tools/env-prefix.ts";
+import { ACCELERATOR } from "../support/tools/fixture.ts";
+import { unprefixedEnvVars } from "../support/tools/env-prefix.ts";
 
 function tree(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "env-prefix-"));

@@ -14,13 +14,13 @@ import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { BUDGET_OUT, CUT_OFF, sampledScope } from "../skill/agent-readiness/scripts/lib/scope.ts";
 import { safetyScan } from "../skill/agent-readiness/scripts/lib/static.ts";
 import type { ContractCommand, ScanBound } from "../skill/agent-readiness/scripts/lib/types.ts";
-import { readiness } from "../tools/fixture.ts";
+import { readiness } from "../support/tools/fixture.ts";
 import { makeAudit, reportFor } from "./helpers.ts";
 
 const rubric = loadRubric("2026-11-alpha");
 
 function tree(files: Record<string, string>, opts: { git?: boolean } = {}): string {
-  const dir = join(mkdtempSync(join(tmpdir(), "readiness-ws6-")), "repo");
+  const dir = join(mkdtempSync(join(tmpdir(), "readiness-toolchains-")), "repo");
   for (const [rel, text] of Object.entries(files)) {
     mkdirSync(join(dir, rel, ".."), { recursive: true });
     writeFileSync(join(dir, rel), text);
@@ -129,7 +129,7 @@ function timingExecutor(durationSec: (command: string) => number): Executor & { 
     strength: "clean_replay" as const,
     image: "node:22-bookworm",
     imageSource: "audit" as const,
-    root: mkdtempSync(join(tmpdir(), "readiness-ws6-")),
+    root: mkdtempSync(join(tmpdir(), "readiness-toolchains-")),
     ran,
     exec: async (cmdText: string, _cwd: string, timeoutSec: number) => {
       ran.push({ command: cmdText, timeoutSec });

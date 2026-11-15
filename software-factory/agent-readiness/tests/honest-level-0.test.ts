@@ -17,7 +17,7 @@ const rubric = loadRubric("2026-11-alpha");
 const fakeAws = () => "AKIA" + "QRSTUVWXYZ234567";
 
 function tree(files: Record<string, string>, name = "repo"): string {
-  const dir = join(mkdtempSync(join(tmpdir(), "readiness-ws2-")), name);
+  const dir = join(mkdtempSync(join(tmpdir(), "readiness-level0-")), name);
   for (const [rel, text] of Object.entries(files)) {
     mkdirSync(join(dir, rel, ".."), { recursive: true });
     writeFileSync(join(dir, rel), text);
@@ -194,7 +194,7 @@ describe("part 1 says what isn't assessed, in grammatical sentences", () => {
   });
 });
 
-// Shapes the MacBook real-repo gate (G3) found in Spree, Medusa, Saleor and Laravel.
+// Repo shapes found by auditing Spree, Medusa, Saleor and Laravel.
 describe("real-repo gate fixes", () => {
   const pkgs = [{ name: "@spree/sdk-core", path: "packages/sdk-core" }, { name: "@spree/admin-sdk", path: "packages/admin-sdk" }];
   const sdkBuild = cmd("build", "packages/admin-sdk");
@@ -230,6 +230,7 @@ describe("real-repo gate fixes", () => {
   });
 
   test("Medusa: integration-test helpers and specs don't block, and non-credential environment reads aren't flagged", () => {
+    // Placeholder for the secret-scan fixture; not a real credential.
     const assign = 'const customer = { email: "x@example.com", password: "Zq8mN2pL7vX4kR9t" }\n';
     const dir = tree({
       "package.json": "{\"name\":\"medusa\"}",

@@ -3,10 +3,10 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import type { Audit, ReportJson } from "../skill/agent-readiness/scripts/lib/types.ts";
-import { claimsNotInTree } from "../evals/lib/claims.ts";
-import { goldenProblems, levelViolations, loadGoldens, loadLastRun, rankViolations, scoringDigest, staleResults } from "../evals/lib/goldens.ts";
-import type { GoldenResult, GoldenSet, LastRun } from "../evals/lib/goldens.ts";
-import { materialize, readiness } from "../tools/fixture.ts";
+import { claimsNotInTree } from "../support/evals/lib/claims.ts";
+import { goldenProblems, levelViolations, loadGoldens, loadLastRun, rankViolations, scoringDigest, staleResults } from "../support/evals/lib/goldens.ts";
+import type { GoldenResult, GoldenSet, LastRun } from "../support/evals/lib/goldens.ts";
+import { materialize, readiness } from "../support/tools/fixture.ts";
 
 function audited(fixture: string): { repo: string; report: ReportJson; audit: Audit } {
   const repo = materialize(fixture);
