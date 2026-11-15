@@ -277,6 +277,6 @@ describe("CLI", { concurrency: 4 }, () => {
     assert.match(readiness(repo, ["validate", ".agent-readiness/roadmap.json"]).out, /valid roadmap/);
     writeFileSync(join(repo, "bad.json"), JSON.stringify({ schema: "agent-readiness/report@1" }));
     assert.match(readiness(repo, ["validate", "bad.json"]).out, /not a valid report/);
-    assert.match(readiness(repo, ["version"]).out, /agent-readiness skill 0\.1\.0 \(agent-readiness-v0\.1\.0\), rubric 2026-11-alpha/);
+    assert.match(readiness(repo, ["version"]).out, /agent-readiness skill 0\.2\.0 \(agent-readiness-v0\.2\.0\), rubric 2026-11-alpha/);
   });
 });
