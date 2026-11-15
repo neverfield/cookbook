@@ -59,14 +59,19 @@
       },
       "recorded": {
         "any": {
-          "exit": 1,
-          "sealed": false,
-          "runtime": null,
-          "level": null,
-          "outcome": null,
-          "unproven": null,
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 2,
+          "outcome": "proven",
+          "unproven": false,
           "couldBe": null,
-          "components": {},
+          "components": {
+            "zustand": {
+              "level": 2,
+              "unproven": false
+            }
+          },
           "notAssessed": [],
           "instructionFailures": [],
           "blockingSafety": []
