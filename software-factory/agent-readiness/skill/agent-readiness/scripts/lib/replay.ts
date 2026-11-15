@@ -5,6 +5,7 @@ import { ContainerSession, buildImage, detectRuntime } from "./container.ts";
 import { containerImage, toolSetup } from "./contract.ts";
 import { diagnose, testCounts } from "./diagnose.ts";
 import { addEvidence } from "./evidence.ts";
+import { replayInstructions } from "./instructions.ts";
 import { applySite, chooseSites } from "./mutate.ts";
 import { redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
@@ -167,7 +168,7 @@ export function newBudget(componentMinutes: number, totalMinutes: number): Budge
   return { componentMs: componentMinutes * 60000, totalMs: totalMinutes * 60000, startedAt: Date.now(), used: new Map() };
 }
 
-function overBudget(b: Budget, component: string): boolean {
+export function overBudget(b: Budget, component: string): boolean {
   if (Date.now() - b.startedAt > b.totalMs) return true;
   return component !== "*" && (b.used.get(component) ?? 0) > b.componentMs;
 }
@@ -186,7 +187,7 @@ function capped(b: Budget, component: string, timeoutSec: number): { sec: number
   return left < timeoutSec ? { sec: Math.max(1, left), byBudget: true } : { sec: timeoutSec, byBudget: false };
 }
 
-function charge(b: Budget, component: string, ms: number): void {
+export function charge(b: Budget, component: string, ms: number): void {
   b.used.set(component, (b.used.get(component) ?? 0) + ms);
 }
 
@@ -656,80 +657,4 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
   }
 }
 
-export const INSTRUCTION_TIMEOUT_SEC = 300;
 export { CUT_OFF };
-
-// Documented commands run one by one in the replay copy, inside the audit's overall time budget:
-// each gets what is left of it, and none starts once it is spent.
-export async function replayInstructions(audit: Audit, ex: Executor, copyDir: string, budget: Budget, registryValues: string[], notInstalled: { blocked?: string } | null): Promise<void> {
-  for (const item of audit.instructions.filter((i) => i.category === "replay" && i.staticResult === "pass")) {
-    if (notInstalled) {
-      item.result = "not_run";
-      item.reason = notInstalled.blocked ? "not replayed because the install was blocked on this machine" : "not replayed because the install failed";
-      item.blocked = notInstalled.blocked;
-      continue;
-    }
-    const leftSec = Math.floor((budget.totalMs - (Date.now() - budget.startedAt)) / 1000);
-    if (overBudget(budget, "*") || leftSec < 1) {
-      item.result = "not_run";
-      item.reason = CUT_OFF;
-      continue;
-    }
-    const cwd = dirname(item.source) === "" ? "." : dirname(item.source);
-    const out = await ex.exec(item.text, exists(join(copyDir, cwd)) ? cwd : ".", Math.min(INSTRUCTION_TIMEOUT_SEC, leftSec));
-    charge(budget, "*", out.durationMs);
-    const ok = out.exitCode === 0 && !out.timedOut;
-    const redacted = redact(out.output, registryValues);
-    const why = ok ? null : diagnose(out.output, out.timedOut, "instruction");
-    if (!ok && ex.where !== "container" && out.output.includes(SUDO_SHIM_MARK)) {
-      item.result = "not_run";
-      item.reason = "not replayed: it uses sudo, which the audit never runs on the host";
-      item.blocked = "it uses sudo, which the audit never runs on the host";
-      continue;
-    }
-    if (why?.cause === "permission") {
-      item.result = "not_run";
-      item.reason = `not replayed: ${why.detail} on this machine, an environment limit rather than a repo defect`;
-      item.blocked = `${why.detail} on this machine`;
-      continue;
-    }
-    if (why?.cause === "missing_tool" && (ex.where !== "container" || ex.imageSource !== "repo")) {
-      const where = ex.where === "container" ? `in the audit's image (${ex.image})` : "on this machine";
-      item.result = "not_run";
-      item.reason = `not replayed: ${why.detail} ${where}, an environment limit rather than a repo defect`;
-      item.blocked = `${why.detail} ${where}`;
-      continue;
-    }
-    if (why && (why.cause === "credential" || why.cause === "network" || why.cause === "service" || why.cause === "registry")) {
-      item.category = "needs_access";
-      item.result = "not_run";
-      item.reason = `not replayed: it ${why.cause === "network" ? "needs the network" : why.detail}, which the replay doesn't provide`;
-      continue;
-    }
-    // A timeout the budget forced is the audit's limit, not a slow instruction.
-    if (out.timedOut && overBudget(budget, "*")) {
-      item.result = "not_run";
-      item.reason = CUT_OFF;
-      continue;
-    }
-    const ev = addEvidence(audit, {
-      checkId: "context.instructions_verified",
-      condition: "instructions",
-      strength: ex.strength,
-      where: ex.where,
-      result: ok ? "pass" : "fail",
-      command: item.text,
-      cwd,
-      image: ex.image ?? undefined,
-      exitCode: out.exitCode,
-      timedOut: out.timedOut,
-      durationMs: out.durationMs,
-      outputTail: tail(redacted, 1500),
-      outputDigest: sha256(redacted),
-      summary: `${item.source}:${item.line} \`${item.text}\` ${ok ? "replays" : "fails: " + why!.detail}`,
-    });
-    item.result = ok ? "pass" : "fail";
-    item.reason = ok ? undefined : why!.detail;
-    item.evidenceId = ev.id;
-  }
-}
