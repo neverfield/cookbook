@@ -130,15 +130,15 @@ function instructions(audit: Audit): Explanation[] {
   });
 }
 
-const SAFETY_FALLBACK: Record<SafetyFinding["kind"], string> = { secret: "secret", lifecycle_hook: "lifecycle-hook", network_piped: "network-piped", destructive: "destructive", deploy_publish: "deploy-publish", credential_needed: "credential-needed", elevated: "elevated" };
+const SAFETY_FALLBACK: Record<SafetyFinding["kind"], string> = { secret: "secret", lifecycle_hook: "lifecycle-hook", network_piped: "network-piped", destructive: "destructive", deploy_publish: "deploy-publish", credential_needed: "credential-needed", elevated: "elevated", host_mode: "host-mode" };
 
 function safety(audit: Audit): Explanation[] {
   return audit.safety.map((s) => ({
     kind: "safety" as const,
-    subject: `${s.file}${s.line ? `:${s.line}` : ""}`,
+    subject: s.file === "." ? "this audit" : `${s.file}${s.line ? `:${s.line}` : ""}`,
     result: s.waived ? "waived" : s.blocking ? "blocks Level 2" : "listed for review",
-    ran: "the secret and script scan",
-    where: STATIC_PLACE,
+    ran: s.kind === "host_mode" ? "the repo's commands, in host mode" : "the secret and script scan",
+    where: s.kind === "host_mode" ? "on the host, with --allow-host" : STATIC_PLACE,
     happened: s.waived ? `${s.waived.was}; waived by ${s.waived.waiver} (${s.waived.by}): ${s.waived.reason}` : s.detail,
     rule: SAFETY_RULES[s.rule ?? SAFETY_FALLBACK[s.kind]] ?? SAFETY_RULES.secret,
   }));

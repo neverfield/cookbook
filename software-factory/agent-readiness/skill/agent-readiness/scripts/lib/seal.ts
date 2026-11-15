@@ -52,6 +52,7 @@ export interface ComponentResult {
   level: Level;
   couldBe: Level | null;
   outcomeReasons: string[];
+  unproven?: boolean;
 }
 
 export interface Computed {
@@ -77,13 +78,13 @@ export function compute(audit: Audit, rubric: Rubric, history: HistoryLine[], ta
     const s = statesOf(states.get(c.id)!);
     const proven = componentLevel(rubric, s);
     const measured = outcomeLevel(rubric, { level2: proven.level === 2, targets, outcomes: o ? { agent: o.byComponent[c.id] ?? emptyStats(), control: o.control, truncated: o.truncated, windowDays: o.window.days } : null, previousAtLevel3: previousAtLevel3(history, c.id), level3Run: level3Run(history, c.id, run) });
-    levels.set(c.id, { level: measured.level ?? proven.level, couldBe: measured.level ? null : proven.couldBe, outcomeReasons: measured.reasons });
+    levels.set(c.id, { level: measured.level ?? proven.level, couldBe: measured.level ? null : proven.couldBe, outcomeReasons: measured.reasons, ...(!measured.level && proven.unproven ? { unproven: true } : {}) });
     const m = new Map<ScenarioId, LevelResult>();
     for (const id of scenariosFor(rubric, audit.scenarios ?? [], c.id)) m.set(id, componentLevel(rubric, s, id));
     scenarioLevels.set(c.id, m);
   }
   const active = activeComponents(rubric, audit.profile!.components, history);
-  const r = repoLevel(new Map([...levels.entries()].map(([id, l]) => [id, { level: l.level, couldBe: l.couldBe, missing: [], unknown: [] }])), active);
+  const r = repoLevel(new Map([...levels.entries()].map(([id, l]) => [id, { level: l.level, couldBe: l.couldBe, missing: [], unknown: [], ...(l.unproven ? { unproven: true } : {}) }])), active);
   const outcomeReasons = [...new Set(r.setBy.flatMap((id) => levels.get(id)?.outcomeReasons ?? []))];
   return { states, levels, scenarioLevels, repo: { ...r, outcomeReasons }, active };
 }

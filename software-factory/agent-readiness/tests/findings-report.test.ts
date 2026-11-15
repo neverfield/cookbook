@@ -240,6 +240,13 @@ describe("every result is explained by the report", () => {
     assert.ok(explanationGaps(report, audit).includes("the report doesn't explain api's level"));
   });
 
+  test("a repo whose Level 1 was only blocked is unproven at the repo level too, which the history line carries", () => {
+    const audit = makeAudit({ components: [{ id: "app", share: 1 }] });
+    for (const e of audit.evidence.filter((x) => x.kind === "install")) Object.assign(e, { result: "not_run", blocked: "the install hit a TLS or certificate error on the network" });
+    const c = compute(audit, rubric, []);
+    assert.deepEqual([c.levels.get("app")!.unproven, c.repo.unproven], [true, true]);
+  });
+
   test("a repo mostly in an unassessed language says so in the heading", () => {
     const report = reportFor(makeAudit({ components: [{ id: "ui", share: 0.1, test: "missing" }, { id: "backend", share: 0.9, assessed: false }] }));
     assert.match(report.executive.heading, /covers only 10% of recent changes, and the rest isn't assessed/);

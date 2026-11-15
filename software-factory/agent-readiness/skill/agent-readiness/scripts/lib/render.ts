@@ -511,7 +511,7 @@ function coverageLine(input: RenderInput): string {
     const shown = listed.slice(0, 5).map((s) => {
       const where = `${s.file}${s.line ? `:${s.line}` : ""}`;
       const text = s.detail.replace(/`/g, "");
-      return banned(where) ? text : `${text} (${where})`;
+      return s.file === "." || banned(where) ? text : `${text} (${where})`;
     }).filter((t) => !banned(t));
     line += ` Listed for review, not blocking: ${shown.join("; ")}${listed.length > 5 ? `; and ${listed.length - 5} more in part 5` : ""}.`;
   }

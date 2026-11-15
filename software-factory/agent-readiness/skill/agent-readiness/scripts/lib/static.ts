@@ -780,6 +780,7 @@ export const SAFETY_RULES: Record<string, string> = {
   destructive: "A script that deletes data is listed for review.",
   "deploy-publish": "A script that deploys or publishes is listed for review.",
   elevated: "A setup step or script that uses sudo is listed for review; the audit runs it only inside a container.",
+  "host-mode": "Host mode runs the repo's commands on this machine as this user, so the report says it could read local files; it is never a sandbox.",
   waived: INSTRUCTION_RULES.waived,
 };
 
