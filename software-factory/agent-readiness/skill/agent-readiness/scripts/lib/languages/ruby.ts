@@ -207,7 +207,7 @@ export function rubyQuoted(text: string): Set<number> {
   for (let l = 0; l < lines.length; l++) {
     const line = lines[l];
     if (!open && /^__END__\s*$/.test(line)) {
-      span(l, lines.length);
+      span(l, lines.length - 1);
       break;
     }
     if (!open && /^=begin\b/.test(line)) {
