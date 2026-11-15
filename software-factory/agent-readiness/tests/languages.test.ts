@@ -19,6 +19,7 @@ import { RAN_OUT_BEFORE, banRepeats, budgetFloors, environmentLimit, instruction
 import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { IDLE_MARK, IDLE_OFFLINE, compilerError, diagnose, failingTests } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { extractFromMarkdown, instructionItems } from "../skill/agent-readiness/scripts/lib/static.ts";
+import { staticSignals } from "../skill/agent-readiness/scripts/lib/signals.ts";
 import { instructionKey } from "../skill/agent-readiness/scripts/lib/instructions.ts";
 import { existsExact } from "../skill/agent-readiness/scripts/lib/util.ts";
 import { scanText } from "../skill/agent-readiness/scripts/lib/redact.ts";
@@ -749,5 +750,40 @@ describe("servers and stalls don't spend the audit's time", () => {
     } finally {
       s.remove();
     }
+  });
+});
+
+describe("the targeted-tests signal knows every scored toolchain's runner", () => {
+  const signal = (language: Language, command: string) => {
+    const dir = repo({ "README.md": "# x\n" });
+    const profile = { ...buildProfile(dir, dir, rubric), components: [{ id: "app", path: ".", language, assessed: true, manifest: null, scripts: {}, changes: 1, changeShare: 1 }] };
+    const contract = [{ id: "cmd-app-test", kind: "test" as const, component: "app", cwd: ".", command, source: "readiness", reason: "x", timeoutSec: 600 }];
+    return staticSignals(dir, profile, contract).find((s) => s.id === "targeted_tests")!;
+  };
+
+  test("each runner says how it runs one test", () => {
+    const cases: [Language, string, RegExp][] = [
+      ["java", "./mvnw -B -q test", /-Dtest=Class/],
+      ["kotlin", "./gradlew --no-daemon test", /--tests/],
+      ["kotlin", "gradle jvmTest", /--tests/],
+      ["csharp", "dotnet test --nologo", /--filter/],
+      ["go", "go test -count=1 -v ./...", /-run/],
+      ["rust", "cargo test --locked", /test name filter/],
+      ["php", "vendor/bin/phpunit", /--filter/],
+      ["php", "./vendor/bin/pest", /Pest/],
+      ["ruby", "bundle exec rspec", /spec file/],
+      ["ruby", "ruby -Itest test/cart_test.rb", /minitest/],
+      ["ruby", "bin/rails test", /minitest/],
+    ];
+    for (const [language, command, how] of cases) {
+      const s = signal(language, command);
+      assert.equal(s.found, true, `${command}: ${s.detail}`);
+      assert.match(s.detail, how, command);
+    }
+  });
+
+  test("a command that runs no test runner still shows no way to run one file", () => {
+    assert.equal(signal("go", "go vet ./...").found, false);
+    assert.equal(signal("java", "./mvnw -B package -DskipTests=false").found, false);
   });
 });
