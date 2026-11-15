@@ -11,7 +11,7 @@
     "repo": {
       "type": "object",
       "required": ["name", "commit", "dirtyTree"],
-      "properties": { "name": { "type": "string" }, "commit": { "type": "string" }, "dirtyTree": { "type": "boolean" } }
+      "properties": { "name": { "type": "string" }, "commit": { "type": "string" }, "dirtyTree": { "type": "boolean" }, "shallow": { "type": "boolean" }, "submodulesMissing": { "type": "array", "items": { "type": "string" } }, "lfsPointers": { "type": "integer", "minimum": 0 } }
     },
     "scenarios": {
       "type": "array",

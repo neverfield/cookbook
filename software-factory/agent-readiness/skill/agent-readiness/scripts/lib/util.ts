@@ -121,9 +121,116 @@ export interface GitResult {
   stderr: string;
 }
 
+// Near V8's string limit, so a long `git log` on a large repo fails loudly instead of quietly
+// returning nothing at 64 MB.
+const GIT_MAX_BUFFER = 512 * 1024 * 1024;
+
 export function git(args: string[], cwd: string, timeoutMs?: number): GitResult {
-  const r = spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...(timeoutMs ? { timeout: Math.max(1, timeoutMs) } : {}) });
-  return { ok: r.status === 0, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+  const r = spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: GIT_MAX_BUFFER, ...(timeoutMs ? { timeout: Math.max(1, timeoutMs) } : {}) });
+  const stderr = r.error && (r.error as NodeJS.ErrnoException).code === "ENOBUFS" ? `git ${args[0]} printed more than ${GIT_MAX_BUFFER / 1024 / 1024} MB` : (r.stderr ?? "");
+  return { ok: r.status === 0 && !r.error, stdout: r.stdout ?? "", stderr };
+}
+
+export function isShallow(repo: string): boolean {
+  return git(["rev-parse", "--is-shallow-repository"], repo).stdout.trim() === "true";
+}
+
+// The last commit date of each file, from one `git log` walk instead of one process per file.
+// Files the walk didn't reach within maxCommits (or the time bound) are left out.
+export function lastChanged(repo: string, files: string[], opts: { commit?: string; under?: string; maxCommits?: number; timeoutMs?: number } = {}): Map<string, string> {
+  const want = new Set(files);
+  const out = new Map<string, string>();
+  if (!want.size) return out;
+  const args = ["log", opts.commit ?? "HEAD", "--no-renames", "--name-only", "--format=@@%cI", "-n", String(opts.maxCommits ?? 5000)];
+  if (opts.under && opts.under !== ".") args.push("--", opts.under);
+  const r = git(args, repo, opts.timeoutMs);
+  let date = "";
+  for (const line of r.stdout.split("\n")) {
+    if (line.startsWith("@@")) date = line.slice(2);
+    else if (line && want.has(line) && !out.has(line)) {
+      out.set(line, date);
+      if (out.size === want.size) break;
+    }
+  }
+  return out;
+}
+
+const GLOB_CHARS = /[*?{[]/;
+
+const escapeRe = (s: string) => s.replace(/[.+^$()|[\]\\{}]/g, "\\$&");
+
+function segmentRegex(seg: string): string {
+  let s = "";
+  for (let j = 0; j < seg.length; j++) {
+    const ch = seg[j];
+    const end = ch === "{" ? seg.indexOf("}", j) : -1;
+    if (ch === "*") s += "[^/]*";
+    else if (ch === "?") s += "[^/]";
+    else if (end > j) {
+      s += `(?:${seg.slice(j + 1, end).split(",").map(segmentRegex).join("|")})`;
+      j = end;
+    } else s += escapeRe(ch);
+  }
+  return s;
+}
+
+// `**` is zero or more folders, so `packages/**` also matches `packages` and `**/app` matches `app`.
+function globRegex(pattern: string): RegExp {
+  const segs = pattern.split("/");
+  if (segs.length === 1 && segs[0] === "**") return /^.*$/;
+  let re = "";
+  segs.forEach((seg, i) => {
+    if (seg === "**") re += i === 0 ? "(?:[^/]+/)*" : "(?:/[^/]+)*";
+    else re += (i === 0 || (i === 1 && segs[0] === "**") ? "" : "/") + segmentRegex(seg);
+  });
+  return new RegExp(`^${re}$`);
+}
+
+// Workspace folders an npm, Yarn or pnpm `workspaces` list names: `*`, `**` at any depth, `?`,
+// `{a,b}`, and `!` exclusions, which apply whatever their position in the list. `accept` filters
+// the folders a glob reaches, such as to those with a package.json.
+export function workspaceDirs(tree: string, patterns: string[], accept: (dir: string) => boolean = () => true): string[] {
+  const clean = (p: string) => p.trim().replace(/^\.\//, "").replace(/\/+$/, "");
+  const include = patterns.filter((p) => !p.trim().startsWith("!")).map(clean).filter(Boolean);
+  const exclude = patterns.filter((p) => p.trim().startsWith("!")).map((p) => globRegex(clean(p.trim().slice(1))));
+  const found = new Set<string>();
+  const dirs: string[] = [];
+  const walk = (rel: string, depth: number) => {
+    if (depth > 12) return;
+    let names: string[];
+    try {
+      names = readdirSync(rel ? join(tree, rel) : tree).sort();
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (SKIP_DIRS.has(name)) continue;
+      const child = rel ? `${rel}/${name}` : name;
+      let st;
+      try {
+        st = statSync(join(tree, child));
+      } catch {
+        continue;
+      }
+      if (!st.isDirectory()) continue;
+      dirs.push(child);
+      walk(child, depth + 1);
+    }
+  };
+  let walked = false;
+  for (const p of include) {
+    if (!GLOB_CHARS.test(p)) {
+      if (existsSync(join(tree, p)) && statSync(join(tree, p)).isDirectory()) found.add(p);
+      continue;
+    }
+    if (!walked) {
+      walk("", 0);
+      walked = true;
+    }
+    const re = globRegex(p);
+    for (const d of dirs) if (re.test(d)) found.add(d);
+  }
+  return [...found].filter((d) => !exclude.some((re) => re.test(d)) && accept(d)).sort();
 }
 
 export function gitOrThrow(args: string[], cwd: string): string {

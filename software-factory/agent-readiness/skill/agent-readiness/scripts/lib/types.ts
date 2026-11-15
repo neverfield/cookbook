@@ -231,6 +231,8 @@ export interface PrRecord {
   firstCheck: "success" | "failure" | null;
   changesRequested: boolean;
   coAuthors?: string[];
+  // GitHub listed more changed files than it returns, so the PR isn't attributed to components.
+  filesIncomplete?: boolean;
 }
 
 export interface OutcomeStats {
@@ -255,6 +257,8 @@ export interface OutcomesSnapshot {
   multiComponentPrs: number;
   // gh returned as many PRs as it was asked for, so the window may hold more than were read.
   truncated?: boolean;
+  // Agent PRs left out of byComponent because their file list was incomplete.
+  filesIncomplete?: number;
 }
 
 export interface AuditSkillInfo {
@@ -270,7 +274,9 @@ export interface Audit {
   kind: "audit";
   createdAt: string;
   state: "draft" | "sealed";
-  repo: { name: string; commit: string; dirtyTree: boolean };
+  // shallow: the audited clone is shallow, so change shares come from the commits it has.
+  // submodulesMissing and lfsPointers: what the audit tree lacks that a full CI checkout would have.
+  repo: { name: string; commit: string; dirtyTree: boolean; shallow?: boolean; submodulesMissing?: string[]; lfsPointers?: number };
   scenarios: ScenarioSpec[];
   tier: Tier;
   rubric: string;

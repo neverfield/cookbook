@@ -1,4 +1,4 @@
-import { ghJson } from "./gh.ts";
+import { ghGraphql, ghPagedLines } from "./gh.ts";
 import type { Rubric } from "./rubric.ts";
 import type { Component, OutcomeStats, OutcomesSnapshot, PrRecord, RateValue } from "./types.ts";
 import { addDays, fail, fmtShortDate, median, readJson, today } from "./util.ts";
@@ -72,9 +72,14 @@ export function computeOutcomes(prs: PrRecord[], comps: Component[], rubric: Rub
   const control = inWindow.filter((p) => !isAgentPr(p, filter));
   const byComponent: Record<string, OutcomeStats> = {};
   let multi = 0;
+  let incomplete = 0;
   for (const c of comps) byComponent[c.id] = emptyStats();
   const grouped = new Map<string, PrRecord[]>();
   for (const pr of agent) {
+    if (pr.filesIncomplete) {
+      incomplete++;
+      continue;
+    }
     const touched = componentsTouched(pr, comps);
     if (touched.length > 1) multi++;
     for (const id of touched) grouped.set(id, [...(grouped.get(id) ?? []), pr]);
@@ -90,6 +95,7 @@ export function computeOutcomes(prs: PrRecord[], comps: Component[], rubric: Rub
     matchedAgentPrs: agent.map((p) => p.number),
     multiComponentPrs: multi,
     ...(truncated ? { truncated } : {}),
+    ...(incomplete ? { filesIncomplete: incomplete } : {}),
   };
 }
 
@@ -106,64 +112,134 @@ export function describeRate(r: RateValue): string {
   return `${Math.round(r.rate * 100)}% (${r.count} of ${r.n})`;
 }
 
-interface GhPr {
+interface Page<T> {
+  totalCount: number;
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  nodes: T[];
+}
+
+interface GqlPr {
   number: number;
   headRefName: string;
-  author: { login: string } | null;
-  labels: { name: string }[];
   createdAt: string;
   mergedAt: string | null;
   state: string;
-  files: { path: string }[];
-  reviews: { state: string }[];
-  commits: { oid: string; messageBody?: string; authors?: { name: string; email: string }[] }[];
+  author: { __typename: string; login: string } | null;
+  labels: { nodes: { name: string }[] };
+  changesRequested: { totalCount: number };
+  files: Page<{ path: string }>;
+  commits: Page<{ commit: { oid: string; message: string } }>;
 }
 
-interface CheckRuns {
-  total_count?: number;
-  check_runs: { conclusion: string | null; status: string }[];
+// GitHub's search returns at most 1,000 results, whatever the page size.
+export const MAX_PRS = 1000;
+// GitHub lists at most 3,000 files and 250 commits for one pull request.
+const MAX_PR_FILES = 3000;
+const MAX_PR_COMMITS = 250;
+// Small pages with no nested connection past one level keep each query far under GitHub's
+// 500,000-node limit (25 x 100 files + 25 x 100 commits + 25 x 50 labels).
+const PAGE_SIZE = 25;
+
+const PR_FIELDS = `number headRefName createdAt mergedAt state
+  author { __typename login }
+  labels(first: 50) { nodes { name } }
+  changesRequested: reviews(first: 1, states: CHANGES_REQUESTED) { totalCount }
+  files(first: 100) { totalCount pageInfo { hasNextPage endCursor } nodes { path } }
+  commits(first: 100) { totalCount pageInfo { hasNextPage endCursor } nodes { commit { oid message } } }`;
+
+const SEARCH = `query($q: String!, $n: Int!, $after: String) {
+  search(query: $q, type: ISSUE, first: $n, after: $after) {
+    issueCount
+    pageInfo { hasNextPage endCursor }
+    nodes { ... on PullRequest { ${PR_FIELDS} } }
+  }
+}`;
+
+const MORE_FILES = `query($owner: String!, $name: String!, $pr: Int!, $after: String) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $pr) { files(first: 100, after: $after) { totalCount pageInfo { hasNextPage endCursor } nodes { path } } } }
+}`;
+
+const MORE_COMMITS = `query($owner: String!, $name: String!, $pr: Int!, $after: String) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $pr) { commits(first: 100, after: $after) { totalCount pageInfo { hasNextPage endCursor } nodes { commit { oid message } } } } }
+}`;
+
+type PrMore = { repository: { pullRequest: Record<string, Page<unknown>> } };
+
+function rest<T>(page: Page<T>, slug: string, pr: number, field: "files" | "commits", cap: number): T[] {
+  const [owner, name] = slug.split("/");
+  const nodes = [...page.nodes];
+  let info = page.pageInfo;
+  while (info.hasNextPage && nodes.length < cap) {
+    const more = ghGraphql<PrMore>(field === "files" ? MORE_FILES : MORE_COMMITS, { owner, name, pr, after: info.endCursor }).repository.pullRequest[field] as Page<T>;
+    nodes.push(...more.nodes);
+    info = more.pageInfo;
+  }
+  return nodes;
 }
 
-export const MAX_PRS = 300;
-
-export function fetchPrs(repoSlug: string, windowDays: number, maxPrs = MAX_PRS): { prs: PrRecord[]; truncated: boolean } {
+export async function fetchPrs(repoSlug: string, windowDays: number, maxPrs = MAX_PRS): Promise<{ prs: PrRecord[]; truncated: boolean }> {
   const since = addDays(today(), -windowDays);
-  const list = ghJson<GhPr[]>(["pr", "list", "--repo", repoSlug, "--state", "all", "--limit", String(maxPrs), "--search", `created:>=${since}`, "--json", "number,headRefName,author,labels,createdAt,mergedAt,state,files,reviews,commits"]);
-  return { prs: toRecords(repoSlug, list), truncated: list.length >= maxPrs };
+  const q = `repo:${repoSlug} is:pr created:>=${since} sort:created-desc`;
+  const list: GqlPr[] = [];
+  let after: string | null = null;
+  let total = 0;
+  for (;;) {
+    const page: { search: { issueCount: number; pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: GqlPr[] } } = ghGraphql(SEARCH, { q, n: Math.min(PAGE_SIZE, maxPrs - list.length), after });
+    total = page.search.issueCount;
+    list.push(...page.search.nodes.filter((n) => typeof n?.number === "number"));
+    if (!page.search.pageInfo.hasNextPage || list.length >= maxPrs) break;
+    after = page.search.pageInfo.endCursor;
+  }
+  const records = list.map((p) => toRecord(repoSlug, p));
+  let next = 0;
+  const worker = async () => {
+    while (next < records.length) {
+      const r = records[next++];
+      if (r.firstSha) r.pr.firstCheck = await firstCheckOf(repoSlug, r.firstSha);
+    }
+  };
+  await Promise.all(Array.from({ length: CHECK_CONCURRENCY }, worker));
+  return { prs: records.map((r) => r.pr), truncated: total > list.length };
 }
 
-function toRecords(repoSlug: string, list: GhPr[]): PrRecord[] {
-  return list.map((p) => {
-    let firstCheck: PrRecord["firstCheck"] = null;
-    const first = p.commits[0]?.oid;
-    if (first) {
-      try {
-        const runs = ghJson<CheckRuns>(["api", `repos/${repoSlug}/commits/${first}/check-runs?per_page=100`, "-q", "{total_count, check_runs: [.check_runs[] | {conclusion, status}]}"]);
-        // Unknown until every run finished, when runs sit past the first page, or when every run
-        // was skipped, which proves nothing.
-        const all = runs.check_runs;
-        const ran = all.filter((r) => r.conclusion !== "skipped" && r.conclusion !== "neutral");
-        const complete = (runs.total_count ?? all.length) <= all.length;
-        if (complete && all.length && all.every((r) => r.status === "completed") && ran.length) firstCheck = ran.every((r) => r.conclusion === "success") ? "success" : "failure";
-      } catch {
-        firstCheck = null;
-      }
-    }
-    const coAuthors = p.commits.flatMap((c) => [...(c.messageBody ?? "").matchAll(/Co-authored-by:\s*([^\n<]+)/gi)].map((m) => m[1].trim()));
-    return {
-      number: p.number,
-      headRefName: p.headRefName,
-      author: p.author?.login ?? "",
-      labels: p.labels.map((l) => l.name),
-      createdAt: p.createdAt,
-      mergedAt: p.mergedAt,
-      state: p.state,
-      files: p.files.map((f) => f.path),
-      firstCheck,
-      changesRequested: p.reviews.some((r) => r.state === "CHANGES_REQUESTED"),
-      coAuthors,
-    };
-  });
+// One check-runs call per PR, so a few run at once.
+const CHECK_CONCURRENCY = 8;
+
+// Unknown until every run finished, or when every run was skipped, which proves nothing.
+async function firstCheckOf(repoSlug: string, sha: string): Promise<PrRecord["firstCheck"]> {
+  try {
+    const runs = (await ghPagedLines(`repos/${repoSlug}/commits/${sha}/check-runs?per_page=100`, ".check_runs[] | [.status, (.conclusion // \"\")] | join(\" \")")).map((l) => {
+      const [status, conclusion] = l.split(" ");
+      return { status, conclusion };
+    });
+    const ran = runs.filter((r) => r.conclusion !== "skipped" && r.conclusion !== "neutral");
+    if (!runs.length || !runs.every((r) => r.status === "completed") || !ran.length) return null;
+    return ran.every((r) => r.conclusion === "success") ? "success" : "failure";
+  } catch {
+    return null;
+  }
+}
+
+function toRecord(repoSlug: string, p: GqlPr): { pr: PrRecord; firstSha: string | undefined } {
+  const files = rest(p.files, repoSlug, p.number, "files", MAX_PR_FILES).map((f) => f.path);
+  const commits = rest(p.commits, repoSlug, p.number, "commits", MAX_PR_COMMITS).map((c) => c.commit);
+  const coAuthors = commits.flatMap((c) => [...(c.message ?? "").matchAll(/Co-authored-by:\s*([^\n<]+)/gi)].map((m) => m[1].trim()));
+  const pr: PrRecord = {
+    number: p.number,
+    headRefName: p.headRefName,
+    // As `gh pr list` names them, so author filters written for it still match.
+    author: p.author ? (p.author.__typename === "Bot" ? `app/${p.author.login}` : p.author.login) : "",
+    labels: p.labels.nodes.map((l) => l.name),
+    createdAt: p.createdAt,
+    mergedAt: p.mergedAt,
+    state: p.state,
+    files,
+    firstCheck: null,
+    changesRequested: p.changesRequested.totalCount > 0,
+    coAuthors,
+    ...(files.length < p.files.totalCount ? { filesIncomplete: true } : {}),
+  };
+  return { pr, firstSha: commits[0]?.oid };
 }
 
 export function loadPrsFile(path: string): PrRecord[] {
