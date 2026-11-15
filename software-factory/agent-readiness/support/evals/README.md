@@ -119,6 +119,12 @@ npm run evals -- --release-check support/evals/runs/result.json --release-record
 
 `compare()` against the baseline still runs alongside, to catch drift case by case. The release verdict doesn't depend on a baseline.
 
+### Planted faults and the kill rate
+
+Faults are chosen from the code ([../../skill/agent-readiness/scripts/lib/mutate.ts](../../skill/agent-readiness/scripts/lib/mutate.ts) `chooseSites()`): the pick is seeded by a digest of the files the tests import and of the tests themselves, so the same code gets the same faults and a fault result changes only when the code does. A non-empty seed, such as an eval's pinned seed or the grader's own for `freshFaultsCaught`, salts that digest to get other faults. Faults never land in docstrings, block comments or template literals that span lines, type-only lines, or timing constants, and never as a boundary flip on a clamp guard that returns its own bound, which no test can tell apart. Tests reach code through relative imports, tsconfig `paths` and `baseUrl`, package.json `imports`, and barrel files; a target in `dist/` or `build/` moves to its source under `src/`, or is dropped.
+
+`faultsVerdict()` passes a component when the tests catch at least `mutation.killRate` of the faults that gave a clear result, and needs every one while the rubric sets no rate. `support/tools/kill-rate.ts` calibrates the rate on audited repos, such as the pinned trial checkouts: it tabulates caught and counted per component and audit, optionally audits each repo again per `--seeds` value, and shows, per candidate rate, how many component audits pass and which components' verdicts change between audits.
+
 ### Baseline and compare()
 
 `evals/baseline.json` is schema `@2`:
