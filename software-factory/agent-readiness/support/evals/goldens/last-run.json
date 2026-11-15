@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-11-15T20:44:16.418Z",
+  "ranAt": "2026-11-15T21:52:36.437Z",
   "results": [
     {
       "id": "slugify",
@@ -94,18 +94,14 @@
       "id": "uuid",
       "sha": "2d3c2a9cc518326daf99a383f07c4d3c44317e4d",
       "scoring": "60f9eff4ff44fb5dabf333604bad48a52aff6ec70c8cca5b034f02c0294d0062",
-      "commit": "3231d3f09ee452991aba037c1302feb86fb1bf91",
-      "minutes": 0,
-      "repoLevel": null,
-      "outcome": "not_assessed",
-      "levels": {},
-      "excluded": [
-        {
-          "id": "uuid",
-          "toolchain": "Go",
-          "reason": "Go isn't supported yet"
-        }
-      ],
+      "commit": "f239ba72204112e4da70c4704d315625c57b63e6",
+      "minutes": 0.3,
+      "repoLevel": 2,
+      "outcome": "proven",
+      "levels": {
+        "uuid": 2
+      },
+      "excluded": [],
       "failures": []
     },
     {
