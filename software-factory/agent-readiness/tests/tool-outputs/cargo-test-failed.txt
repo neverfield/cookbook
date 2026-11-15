@@ -1,0 +1,25 @@
+   Compiling calc v0.1.0 (/w)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+     Running unittests src/lib.rs (target/debug/build/calc/cbc7eb0ec97a09bc/out/calc-cbc7eb0ec97a09bc)
+
+running 2 tests
+test tests::zero ... ok
+test tests::adds ... FAILED
+
+failures:
+
+---- tests::adds stdout ----
+
+thread 'tests::adds' (72) panicked at src/lib.rs:7:17:
+assertion `left == right` failed
+  left: 0
+ right: 4
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::adds
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`

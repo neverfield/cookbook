@@ -11,11 +11,15 @@ import { IMAGE_DIGESTS } from "../skill/agent-readiness/scripts/lib/images.ts";
 import { inComponent, namedAfter, sameFolder, withInlineTests } from "../skill/agent-readiness/scripts/lib/languages/coverage.ts";
 import { ECOSYSTEMS, LANGUAGES, ecosystemOf, languageOf } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
 import type { ReplayHooks } from "../skill/agent-readiness/scripts/lib/languages/language.ts";
+import { php } from "../skill/agent-readiness/scripts/lib/languages/php.ts";
 import { ruby } from "../skill/agent-readiness/scripts/lib/languages/ruby.ts";
 import { chooseSites, targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
-import { budgetFloors, environmentLimit, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
-import { diagnose } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
+import { budgetFloors, environmentLimit, instructionExecutor, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { diagnose, failingTests } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
+import { extractFromMarkdown, instructionItems } from "../skill/agent-readiness/scripts/lib/static.ts";
+import { existsExact } from "../skill/agent-readiness/scripts/lib/util.ts";
 import { scanText } from "../skill/agent-readiness/scripts/lib/redact.ts";
 import { jvm } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
 import { loadRubric, latestRubricVersion } from "../skill/agent-readiness/scripts/lib/rubric.ts";
@@ -521,5 +525,108 @@ describe("the ordinary user gets an /etc/passwd entry", () => {
     } finally {
       s.remove();
     }
+  });
+});
+
+describe("a supported language an older rubric doesn't list", () => {
+  test("is left out with a reason that names it and the rubric, for PHP and Ruby alike", () => {
+    const old = loadRubric("2026-10-alpha");
+    assert.ok(!old.mutation.languages.includes("php") && !old.mutation.languages.includes("ruby"));
+    const saved = { replay: php.replay, tier: php.stacks[0].tier };
+    php.replay = { ...toy, classify: () => ({ language: "php", packageManager: "composer" }) };
+    php.stacks[0].tier = "supported";
+    try {
+      withToy(() => {
+        const dir = repo({ "app/composer.json": '{"name":"acme/app"}', "app/src/Cart.php": "<?php\n", "worker/Gemfile": "source 'https://rubygems.org'\n", "worker/lib/job.py": "" });
+        const byId = Object.fromEntries(buildProfile(dir, dir, old).components.map((c) => [c.id, c]));
+        assert.deepEqual([byId.app.assessed, byId.app.notAssessedReason], [false, "PHP isn't scored under rubric 2026-10-alpha"]);
+        assert.deepEqual([byId.worker.assessed, byId.worker.notAssessedReason], [false, "Ruby isn't scored under rubric 2026-10-alpha"]);
+        const current = Object.fromEntries(buildProfile(dir, dir, rubric).components.map((c) => [c.id, c]));
+        assert.deepEqual([current.app.assessed, current.worker.assessed], [true, true], "the newest rubric scores both");
+      });
+    } finally {
+      php.replay = saved.replay;
+      php.stacks[0].tier = saved.tier;
+    }
+  });
+});
+
+// pocketbase/pocketbase@7f2773e CONTRIBUTING.md, lines 28-70: "Navigate to `examples/base`" is a step
+// for running the example, and the test and lint blocks under the next bullet run from the root.
+const POCKETBASE_CONTRIBUTING = "\n## Making changes in the Go code\n\nPocketBase is distributed as a Go package, which means that in order to run the project you'll have to create a Go `main` program that imports the package.\n\nThe repository already includes such program, located in `examples/base`, that is also used for the prebuilt executables.\n\nSo, let's assume that you already done some changes in the PocketBase Go code and you want now to run them:\n\n1. Navigate to `examples/base`\n2. Run `go run main.go serve`\n\nThis will start a web server on `http://localhost:8090` with the embedded prebuilt Superuser UI from `ui/dist`. And that's it!\n\n**Before making a PR to the main repository, it is a good idea to:**\n\n- Add unit/integration tests for your changes (we are using the standard `testing` go package).\n  To run the tests, you could execute (while in the root project directory):\n\n  ```sh\n  go test ./...\n\n  # or using the Makefile\n  make test\n  ```\n\n- Run the linter - **golangci** ([see how to install](https://golangci-lint.run/usage/install/#local-installation)):\n\n  ```sh\n  golangci-lint run -c ./golangci.yml ./...\n\n  # or using the Makefile\n  make lint\n  ```\n\n## Making changes in the Superuser UI\n\nPocketBase Superuser UI is a single-page application (SPA) built with Svelte and Vite.\n\nTo start the Superuser UI:\n\n1. Navigate to the `ui` project directory\n2. Run `npm install` to install the node dependencies\n";
+
+describe("a step's working folder stays in its block", () => {
+  test("Navigate to `examples/base` doesn't carry into the later test and lint blocks", () => {
+    const folders = new Set(["examples/base", "ui"]);
+    const found = extractFromMarkdown(POCKETBASE_CONTRIBUTING, { exists: (p) => folders.has(p) }).filter((e) => e.kind === "command");
+    const within = Object.fromEntries(found.map((e) => [e.text, e.within ?? "."]));
+    assert.equal(within["go run main.go serve"], "examples/base");
+    assert.equal(within["go test ./..."], ".");
+    assert.equal(within["make test"], ".");
+    assert.equal(within["make lint"], ".");
+    assert.equal(within["npm install"], "ui", "the UI section's own step still holds for its list");
+  });
+
+  test("a code block right after the step still runs in its folder", () => {
+    const found = extractFromMarkdown("## Web\n\nNavigate to the `web` folder:\n\n```sh\nnpm test\n```\n\nThen go back.\n\n```sh\nnpm run lint\n```\n", { exists: (p) => p === "web" });
+    assert.deepEqual(found.filter((e) => e.kind === "command").map((e) => [e.text, e.within ?? "."]), [["npm test", "web"], ["npm run lint", "."]]);
+  });
+});
+
+describe("a replayed instruction runs in the image of the component it targets", () => {
+  const ex = (name: string) => ({ image: name }) as unknown as Executor;
+  const exs = { forComponent: (id: string) => ex(`image of ${id}`), repo: ex("the repo's image") };
+  const comp = (id: string, path: string, language: Language, assessed = true) => ({ id, path, language, assessed, manifest: null, scripts: {}, changes: 1, changeShare: 0.5 });
+  const tree = repo({ Makefile: "test:\n\tgo test ./...\n\nlint:\n\tgolangci-lint run ./...\n\nui:\n\tnpm --prefix ui run build\n" });
+  const pick = (components: ReturnType<typeof comp>[], cwd: string, command: string) => (instructionExecutor(exs, { components } as unknown as Parameters<typeof instructionExecutor>[1], tree, cwd, command) as unknown as { image: string }).image;
+  const both = [comp("pocketbase", ".", "go"), comp("ui", "ui", "js")];
+
+  test("by the tool it runs, the Make target's recipe, and the folder it runs in", () => {
+    assert.equal(pick(both, ".", "go test ./..."), "image of pocketbase");
+    assert.equal(pick(both, ".", "make test"), "image of pocketbase");
+    assert.equal(pick(both, ".", "make ui"), "image of ui");
+    assert.equal(pick(both, ".", "npm --prefix ui ci"), "image of ui");
+    assert.equal(pick(both, "ui", "npm run build"), "image of ui");
+    assert.equal(pick(both, ".", "cd ui && npm test"), "image of ui");
+    assert.equal(pick(both, ".", "./scripts/release.sh"), "image of pocketbase", "an unknown tool goes to the root component");
+  });
+
+  test("a tool no assessed component uses stays in the repo's image", () => {
+    assert.equal(pick([comp("pocketbase", ".", "go", false), comp("ui", "ui", "js")], ".", "go test ./..."), "the repo's image");
+  });
+});
+
+describe("a failing Go or Rust test is named in the summary", () => {
+  const out = (name: string) => readFileSync(join(dirname(new URL(import.meta.url).pathname), "tool-outputs", `${name}.txt`), "utf8");
+
+  test("go test's --- FAIL lines, a subtest only when its parent isn't failing", () => {
+    assert.deepEqual(failingTests(out("go-test-failed")), ["TestAdd", "TestTable"]);
+    assert.deepEqual(diagnose(out("go-test-failed"), false, "test"), { cause: "unknown", detail: "TestAdd and 1 more failed" });
+  });
+
+  test("cargo test's FAILED lines", () => {
+    assert.deepEqual(diagnose(out("cargo-test-failed"), false, "test"), { cause: "unknown", detail: "tests::adds failed" });
+  });
+});
+
+// TheAlgorithms/C-Sharp@6d3b02a README.md:156 links ./Algorithms/Shufflers/LinqShuffler.cs, but the
+// file is LINQShuffler.cs. A Mac's case-insensitive filesystem would let it pass there and fail on
+// Linux, so paths are matched against the folders' listings, exactly.
+describe("an instruction path must match the repo's spelling, on every filesystem", () => {
+  test("existsExact compares each segment with its folder's listing", () => {
+    const dir = repo({ "Algorithms/Shufflers/LINQShuffler.cs": "", Makefile: "test:\n\ttrue\n" });
+    assert.equal(existsExact(dir, "Algorithms/Shufflers/LINQShuffler.cs"), true);
+    assert.equal(existsExact(dir, "./Algorithms/Shufflers/../Shufflers/LINQShuffler.cs"), true);
+    assert.equal(existsExact(dir, "Algorithms/Shufflers/LinqShuffler.cs"), false);
+    assert.equal(existsExact(dir, "algorithms/Shufflers/LINQShuffler.cs"), false);
+    assert.equal(existsExact(dir, "Algorithms"), true);
+    assert.equal(existsExact(dir, "."), true);
+    assert.equal(existsExact(dir, "makefile"), false);
+  });
+
+  test("a README link that differs from the file only in case is flagged", () => {
+    const dir = repo({ "Algorithms/Shufflers/LINQShuffler.cs": "class LINQShuffler {}\n", "README.md": "# Algorithms\n\n- [LINQ shuffler](./Algorithms/Shufflers/LinqShuffler.cs)\n- [Same, spelled right](./Algorithms/Shufflers/LINQShuffler.cs)\n" });
+    const items = instructionItems(dir, buildProfile(dir, dir, rubric)).filter((i) => i.kind === "path");
+    assert.deepEqual(items.map((i) => [i.text, i.result]), [["./Algorithms/Shufflers/LinqShuffler.cs", "fail"], ["./Algorithms/Shufflers/LINQShuffler.cs", "pass"]]);
   });
 });
