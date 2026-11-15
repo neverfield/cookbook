@@ -233,6 +233,20 @@ function toolchainGap(text: string): string | null {
   return null;
 }
 
+// The first error a compiler reports, rather than the build tool's tally ("2 Error(s)", "BUILD
+// FAILURE"): C#'s "Orders.cs(5,80): error CS0103: ...", without MSBuild's trailing [project]; the
+// first "[ERROR] /path/X.java:[l,c] ..." after Maven's "COMPILATION ERROR"; kotlinc's
+// "e: file:///.../X.kt:l:c ...".
+export function compilerError(output: string): string | null {
+  const cs = output.match(/^\s*(\S[^\n]*?: error CS\d{4}: [^\n]*?)(?:\s+\[[^\]\n]+\])?\s*$/m);
+  if (cs) return cs[1].trim();
+  const maven = output.match(/COMPILATION ERROR[^\n]*\n(?:[^\n]*\n)*?\[ERROR\] (\S+\.(?:java|kt|groovy|scala):\[\d+,\d+\][^\n]*)/);
+  if (maven) return maven[1].trim();
+  const kotlin = output.match(/^e: ((?:file:\/\/)?\S+\.kts?:\d+:\d+ [^\n]+)$/m);
+  if (kotlin) return kotlin[1].trim();
+  return null;
+}
+
 // The tests a Go or Rust run names as failing: go test's "--- FAIL: TestX" (a subtest only when its
 // parent isn't listed) and cargo test's "test name ... FAILED". Their last line is just "FAIL" or
 // "error: test failed", which says nothing about which test.
@@ -243,8 +257,16 @@ export function failingTests(output: string): string[] {
   return [...new Set([...top, ...rust])];
 }
 
+// What the audit appends to a timed-out command's output when the command's processes used no CPU
+// in the seconds before it was stopped, and whether the network was off then.
+export const IDLE_MARK = "readiness: idle at the timeout";
+export const IDLE_OFFLINE = "with the network off";
+
 export function diagnose(rawOutput: string, timedOut: boolean, phase: string): Diagnosis {
   const clean = rawOutput.replace(/\x1b\[[0-9;]*m/g, "");
+  // Stuck with no CPU while the network was off: most likely waiting on a download, such as an
+  // npm install of a packed tarball inside a test script.
+  if (timedOut && rawOutput.includes(`${IDLE_MARK}`) && rawOutput.includes(IDLE_OFFLINE)) return { cause: "network", detail: `the ${phase} step stopped using CPU ${IDLE_OFFLINE}, likely waiting on the network` };
   if (timedOut) return { cause: "timeout", detail: `the ${phase} step ran out of time` };
   const focus = failingPart(clean);
   const output = `${focus}\n${unwrap(focus)}`;
@@ -276,11 +298,17 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   if (/ensurepip is not\s+available|No module named venv\b/.test(output)) return { cause: "missing_tool", detail: "python3-venv is not installed" };
   const tool = output.match(/(?:^|\n)(?:[^\n:]*: line \d+: |[^\n:]*: \d+: |(?:ba)?sh: )?([\w.+-]+): (?:command )?not found/);
   if (tool) return { cause: "missing_tool", detail: `${tool[1]} is not installed` };
+  // GNU make runs a simple recipe line itself, so a missing tool reads "make: golangci-lint: No such
+  // file or directory" and then "Error 127". A path such as ./scripts/x.sh is the repo's own file.
+  const makeTool = output.match(/(?:^|\n)make(?:\[\d+\])?: ([\w.+-]+): (?:No such file or directory|Command not found)\n(?:[^\n]*\n)*?[^\n]*\bError 127\b/);
+  if (makeTool) return { cause: "missing_tool", detail: `${makeTool[1]} is not installed` };
   const mod = MISSING_MODULE.map((re) => output.match(re)).filter((m): m is RegExpMatchArray => m !== null).sort((a, b) => (a.index ?? 0) - (b.index ?? 0))[0];
   if (mod) return { cause: "missing_module", detail: `module ${mod[1]} is missing` };
   const network = networkFailure(output);
   if (network) return { cause: "network", detail: network };
   if (/SyntaxError|error TS\d{4}|IndentationError/.test(output)) return { cause: "compile", detail: "the code doesn't compile" };
+  const compiler = compilerError(clean);
+  if (compiler) return { cause: "compile", detail: compiler.slice(0, 200) };
   const named = failingTests(clean);
   if (named.length) return { cause: "unknown", detail: named.length === 1 ? `${named[0]} failed` : `${named[0]} and ${named.length - 1} more failed` };
   const lines = (focus.trim() ? focus : clean).split("\n").map((l) => l.trim()).filter(Boolean);
