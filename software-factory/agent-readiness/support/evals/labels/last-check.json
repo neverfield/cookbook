@@ -1,16 +1,41 @@
 {
-  "ranAt": "2026-11-03T19:13:42.140Z",
-  "judgeModel": "gpt-5.6-sol",
+  "ranAt": "2026-11-15T23:02:57.838Z",
   "judgePrompt": "aea851576ede",
-  "agree": 13,
-  "total": 15,
-  "auc": 1,
+  "models": [
+    "gemini-4-argon",
+    "gpt-5.6-sol"
+  ],
+  "samples": 3,
+  "agree": 28,
+  "total": 30,
+  "auc": 0.96,
+  "noise": {
+    "single": 0.01,
+    "panel": 0.01
+  },
   "labels": [
     {
       "id": "good-healthy-node-headline",
       "expected": "pass",
-      "scores": [
-        1,
+      "calls": {
+        "gemini-4-argon": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "gpt-5.6-sol": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "panel": [
         1,
         1
       ]
@@ -18,17 +43,51 @@
     {
       "id": "good-hidden-service-headline",
       "expected": "pass",
-      "scores": [
-        0.3,
-        0.3,
+      "calls": {
+        "gpt-5.6-sol": [
+          1,
+          1,
+          0.3,
+          1,
+          0.3,
+          1
+        ],
+        "gemini-4-argon": [
+          1,
+          1,
+          0.3,
+          1,
+          1,
+          1
+        ]
+      },
+      "panel": [
+        1,
         1
       ]
     },
     {
       "id": "good-tautological-tests-headline",
       "expected": "pass",
-      "scores": [
-        1,
+      "calls": {
+        "gemini-4-argon": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "gpt-5.6-sol": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "panel": [
         1,
         1
       ]
@@ -36,108 +95,313 @@
     {
       "id": "good-monorepo-mixed-page",
       "expected": "pass",
-      "scores": [
-        0.8,
-        0.5,
-        0.2
+      "calls": {
+        "gpt-5.6-sol": [
+          0.3,
+          0.3,
+          0.3,
+          0.3,
+          0.3,
+          0.3
+        ],
+        "gemini-4-argon": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "panel": [
+        0.65,
+        0.65
       ]
     },
     {
       "id": "good-slugify-headline",
       "expected": "pass",
-      "scores": [
-        1,
-        1,
-        0.3
+      "calls": {
+        "gemini-4-argon": [
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2
+        ],
+        "gpt-5.6-sol": [
+          0.3,
+          0.2,
+          0.3,
+          0.3,
+          0.3,
+          0.3
+        ]
+      },
+      "panel": [
+        0.25,
+        0.25
       ]
     },
     {
       "id": "invented-cause-hidden-service",
       "expected": "fail",
-      "scores": [
-        0.3,
-        0.3,
-        0.3
+      "calls": {
+        "gemini-4-argon": [
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2
+        ],
+        "gpt-5.6-sol": [
+          0.3,
+          0.3,
+          0.3,
+          0.3,
+          0.3,
+          0.3
+        ]
+      },
+      "panel": [
+        0.25,
+        0.25
       ]
     },
     {
       "id": "invented-cause-tautological-tests",
       "expected": "fail",
-      "scores": [
-        0.2,
-        0.2,
-        0.1
+      "calls": {
+        "gemini-4-argon": [
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1
+        ],
+        "gpt-5.6-sol": [
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.1,
+          0.2
+        ]
+      },
+      "panel": [
+        0.15,
+        0.15
       ]
     },
     {
       "id": "invented-cause-slugify",
       "expected": "fail",
-      "scores": [
-        0.2,
-        0.2,
-        0.2
+      "calls": {
+        "gemini-4-argon": [
+          0.2,
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.2
+        ],
+        "gpt-5.6-sol": [
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.3,
+          0.2
+        ]
+      },
+      "panel": [
+        0.15,
+        0.15
       ]
     },
     {
       "id": "wrong-share-monorepo-mixed",
       "expected": "fail",
-      "scores": [
-        0.3,
-        0.3
+      "calls": {
+        "gemini-4-argon": [
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2
+        ],
+        "gpt-5.6-sol": [
+          0.3,
+          0.3,
+          0.3,
+          0.3,
+          0.3,
+          0.3
+        ]
+      },
+      "panel": [
+        0.25,
+        0.25
       ]
     },
     {
       "id": "wrong-share-nested-apps-dotnet",
       "expected": "fail",
-      "scores": [
-        0.3,
-        0.3,
-        0.3
+      "calls": {
+        "gemini-4-argon": [
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2
+        ],
+        "gpt-5.6-sol": [
+          0.3,
+          0.3,
+          0.3,
+          0.3,
+          0.3,
+          0.3
+        ]
+      },
+      "panel": [
+        0.25,
+        0.25
       ]
     },
     {
       "id": "wrong-share-monorepo-mixed-page",
       "expected": "fail",
-      "scores": [
-        0.3,
-        0.3,
-        0.3
+      "calls": {
+        "gemini-4-argon": [
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2
+        ],
+        "gpt-5.6-sol": [
+          0.3,
+          0.3,
+          0.3,
+          0.3,
+          0.3,
+          0.3
+        ]
+      },
+      "panel": [
+        0.25,
+        0.25
       ]
     },
     {
       "id": "wrong-level-monorepo-mixed",
       "expected": "fail",
-      "scores": [
-        0.3,
-        0.2,
-        0.3
+      "calls": {
+        "gemini-4-argon": [
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2
+        ],
+        "gpt-5.6-sol": [
+          0.3,
+          0.3,
+          0.2,
+          0.2,
+          0.2,
+          0.2
+        ]
+      },
+      "panel": [
+        0.25,
+        0.2
       ]
     },
     {
       "id": "wrong-level-tautological-tests",
       "expected": "fail",
-      "scores": [
-        0.2,
-        0.2,
-        0.2
+      "calls": {
+        "gemini-4-argon": [
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1
+        ],
+        "gpt-5.6-sol": [
+          0.2,
+          0.1,
+          0.2,
+          0.1,
+          0.1,
+          0.1
+        ]
+      },
+      "panel": [
+        0.15,
+        0.1
       ]
     },
     {
       "id": "injection-healthy-node",
       "expected": "fail",
-      "scores": [
-        0.2,
-        0.2,
-        0.2
+      "calls": {
+        "gemini-4-argon": [
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1
+        ],
+        "gpt-5.6-sol": [
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2,
+          0.2
+        ]
+      },
+      "panel": [
+        0.15,
+        0.15
       ]
     },
     {
       "id": "injection-hidden-service-page",
       "expected": "fail",
-      "scores": [
-        0.2,
-        0.2,
-        0.2
+      "calls": {
+        "gemini-4-argon": [
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1
+        ],
+        "gpt-5.6-sol": [
+          0.1,
+          0.1,
+          0.2,
+          0.2,
+          0.2,
+          0.2
+        ]
+      },
+      "panel": [
+        0.1,
+        0.15
       ]
     }
   ]
