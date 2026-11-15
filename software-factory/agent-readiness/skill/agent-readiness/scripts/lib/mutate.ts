@@ -1,5 +1,7 @@
 import { statSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
+import { inComponent } from "./languages/coverage.ts";
+import { languageOf } from "./languages/index.ts";
 import type { Component, Language } from "./types.ts";
 import { exists, lastChanged, listFiles, readText, sha256 } from "./util.ts";
 
@@ -365,8 +367,15 @@ function sourceOf(tree: string, file: string): string | null {
 
 const plantable = (f: string) => !isTestFile(f) && !f.includes("node_modules") && !/\.d\.[mc]?ts$|\.min\.js$/.test(f);
 
+// A language file's fault hooks, for a language Node's and Python's rules don't cover.
+function hooksFor(lang: Language) {
+  return languageOf(lang)?.replay?.mutation;
+}
+
 export function testFiles(tree: string, comp: Component): string[] {
   const lang = comp.language;
+  const hooks = hooksFor(lang);
+  if (hooks) return inComponent(listFiles(tree), comp.path).filter((f) => hooks.isTest(f));
   return listFiles(tree)
     .filter((f) => comp.path === "." || f.startsWith(comp.path + "/"))
     .filter((f) => isTestFile(f) && (lang === "py" ? f.endsWith(".py") : /\.(ts|tsx|js|mjs|cjs|mts|cts)$/.test(f)));
@@ -380,6 +389,8 @@ const PY_IMPORT = /^\s*(?:from\s+(\S+)\s+import|import\s+([\w.]+))/gm;
 // (an index.ts of `export * from` lines, an __init__.py of relative imports) that re-export them.
 export function targetFiles(tree: string, comp: Component): string[] {
   const lang = comp.language;
+  const hooks = hooksFor(lang);
+  if (hooks) return [...new Set(hooks.covered(tree, comp, testFiles(tree, comp), inComponent(listFiles(tree), comp.path)))].filter((f) => hooks.isSource(f) && !hooks.isTest(f)).sort();
   const aliases = lang === "py" ? { aliases: [], baseUrl: null } : jsAliases(tree, comp);
   const targets = new Set<string>();
   const queue: string[] = [];
@@ -488,13 +499,17 @@ export function equivalentConstant(lines: string[], i: number, before: string, a
 
 export function allSites(tree: string, files: string[], lang: Language): Site[] {
   const sites: Site[] = [];
+  // A language without hooks of its own for sites or quoting gets the C-like rules.
+  const hooks = hooksFor(lang);
+  const quote = (text: string) => (hooks ? (hooks.quoted?.(text) ?? quotedLines(text, "ts")) : quotedLines(text, lang));
+  const onLine = (line: string) => (hooks ? (hooks.sites?.(line) ?? sitesForLine(line, "ts")) : sitesForLine(line, lang));
   for (const file of files) {
     const text = readText(join(tree, file));
-    const quoted = quotedLines(text, lang);
+    const quoted = quote(text);
     const lines = text.split("\n");
     lines.forEach((line, i) => {
       if (quoted.has(i)) return;
-      for (const s of sitesForLine(line, lang)) {
+      for (const s of onLine(line)) {
         if (s.operator === "boundary_flip" && equivalentBoundary(lines, i)) continue;
         if (s.operator === "change_constant" && equivalentConstant(lines, i, s.before, s.after)) continue;
         sites.push({ file, line: i + 1, ...s });

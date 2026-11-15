@@ -2,17 +2,18 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:f
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { ContainerSession, NETWORK_ENV, buildImage, detectRuntime, hostUser, probeLimits } from "./container.ts";
-import { containerImage, toolSetup } from "./contract.ts";
+import { hooked, imagePlan, toolSetup } from "./contract.ts";
 import { diagnose, testCounts } from "./diagnose.ts";
 import { addEvidence } from "./evidence.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
+import { ecosystemOf } from "./languages/index.ts";
 import { applySite, chooseSites, faultsVerdict, killRateOf } from "./mutate.ts";
 import { proxyPasswords, redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { SUDO_SHIM_MARK, runCommand, scrubbedEnv } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
-import type { Audit, CommandKind, CondId, ContractCommand, Diagnosis, Evidence, Mutant, Profile, Strength, Where } from "./types.ts";
+import type { Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Mutant, Profile, Strength, Where } from "./types.ts";
 import { containedPath, exists, fail, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
 import { commandsFor } from "./score.ts";
 import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
@@ -139,6 +140,19 @@ const KIND_CHECK: Record<CommandKind, { check: string; condition?: CondId }> = {
   test: { check: "bootstrap.cold_replay", condition: "clean.test" },
 };
 
+// A test run's counts, by the component's language file when it reads its own runner.
+export function countTests(profile: Profile | null | undefined, component: string, output: string): ReturnType<typeof testCounts> {
+  const comp = profile?.components.find((c) => c.id === component);
+  const own = comp ? hooked(comp)?.testCounts : undefined;
+  return own ? own(output) : testCounts(output);
+}
+
+// Whether output says the code doesn't compile, by the component's language file when it has a rule.
+function compileFailed(comp: Component, output: string, kind: CommandKind): boolean {
+  const own = hooked(comp)?.mutation.compileError;
+  return own ? own(output) : diagnose(output, false, kind).cause === "compile";
+}
+
 export interface PhaseResult {
   cmd: ContractCommand;
   status: "pass" | "fail" | "not_run";
@@ -146,6 +160,8 @@ export interface PhaseResult {
   diagnosis: Diagnosis | null;
   note: string;
   blocked?: string;
+  // Where it ran, when the replay used more than one image.
+  executor?: Executor;
 }
 
 export const INSTALL_BLOCKED = "not run because the install was blocked on this machine";
@@ -202,22 +218,39 @@ export interface Budget {
   totalMs: number;
   startedAt: number;
   used: Map<string, number>;
+  // A slow toolchain's component budget, where its language file raises the floor.
+  floorMs?: Map<string, number>;
 }
 
-export function newBudget(componentMinutes: number, totalMinutes: number): Budget {
-  return { componentMs: componentMinutes * 60000, totalMs: totalMinutes * 60000, startedAt: Date.now(), used: new Map() };
+export function newBudget(componentMinutes: number, totalMinutes: number, floors: Record<string, number> = {}): Budget {
+  const floorMs = new Map(Object.entries(floors).filter(([, m]) => m * 60000 > componentMinutes * 60000).map(([id, m]) => [id, m * 60000]));
+  return { componentMs: componentMinutes * 60000, totalMs: totalMinutes * 60000, startedAt: Date.now(), used: new Map(), ...(floorMs.size ? { floorMs } : {}) };
+}
+
+function componentMs(b: Budget, component: string): number {
+  return b.floorMs?.get(component) ?? b.componentMs;
+}
+
+// The component budgets a slow toolchain's language file raises, in minutes.
+export function budgetFloors(profile: Profile): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const c of profile.components.filter((x) => x.assessed)) {
+    const m = hooked(c)?.budget?.componentMinutes;
+    if (m) out[c.id] = m;
+  }
+  return out;
 }
 
 export function overBudget(b: Budget, component: string): boolean {
   if (Date.now() - b.startedAt > b.totalMs) return true;
-  return component !== "*" && (b.used.get(component) ?? 0) > b.componentMs;
+  return component !== "*" && (b.used.get(component) ?? 0) > componentMs(b, component);
 }
 
 // Seconds of budget left for a component, the whole audit's for "*". A command gets no longer than
 // this, so a large repo's install or test run stops at the budget instead of running past it.
 export function budgetLeftSec(b: Budget, component: string): number {
   const total = b.totalMs - (Date.now() - b.startedAt);
-  const mine = component === "*" ? total : Math.min(total, b.componentMs - (b.used.get(component) ?? 0));
+  const mine = component === "*" ? total : Math.min(total, componentMs(b, component) - (b.used.get(component) ?? 0));
   return Math.max(0, Math.floor(mine / 1000));
 }
 
@@ -258,7 +291,7 @@ export async function runContract(
   ex: Executor,
   contract: ContractCommand[],
   // tree: the audited commit, to list the files a check must leave alone and put them back from.
-  opts: { components: Set<string>; budget: Budget; registryValues: string[]; tree?: string; onResult?: (r: PhaseResult) => void; workspacePackages?: WorkspacePackage[] },
+  opts: { components: Set<string>; budget: Budget; registryValues: string[]; tree?: string; onResult?: (r: PhaseResult) => void; workspacePackages?: WorkspacePackage[]; profile?: Profile | null },
 ): Promise<PhaseResult[]> {
   const results: PhaseResult[] = [];
   const push = (r: PhaseResult) => {
@@ -322,7 +355,7 @@ export async function runContract(
     const changed = watched ? rewritten(ex.root, watched) : [];
     if (changed.length && opts.tree) for (const rel of changed) if (exists(join(opts.tree, rel))) cpSync(join(opts.tree, rel), join(ex.root, rel), { verbatimSymlinks: true });
     // A runner that prints failures and still exits 0 hasn't passed.
-    const reportedFailures = cmd.kind === "test" && out.exitCode === 0 ? (testCounts(out.output)?.failed ?? 0) : 0;
+    const reportedFailures = cmd.kind === "test" && out.exitCode === 0 ? (countTests(opts.profile, cmd.component, out.output)?.failed ?? 0) : 0;
     const ok = out.exitCode === 0 && !out.timedOut && reportedFailures === 0 && changed.length === 0;
     const rewroteDetail = `it changed ${changed.length} ${changed.length === 1 ? "file" : "files"} (${changed.slice(0, 3).join(", ")}${changed.length > 3 ? ", …" : ""}), ${REWROTE}`;
     const diagnosis = ok ? null : changed.length ? { cause: "unknown" as const, detail: rewroteDetail } : reportedFailures > 0 ? { cause: "unknown" as const, detail: `the runner reported ${reportedFailures} failing tests but exited 0` } : diagnose(out.output, out.timedOut, cmd.kind);
@@ -376,7 +409,7 @@ export function evidenceFromPhase(audit: Audit, ex: Executor, r: PhaseResult, re
   const map = KIND_CHECK[r.cmd.kind];
   const redacted = r.outcome ? redact(r.outcome.output, registryValues) : "";
   let summary: string;
-  const counts = r.cmd.kind === "test" && r.outcome ? testCounts(r.outcome.output) : null;
+  const counts = r.cmd.kind === "test" && r.outcome ? countTests(audit.profile, r.cmd.component, r.outcome.output) : null;
   if (r.status === "pass") summary = `${r.cmd.kind} passed${counts ? ` (${counts.passed} of ${counts.total} tests)` : ""}`;
   else if (r.status === "not_run") summary = r.note.startsWith("not run") ? `${r.cmd.kind} ${r.note}` : `${r.cmd.kind} not run: ${r.note}`;
   else summary = `${r.cmd.kind} failed: ${r.diagnosis?.detail ?? "non-zero exit"}${counts && counts.failed ? ` (${counts.failed} of ${counts.total} tests failed)` : ""}`;
@@ -461,36 +494,53 @@ export interface ReplayOptions {
   allowHost?: boolean;
 }
 
-const FROZEN = /(\bci\b|--frozen|--immutable|--frozen-lockfile|\bpoetry (sync\b|install\b.*--sync))/;
+// The ecosystem one of the audit's installs runs: the root's for a repo-wide one.
+function installEcosystem(profile: Profile, cmd: ContractCommand) {
+  const comp = profile.components.find((c) => c.id === cmd.component);
+  return ecosystemOf(cmd.component === "*" ? profile.packageManager : (comp?.packageManager ?? profile.packageManager));
+}
 
-function lockfileEvidence(audit: Audit, ex: Executor, profile: Profile, copyDir: string, before: Map<string, string>, installCmds: ContractCommand[]): void {
-  const pm = profile.packageManager;
+// The lockfiles to compare after the install: the ones the scan listed, and each install's own
+// ecosystem's, as the audited commit has them.
+export function lockfilesToCompare(profile: Profile, tree: string, installCmds: ContractCommand[]): string[] {
+  const out = new Set(profile.lockfiles);
+  for (const cmd of installCmds.filter((c) => c.kind === "install" && c.source === "readiness")) {
+    for (const f of installEcosystem(profile, cmd)?.lockfiles ?? []) {
+      const rel = cmd.cwd === "." ? f : join(cmd.cwd, f);
+      if (exists(join(tree, rel))) out.add(rel);
+    }
+  }
+  return [...out].sort();
+}
+
+// The lockfile condition, by each ecosystem's rule (languages/): every install the audit chose pins
+// what it installs, is frozen, and leaves its lockfiles as committed. `tree` is the audited commit,
+// so a lockfile the install wrote doesn't count as committed.
+function lockfileEvidence(audit: Audit, ex: Executor, profile: Profile, tree: string, copyDir: string, before: Map<string, string>, installCmds: ContractCommand[]): void {
   let result: "pass" | "fail" = "pass";
   let summary = "frozen install reproduced the lockfile";
-  if (pm === "pip") {
-    const req = join(copyDir, "requirements.txt");
-    const lines = exists(req) ? readText(req).split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#") && !l.startsWith("-")) : [];
-    const loose = lines.filter((l) => !l.includes("=="));
-    if (lines.length === 0 && !exists(join(copyDir, "pyproject.toml"))) {
-      result = "fail";
-      summary = "no requirements file or lockfile";
-    } else if (loose.length > 0) {
-      result = "fail";
-      summary = `requirements.txt doesn't pin exact versions for ${loose.length} of ${lines.length} packages`;
+  const units = installCmds.filter((c) => c.source === "readiness");
+  const failWith = (why: string, cwd = ".") => {
+    result = "fail";
+    summary = units.length > 1 && cwd !== "." ? `${cwd}: ${why}` : why;
+  };
+  if (units.length === 0 && profile.lockfiles.length === 0) failWith("no lockfile is committed");
+  for (const u of units) {
+    const eco = installEcosystem(profile, u);
+    const unpinned = eco ? eco.unpinned(tree, u.cwd) : profile.lockfiles.length === 0 ? "no lockfile is committed" : null;
+    if (unpinned) {
+      failWith(unpinned, u.cwd);
+      break;
     }
-  } else if (profile.lockfiles.length === 0) {
-    result = "fail";
-    summary = "no lockfile is committed";
-  } else if (installCmds.some((c) => c.source === "readiness" && !FROZEN.test(c.command))) {
-    result = "fail";
-    summary = "the install isn't frozen";
-  } else {
+    if (!eco?.install(tree, u.cwd, { ignoreScripts: false }).frozen) {
+      failWith("the install isn't frozen", u.cwd);
+      break;
+    }
+  }
+  if (result === "pass") {
     for (const [f, digest] of before) {
       const now = exists(join(copyDir, f)) ? sha256(readText(join(copyDir, f))) : "";
-      if (now !== digest) {
-        result = "fail";
-        summary = `the install changed ${f}`;
-      }
+      if (now !== digest) failWith(`the install changed ${f}`);
     }
   }
   addEvidence(audit, { checkId: "bootstrap.cold_replay", condition: "lockfile", component: "*", strength: ex.strength, where: ex.where, result, summary, image: ex.image ?? undefined });
@@ -501,7 +551,9 @@ export const NO_MUTANTS = "planted faults skipped by --no-mutants";
 // How to tell whether a planted fault compiles, on its own: the component's type-check command, or
 // the TypeScript compiler the install put in place. A test script that runs tsc next to the tests
 // can't tell it, because which of them reports first depends on how fast the machine is.
-function compileProbe(audit: Audit, ex: Executor, comp: { id: string; path: string; language: string }): { command: string; cwd: string } | null {
+function compileProbe(audit: Audit, ex: Executor, comp: Component): { command: string; cwd: string } | null {
+  const hooks = hooked(comp);
+  if (hooks) return hooks.mutation.compileProbe(comp);
   const typecheck = audit.contract.find((c) => c.kind === "typecheck" && (c.component === comp.id || c.component === "*"));
   if (typecheck) return { command: typecheck.command, cwd: typecheck.cwd };
   if (comp.language !== "ts" || !exists(join(ex.root, comp.path, "tsconfig.json"))) return null;
@@ -509,12 +561,18 @@ function compileProbe(audit: Audit, ex: Executor, comp: { id: string; path: stri
   return tsc ? { command: `${shellQuote(tsc)} --noEmit -p ${shellQuote(join(comp.path, "tsconfig.json"))}`, cwd: "." } : null;
 }
 
+// How long one test run with a planted fault may take: the rubric's, or a slow toolchain's floor.
+function faultRunSec(rubric: Rubric, comp: Component): number {
+  return Math.max(rubric.mutation.runTimeoutSec, hooked(comp)?.budget?.mutationRunTimeoutSec ?? 0);
+}
+
 async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executor, rubric: Rubric, testCmd: ContractCommand, budget: Budget, log: (s: string) => void): Promise<void> {
   const comp = audit.profile!.components.find((c) => c.id === testCmd.component)!;
+  const runSec = faultRunSec(rubric, comp);
   // Used only when the clean tree passes it, so a repo's own type errors don't discard every fault.
   let probe = compileProbe(audit, ex, comp);
   if (probe) {
-    const clean = await ex.exec(probe.command, probe.cwd, capped(budget, comp.id, rubric.mutation.runTimeoutSec).sec);
+    const clean = await ex.exec(probe.command, probe.cwd, capped(budget, comp.id, runSec).sec);
     charge(budget, comp.id, clean.durationMs);
     if (clean.exitCode !== 0 || clean.timedOut) probe = null;
   }
@@ -540,15 +598,15 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
     let result: Mutant["result"] = "survived";
     try {
       if (probe) {
-        const compiled = await ex.exec(probe.command, probe.cwd, capped(budget, comp.id, rubric.mutation.runTimeoutSec).sec);
+        const compiled = await ex.exec(probe.command, probe.cwd, capped(budget, comp.id, runSec).sec);
         charge(budget, comp.id, compiled.durationMs);
-        if (compiled.exitCode !== 0 && !compiled.timedOut && diagnose(compiled.output, false, "typecheck").cause === "compile") {
+        if (compiled.exitCode !== 0 && !compiled.timedOut && compileFailed(comp, compiled.output, "typecheck")) {
           codes.push(compiled.exitCode ?? -1);
           result = "discarded";
         }
       }
       for (let run = 0; run < rubric.mutation.flakeRuns && result !== "discarded"; run++) {
-        const limit = capped(budget, comp.id, rubric.mutation.runTimeoutSec);
+        const limit = capped(budget, comp.id, runSec);
         const out = await ex.exec(testCmd.command, testCmd.cwd, limit.sec);
         charge(budget, comp.id, out.durationMs);
         codes.push(out.exitCode ?? -1);
@@ -557,11 +615,11 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
           result = "not_run";
           break;
         }
-        if (out.exitCode === 0 && !((testCounts(out.output)?.failed ?? 0) > 0)) {
+        if (out.exitCode === 0 && !((countTests(audit.profile, comp.id, out.output)?.failed ?? 0) > 0)) {
           result = run === 0 ? "survived" : "discarded";
           break;
         }
-        if (diagnose(out.output, false, "test").cause === "compile") {
+        if (compileFailed(comp, out.output, "test")) {
           result = "discarded";
           break;
         }
@@ -633,12 +691,79 @@ function startError(output: string): string {
 // A clean container, or host mode when the user allowed it, or nothing: never a silent fallback to
 // the host. With nothing, every command is recorded as not run with the reason, so Level 1 is
 // unproven on this machine and the report says why.
-export function makeExecutor(audit: Audit, copyDir: string, runtimePref: string, log: (s: string) => void, imageOverride?: string, allowHost?: boolean): Executor {
+export interface ExecutorGroup {
+  ex: Executor;
+  // The assessed components whose commands run here.
+  components: string[];
+  // Whether the repo-wide commands ("*") run here too.
+  repoWide: boolean;
+}
+
+// Every executor of one replay: one per image, so a mixed-language repo runs each component in its
+// own toolchain's image.
+export interface Executors {
+  groups: ExecutorGroup[];
+  // Where a component's commands and planted faults run.
+  forComponent(id: string): Executor;
+  // Where the repo-wide commands and the instruction replay run: the repo's image, or the most
+  // active component's when nothing repo-wide runs.
+  repo: Executor;
+  close(): void;
+}
+
+function executorSet(groups: ExecutorGroup[], profile: Profile): Executors {
+  const forComponent = (id: string) => (groups.find((g) => g.components.includes(id)) ?? groups[0]).ex;
+  const top = profile.components.filter((c) => c.assessed).sort((a, b) => b.changeShare - a.changeShare)[0];
+  const repo = groups.find((g) => g.repoWide)?.ex ?? (top ? forComponent(top.id) : groups[0].ex);
+  return { groups, forComponent, repo, close: () => groups.forEach((g) => g.ex.close()) };
+}
+
+// Starts one clean container and adds what the audit's own image lacks for these components.
+function startContainer(audit: Audit, runtime: NonNullable<ReturnType<typeof detectRuntime>>, image: string, imageSource: Executor["imageSource"], copyDir: string, limits: ReturnType<typeof probeLimits>, comps: Component[], forWhom: string, log: (s: string) => void): Executor | { error: string } {
+  const session = new ContainerSession(runtime, `readiness-${audit.id}-${randomHex(3)}`, image, copyDir, audit.environment.registryEnv, hostUser(), limits);
+  const started = session.start();
+  if (!started.ok) {
+    session.remove();
+    log(`Could not start a container${forWhom}: ${startError(started.output)}`);
+    return { error: startError(started.output) };
+  }
+  session.enableCorepack();
+  const digest = digestOf(image);
+  log(`Replaying${forWhom} in a clean ${runtime.bin} container (${image}${digest ? `, pinned at ${digest.slice(0, 19)}` : ""}; ${limits.cpus ? `${limits.cpus} CPUs, ` : ""}${limits.memoryMb} MB, ${limits.pids} processes).`);
+  // Python components in the Node image, as with --image, need the venv module it lacks.
+  if (image.startsWith("node:") && comps.some((c) => c.language === "py")) {
+    const added = session.asImageUser("python3 -m venv /tmp/venv-probe >/dev/null 2>&1 || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv >/dev/null)", 600000);
+    log(added.ok ? "Added python3-venv to the Node image for the Python components." : `Couldn't add python3-venv for the Python components: ${tail(added.output, 300)}`);
+  }
+  // A tool missing from the repo's own image is the repo's to add, so only the audit's images get
+  // one. Poetry needs the venv module above.
+  if (imageSource !== "repo") {
+    for (const t of toolSetup(audit.profile!, copyDir, new Set(comps.map((c) => c.id)))) {
+      if (session.asImageUser(`command -v ${t.tool}`, 30000).ok) continue;
+      const added = session.asImageUser(t.install, TOOL_SETUP_MS, { registry: true });
+      (audit.environment.tools ??= []).push({ spec: t.spec, added: added.ok });
+      log(added.ok ? `Added ${t.spec} to the image for the frozen install.` : `Couldn't add ${t.spec} to the image, so its install will be blocked: ${tail(added.output, 300)}`);
+    }
+  }
+  session.reclaimHome();
+  return containerExecutor(session, copyDir, imageSource);
+}
+
+function hostModeSafety(audit: Audit): void {
+  if (!audit.safety.some((s) => s.kind === "host_mode")) audit.safety.push({ id: `saf-${String(audit.safety.length + 1).padStart(3, "0")}`, kind: "host_mode", file: ".", detail: HOST_MODE_NOTE, blocking: false });
+}
+
+// Clean containers, one per image in the plan, or host mode when the user allowed it, or nothing:
+// never a silent fallback to the host. With nothing, every command is recorded as not run with the
+// reason, so Level 1 is unproven on this machine and the report says why. `repoWide`: whether any
+// repo-wide command runs, which the repo's image is started for even when no component runs in it.
+export function makeExecutors(audit: Audit, copyDir: string, runtimePref: string, log: (s: string) => void, imageOverride?: string, allowHost?: boolean, repoWide = true): Executors {
   assertPlatformSupported();
+  const profile = audit.profile!;
   const runtime = detectRuntime(runtimePref);
-  let image = imageOverride ?? containerImage(audit.profile!, copyDir);
+  let single = imageOverride;
   let imageSource: Executor["imageSource"] = imageOverride ? "override" : "audit";
-  const declared = audit.profile?.environmentJson?.build;
+  const declared = profile.environmentJson?.build;
   if (runtime && declared && !imageOverride) {
     const dockerfile = insideTree(copyDir, ".cursor", declared.dockerfile);
     const context = insideTree(copyDir, ".cursor", declared.context ?? ".");
@@ -646,56 +771,71 @@ export function makeExecutor(audit: Audit, copyDir: string, runtimePref: string,
     log(`Building the repo's declared environment image from .cursor/${declared.dockerfile}.`);
     const built = buildImage(runtime, context, dockerfile, tag);
     if (!built.ok) fail(`The declared environment image didn't build:\n${tail(built.output, 2000)}`);
-    image = tag;
+    single = tag;
     imageSource = "repo";
   }
+  const plan = imagePlan(profile, copyDir, single);
+  const assessed = profile.components.filter((c) => c.assessed);
+  const wanted = plan.filter((g, i) => g.components.length > 0 || (i === 0 && repoWide));
+  const allIds = assessed.map((c) => c.id);
   let notStarted: string | null = null;
-  if (runtime) {
+  if (runtime && wanted.length) {
     const limits = probeLimits(runtime);
-    const session = new ContainerSession(runtime, `readiness-${audit.id}-${randomHex(3)}`, image, copyDir, audit.environment.registryEnv, hostUser(), limits);
-    const started = session.start();
-    if (started.ok) {
-      session.enableCorepack();
+    const started: (ExecutorGroup | { why: string; components: string[]; repoWide: boolean })[] = [];
+    const runs: ImageRun[] = [];
+    for (const g of wanted) {
+      const isRepo = g === plan[0];
+      const forWhom = wanted.length > 1 ? ` ${isRepo ? "the repo" : g.components.join(", ")}` : "";
+      const r = startContainer(audit, runtime, g.image, imageSource, copyDir, limits, assessed.filter((c) => g.components.includes(c.id)), forWhom, log);
+      const digest = digestOf(g.image);
+      const ids = [...(isRepo ? ["*"] : []), ...g.components];
+      if ("error" in r) {
+        const why = `the audit's ${runtime.bin} container (${g.image}) didn't start: ${r.error}`;
+        started.push({ why, components: g.components, repoWide: isRepo });
+        runs.push({ image: g.image, ...(digest ? { digest } : {}), components: ids, started: false, notRun: why });
+      } else {
+        started.push({ ex: r, components: g.components, repoWide: isRepo });
+        runs.push({ image: g.image, ...(digest ? { digest } : {}), components: ids, started: true });
+      }
+    }
+    const first = started.find((g): g is ExecutorGroup => "ex" in g);
+    if (first) {
+      // Some image started: one that didn't leaves its components unproven here, or runs them in
+      // host mode when the user allowed it.
+      const groups = started.map((g): ExecutorGroup => {
+        if ("ex" in g) return g;
+        if (hostAllowed(allowHost)) {
+          hostModeSafety(audit);
+          audit.environment.hostMode = true;
+          return { ex: hostExecutor(copyDir, audit.environment.registryEnv, audit.environment.inheritEnv, "fresh_copy", true), components: g.components, repoWide: g.repoWide };
+        }
+        return { ex: unavailableExecutor(copyDir, `${g.why}, and ${HOST_NOT_ALLOWED}`), components: g.components, repoWide: g.repoWide };
+      });
       audit.environment.containerRuntime = runtime.bin;
-      audit.environment.image = image;
+      audit.environment.image = wanted[0].image;
       audit.environment.limits = limits;
-      const digest = digestOf(image);
+      const digest = digestOf(wanted[0].image);
       if (digest) audit.environment.imageDigest = digest;
       else delete audit.environment.imageDigest;
-      log(`Replaying in a clean ${runtime.bin} container (${image}${digest ? `, pinned at ${digest.slice(0, 19)}` : ""}; ${limits.cpus ? `${limits.cpus} CPUs, ` : ""}${limits.memoryMb} MB, ${limits.pids} processes).`);
-      // Python components next to Node ones run in the Node image, which has python3 but no venv.
-      if (image.startsWith("node:") && audit.profile!.components.some((c) => c.assessed && c.language === "py")) {
-        const added = session.asImageUser("python3 -m venv /tmp/venv-probe >/dev/null 2>&1 || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv >/dev/null)", 600000);
-        log(added.ok ? "Added python3-venv to the Node image for the Python components." : `Couldn't add python3-venv for the Python components: ${tail(added.output, 300)}`);
-      }
-      // A tool missing from the repo's own image is the repo's to add, so only the audit's images get
-      // one. Poetry needs the venv module above.
-      if (imageSource !== "repo") {
-        for (const t of toolSetup(audit.profile!, copyDir)) {
-          if (session.asImageUser(`command -v ${t.tool}`, 30000).ok) continue;
-          const added = session.asImageUser(t.install, TOOL_SETUP_MS, { registry: true });
-          (audit.environment.tools ??= []).push({ spec: t.spec, added: added.ok });
-          log(added.ok ? `Added ${t.spec} to the image for the frozen install.` : `Couldn't add ${t.spec} to the image, so its install will be blocked: ${tail(added.output, 300)}`);
-        }
-      }
-      session.reclaimHome();
+      if (runs.length > 1) audit.environment.images = runs;
+      else delete audit.environment.images;
       delete audit.environment.notRun;
-      return containerExecutor(session, copyDir, imageSource);
+      return executorSet(groups, profile);
     }
-    session.remove();
-    notStarted = `the audit's ${runtime.bin} container (${image}) didn't start: ${startError(started.output)}`;
-    log(`Could not start a container: ${startError(started.output)}`);
+    notStarted = (started[0] as { why: string }).why;
   }
   delete audit.environment.limits;
   delete audit.environment.imageDigest;
+  delete audit.environment.images;
+  const image = wanted[0]?.image ?? plan[0].image;
   if (hostAllowed(allowHost)) {
     audit.environment.containerRuntime = null;
     audit.environment.image = null;
     audit.environment.hostMode = true;
     delete audit.environment.notRun;
-    if (!audit.safety.some((s) => s.kind === "host_mode")) audit.safety.push({ id: `saf-${String(audit.safety.length + 1).padStart(3, "0")}`, kind: "host_mode", file: ".", detail: HOST_MODE_NOTE, blocking: false });
+    hostModeSafety(audit);
     log(`${notStarted ? "No container" : "No container runtime"}: host mode is allowed, so the repo's commands run in a fresh copy on this machine. They can read this user's local files, and Level 1 can't be proved here.`);
-    return hostExecutor(copyDir, audit.environment.registryEnv, audit.environment.inheritEnv, "fresh_copy", true);
+    return executorSet([{ ex: hostExecutor(copyDir, audit.environment.registryEnv, audit.environment.inheritEnv, "fresh_copy", true), components: allIds, repoWide: true }], profile);
   }
   // A runtime that couldn't start the container stays recorded, so the report names the container
   // and its error rather than a missing runtime.
@@ -704,7 +844,21 @@ export function makeExecutor(audit: Audit, copyDir: string, runtimePref: string,
   const reason = notStarted ? `${notStarted}, and ${HOST_NOT_ALLOWED}` : HOST_NOT_ALLOWED;
   audit.environment.notRun = reason;
   log(`${notStarted ? "No container" : "No container runtime"}: nothing runs outside a container without the user's yes, so Level 1 is unproven on this machine (${reason}).`);
-  return unavailableExecutor(copyDir, reason);
+  return executorSet([{ ex: unavailableExecutor(copyDir, reason), components: allIds, repoWide: true }], profile);
+}
+
+// Runs each executor's share of the contract: the repo-wide commands where they run, and each
+// component's commands in its own image. Every result says which executor ran it.
+export async function runContracts(exs: Executors, contract: ContractCommand[], opts: Parameters<typeof runContract>[2]): Promise<PhaseResult[]> {
+  const out: PhaseResult[] = [];
+  for (const g of exs.groups) {
+    const components = new Set(g.components.filter((c) => opts.components.has(c)));
+    const mine = contract.filter((c) => (c.component === "*" ? g.repoWide : components.has(c.component)));
+    if (mine.length === 0) continue;
+    const results = await runContract(g.ex, mine, { ...opts, components });
+    out.push(...results.map((r) => ({ ...r, executor: g.ex })));
+  }
+  return out;
 }
 
 export async function replay(audit: Audit, repo: string, tree: string, rubric: Rubric, opts: ReplayOptions): Promise<void> {
@@ -719,34 +873,37 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
   const copyDir = join(mkdtempSync(join(tmpdir(), "readiness-replay-")), "work");
   copyWorkTree(tree, copyDir);
   const before = new Map<string, string>();
-  for (const f of profile.lockfiles) before.set(f, sha256(readText(join(copyDir, f))));
+  for (const f of lockfilesToCompare(profile, tree, audit.contract)) before.set(f, sha256(readText(join(copyDir, f))));
   if (opts.image) audit.environment.imageOverride = opts.image;
-  const ex = makeExecutor(audit, copyDir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost);
-  const registryValues = registryValuesOf(audit);
   const components = new Set(profile.components.filter((c) => c.assessed && (!opts.component || c.id === opts.component)).map((c) => c.id));
   if (opts.component && components.size === 0) fail(`No assessed component named ${opts.component}`);
-  const budget = newBudget(opts.budgetComponentMinutes, opts.budgetTotalMinutes);
+  const exs = makeExecutors(audit, copyDir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost, audit.contract.some((c) => c.component === "*"));
+  const ex = exs.repo;
+  const registryValues = registryValuesOf(audit);
+  const budget = newBudget(opts.budgetComponentMinutes, opts.budgetTotalMinutes, budgetFloors(profile));
   try {
-    const results = await runContract(ex, audit.contract, {
+    const results = await runContracts(exs, audit.contract, {
       components,
       budget,
       registryValues,
       tree,
+      profile,
       workspacePackages: workspacePackages(copyDir, profile),
       onResult: (r) => opts.log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.blocked ? "blocked" : r.status}${r.blocked ? ` (${r.blocked})` : r.diagnosis ? ` (${r.diagnosis.detail})` : r.note ? ` (${r.note})` : ""}`),
     });
     for (const r of results) {
-      if (r.blocked && r.diagnosis?.cause === "missing_tool" && ex.where !== "container") {
+      const rex = r.executor ?? ex;
+      if (r.blocked && r.diagnosis?.cause === "missing_tool" && rex.where !== "container") {
         const tool = r.diagnosis.detail.replace(/ is not installed$/, "");
         const declared = declaredImageInstalls(copyDir, profile, tool);
         if (declared) r.blocked += `, though the repo's declared image (${declared}) installs it`;
       }
-      if (r.blocked && r.diagnosis?.cause === "missing_tool" && ex.where === "container") {
+      if (r.blocked && r.diagnosis?.cause === "missing_tool" && rex.where === "container") {
         const tool = r.diagnosis.detail.replace(/ is not installed$/, "");
         const failed = audit.environment.tools?.find((t) => !t.added && t.spec.split(/[@=]/)[0] === tool);
         if (failed) r.blocked += `: the audit couldn't add ${failed.spec} to it on this machine`;
       }
-      const ev = evidenceFromPhase(audit, ex, r, registryValues);
+      const ev = evidenceFromPhase(audit, rex, r, registryValues);
       if (r.diagnosis?.cause === "credential" && !audit.safety.some((s) => s.kind === "credential_needed" && s.detail.includes(r.diagnosis!.detail))) {
         audit.safety.push({ id: `saf-${String(audit.safety.length + 1).padStart(3, "0")}`, kind: "credential_needed", file: ev.id, detail: `tests ${r.diagnosis.detail}`, blocking: true });
       }
@@ -755,13 +912,14 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
     // When this machine blocked the shared install, the components' own frozen installs stand in for it.
     const installs = allInstalls.some((r) => r.cmd.fallbackFor) ? allInstalls.filter((r) => r.cmd.fallbackFor || !r.blocked) : allInstalls;
     const installed = installs.length > 0 && installs.every((r) => r.status === "pass");
-    if (installed) lockfileEvidence(audit, ex, profile, copyDir, before, installs.map((r) => r.cmd));
+    if (installed) lockfileEvidence(audit, ex, profile, tree, copyDir, before, installs.map((r) => r.cmd));
     else if (installs.some((r) => r.blocked) && installs.every((r) => r.status === "pass" || r.blocked)) {
       const blocked = installs.find((r) => r.blocked)!.blocked!;
       addEvidence(audit, { checkId: "bootstrap.cold_replay", condition: "lockfile", component: "*", strength: ex.strength, where: ex.where, result: "not_run", summary: "the frozen install couldn't run on this machine", blocked, image: ex.image ?? undefined });
     }
     if (opts.mutants) {
       for (const comp of components) {
+        const ex = exs.forComponent(comp);
         const mine = new Set(commandsFor(audit.contract, comp, "test").map((c) => c.id));
         const testRuns = results.filter((r) => mine.has(r.cmd.id));
         const testRes = testRuns.find((r) => r.cmd.component === comp) ?? testRuns[0];
@@ -780,7 +938,7 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
           addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "faults weren't planted: the time budget ran out first", blocked: BUDGET_OUT });
           continue;
         }
-        if (second.exitCode !== 0 || (testCounts(second.output)?.failed ?? 0) > 0) {
+        if (second.exitCode !== 0 || (countTests(profile, comp, second.output)?.failed ?? 0) > 0) {
           addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "tests passed once and failed on a second run, so faults weren't planted (possible flaky tests)" });
           continue;
         }
@@ -798,14 +956,17 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
         }
       }
     } else {
-      for (const comp of components) addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: NO_MUTANTS, skipped: "--no-mutants" });
+      for (const comp of components) {
+        const cex = exs.forComponent(comp);
+        addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: cex.strength, where: cex.where, result: "not_run", summary: NO_MUTANTS, skipped: "--no-mutants" });
+      }
     }
     if (opts.instructions) {
       const blocked = installs.find((r) => r.blocked)?.blocked;
       await replayInstructions(audit, ex, copyDir, budget, registryValues, installed ? null : { blocked });
     }
   } finally {
-    ex.close();
+    exs.close();
     rmSync(dirname(copyDir), { recursive: true, force: true });
   }
 }

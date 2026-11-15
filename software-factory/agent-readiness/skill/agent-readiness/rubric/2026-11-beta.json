@@ -3,7 +3,8 @@
   "changes": [
     "Planted faults: a component passes when its tests catch at least mutation.killRate (60%) of the planted faults that gave a clear result, instead of every one, and at least mutation.minForPass (3) must give a clear result. Calibrated on the pinned trial repos with five draws of faults per component: requiring every fault failed 19 of 39 component audits of suites the reviews judged reasonable, and 60% failed 7.",
     "Faults come from the code (mutation.seedFrom \"code\"): the same code and tests get the same faults, so the fault check, and the level, change only when the files a component's tests import or the tests themselves change. Earlier rubrics plant faults from a fresh seed each audit.",
-    "Up to 10 components are assessed (components.maxAssessed, up from 6), so every component that can reach the 10% active share is assessed."
+    "Up to 10 components are assessed (components.maxAssessed, up from 6), so every component that can reach the 10% active share is assessed.",
+    "Level 1 per ecosystem: each language file in scripts/lib/languages/ defines its frozen install and lockfile rule (references/levels.md lists them), and each component runs in its own toolchain's image, so a Python project next to Node ones gets Python's. mutation.languages lists every language this rubric can score; a language counts only once its stack is in the supported tier (references/supported.md)."
   ],
   "scale": [
     {
@@ -278,7 +279,14 @@
     "languages": [
       "ts",
       "js",
-      "py"
+      "py",
+      "go",
+      "rust",
+      "java",
+      "kotlin",
+      "csharp",
+      "php",
+      "ruby"
     ],
     "operators": [
       "boundary_flip",
@@ -290,7 +298,7 @@
     ],
     "runTimeoutSec": 300,
     "flakeRuns": 2,
-    "targeting": "files imported by the component's tests, most recently changed first"
+    "targeting": "files the component's tests cover (the files they import, or the source their language file names), most recently changed first"
   },
   "budgets": {
     "commandTimeoutSec": 600,

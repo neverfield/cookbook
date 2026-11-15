@@ -22,19 +22,20 @@ describe("rubric 2026-11-beta", () => {
     assert.equal(JSON.stringify(JSON.parse(text), null, 2) + "\n", text);
   });
 
-  test("changes only the kill rate, the code seed, the component cap and the fault action's wording", () => {
+  test("changes only the kill rate, the code seed, the component cap, the languages it can score and the fault wording", () => {
     const strip = (r: typeof beta) => {
       const c = structuredClone(r) as Partial<typeof beta> & Record<string, unknown>;
       delete c.version;
       delete c.changes;
       c.components = { ...r.components, maxAssessed: 0 };
-      c.mutation = { ...r.mutation, killRate: undefined, seedFrom: undefined };
+      c.mutation = { ...r.mutation, killRate: undefined, seedFrom: undefined, languages: [], targeting: "" };
       c.templates = { ...r.templates, faults: { ...r.templates.faults, doneWhen: "", steps: [] } };
       return JSON.parse(JSON.stringify(c));
     };
     assert.deepEqual(strip(beta), strip(alpha));
     assert.deepEqual([beta.mutation.killRate, beta.mutation.seedFrom, beta.components.maxAssessed], [0.6, "code", 10]);
     assert.deepEqual([alpha.mutation.killRate, alpha.mutation.seedFrom, alpha.components.maxAssessed], [undefined, undefined, 6]);
+    assert.deepEqual(beta.mutation.languages, [...alpha.mutation.languages, "go", "rust", "java", "kotlin", "csharp", "php", "ruby"]);
   });
 
   test("every component that can reach the active share is assessed", () => {

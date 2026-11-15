@@ -1,0 +1,19 @@
+{
+  "purpose": "A Node package at the root and a uv Python service with its own uv.lock under services/. Each runs in its own toolchain's image: the package in Node's, the service in uv's Python image, where uv is installed and its frozen install and unittest suite run without the network. Both reach Level 2, and the replay environment names both images.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "storefront-web": 2,
+        "pricing": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:storefront-web",
+      "noBlocker": true,
+      "safety": "pass"
+    }
+  ]
+}

@@ -37,7 +37,7 @@ On a large repo the scan has a time bound (`--budget-scan`, 3 minutes by default
 | Id | Stack or machine | What the scan looks for | Why not yet | Proven by |
 |---|---|---|---|---|
 | `yarn-berry-unpinned` | Yarn 2 or later with no version pin | Yarn 2 or later with neither a `packageManager` pin nor `yarnPath` | nothing says which Yarn to run: add packageManager to package.json or yarnPath to .yarnrc.yml | `tests/toolchains.test.ts` |
-| `python-behind-root-package` | A Python app next to a root package.json | a root `pyproject.toml`, `setup.py` or `requirements.txt` beside a root `package.json` | the audit runs one image per repo, and it picks Node's | `fixtures/python-behind-root-package`, `saleor/saleor@dfbf139` |
+| `python-behind-root-package` | A Python app next to a root package.json | a root `pyproject.toml`, `setup.py` or `requirements.txt` beside a root `package.json` | the app and the root package share the root folder, which the audit installs once, with Node's package manager | `fixtures/python-behind-root-package`, `saleor/saleor@dfbf139` |
 | `task-graph` | A package that needs a sibling package built first | a build or test that fails because a sibling workspace package's module is missing | the audit builds packages one by one, not in Turbo's or Nx's order | `fixtures/turbo-depends-on-build`, `spree/spree@cdd9a02` |
 | `windows` | Native Windows | `process.platform` is `win32` | the audit drives its container and host mode through bash; run it in WSL 2 | `tests/supported.test.ts`, `tests/safety.test.ts` |
 
@@ -56,6 +56,7 @@ A Python, PHP or Ruby app next to a root `package.json` is listed with its own s
 | `swift` | Swift | `Package.swift`, or `.swift` files in a top-level folder | | `fixtures/swift-package`, `apple/swift-argument-parser@38ca4ec` |
 | `dart` | Dart | `pubspec.yaml`; a workspace's root `pubspec.yaml` lists its packages instead | | `fixtures/dart-packages`, `dart-lang/http@8c0d66a` |
 | `terraform` | Terraform | a folder of `.tf` files at any depth, the root module included | | `fixtures/terraform-modules`, `fixtures/monorepo-mixed`, `terraform-aws-modules/terraform-aws-vpc@b3abd6d` |
+| `cpp` | C or C++ | a `CMakeLists.txt` or `meson.build`; `.c` and `.cc` files alone don't count, since a Node addon or Python extension holds them | the audit recognizes it and doesn't score it in this release, since builds vary too much between CMake, Meson and Make for one install and test rule | `fixtures/cpp-cmake` |
 | `podman` | Podman | `podman info` | the audit drives it like Docker, but no fixture run has used it | none yet |
 
 A .NET repo with several root solutions is named after the solution that matches the repo's name, or after the repo, never after whichever solution sorts first.
@@ -101,8 +102,12 @@ When tests fail because nothing answers on a local port, the report names the po
 
 The drafted install uses apt, so the audit proves it only where Debian's package mirrors are reachable.
 
+## Mixed-language repos
+
+Each assessed component runs in its own toolchain's image: a Python project with its own lockfile next to Node packages gets Python's image (with uv for a uv project), and a Node project with its own lockfile next to a Python root gets Node's. The repo-wide commands run in the repo's image. A repo that declares its environment in `.cursor/environment.json`, or a run given `--image`, runs everything in that one image, as the repo set it up. The report's replay environment lists each image and what ran in it (`fixtures/mixed-images`).
+
 ## Adding an entry
 
 1. Add a fixture under `support/fixtures/` that shows the behaviour, or pin a public repo at a SHA.
-2. Add the entry to `scripts/lib/support.ts` and to the matching table here, in the same tier, with the same reason and proof.
+2. Add the entry to the matching table here, in the same tier, with the same reason and proof, and to the code: a language's stacks live in its own file under `scripts/lib/languages/`, and machines and entries that span languages in `scripts/lib/support.ts`.
 3. Moving an entry to **Supported** needs a fixture or repo whose audit gives the expected level.

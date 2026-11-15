@@ -25,9 +25,22 @@ export type Level = 0 | 1 | 2 | 3 | 4;
 export type CommandKind = "doctor" | "install" | "build" | "lint" | "typecheck" | "test" | "start";
 export type Where = "static" | "host" | "fresh_copy" | "container";
 export type Result = "pass" | "fail" | "not_run";
-export type Language = "ts" | "js" | "py" | "other";
-export type PackageManager = "npm" | "pnpm" | "yarn" | "bun" | "pip" | "uv" | "poetry";
+// Every language a file in scripts/lib/languages/ can score. A component's language picks its
+// language file; "other" is a component no language file scores.
+export type Language = "ts" | "js" | "py" | "go" | "rust" | "java" | "kotlin" | "csharp" | "php" | "ruby" | "other";
+// Every ecosystem a language file defines a frozen install for (scripts/lib/languages/).
+export type PackageManager = "npm" | "pnpm" | "yarn" | "bun" | "pip" | "uv" | "poetry" | "go" | "cargo" | "maven" | "gradle" | "nuget" | "composer" | "bundler";
 export type Effort = "small" | "medium" | "large";
+
+export interface ImageRun {
+  image: string;
+  digest?: string;
+  // "*" for the repo-wide commands, then the component ids that ran here.
+  components: string[];
+  started: boolean;
+  // Why nothing ran in this image, when its container didn't start.
+  notRun?: string;
+}
 
 export interface Component {
   id: string;
@@ -298,6 +311,9 @@ export interface Audit {
     hostMode?: boolean;
     // Why no repo command ran: no container runtime, or a container that didn't start, and host mode not allowed.
     notRun?: string;
+    // One entry per image the replay used, the repo's first. A mixed-language repo runs each
+    // component in its own toolchain's image; `image` above is the first entry's.
+    images?: ImageRun[];
   };
   profile: Profile | null;
   assets: Asset[];

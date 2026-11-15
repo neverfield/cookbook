@@ -24,7 +24,29 @@ An audit never claims Level 3 or 4 by itself. A condition the audit couldn't run
 
 - **Level 1:** the frozen install, the build and every test pass in a clean container.
 - **Level 2:** Level 1, plus build, lint, type-check and test commands pass at `HEAD`; the tests catch at least the rubric's kill rate of the planted faults that give a clear result (60% under 2026-11-beta, every one under earlier rubrics; at least 3 must give a clear result); agent instructions are accurate; and normal work needs no production access.
+- **Level 1 per ecosystem:** what counts as a reproducible install depends on the package ecosystem, as the table below says. Level 1's clean install is that ecosystem's install passing in a clean container, in the component's own toolchain image. Level 2's lockfile condition adds that the committed files pin every dependency, the install is frozen, and it leaves every lockfile as committed. An ecosystem whose language isn't scored yet (see [supported.md](supported.md)) has its rule written down here, and it decides nothing until the language is scored.
 - **Levels 3 and 4:** measured on the agent PRs that touch the component, against the same control group of other PRs. Level 3 needs Level 2 and targets met over at least 20 agent PRs in a 30-day window. A team can lower the 20 with `--min-prs`, never below 10. Level 4 (rubric 2026-11-alpha) needs two back-to-back audit windows at Level 3 or above, each meeting the targets, with this window's agent PRs at least double the first window's and the change-request rate no higher. A window below Level 3 starts the count again; a Level 4 window stays in the run, so Level 4 holds while the volume does. Audits sealed under 2026-10-alpha compared with the last audit at Level 3 or above.
+
+### Reproducible install by ecosystem
+
+Each row comes from the ecosystem's file under `scripts/lib/languages/`, and a test fails when the two drift apart. Without the lockfile a row names, the install runs unfrozen: it can still pass Level 1, and the lockfile condition of Level 2 fails with the reason.
+
+| Ecosystem | Language | Reproducible install |
+|---|---|---|
+| `npm` | Node | `npm ci` from a committed `package-lock.json` |
+| `pnpm` | Node | `pnpm install --frozen-lockfile` from a committed `pnpm-lock.yaml`, with the pinned pnpm |
+| `yarn` | Node | `yarn install --frozen-lockfile` (Yarn 1) or `--immutable` (Yarn 2 or later) from a committed `yarn.lock`, with the pinned Yarn |
+| `bun` | Node | `bun install --frozen-lockfile` from a committed `bun.lock` or `bun.lockb`, with the pinned Bun |
+| `pip` | Python | `pip install` into a fresh virtualenv from a `requirements.txt` that pins every package with `==`, or from `pyproject.toml` |
+| `uv` | Python | `uv sync --frozen` from a committed `uv.lock`, every workspace member with the dev group and any test group |
+| `poetry` | Python | `poetry sync` (`poetry install --sync` before Poetry 2) from a committed `poetry.lock`, with the Poetry that wrote it |
+| `go` | Go | `go mod download` with `-mod=readonly`, from a committed `go.sum` that covers every module `go.mod` requires; a committed `vendor/modules.txt` counts as the lock |
+| `cargo` | Rust | `cargo fetch --locked` from a committed `Cargo.lock`; a workspace's members share the root's |
+| `maven` | JVM | `mvn dependency:go-offline` through the committed Maven Wrapper when there is one, with every dependency and plugin version fixed in `pom.xml`: no version ranges, `LATEST` or `RELEASE` |
+| `gradle` | JVM | `gradle dependencies` through the committed Gradle Wrapper, with dependency locking (`gradle.lockfile`) committed, or with no dynamic versions (`1.+`, `latest.release`, ranges) in the build |
+| `nuget` | .NET | `dotnet restore --locked-mode` with a committed `packages.lock.json` next to every project that references packages |
+| `composer` | PHP | `composer install` from a committed `composer.lock` |
+| `bundler` | Ruby | `bundle install` in frozen mode (`BUNDLE_FROZEN=true`) from a committed `Gemfile.lock` |
 
 ## The rollup rule
 

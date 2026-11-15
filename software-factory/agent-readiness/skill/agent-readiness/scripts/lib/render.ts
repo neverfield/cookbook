@@ -10,7 +10,8 @@ import { NOT_SUPPORTED, SUPPORTED_DOC } from "./support.ts";
 import type { Asset, Audit, CondId, Component, ComponentLevel, HistoryLine, Level, OutcomeStats, OutcomesSnapshot, ReportAction, ReportChanges, ReportJson, Roadmap, RoadmapItem, ScenarioId } from "./types.ts";
 import { EMOJI, fmtDate, fmtShortDate, pct, wordCount } from "./util.ts";
 import { serviceLabel } from "./diagnose.ts";
-import { explanationsOf, waiversOf } from "./explain.ts";
+import { explanationsOf, imagesUsed, waiversOf } from "./explain.ts";
+import { LANGUAGE_LABELS } from "./languages/index.ts";
 
 export interface RenderInput {
   audit: Audit;
@@ -803,7 +804,9 @@ export function buildReport(input: RenderInput): ReportJson {
         {
           label: "Replay environment",
           value: audit.environment.containerRuntime
-            ? `${audit.environment.containerRuntime} container, ${audit.environment.image}`
+            ? imagesUsed(audit.environment)
+              ? `${audit.environment.containerRuntime} containers, ${imagesUsed(audit.environment)}`
+              : `${audit.environment.containerRuntime} container, ${audit.environment.image}`
             : audit.evidence.some((e) => e.where === "fresh_copy" || e.where === "container")
               ? "fresh copy on the host (no container runtime)"
               : `none: no repo command ran${noneAssessed(input) ? ", because no component could be assessed" : ""}`,
@@ -918,7 +921,7 @@ function componentsOf(input: RenderInput): ReportJson["components"] {
 }
 
 function toolchainOf(c: Component): string {
-  return c.language === "py" ? "Python" : c.language === "ts" ? "TypeScript" : c.language === "js" ? "Node" : "unknown";
+  return LANGUAGE_LABELS[c.language] ?? "unknown";
 }
 
 function missingList(assets: Asset[]): string[] {

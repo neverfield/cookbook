@@ -136,7 +136,7 @@ describe("stacks the audit doesn't support yet", () => {
     const comps = layout(tree(files), files).components;
     assert.deepEqual(comps.map((c) => [c.id, c.path, c.assessed, c.notAssessedReason]), [
       ["saleor", ".", false, "it goes with the Python app at the root, which isn't supported yet, so it isn't assessed on its own"],
-      ["saleor-python", ".", false, "a Python app next to a root package.json isn't supported yet: the audit runs one image per repo, and it picks Node's"],
+      ["saleor-python", ".", false, "a Python app next to a root package.json isn't supported yet: the app and the root package share the root folder, which the audit installs once, with Node's package manager"],
     ]);
     const withTests = { ...files, "package.json": "{\"name\":\"web\",\"scripts\":{\"test\":\"node --test\"}}" };
     assert.equal(layout(tree(withTests), withTests).components[0].notAssessedReason, undefined, "a root package with its own tests is still assessed");
