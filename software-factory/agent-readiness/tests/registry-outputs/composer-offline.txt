@@ -1,0 +1,9 @@
+No composer.lock file present. Updating dependencies to latest instead of installing from lock file. See https://getcomposer.org/install for more information.
+Loading composer repositories with package information
+The following exception probably indicates you are offline or have misconfigured DNS resolver(s)
+If you intend to run Composer without connecting to the internet, run the command again prefixed with COMPOSER_DISABLE_NETWORK=1 to make Composer run in offline mode.
+In CurlDownloader.php line 549:
+                                                                               
+  curl error 6 while downloading https://repo.packagist.org/packages.json: Co  
+  uld not resolve host: repo.packagist.org (Could not contact DNS servers)     
+                                                                               

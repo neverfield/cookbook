@@ -75,6 +75,25 @@ export function testCounts(output: string): { passed: number; failed: number; to
 const NETWORK: { re: RegExp; detail: string }[] = [
   { re: /There was an issue establishing a connection while requesting https?:\/\/\S+|Failed to (fetch|download) (font|`[^`\n]+` from Google Fonts)|request to https?:\/\/fonts\.(googleapis|gstatic)\.com\S* failed/i, detail: "a failed font download on the network" },
   { re: /Error when performing the request to https?:\/\/\S+|ERR_PNPM_META_FETCH_FAIL|npm (error|ERR!) network\b|YN0001[^\n]*(RequestError|getaddrinfo|ENOTFOUND|ECONNREFUSED)/, detail: "an unreachable package registry on the network" },
+  // The registries of the other ecosystems, as each tool reports a refused or unreachable host. A
+  // missing version reads differently (Maven's "Could not find artifact", NuGet's NU1102, Go's
+  // "unknown revision", Bundler's "Could not find gem"), so it stays the repo's failure.
+  // Bundler: "Bundler::HTTPError Could not fetch specs from https://rubygems.org/ ... SSL_connect
+  // returned=1", or "Could not reach host index.rubygems.org. Check your network connection".
+  { re: /Bundler::HTTPError|Could not fetch specs from https?:\/\/\S+|Gem::RemoteFetcher::(FetchError|UnknownHostError)|SSL_connect returned=\d|Could not reach host [\w.-]+\.\s+Check your network connection/, detail: "an unreachable package registry on the network" },
+  // Composer boxes its message and wraps it mid-word, so only the curl code and URL are reliable.
+  { re: /curl error (5|6|7|28|35|52|56) while downloading https?:\/\//, detail: "an unreachable package registry on the network" },
+  // NuGet: "error NU1301: Unable to load the service index for source https://api.nuget.org/v3/index.json".
+  { re: /\bNU1301\b|Unable to load the service index for source https?:\/\/\S+/, detail: "an unreachable package registry on the network" },
+  // Maven: a transfer that failed on the connection, not on a missing artifact. With -q only the
+  // last line shows; the dependency plugin is Maven's own, so failing to find it means the
+  // repository wasn't reached. The Maven Wrapper downloads Maven with wget.
+  { re: /Could not transfer (artifact|metadata) [^\n]* from\/to [^\n]*\(https?:\/\/[^)\s]+\): (Remote host terminated the handshake|Connection reset|Connect to [^\n]* failed|[\w.-]+(: (Name or service not known|Temporary failure in name resolution))?$)|No plugin found for prefix 'dependency' in the current project|wget: Failed to fetch https?:\/\//m, detail: "an unreachable package registry on the network" },
+  // Gradle: "Could not GET 'https://repo.maven.apache.org/...'"; a missing version is "Could not find".
+  { re: /Could not GET '[^']+'/, detail: "an unreachable package registry on the network" },
+  // Go: `Get "https://proxy.golang.org/...": EOF`, or a dial, TLS or reset error after the URL.
+  { re: /Get "https?:\/\/[^"]+": (EOF|dial tcp|net\/http: TLS handshake timeout|read tcp [^\n]*connection reset|tls: |x509: )/, detail: "an unreachable package registry on the network" },
+  { re: /java\.net\.(UnknownHostException|ConnectException|NoRouteToHostException)|Remote host terminated the handshake|java\.net\.SocketException: (Connection reset|Network is unreachable)/, detail: "a network connection failed" },
   { re: /\bcurl: \((5|6|7|28|35|52|56)\)/, detail: "it tried to reach the network" },
   { re: /ProxyError|407 Proxy Authentication|tunneling socket could not be established|proxy[^\n]{0,40}(refused|error|failed)/i, detail: "a proxy error on the network" },
   { re: /CERT_|certificate verify failed|unable to (get|verify) (the )?(local issuer|first) certificate|self[- ]signed certificate|SSLError|SSL: [A-Z_]+|ERR_SSL|SSL routines|tlsv1 alert|TLS handshake|Client network socket disconnected before secure TLS/i, detail: "a TLS or certificate error on the network" },

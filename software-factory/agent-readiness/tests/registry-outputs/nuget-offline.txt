@@ -1,0 +1,6 @@
+  Determining projects to restore...
+/w/App.csproj : error NU1301: Unable to load the service index for source https://api.nuget.org/v3/index.json.
+/w/App.csproj : error NU1301:   Resource temporarily unavailable (api.nuget.org:443)
+/w/App.csproj : error NU1301:   Resource temporarily unavailable
+/w/App.csproj : warning NU1900: Error occurred while getting package vulnerability data: Unable to load the service index for source https://api.nuget.org/v3/index.json.
+  Failed to restore /w/App.csproj (in 11.03 sec).

@@ -1,0 +1,7 @@
+No composer.lock file present. Updating dependencies to latest instead of installing from lock file. See https://getcomposer.org/install for more information.
+Loading composer repositories with package information
+In CurlDownloader.php line 549:
+                                                                               
+  curl error 35 while downloading https://repo.packagist.org/packages.json: T  
+  LS connect error: error:0A000126:SSL routines::unexpected eof while reading  
+                                                                               

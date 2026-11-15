@@ -325,7 +325,9 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
     if (!hit) continue;
     // A root project's own folders, such as a Go root's packages or a PHP app's tests/, are part of
     // it; only its examples are listed apart.
-    if (rootStacks.has(hit.stack) && !EXAMPLE_SEGMENT.test(dir)) continue;
+    // By language, so a root build a language file refined (a Gradle build applying the Android
+    // plugin) still owns its source folders.
+    if ([...rootStacks].some((s) => sameLanguage(s, hit.stack)) && !EXAMPLE_SEGMENT.test(dir)) continue;
     const holds = SATELLITE_SEGMENT.test(dir) ? SATELLITE_HOLDS : PACKAGING_SEGMENT.test(dir) ? PACKAGING_HOLDS : null;
     if (holds && comps.length > 0) {
       satelliteList.push({ path: dir, manifest: inside.find((f) => hit.ext.test(f))!, toolchain: stack(hit.stack).label, reason: `it sits under ${dir}/, which usually holds ${holds} rather than the product` });
@@ -335,6 +337,11 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
     comps.push({ ...languageComponent(tree, { id: sanitizeId(dir), path: dir, manifest: null }, hit.stack), lockfile: null });
   }
   return { components: uniqueIds(comps), satellites: satelliteList };
+}
+
+function sameLanguage(a: string | undefined, b: string): boolean {
+  const la = languageOfStack(a);
+  return a === b || (la !== undefined && la === languageOfStack(b));
 }
 
 // Every support entry the scan can put a component in; tests/supported.test.ts checks each is listed.

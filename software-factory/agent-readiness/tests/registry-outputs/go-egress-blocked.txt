@@ -1,0 +1,1 @@
+go: github.com/google/uuid@v1.6.0: Get "https://goproxy.io/github.com/google/uuid/@v/v1.6.0.mod": EOF

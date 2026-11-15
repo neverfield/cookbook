@@ -13,7 +13,10 @@ import type { ReplayHooks } from "../skill/agent-readiness/scripts/lib/languages
 import { ruby } from "../skill/agent-readiness/scripts/lib/languages/ruby.ts";
 import { chooseSites, targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
-import { budgetFloors, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { budgetFloors, environmentLimit, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { diagnose } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
+import { scanText } from "../skill/agent-readiness/scripts/lib/redact.ts";
+import { jvm } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
 import { loadRubric, latestRubricVersion } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { STACKS, supported } from "../skill/agent-readiness/scripts/lib/support.ts";
 import type { Language } from "../skill/agent-readiness/scripts/lib/types.ts";
@@ -372,3 +375,77 @@ describe("commands see the image's PATH", () => {
     }
   });
 });
+
+// Output captured from each tool's real install (Nov 15, 2026) with the registry blocked by egress
+// (the cloud VM resets TLS to hosts it doesn't allow) and with the network off. Go and Cargo reach
+// their registries from the VM, so their egress-blocked runs used a blocked mirror (goproxy.io,
+// rsproxy.cn): same tool, same failure, another host.
+const OUTPUTS = join(dirname(new URL(import.meta.url).pathname), "registry-outputs");
+const output = (name: string) => readFileSync(join(OUTPUTS, `${name}.txt`), "utf8");
+const install = { id: "cmd-app-install", kind: "install" as const, component: "app", cwd: ".", command: "install", source: "readiness", reason: "x", timeoutSec: 600 };
+const inContainer = { where: "container" as const, image: "x", imageSource: "audit" as const };
+
+describe("a blocked registry is this machine's limit, in every ecosystem", () => {
+  const blocked = readdirSync(OUTPUTS).filter((f) => /-(egress-blocked|offline)\.txt$/.test(f)).map((f) => f.replace(/\.txt$/, ""));
+
+  test("there is a capture of both kinds for each ecosystem", () => {
+    for (const eco of ["go", "cargo", "maven", "gradle", "nuget", "composer", "bundler"]) {
+      assert.ok(blocked.includes(`${eco}-egress-blocked`) && blocked.includes(`${eco}-offline`), eco);
+    }
+  });
+
+  for (const name of blocked) {
+    test(`${name}: the install is blocked, not a repo failure`, () => {
+      const d = diagnose(output(name), false, "install");
+      assert.equal(d.cause, "network", d.detail);
+      assert.ok(environmentLimit(inContainer, install, d, []), "reported as blocked");
+    });
+  }
+
+  test("a wrong dependency version stays the repo's failure", () => {
+    const wrong = [
+      output("cargo-wrong-version"),
+      output("go-wrong-version"),
+      "[ERROR] Failed to execute goal on project app: Could not resolve dependencies for project ex:app:jar:1.0: Could not find artifact junit:junit:jar:99.0 in central (https://repo.maven.apache.org/maven2)",
+      "   > Could not resolve com.google.guava:guava:99.0.\n      > Could not find com.google.guava:guava:99.0.",
+      "/w/App.csproj : error NU1102: Unable to find package Serilog with version (>= 99.0.0)",
+      "Could not find gem 'rake (= 99.0)' in rubygems repository https://rubygems.org/ or installed locally.",
+      "  Problem 1\n    - Root composer.json requires monolog/monolog ^99.0, found monolog/monolog[1.0.0, ..., 3.8.1] but it does not match the constraint.",
+      // Gradle says this for a blocked plugin portal and for a plugin version that doesn't exist alike,
+      // so on its own it can't be called blocked; the "Could not GET" line under it can.
+      "Plugin [id: 'com.github.ben-manes.versions', version: '9.9.9'] was not found in any of the following sources:\n- Plugin Repositories (could not resolve plugin artifact 'com.github.ben-manes.versions:com.github.ben-manes.versions.gradle.plugin:9.9.9')",
+    ];
+    for (const text of wrong) {
+      const d = diagnose(text, false, "install");
+      assert.notEqual(d.cause, "network", text);
+      assert.equal(environmentLimit(inContainer, install, d, []), undefined, text);
+    }
+  });
+});
+
+describe("Symfony parameter references aren't secrets", () => {
+  test("%env(...)% and %name% name where a value comes from; a committed literal is still flagged", () => {
+    assert.deepEqual(scanText("framework:\n    secret: '%env(APP_SECRET)%'\n"), []);
+    assert.deepEqual(scanText("parameters:\n    secret: '%kernel.secret%'\n"), []);
+    assert.deepEqual(scanText("APP_SECRET=not-a-secret--read-the-doc!\n").map((h) => h.line), [1]);
+  });
+});
+
+describe("a root build a language file refines keeps its source folders", () => {
+  test("an Android Gradle root doesn't split app/ off as a JVM folder with no manifest", () => {
+    const android = { id: "android", label: "Android", kind: "stack" as const, tier: "not_assessed" as const, proof: [] };
+    jvm.stacks.push(android);
+    STACKS.push(android);
+    jvm.detect.refine = (_manifest, text) => (/com\.android\.(application|library)/.test(text) ? "android" : undefined);
+    try {
+      const dir = repo({ "build.gradle": "plugins { id 'com.android.application' version '8.5.0' apply false }\n", "settings.gradle": "include ':app'\n", "app/build.gradle": "plugins { id 'com.android.application' }\n", "app/src/main/java/shop/Cart.java": "class Cart {}\n" });
+      const comps = buildProfile(dir, dir, rubric).components;
+      assert.deepEqual(comps.map((c) => [c.path, c.stack]), [[".", "android"]]);
+    } finally {
+      delete jvm.detect.refine;
+      jvm.stacks.splice(jvm.stacks.indexOf(android), 1);
+      STACKS.splice(STACKS.indexOf(android), 1);
+    }
+  });
+});
+
