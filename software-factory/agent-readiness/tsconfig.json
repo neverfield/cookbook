@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["skill/agent-readiness/scripts", "tests", "support/tools", "support/evals"]
+  "include": ["skill/agent-readiness/scripts", "tests", "support/tools", "support/evals", "support/trials"]
 }

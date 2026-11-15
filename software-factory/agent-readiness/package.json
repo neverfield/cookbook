@@ -15,7 +15,8 @@
     "release-manifest": "node --experimental-strip-types --no-warnings support/tools/release-manifest.ts",
     "evals": "node --experimental-strip-types --no-warnings support/evals/run.ts",
     "goldens": "node --experimental-strip-types --no-warnings support/evals/goldens.ts",
-    "labels": "node --experimental-strip-types --no-warnings support/evals/labels/check.ts"
+    "labels": "node --experimental-strip-types --no-warnings support/evals/labels/check.ts",
+    "trials": "node --experimental-strip-types --no-warnings --test support/trials/trials.test.ts"
   },
   "devDependencies": {
     "@cursor/sdk": "1.2.0",
