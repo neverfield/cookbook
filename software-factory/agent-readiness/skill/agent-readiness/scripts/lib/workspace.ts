@@ -300,10 +300,12 @@ function seedFromCode(rubricVersion: string): boolean {
 }
 
 // Keyed by the eval pin or the seal key when there is one, so only the commit's code moves it.
-// Without either it is a digest of the code alone: stable, but anyone with the code can work it out.
+// Without either it is "": mutate.ts mixes in each component's code, so the faults come from the
+// code alone, and anyone with the code can work them out.
 export function codeSeed(repo: string, commit: string, seedEnv?: string): string {
+  const key = seedEnv ?? process.env.SA_READINESS_SEAL_KEY;
+  if (!key) return "";
   const tree = gitOrThrow(["rev-parse", `${commit}^{tree}`], repo).trim();
-  const key = seedEnv ?? process.env.SA_READINESS_SEAL_KEY ?? "";
   return createHmac("sha256", `readiness-seed:${key}`).update(tree).digest("hex").slice(0, 32);
 }
 
@@ -320,8 +322,9 @@ export function seedDigest(seed: string): string {
 // The seed planted faults are chosen from, kept next to the audit tree outside the repository.
 export function realSeed(audit: Audit, local: LocalInfo): string {
   const f = join(dirname(local.tree), "seed.txt");
-  const seed = exists(f) ? readText(f).trim() : "";
-  return seed && seedDigest(seed) === audit.seed.value ? seed : audit.seed.value;
+  if (!exists(f)) return audit.seed.value;
+  const seed = readText(f).trim();
+  return seedDigest(seed) === audit.seed.value ? seed : audit.seed.value;
 }
 
 // Every write the scripts make to the draft leaves its digest outside the repository, keyed when

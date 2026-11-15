@@ -48,7 +48,7 @@
       "review": "customer-trial-opus.md",
       "truth": "Medium pnpm TypeScript library with \"type\": \"commonjs\" and engines.node >=12.20.0. Installs, builds, type-checks and passes its tests, on the host too. The review hit a crash on the commonjs type, a silent host fallback because node:12-bookworm doesn't exist, and with --image a false Level 0 because the audit's pnpm store sat in the work tree and prettier parsed it. Run from the copied skill, the audit currently exits before sealing with \"Cannot use import statement outside a module\".",
       "realInstructionFindings": [],
-      "falseInstructionFindings": 1,
+      "falseInstructionFindings": 0,
       "target": {
         "sealed": true,
         "runtime": "docker",
@@ -59,23 +59,16 @@
       },
       "recorded": {
         "any": {
-          "exit": 0,
-          "sealed": true,
+          "exit": 1,
+          "sealed": false,
           "runtime": null,
-          "level": 0,
-          "outcome": "blocked",
-          "unproven": true,
-          "couldBe": 1,
-          "components": {
-            "zustand": {
-              "level": 0,
-              "unproven": true
-            }
-          },
+          "level": null,
+          "outcome": null,
+          "unproven": null,
+          "couldBe": null,
+          "components": {},
           "notAssessed": [],
-          "instructionFailures": [
-            "README.md:24"
-          ],
+          "instructionFailures": [],
           "blockingSafety": []
         }
       }

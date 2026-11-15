@@ -1,4 +1,4 @@
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { inventory, orgSkillBuilders } from "./lib/assets.ts";
 import { addContractCommand, checkComponent, discoverContract } from "./lib/contract.ts";
@@ -9,7 +9,7 @@ import { auditIds, loadSealedAudit, pushHistory, readHistory, readRoadmap, write
 import { MAX_PRS, computeOutcomes, fetchPrs, loadPrsFile } from "./lib/outcomes.ts";
 import { buildProfile } from "./lib/profile.ts";
 import { redact } from "./lib/redact.ts";
-import { evidenceFromPhase, hostExecutor, newBudget, registryValuesOf, replay, runContract } from "./lib/replay.ts";
+import { ALLOW_HOST_ENV, assertPlatformSupported, evidenceFromPhase, hostExecutor, newBudget, registryValuesOf, replay, runContract } from "./lib/replay.ts";
 import { latestRubricVersion, loadRubric } from "./lib/rubric.ts";
 import { SCAN_BOUND_MINUTES, sampledScope } from "./lib/scope.ts";
 import { validateAgainst } from "./lib/schema.ts";
@@ -20,6 +20,7 @@ import { staticSignals } from "./lib/signals.ts";
 import { instructionItems, safetyScan } from "./lib/static.ts";
 import type { Audit, CommandKind, Narration, Result, Roadmap, ScanBound, ScenarioId, ScenarioSpec, Strength, Tier } from "./lib/types.ts";
 import { addDays, exists, fail, git, listFiles, nowIso, randomHex, readJson, readText, sha256, today, writeJson } from "./lib/util.ts";
+import { WAIVER_FILE, applyWaivers, loadWaivers } from "./lib/waivers.ts";
 import { commitReader, currentDraftId, initAudit, loadDraft, paths, refreshTree, releaseManifest, resolveRepo, saveDraft, scratchTree } from "./lib/workspace.ts";
 
 const BOOLEAN = new Set(["force", "remediate", "inherit-env", "allow-host", "no-mutants", "no-instructions", "no-outcomes", "json", "push", "allow-eval", "allow-unkeyed", "dockerfile", "instructions", "strict", "help"]);
@@ -135,6 +136,11 @@ function cmdScan(a: Args): void {
     const ev = addEvidence(audit, { checkId: "context.instructions_verified", condition: "instructions", strength: "static", where: "static", result: "fail", summary: `${item.source}:${item.line} \`${item.text}\`: ${item.staticReason}` });
     item.evidenceId = ev.id;
   }
+  const workingWaivers = join(repo, WAIVER_FILE);
+  audit.waivers = loadWaivers(local.tree, rubric, today(), existsSync(workingWaivers) ? readFileSync(workingWaivers, "utf8") : null) ?? undefined;
+  applyWaivers(audit);
+  if (audit.waivers?.ignored) log(`Waivers: ${audit.waivers.ignored}.`);
+  for (const r of audit.waivers?.rejected ?? []) log(`Waiver ${r.id} refused: ${r.reason}.`);
   const blocking = audit.safety.filter((s) => s.blocking);
   const { scanned, total } = bound.scope.secrets;
   // A secret scan the bound cut short can't show the repo is clean, only that it found none so far.
@@ -681,8 +687,9 @@ process.stdout.on("error", (e: NodeJS.ErrnoException) => {
 
 async function main(): Promise<void> {
   assertNodeVersion();
+  assertPlatformSupported();
   const a = parse(process.argv.slice(2));
-  if (a.flags["allow-host"]) process.env.SA_READINESS_ALLOW_HOST = "1";
+  if (a.flags["allow-host"]) process.env[ALLOW_HOST_ENV] = "1";
   const cmd = a.positional[0];
   if (!cmd || a.flags.help || cmd === "help") {
     process.stdout.write(HELP);

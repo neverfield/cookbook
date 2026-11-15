@@ -74,6 +74,28 @@ describe("first run", { concurrency: 4 }, () => {
     assert.equal(r.status, 0, r.stderr);
   });
 
+  test("scan --strict passes once a committed waiver covers each wrong instruction, and ignores an uncommitted one", () => {
+    const repo = materialize("stale-setup-docs");
+    assert.equal(readiness(repo, ["init", "--tier", "read-only"]).code, 0);
+    const before = readiness(repo, ["scan", "--strict"]);
+    assert.equal(before.code, 1, before.out);
+    const wrong = [...before.out.matchAll(/wrong instruction (\S+:\d+) /g)].map((m) => m[1]);
+    assert.ok(wrong.length > 0, before.out);
+    const file = join(repo, ".agent-readiness", "waivers.json");
+    const waivers = { schema: "agent-readiness/waivers@1", waivers: wrong.map((match, i) => ({ id: `w${i + 1}`, check: "context.instructions_verified", match, reason: "reviewed: documented for the package's users", by: "Contributor A" })) };
+    writeFileSync(file, JSON.stringify(waivers, null, 2));
+    assert.equal(readiness(repo, ["init", "--tier", "read-only", "--force"]).code, 0);
+    const uncommitted = readiness(repo, ["scan", "--strict"]);
+    assert.equal(uncommitted.code, 1, "a waiver outside the audited commit doesn't count");
+    assert.match(uncommitted.out, /isn't in the audited commit/);
+    sh(repo, "add", "-f", file);
+    commitAll(repo, "waive reviewed findings");
+    assert.equal(readiness(repo, ["init", "--tier", "read-only", "--force"]).code, 0);
+    const after = readiness(repo, ["scan", "--strict"]);
+    assert.equal(after.code, 0, after.out);
+    assert.match(after.out, /0 wrong/);
+  });
+
   test("--help documents --force on audit and --allow-host", () => {
     const r = readiness(tmp(), ["help"]);
     assert.match(r.out, /audit --tier T .*--force/);
@@ -148,7 +170,17 @@ describe("git helpers", () => {
   test("the code seed holds while the code does, and a component's seed moves only with its own files", () => {
     const repo = repoWith({ "api/a.js": "1\n", "web/b.js": "1\n" });
     const c1 = head(repo);
-    assert.equal(codeSeed(repo, c1), codeSeed(repo, c1));
+    const key = process.env.SA_READINESS_SEAL_KEY;
+    delete process.env.SA_READINESS_SEAL_KEY;
+    try {
+      assert.equal(codeSeed(repo, c1), "", "unpinned and unkeyed, the faults come from the code alone");
+      process.env.SA_READINESS_SEAL_KEY = "ci-key";
+      assert.equal(codeSeed(repo, c1), codeSeed(repo, c1));
+      assert.notEqual(codeSeed(repo, c1), "");
+    } finally {
+      if (key === undefined) delete process.env.SA_READINESS_SEAL_KEY;
+      else process.env.SA_READINESS_SEAL_KEY = key;
+    }
     assert.notEqual(codeSeed(repo, c1, "pin-a"), codeSeed(repo, c1, "pin-b"));
     writeFileSync(join(repo, "web/b.js"), "2\n");
     commitAll(repo, "web");
