@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { allSites, chooseSites, codeDigest, equivalentBoundary, faultsVerdict, killRateOf, parseJsonc, quotedLines, sitesForLine, targetFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
+import { allSites, chooseSites, codeDigest, equivalentBoundary, equivalentConstant, faultsVerdict, killRateOf, parseJsonc, quotedLines, sitesForLine, targetFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import type { Component } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { cases as fixtureCases } from "../support/evals/cases/fixtures.ts";
 import { panelCalibration } from "../support/evals/labels/check.ts";
@@ -55,6 +55,29 @@ describe("planted faults land on code the tests run", () => {
     assert.ok(!eq("  return day >= 1 && day <= 5;"));
     const dir = repo({ "src/limits.js": "export function clamp(n) {\n  if (n < 0) {\n    return 0;\n  }\n  return n;\n}\n" });
     assert.ok(!allSites(dir, ["src/limits.js"], "js").some((s) => s.operator === "boundary_flip"));
+  });
+
+  test("a constant no use can tell from the next integer takes no fault, as in slugify's counter fallback", () => {
+    const slugify = [
+      "\t\tconst stringLower = string.toLowerCase();",
+      "\t\tconst numberless = occurrences.get(removeCounterSuffix(stringLower)) || 0;",
+      "\t\tconst counter = occurrences.get(stringLower);",
+      "\t\tlet result = newCounter >= 2 || numberless > 2 ? `${string}-${newCounter}` : string;",
+    ];
+    const eq = (lines: string[], i: number) => {
+      const s = sitesForLine(lines[i], "js").find((x) => x.operator === "change_constant")!;
+      return equivalentConstant(lines, i, s.before, s.after);
+    };
+    assert.ok(eq(slugify, 1));
+    const swap = (use: string) => [slugify[1], use];
+    assert.ok(eq(swap("if (2 < numberless) x();"), 0), "a literal on the left is read the same way");
+    assert.ok(eq(["const n = ready ? 0 : count;", "if (n >= 5) go();"], 0), "an arm of a conditional");
+    assert.ok(eq(["    seen = cache.get(k) or 0", "    if seen > 3:"], 0), "a Python fallback");
+    for (const use of ["if (numberless > 0) x();", "if (numberless >= 1) x();", "if (numberless === 0) x();", "return numberless;", "total += numberless;", "if (numberless + 1 > 2) x();", "// numberless counts the bare slug"]) assert.ok(!eq(swap(use), 0), use);
+    assert.ok(!eq(["const n = a * 2;", "if (n > 10) go();"], 0), "a constant inside an expression changes every value, not one branch");
+    assert.ok(!eq(["const n = get() || 0;"], 0), "no use at all decides nothing");
+    const dir = repo({ "index.js": `${slugify.join("\n")}\n` });
+    assert.ok(!allSites(dir, ["index.js"], "js").some((s) => s.line === 2 && s.operator === "change_constant"));
   });
 
   test("types and timing constants take no fault; a mutant equal to its line is never made", () => {
