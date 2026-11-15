@@ -1,0 +1,19 @@
+{
+  "purpose": "Install lines for the package's users, a \"never run\" sentence and a package-relative `cd src &&` step: none of them is a wrong instruction, so the repo is Level 2 with every check passing.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "consumer-snippets": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:consumer-snippets",
+      "noBlocker": true,
+      "safety": "pass",
+      "skipped": 6
+    }
+  ]
+}

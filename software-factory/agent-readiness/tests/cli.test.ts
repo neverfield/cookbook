@@ -152,7 +152,7 @@ describe("CLI", { concurrency: 4 }, () => {
       assert.ok(ev(app, "planted faults").length > 0, `${app} got planted faults`);
       assert.ok(ev(app, "test passed (").some((e: { summary: string }) => /^test passed \(\d+ of \d+ tests\)$/.test(e.summary)), `${app}'s test count is in the report`);
     }
-    assert.ok(report.details.evidence.some((e: { summary: string }) => /^caught 0 of \d+ planted faults; missed: \w+ at apps\/admin-web\/src\/roles\.js:\d+/.test(e.summary)), "the missed faults are named by operator and line");
+    assert.ok(report.details.evidence.some((e: { summary: string }) => /^caught 0 of \d+ planted faults(, below the \d+% the rubric requires)?; missed: \w+ at apps\/admin-web\/src\/roles\.js:\d+/.test(e.summary)), "the missed faults are named by operator and line");
     assert.equal(report.actions[0].itemId, "faults:admin-web", "the test gap can start now, without the clean container");
     assert.equal(report.actions[0].startNow, true);
     assert.match(report.executive.gaps[0].blocks, /^Can start now; blocks Level 2 for admin-web/);
@@ -227,7 +227,7 @@ describe("CLI", { concurrency: 4 }, () => {
     const dir = join(repo, ".agent-readiness/feedback");
     const bundle = JSON.parse(readFileSync(join(dir, readdirSync(dir)[0]), "utf8"));
     assert.equal(bundle.check, "bootstrap.cold_replay");
-    assert.equal(bundle.rubric, "2026-11-alpha");
+    assert.equal(bundle.rubric, "2026-11-beta");
     assert.ok(!JSON.stringify(bundle).includes("outputTail"));
     assert.ok(!JSON.stringify(bundle).includes("isAdult"));
   });
@@ -277,6 +277,6 @@ describe("CLI", { concurrency: 4 }, () => {
     assert.match(readiness(repo, ["validate", ".agent-readiness/roadmap.json"]).out, /valid roadmap/);
     writeFileSync(join(repo, "bad.json"), JSON.stringify({ schema: "agent-readiness/report@1" }));
     assert.match(readiness(repo, ["validate", "bad.json"]).out, /not a valid report/);
-    assert.match(readiness(repo, ["version"]).out, /agent-readiness skill 0\.2\.0 \(agent-readiness-v0\.2\.0\), rubric 2026-11-alpha/);
+    assert.match(readiness(repo, ["version"]).out, /agent-readiness skill 0\.2\.0 \(agent-readiness-v0\.2\.0\), rubric 2026-11-beta/);
   });
 });

@@ -7,7 +7,7 @@ The rules in [SKILL.md](SKILL.md) still hold. You don't decide that a fix worked
 ## Before you start
 
 1. Take the step the user named, or the first step under "What moves the needle next" in `.agent-readiness/latest/report.md` (it is also part 1's "Next move"). Read its "Why it matters", "Done when" and steps in part 5.
-2. Work on a new branch. The audit reads `git archive HEAD`, so a fix only counts once it's committed.
+2. Work on a new branch. The audit reads the committed tree of HEAD, so a fix only counts once it's committed.
 3. If the item lists a decision ("Decision needed: ..."), ask the user before acting on it, unless they already gave the answer.
 
 ## The environment setup contract
@@ -38,10 +38,10 @@ Once the component's commands pass in a clean container:
 
 For an item like "Make worker's tests catch wrong behavior":
 
-1. The report names the file and the kind of fault, never the line or the edit. Don't look for planted-fault details in `.agent-readiness/`. The next audit plants fresh faults from a new seed, so tests aimed at old faults don't help.
+1. The report names the file and the kind of fault, never the line or the edit. Don't look for planted-fault details in `.agent-readiness/`. Faults are chosen from the code and its tests, so once the tests change the next audit plants different faults, and tests aimed at the old ones don't help.
 2. Decide the intended behavior of the named files with the user when it isn't obvious, then write tests that assert results and edge cases.
 3. Never delete tests, add skip markers or loosen assertions. `readiness diff` flags all three.
-4. Prove it with a new audit: the fresh planted faults in that component must all be caught.
+4. Prove it with a new audit: the tests must catch at least the rubric's kill rate of the faults it plants in that component (60% under rubric 2026-11-beta).
 
 ## Stale agent instructions
 

@@ -224,8 +224,7 @@
           "items": { "type": "object", "required": ["id", "check", "component", "ran", "where", "result", "summary"], "properties": { "id": { "type": "string", "pattern": "^ev-\\d{3,}$" } } }
         }
       }
-    }
-,
+    },
     "explanations": {
       "type": "array",
       "items": {

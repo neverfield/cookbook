@@ -1,0 +1,19 @@
+{
+  "purpose": "AGENTS.md names a script only the release pipeline adds, and a committed waiver marks it as a false positive with a reason and a reviewer: the finding is listed as waived and doesn't hold the level.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "waived-instruction": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:waived-instruction",
+      "noBlocker": true,
+      "safety": "pass",
+      "skipped": 1
+    }
+  ]
+}

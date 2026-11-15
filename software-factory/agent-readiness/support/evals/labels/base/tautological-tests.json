@@ -2,15 +2,15 @@
  "schema": "agent-readiness/report@1",
  "repo": "tautological-tests",
  "audit": {
-  "id": "aud-2026-11-02-f83446a-ab2d",
-  "date": "2026-11-02",
-  "commit": "f83446a",
+  "id": "aud-2026-11-15-65f7391-5009",
+  "date": "2026-11-15",
+  "commit": "65f7391",
   "dirtyTree": false,
-  "rubric": "2026-11-alpha",
+  "rubric": "2026-11-beta",
   "tier": "local-exec",
-  "scriptsDigest": "08c095446d663c1b8169943a35b3aa6ff60d99fca15dab7b3eba6904d6269057",
+  "scriptsDigest": "acdc0e64206948514fbd03536e857e82ececadaa557b183e86909de9b4167762",
   "seedPinned": true,
-  "sealStatus": "Scripts match the agent-readiness-v0.1.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
+  "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
   "staleCopy": null,
   "previous": null,
   "storedAt": ".agent-readiness/history/audits"
@@ -76,7 +76,7 @@
     "condition": "faults",
     "label": "tests catch planted faults",
     "state": "not_met",
-    "reason": "caught 0 of 5 planted faults; missed: change_constant at src/limits.js:5, change_constant at src/limits.js:12, negate_condition at src/limits.js:2, change_constant at src/limits.js:3, change_constant at src/limits.js:6"
+    "reason": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at src/limits.js:2, change_constant at src/limits.js:12, negate_condition at src/limits.js:5, change_constant at src/limits.js:6, change_constant at src/limits.js:3"
    }
   ],
   "unproven": false,
@@ -107,7 +107,7 @@
       "condition": "faults",
       "label": "tests catch planted faults",
       "state": "not_met",
-      "reason": "caught 0 of 5 planted faults; missed: change_constant at src/limits.js:5, change_constant at src/limits.js:12, negate_condition at src/limits.js:2, change_constant at src/limits.js:3, change_constant at src/limits.js:6"
+      "reason": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at src/limits.js:2, change_constant at src/limits.js:12, negate_condition at src/limits.js:5, change_constant at src/limits.js:6, change_constant at src/limits.js:3"
      }
     ],
     "scenarios": []
@@ -145,8 +145,9 @@
    }
   ],
   "ask": "Decision needed: what the untested behavior in src/limits.js should be. Also name an owner for agent readiness.",
-  "coverage": "The level covers 1 component. Agent PRs weren't measured.",
-  "noBlocker": false
+  "coverage": "The level covers 1 component.",
+  "noBlocker": false,
+  "unassessed": null
  },
  "actions": [
   {
@@ -160,10 +161,13 @@
    "research": null,
    "effortAndOwner": "Medium: tests in tautological-tests only. Component owner.",
    "decision": "What the untested behavior in src/limits.js should be",
-   "doneWhen": "A new audit's fresh planted faults in tautological-tests are all caught.",
+   "doneWhen": "An audit after the change catches at least 60% of the faults it plants in tautological-tests.",
    "dependsOn": [],
    "impact": 1,
-   "effort": "medium"
+   "effort": "medium",
+   "evidence": [
+    "ev-009"
+   ]
   }
  ],
  "matrix": {
@@ -182,16 +186,18 @@
     "status": "next",
     "statusText": "next",
     "unlocks": "a named owner for approvals, targets and the weekly recheck",
-    "decision": "Who owns agent readiness for this repo"
+    "decision": "Who owns agent readiness for this repo",
+    "level": null
    },
    {
     "id": "faults:tautological-tests",
     "order": 2,
     "title": "Make tautological-tests's tests catch wrong behavior",
     "status": "next",
-    "statusText": "next",
+    "statusText": "next, alongside step 1",
     "unlocks": "tautological-tests to Level 2",
-    "decision": "What the untested behavior in src/limits.js should be"
+    "decision": "What the untested behavior in src/limits.js should be",
+    "level": 2
    },
    {
     "id": "targets",
@@ -200,7 +206,8 @@
     "status": "later",
     "statusText": "later",
     "unlocks": "a definition of Level 3 for this repo",
-    "decision": "The merge rate, first-time CI pass rate and review load that mean agents handle work here"
+    "decision": "The merge rate, first-time CI pass rate and review load that mean agents handle work here",
+    "level": 3
    }
   ]
  },
@@ -280,7 +287,7 @@
     "name": "Tests catch planted faults",
     "why": "Green tests aren't proof that a change is right.",
     "sources": [],
-    "result": "tautological-tests: caught 0 of 5 planted faults",
+    "result": "tautological-tests: caught 0 of 5 planted faults, below the 60% the rubric requires",
     "ok": false,
     "counts": {
      "passed": 0,
@@ -303,10 +310,7 @@
      "failed": 0,
      "notRun": 0
     },
-    "evidence": [
-     "ev-010",
-     "ev-011"
-    ]
+    "evidence": []
    },
    {
     "id": "safety.execution_boundary",
@@ -345,7 +349,7 @@
     "authors": [
      "Contributor A"
     ],
-    "lastChanged": "2026-07-05",
+    "lastChanged": "2026-07-18",
     "status": "Replays",
     "ok": true
    }
@@ -464,42 +468,24 @@
     "id": "ev-009",
     "check": "verify.behavioral_oracle",
     "component": "tautological-tests",
-    "ran": "caught 0 of 5 planted faults; missed: change_constant at src/limits.js:5, change_constant at src/limits.js:12, negate_condition at src/limits.js:2, change_constant at src/limits.js:3, change_constant at src/limits.js:6",
+    "ran": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at src/limits.js:2, change_constant at src/limits.js:12, negate_condition at src/limits.js:5, change_constant at src/limits.js:6, change_constant at src/limits.js:3",
     "where": "ran in a clean container",
     "result": "fail",
-    "summary": "caught 0 of 5 planted faults; missed: change_constant at src/limits.js:5, change_constant at src/limits.js:12, negate_condition at src/limits.js:2, change_constant at src/limits.js:3, change_constant at src/limits.js:6"
-   },
-   {
-    "id": "ev-010",
-    "check": "context.instructions_verified",
-    "component": null,
-    "ran": "npm test",
-    "where": "ran in a clean container",
-    "result": "pass",
-    "summary": "AGENTS.md:3 `npm test` replays"
-   },
-   {
-    "id": "ev-011",
-    "check": "context.instructions_verified",
-    "component": null,
-    "ran": "npm run lint",
-    "where": "ran in a clean container",
-    "result": "pass",
-    "summary": "AGENTS.md:4 `npm run lint` replays"
+    "summary": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at src/limits.js:2, change_constant at src/limits.js:12, negate_condition at src/limits.js:5, change_constant at src/limits.js:6, change_constant at src/limits.js:3"
    }
   ],
   "record": [
    {
     "label": "Audit",
-    "value": "aud-2026-11-02-f83446a-ab2d"
+    "value": "aud-2026-11-15-65f7391-5009"
    },
    {
     "label": "Commit",
-    "value": "f83446a (clean tree)"
+    "value": "65f7391 (clean tree)"
    },
    {
     "label": "Rubric",
-    "value": "2026-11-alpha"
+    "value": "2026-11-beta"
    },
    {
     "label": "Permission tier",
@@ -507,11 +493,11 @@
    },
    {
     "label": "Seal",
-    "value": "Scripts match the agent-readiness-v0.1.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it"
+    "value": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it"
    },
    {
     "label": "Skill digest",
-    "value": "08c095446d66"
+    "value": "acdc0e642069"
    },
    {
     "label": "Planted faults",
@@ -523,8 +509,129 @@
    },
    {
     "label": "Stored in",
-    "value": ".agent-readiness/history/audits/aud-2026-11-02-f83446a-ab2d"
+    "value": ".agent-readiness/history/audits/aud-2026-11-15-65f7391-5009"
    }
   ]
- }
+ },
+ "notices": [],
+ "waivers": null,
+ "explanations": [
+  {
+   "kind": "level",
+   "subject": "repo",
+   "result": "Level 1",
+   "ran": "the level rules over the active component, tautological-tests",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "Set by tautological-tests, held by tautological-tests: tests catch planted faults, not met (caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at src/limits.js:2, change_constant at src/limits.js:12, negate_condition at src/limits.js:5, change_constant at src/limits.js:6, change_constant at src/limits.js:3).",
+   "rule": "The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it."
+  },
+  {
+   "kind": "level",
+   "subject": "tautological-tests",
+   "result": "Level 1",
+   "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run build` (pass), `npm run lint` (pass) and `npm run test` (pass)",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "Held at Level 1 by tests catch planted faults: not met (caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at src/limits.js:2, change_constant at src/limits.js:12, negate_condition at src/limits.js:5, change_constant at src/limits.js:6, change_constant at src/limits.js:3)",
+   "rule": "Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
+  },
+  {
+   "kind": "condition",
+   "subject": "tautological-tests: installs from the lockfile in a clean container",
+   "result": "met",
+   "ran": "`npm ci` (pass)",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "install passed",
+   "rule": "Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "tautological-tests: builds in a clean container",
+   "result": "met",
+   "ran": "`npm run build` (pass)",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "build passed",
+   "rule": "Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "tautological-tests: passes every test in a clean container",
+   "result": "met",
+   "ran": "`npm run test` (pass)",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "test passed (2 of 2 tests)",
+   "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "tautological-tests: build, lint, type-check and test commands pass",
+   "result": "met",
+   "ran": "`npm run lint` (pass), `npm run build` (pass) and `npm run test` (pass)",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "3 commands pass",
+   "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "tautological-tests: tests catch planted faults",
+   "result": "not met",
+   "ran": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at src/limits.js:2, change_constant at src/limits.js:12, negate_condition at src/limits.js:5, change_constant at src/limits.js:6, change_constant at src/limits.js:3",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at src/limits.js:2, change_constant at src/limits.js:12, negate_condition at src/limits.js:5, change_constant at src/limits.js:6, change_constant at src/limits.js:3",
+   "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not met means it ran and failed, or the repo lacks what it needs."
+  },
+  {
+   "kind": "condition",
+   "subject": "repo: agent instructions are accurate",
+   "result": "met",
+   "ran": "`npm run lint` (pass) and `npm run test` (pass)",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "2 instruction items check out",
+   "rule": "Level 2 needs it: agent instructions are accurate (Agent instructions are accurate). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "repo: normal work needs no production access",
+   "result": "met",
+   "ran": "nothing ran for it",
+   "where": "read from the audited commit's files, nothing ran",
+   "happened": "no blocking safety findings",
+   "rule": "Level 2 needs it: normal work needs no production access (Normal work needs no production access). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "repo: toolchain versions are pinned",
+   "result": "met",
+   "ran": "nothing ran for it",
+   "where": "read from the audited commit's files, nothing ran",
+   "happened": "pinned in .nvmrc",
+   "rule": "Reported with Level 1; no level waits on it alone: toolchain versions are pinned (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "repo: a frozen install reproduces the lockfile",
+   "result": "met",
+   "ran": "frozen install reproduced the lockfile",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "frozen install reproduced the lockfile",
+   "rule": "Reported with Level 1; no level waits on it alone: a frozen install reproduces the lockfile (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "instruction",
+   "subject": "AGENTS.md:3",
+   "result": "checks out",
+   "ran": "`npm test`",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "it runs the same command as the test check, which passed",
+   "rule": "An instruction that runs the same command as a check the audit already ran takes that check's result, and a failure counts once, under the check, not again as a wrong instruction."
+  },
+  {
+   "kind": "instruction",
+   "subject": "AGENTS.md:4",
+   "result": "checks out",
+   "ran": "`npm run lint`",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "it runs the same command as the lint check, which passed",
+   "rule": "An instruction that runs the same command as a check the audit already ran takes that check's result, and a failure counts once, under the check, not again as a wrong instruction."
+  }
+ ]
 }

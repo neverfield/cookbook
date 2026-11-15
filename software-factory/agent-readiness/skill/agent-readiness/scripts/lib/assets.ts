@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { ghJson } from "./gh.ts";
 import { ELEVATED } from "./static.ts";
 import type { Asset, InstructionItem, ScanBound } from "./types.ts";
-import { addDays, git, inTreePath, listFiles, readText, today } from "./util.ts";
+import { addDays, git, inTreePath, lastChanged, listFiles, readText, today } from "./util.ts";
 
 const KINDS: { re: RegExp; kind: Asset["kind"] }[] = [
   { re: /(^|\/)(AGENTS|CLAUDE)\.md$/, kind: "agents_md" },
@@ -68,6 +68,7 @@ export function inventory(repo: string, tree: string, items: InstructionItem[], 
   const files = listFiles(tree, { includeHidden: true }).filter((f) => !f.startsWith(".cursor/skills/agent-readiness/"));
   const assets: Asset[] = [];
   const listed = new Set(files);
+  const dates = lastChanged(repo, files.filter((f) => KINDS.some((k) => k.re.test(f))), bound ? { timeoutMs: Math.max(1000, bound.until - Date.now()) } : {});
   for (const file of files) {
     const hit = KINDS.find((k) => k.re.test(file));
     if (!hit) continue;
@@ -80,7 +81,7 @@ export function inventory(repo: string, tree: string, items: InstructionItem[], 
     const { status, ok } = statusFor({ kind: hit.kind, path: file, frontmatterOk: fm, elevated }, items);
     const left = bound ? bound.until - Date.now() : undefined;
     const who = left === undefined || left > 0 ? authors(repo, file, left) : null;
-    const last = who ? git(["log", "-1", "--format=%cI", "--", file], repo, bound ? Math.max(1000, bound.until - Date.now()) : undefined).stdout.trim() : "";
+    const last = who ? (dates.get(file) ?? "") : "";
     if (bound) {
       bound.scope.assetHistory.total++;
       if (who) bound.scope.assetHistory.read++;

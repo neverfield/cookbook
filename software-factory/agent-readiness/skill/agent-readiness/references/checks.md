@@ -1,6 +1,6 @@
-# The checks (rubric 2026-11-alpha)
+# The checks (rubric 2026-11-beta)
 
-Six checks, plus an informational inventory of agent assets. The checks are the same under 2026-10-alpha; 2026-11-alpha changed Levels 3 and 4, the repo rollup and the action matrix, which [levels.md](levels.md) describes. What the audit supports, stack by stack, is in [supported.md](supported.md). Each check lists what it runs, when it passes, the evidence strength it needs, why it matters, and the usual fixes.
+Six checks, plus an informational inventory of agent assets. The checks are the same under 2026-10-alpha; 2026-11-alpha changed Levels 3 and 4, the repo rollup and the action matrix, which [levels.md](levels.md) describes, and 2026-11-beta changed how planted faults are chosen and how many must be caught, and assesses up to 10 components instead of 6. What the audit supports, stack by stack, is in [supported.md](supported.md). Each check lists what it runs, when it passes, the evidence strength it needs, why it matters, and the usual fixes.
 
 Evidence strength, weakest to strongest: stated in docs (`asserted`), read from files (`static`), ran on host (`executed`), ran in a clean container (`clean_replay`), confirmed by outcomes (`outcome_validated`). A check passes only at its required strength. A pass below it reads "not proven", never "passed".
 
@@ -12,7 +12,7 @@ A Python, PHP or Ruby app next to a root `package.json` is its own component, no
 
 A nested manifest under a folder that usually holds tests, samples or tooling (`test`, `tests`, `spec`, `e2e`, `sample`, `example`, `demo`, `bench`, `plugin`, `util`, `config`), another toolchain's project under a packaging or platform folder (`HomebrewFormula`, `pkg`, `packaging`, `android`, `ios`), or a shared config package such as `@acme/eslint-config`, is a satellite: it's listed in part 5, not made a component, and only becomes one when the repo has nothing else to assess.
 
-Each component's share counts changed files over 90 days. Bot authors, lockfile-only commits, generated files and renames don't count. The most active six supported components are assessed; when there are more, the report labels the scope "sampled" and lists the rest. Part 5 lists every component found, included or excluded, with its path, toolchain, manifest, lockfile and reason. Whenever a component that isn't assessed holds a share of changes, part 1 says how much, by name.
+Each component's share counts changed files over 90 days. Bot authors, lockfile-only commits, generated files and renames don't count. The most active ten supported components are assessed (six under rubrics before 2026-11-beta); when there are more, the report labels the scope "sampled" and lists the rest. Part 5 lists every component found, included or excluded, with its path, toolchain, manifest, lockfile and reason. Whenever a component that isn't assessed holds a share of changes, part 1 says how much, by name.
 
 ## `scope.agent_assets`: agent assets in the repo
 
@@ -38,9 +38,9 @@ Informational and never scored. Lists AGENTS.md and CLAUDE.md, skills (`.cursor/
 
 ## `verify.behavioral_oracle`: tests catch planted faults
 
-- **Runs:** in a throwaway copy, the scripts plant up to 5 faults per component in files the component's tests import, most recently changed first. The operators flip a comparison boundary, negate a condition, shift by one, swap a boolean return, drop a throw or early return, or change a constant. The seed is fresh for each audit, so planted faults can't be learned. TypeScript, JavaScript and Python are supported.
+- **Runs:** in a throwaway copy, the scripts plant up to 5 faults per component in files the component's tests import, most recently changed first. The operators flip a comparison boundary, negate a condition, shift by one, swap a boolean return, drop a throw or early return, or change a constant. Faults are chosen from the code and its tests, so the same code always gets the same faults and the result changes only when the code does; changing the tests plants different faults, so tests aimed at one audit's faults don't help. Under rubrics before 2026-11-beta the seed is fresh for each audit. TypeScript, JavaScript and Python are supported.
 - **Flake guard:** the suite must pass twice before any fault is planted. A fault counts as caught only if the suite fails on two runs. A fault that breaks compilation is discarded, not counted.
-- **Passes:** every counted fault is caught, and at least 3 gave a clear result. Coverage alone never passes.
+- **Passes:** the tests catch at least 60% of the counted faults (`mutation.killRate`; earlier rubrics need every one), and at least 3 gave a clear result. With 5 faults that means 3 caught; a draw of 5 is too small for a higher rate to give the same verdict from one draw to the next. Coverage alone never passes.
 - **Needs:** ran on host or stronger. Level 2 also needs Level 1, which needs a clean container.
 - **Why:** green tests aren't proof that a change is right.
   - OpenAI's SWE-Bench Pro audit flagged 200 of the 731 public tasks automatically (27.4%) and found 249 in human review (34.1%), so OpenAI estimates about 30% are broken, including low-coverage tests that let incomplete fixes pass. Caveat: an audit of one benchmark ([Jul 8, 2026](https://openai.com/index/separating-signal-from-noise-coding-evaluations)). It also sets a design rule here: a planted fault must be one any correct suite catches, not one tied to a particular implementation.

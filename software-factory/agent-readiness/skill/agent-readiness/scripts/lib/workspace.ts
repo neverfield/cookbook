@@ -250,8 +250,10 @@ export function initAudit(opts: InitOptions): { audit: Audit; local: LocalInfo; 
   const tree = join(mkdtempSync(join(tmpdir(), `readiness-${id}-`)), "tree");
   const info = exportTree(opts.repo, commit, tree);
   const rubric = latestRubricVersion();
-  const seed = seedFromCode(rubric) ? codeSeed(opts.repo, commit, seedEnv) : seedEnv ? sha256(`${seedEnv}:${priorAudits(p)}`).slice(0, 32) : randomHex(16);
+  const fromCode = seedFromCode(rubric);
+  const seed = fromCode ? codeSeed(opts.repo, commit, seedEnv) : seedEnv ? sha256(`${seedEnv}:${priorAudits(p)}`).slice(0, 32) : randomHex(16);
   writeText(join(dirname(tree), "seed.txt"), seed + "\n");
+  if (fromCode) writeText(join(dirname(tree), "fault-key.txt"), faultKey(seedEnv) + "\n");
   const manifest = releaseManifest();
   const audit: Audit = {
     schema: "agent-readiness/audit@1",
@@ -295,13 +297,12 @@ export function initAudit(opts: InitOptions): { audit: Audit; local: LocalInfo; 
 
 // Rubrics up to 2026-11-alpha promise fresh faults each audit; a rubric that sets
 // mutation.seedFrom to "code" keeps the faults, and so the level, fixed until the code changes.
-function seedFromCode(rubricVersion: string): boolean {
-  return (loadRubric(rubricVersion).mutation as { seedFrom?: string }).seedFrom === "code";
+export function seedFromCode(rubricVersion: string): boolean {
+  return loadRubric(rubricVersion).mutation.seedFrom === "code";
 }
 
-// Keyed by the eval pin or the seal key when there is one, so only the commit's code moves it.
-// Without either it is "": mutate.ts mixes in each component's code, so the faults come from the
-// code alone, and anyone with the code can work them out.
+// The seed the audit records, keyed by the eval pin or the seal key when there is one, so only the
+// commit's code moves it. Without either it is "".
 export function codeSeed(repo: string, commit: string, seedEnv?: string): string {
   const key = seedEnv ?? process.env.SA_READINESS_SEAL_KEY;
   if (!key) return "";
@@ -309,10 +310,13 @@ export function codeSeed(repo: string, commit: string, seedEnv?: string): string
   return createHmac("sha256", `readiness-seed:${key}`).update(tree).digest("hex").slice(0, 32);
 }
 
-// A component's own seed, which changes only when files under its folder change, tests included.
-export function componentSeed(seed: string, repo: string, commit: string, path: string): string {
-  const r = git(["rev-parse", path === "." ? `${commit}^{tree}` : `${commit}:${path}`], repo);
-  return sha256(`${seed}:${r.ok ? r.stdout.trim() : path}`).slice(0, 32);
+// What faults are picked with under a code seed. mutate.ts mixes in each component's own code, so
+// this must not depend on the commit, or any commit would move every component's faults. It is
+// never recorded, since the seal reveals the recorded seed. Without a key it is "", and anyone with
+// the code can work the faults out.
+export function faultKey(seedEnv?: string): string {
+  const key = seedEnv ?? process.env.SA_READINESS_SEAL_KEY;
+  return key ? createHmac("sha256", `readiness-faults:${key}`).digest("hex").slice(0, 32) : "";
 }
 
 export function seedDigest(seed: string): string {
@@ -325,6 +329,13 @@ export function realSeed(audit: Audit, local: LocalInfo): string {
   if (!exists(f)) return audit.seed.value;
   const seed = readText(f).trim();
   return seedDigest(seed) === audit.seed.value ? seed : audit.seed.value;
+}
+
+// The seed chooseSites() picks this audit's faults with.
+export function plantSeed(audit: Audit, local: LocalInfo): string {
+  if (!seedFromCode(audit.rubric)) return realSeed(audit, local);
+  const f = join(dirname(local.tree), "fault-key.txt");
+  return exists(f) ? readText(f).trim() : "";
 }
 
 // Every write the scripts make to the draft leaves its digest outside the repository, keyed when

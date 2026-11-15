@@ -24,13 +24,13 @@
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
-          "level": 1,
+          "level": 2,
           "outcome": "proven",
           "unproven": false,
           "couldBe": null,
           "components": {
             "ms": {
-              "level": 1,
+              "level": 2,
               "unproven": false
             }
           },
@@ -62,13 +62,13 @@
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
-          "level": 1,
+          "level": 2,
           "outcome": "proven",
           "unproven": false,
-          "couldBe": 2,
+          "couldBe": null,
           "components": {
             "zustand": {
-              "level": 1,
+              "level": 2,
               "unproven": false
             }
           },
@@ -111,17 +111,33 @@
               "level": 0,
               "unproven": true
             },
+            "assemble-release-plan": {
+              "level": 0,
+              "unproven": true
+            },
+            "changelog-github": {
+              "level": 0,
+              "unproven": true
+            },
             "cli": {
               "level": 0,
               "unproven": true
             },
             "get-github-info": {
-              "level": 1,
+              "level": 2,
               "unproven": false
             },
             "git": {
               "level": 0,
               "unproven": true
+            },
+            "logger": {
+              "level": 1,
+              "unproven": false
+            },
+            "types": {
+              "level": 0,
+              "unproven": false
             },
             "write": {
               "level": 0,
@@ -129,9 +145,7 @@
             }
           },
           "notAssessed": [
-            "assemble-release-plan",
             "changelog-git",
-            "changelog-github",
             "color",
             "config",
             "e2e",
@@ -139,14 +153,12 @@
             "get-dependents-graph",
             "get-release-plan",
             "get-version-range-type",
-            "logger",
             "parse",
             "pre",
             "read",
             "release-utils",
             "should-skip-package",
-            "test-utils",
-            "types"
+            "test-utils"
           ],
           "instructionFailures": [],
           "blockingSafety": []
@@ -175,13 +187,13 @@
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
-          "level": 1,
+          "level": 2,
           "outcome": "proven",
           "unproven": false,
           "couldBe": null,
           "components": {
             "dotenv": {
-              "level": 1,
+              "level": 2,
               "unproven": false
             }
           },
@@ -277,11 +289,13 @@
             "git": {
               "level": 0,
               "unproven": true
+            },
+            "time": {
+              "level": 0,
+              "unproven": true
             }
           },
-          "notAssessed": [
-            "time"
-          ],
+          "notAssessed": [],
           "instructionFailures": [],
           "blockingSafety": []
         }
@@ -370,9 +384,17 @@
               "level": 0,
               "unproven": false
             },
+            "dag-task-runner": {
+              "level": 0,
+              "unproven": false
+            },
             "grok-coding-agent-cli": {
               "level": 0,
               "unproven": true
+            },
+            "quickstart": {
+              "level": 0,
+              "unproven": false
             },
             "agent-readiness": {
               "level": 0,
@@ -384,8 +406,6 @@
             }
           },
           "notAssessed": [
-            "dag-task-runner",
-            "quickstart",
             "self-hosted-cloud-agent-ecs-terraform",
             "terraform"
           ],
@@ -415,9 +435,17 @@
               "level": 0,
               "unproven": false
             },
+            "dag-task-runner": {
+              "level": 0,
+              "unproven": false
+            },
             "grok-coding-agent-cli": {
               "level": 0,
               "unproven": true
+            },
+            "quickstart": {
+              "level": 0,
+              "unproven": false
             },
             "agent-readiness": {
               "level": 0,
@@ -429,8 +457,6 @@
             }
           },
           "notAssessed": [
-            "dag-task-runner",
-            "quickstart",
             "self-hosted-cloud-agent-ecs-terraform",
             "terraform"
           ],

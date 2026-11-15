@@ -45,7 +45,10 @@ export interface Rubric {
   level4: { consecutiveWindows: number; volumeMultiplier: number; rule?: "streak" };
   components: { maxAssessed: number; historyDays: number; botAuthorPatterns: string[]; generatedPatterns: string[]; lockfiles: string[] };
   repoLevel: { activeShare: number; hysteresisAudits: number; partialCoverageShare: number; rule: string; newComponentsJoin?: boolean };
-  mutation: { perComponent: number; minForPass: number; languages: string[]; operators: string[]; runTimeoutSec: number; flakeRuns: number; targeting: string };
+  // killRate (from 2026-11-beta): the share of faults with a clear result the tests must catch;
+  // without it, every one. seedFrom "code" (from 2026-11-beta): faults come from the code, so they
+  // and the level stay fixed until the code changes; without it, a fresh seed each audit.
+  mutation: { perComponent: number; minForPass: number; killRate?: number; seedFrom?: "audit" | "code"; languages: string[]; operators: string[]; runTimeoutSec: number; flakeRuns: number; targeting: string };
   budgets: { commandTimeoutSec: number; componentMinutes: number; totalMinutes: number };
   outcomes: {
     windowDays: number;

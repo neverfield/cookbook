@@ -21,7 +21,7 @@ Trend: ▁▂▂▂▂▂ Oct 27 Level 0 → Oct 30 Level 1 → Nov 6 Level 1 (r
 | Component | Level | Ladder 0 to 4 | Share of changes | Trend | What holds it |
 |---|---|---|---|---|---|
 | `api` | Level 2 | ○○●○○ | 59% | ▁▄▄▄▄▄ | ready for agents |
-| `worker` | Level 1 | ○●○○○ | 25% | ▂▂▂▂▂▂ | tests catch planted faults: caught 0 of 5 planted faults (step 5) |
+| `worker` | Level 1 | ○●○○○ | 25% | ▂▂▂▂▂▂ | tests catch planted faults: caught 0 of 5 planted faults, below the 60% the rubric requires (step 5) |
 | `shared` | Level 2 | ○○●○○ | 16% | ▂▄▄▂▄▄ | ready for agents |
 | `infra` | not assessed: Terraform isn't supported yet | | 0% | | |
 
@@ -98,7 +98,7 @@ Confidence: high (every check that decides the level ran).
 - **Agent PRs that pass CI the first time:** 65% (11 of 17). Other PRs: 71% (27 of 38), Oct 31 to Nov 30, 2026.
 - **Recent changes in components below Level 2:** 25%. First audit: 98%; last audit: 27%, counting the last 90 days.
 
-The level covers 3 components and ignores infra (0% of changes, Terraform isn't supported yet). Agent PRs are matched by head branch starting with cursor/.
+The level covers 3 components and ignores infra (0% of changes, Terraform isn't supported yet). Listed for review, not blocking: runs sudo; the audit runs it only inside a container, never on the host (scripts/agent-install.sh); runs sudo; the audit runs it only inside a container, never on the host (scripts/agent-start.sh). Agent PRs are matched by head branch starting with cursor/.
 
 ### Levels over time
 
@@ -130,11 +130,11 @@ Effort against impact (impact is the share of recent changes an action unblocks)
 ### Steps for Make worker's tests catch wrong behavior (step 5)
 
 - **What to watch:** Share of agent PRs touching worker where a reviewer requested changes. Baseline: 2 of 3 (too few for a rate), Sep 27 to Oct 27, 2026. Now: 50% (3 of 6), Oct 31 to Nov 30, 2026.
-- **Done when:** A new audit's fresh planted faults in worker are all caught.
+- **Done when:** An audit after the change catches at least 60% of the faults it plants in worker.
 
 1. **Decide the intended behavior.** For the files named here, write down what correct behavior is, including edge cases.
 2. **Write tests that pin it down.** Assert results and edge cases, not just that code runs.
-3. **Prove it with fresh faults.** Run a new audit. It plants different faults than this one, so tests aimed at one audit's faults don't help.
+3. **Prove it with a new audit.** Run a new audit. Faults come from the code and the tests, so changing the tests plants different faults than this audit did, and tests aimed at one audit's faults don't help.
 4. **Review.** `readiness diff` flags any deleted test or new skip marker, so nothing was weakened to pass.
 
 ### Everything we checked, and why
@@ -145,7 +145,7 @@ Effort against impact (impact is the share of recent changes an action unblocks)
 | Agent assets in the repo (`scope.agent_assets`) | Shows what agent setup already exists and who maintains it. Not scored. | 5 assets, 3 authors |  |
 | Setup works from a clean checkout (`bootstrap.cold_replay`) | Every agent starts from a clean checkout, so setup that only works on a prepared machine breaks every agent run. In the BootstrapAgent study, a reusable, verified setup cut later agents' token use by 25.9% and build time by 22.3%. Measured on the study's benchmark repositories. ([source](https://arxiv.org/abs/2605.15815)) | passed: api, shared and worker | `ev-002`, `ev-003`, `ev-004`, `ev-008`, `ev-009`, `ev-010` and 2 more |
 | Build, lint, type-check and test commands pass (`verify.canonical_interface`) | Agents need one known way to check their own work. | passed: api, shared and worker | `ev-005`, `ev-006`, `ev-007`, `ev-009`, `ev-010`, `ev-011` |
-| Tests catch planted faults (`verify.behavioral_oracle`) | Green tests aren't proof that a change is right. OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. ([source](https://openai.com/index/separating-signal-from-noise-coding-evaluations)) | api: caught 5 of 5 planted faults; shared: caught 5 of 5 planted faults; worker: caught 0 of 5 planted faults | `ev-013`, `ev-014`, `ev-015` |
+| Tests catch planted faults (`verify.behavioral_oracle`) | Green tests aren't proof that a change is right. OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. ([source](https://openai.com/index/separating-signal-from-noise-coding-evaluations)) | api: caught 5 of 5 planted faults; shared: caught 5 of 5 planted faults; worker: caught 0 of 5 planted faults, below the 60% the rubric requires | `ev-013`, `ev-014`, `ev-015` |
 | Agent instructions are accurate (`context.instructions_verified`) | Agents follow AGENTS.md, rules and skills literally, so a stale command costs more than a missing one. No outcome study yet measures how much these files help. | 7 of 7 instruction items check out | `ev-016`, `ev-017`, `ev-018`, `ev-019`, `ev-020` |
 | Normal work needs no production access (`safety.execution_boundary`) | Agents run with whatever access setup gives them, so normal work must never need production credentials. | passed; 2 items listed for review | `ev-001` |
 
@@ -169,7 +169,7 @@ Repo level: 1 Bootable. The repo level is the lowest level among active componen
 
 What holds the repo at Level 1:
 
-- `worker`: tests catch planted faults, not met (caught 0 of 5 planted faults; missed: change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:12).
+- `worker`: tests catch planted faults, not met (caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12).
 
 - **Standard level:** Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access.
 - **Bug fixes scenario:** Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults and normal work needs no production access.
@@ -220,6 +220,67 @@ Missing: hooks.
 
 These don't set a level or add a roadmap step.
 
+### How each result was reached
+
+Every level, every unproven or not-assessed result and every finding, with what ran, where it ran, what happened and the rule that produced the result.
+
+#### Levels
+
+| Result for | Result | What ran | Where it ran | What happened | Rule |
+|---|---|---|---|---|---|
+| repo | Level 1 | the level rules over the active components, api, shared and worker | in a clean docker container (node:22-bookworm) | Set by worker, held by worker: tests catch planted faults, not met (caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12). | The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it. |
+| api | Level 2 | `node --version && npm --version` (pass), `bash scripts/agent-install.sh` (pass), `npm ci` (not run), `bash scripts/agent-start.sh` (pass), `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | Held at Level 2 by agent PRs meet the team's targets: not met (no Level 3 targets are recorded) | Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets. |
+| shared | Level 2 | `node --version && npm --version` (pass), `bash scripts/agent-install.sh` (pass), `npm ci` (not run), `bash scripts/agent-start.sh` (pass), `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | Held at Level 2 by agent PRs meet the team's targets: not met (no Level 3 targets are recorded) | Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets. |
+| worker | Level 1 | `node --version && npm --version` (pass), `bash scripts/agent-install.sh` (pass), `npm ci` (not run), `bash scripts/agent-start.sh` (pass), `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | Held at Level 1 by tests catch planted faults: not met (caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12) | Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets. |
+| infra | not assessed | nothing: the audit runs commands only for assessed components | not run | Terraform isn't supported yet | Only components on a supported toolchain are assessed, up to the 10 most active by share of recent changes; the support list says which toolchains are supported. |
+
+#### Conditions
+
+| Result for | Result | What ran | Where it ran | What happened | Rule |
+|---|---|---|---|---|---|
+| api: installs from the lockfile in a clean container | met | `bash scripts/agent-install.sh` (pass) | in a clean docker container (node:22-bookworm) | install passed | Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
+| api: builds in a clean container | met | `bash scripts/agent-install.sh` (pass) | in a clean docker container (node:22-bookworm) | no build step; follows the install | Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
+| api: passes every test in a clean container | met | `npm run test` (pass) | in a clean docker container (node:22-bookworm) | test passed (1 of 1 tests) | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
+| api: build, lint, type-check and test commands pass | met | `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | 2 commands pass | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. |
+| api: tests catch planted faults | met | caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) | in a clean docker container (node:22-bookworm) | caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) | Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed. |
+| repo: agent instructions are accurate | met | `npm run lint -w api` (pass), `npm run test -w shared` (pass), `npm test` (pass) `node --version && npm --version` (pass), and 1 more | in a clean docker container (node:22-bookworm) | 7 instruction items check out | Level 2 needs it: agent instructions are accurate (Agent instructions are accurate). Met means it ran at the strength the check requires and passed. |
+| repo: normal work needs no production access | met | nothing ran for it | read from the audited commit's files, nothing ran | no blocking safety findings | Level 2 needs it: normal work needs no production access (Normal work needs no production access). Met means it ran at the strength the check requires and passed. |
+| repo: toolchain versions are pinned | met | nothing ran for it | read from the audited commit's files, nothing ran | pinned in .nvmrc | Reported with Level 1; no level waits on it alone: toolchain versions are pinned (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
+| repo: a frozen install reproduces the lockfile | met | frozen install reproduced the lockfile | in a clean docker container (node:22-bookworm) | frozen install reproduced the lockfile | Reported with Level 1; no level waits on it alone: a frozen install reproduces the lockfile (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
+| shared: installs from the lockfile in a clean container | met | `bash scripts/agent-install.sh` (pass) | in a clean docker container (node:22-bookworm) | install passed | Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
+| shared: builds in a clean container | met | `bash scripts/agent-install.sh` (pass) | in a clean docker container (node:22-bookworm) | no build step; follows the install | Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
+| shared: passes every test in a clean container | met | `npm run test` (pass) | in a clean docker container (node:22-bookworm) | test passed (3 of 3 tests) | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
+| shared: build, lint, type-check and test commands pass | met | `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | 2 commands pass | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. |
+| shared: tests catch planted faults | met | caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) | in a clean docker container (node:22-bookworm) | caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) | Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed. |
+| worker: installs from the lockfile in a clean container | met | `bash scripts/agent-install.sh` (pass) | in a clean docker container (node:22-bookworm) | install passed | Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
+| worker: builds in a clean container | met | `bash scripts/agent-install.sh` (pass) | in a clean docker container (node:22-bookworm) | no build step; follows the install | Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
+| worker: passes every test in a clean container | met | `npm run test` (pass) | in a clean docker container (node:22-bookworm) | test passed (2 of 2 tests) | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
+| worker: build, lint, type-check and test commands pass | met | `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | 2 commands pass | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. |
+| worker: tests catch planted faults | not met | caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12 | in a clean docker container (node:22-bookworm) | caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12 | Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not met means it ran and failed, or the repo lacks what it needs. |
+
+#### Agent instructions
+
+<details><summary>Every instruction item</summary>
+
+| Result for | Result | What ran | Where it ran | What happened | Rule |
+|---|---|---|---|---|---|
+| .cursor/rules/style.mdc:6 | checks out | `npm run lint -w api` | in a clean docker container (node:22-bookworm) | it exited 0 | A command that passes the static checks runs in a copy of the repo and must exit 0. |
+| AGENTS.md:3 | checks out | checked that `packages/` exists | read from the audited commit's files, nothing ran | it exists | A file or folder the instructions name must exist in the repo, next to the instruction file, at the root or inside the package that owns it. |
+| AGENTS.md:5 | checks out | `npm ci` | read from the audited commit's files, nothing ran | install commands are checked statically; the clean replay runs the frozen install | Install commands are checked statically; the clean replay runs the frozen install instead. |
+| AGENTS.md:6 | checks out | `npm run test -w shared` | in a clean docker container (node:22-bookworm) | it exited 0 | A command that passes the static checks runs in a copy of the repo and must exit 0. |
+| AGENTS.md:7 | checks out | `npm test` | in a clean docker container (node:22-bookworm) | it exited 0 | A command that passes the static checks runs in a copy of the repo and must exit 0. |
+| .cursor/skills/verify/SKILL.md:15 | checks out | `node --version && npm --version` | in a clean docker container (node:22-bookworm) | it exited 0 | A command that passes the static checks runs in a copy of the repo and must exit 0. |
+| .cursor/skills/verify/SKILL.md:56 | checks out | `npm run test` | in a clean docker container (node:22-bookworm) | it exited 0 | A command that passes the static checks runs in a copy of the repo and must exit 0. |
+
+</details>
+
+#### Safety findings
+
+| Result for | Result | What ran | Where it ran | What happened | Rule |
+|---|---|---|---|---|---|
+| scripts/agent-install.sh | listed for review | the secret and script scan | read from the audited commit's files, nothing ran | runs sudo; the audit runs it only inside a container, never on the host | A setup step or script that uses sudo is listed for review; the audit runs it only inside a container. |
+| scripts/agent-start.sh | listed for review | the secret and script scan | read from the audited commit's files, nothing ran | runs sudo; the audit runs it only inside a container, never on the host | A setup step or script that uses sudo is listed for review; the audit runs it only inside a container. |
+
 ### Evidence log
 
 <details><summary>All evidence</summary>
@@ -238,14 +299,14 @@ These don't set a level or add a roadmap step.
 | `ev-010` | `bootstrap.cold_replay` | shared | npm run test (ran in a clean container) | pass: test passed (3 of 3 tests) |
 | `ev-011` | `bootstrap.cold_replay` | worker | npm run test (ran in a clean container) | pass: test passed (2 of 2 tests) |
 | `ev-012` | `bootstrap.cold_replay` | repo | (ran in a clean container) | pass: frozen install reproduced the lockfile |
-| `ev-013` | `verify.behavioral_oracle` | api | (ran in a clean container) | pass: caught 5 of 5 planted faults (tried: boundary_flip, change_constant, drop_throw_or_return, negate_condition) |
-| `ev-014` | `verify.behavioral_oracle` | shared | (ran in a clean container) | pass: caught 5 of 5 planted faults (tried: boundary_flip, change_constant, negate_condition, drop_throw_or_return) |
-| `ev-015` | `verify.behavioral_oracle` | worker | (ran in a clean container) | fail: caught 0 of 5 planted faults; missed: change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:9, change_constant at p |
+| `ev-013` | `verify.behavioral_oracle` | api | (ran in a clean container) | pass: caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) |
+| `ev-014` | `verify.behavioral_oracle` | shared | (ran in a clean container) | pass: caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) |
+| `ev-015` | `verify.behavioral_oracle` | worker | (ran in a clean container) | fail: caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/s |
 | `ev-016` | `context.instructions_verified` | repo | npm run lint -w api (ran in a clean container) | pass: .cursor/rules/style.mdc:6 `npm run lint -w api` replays |
-| `ev-017` | `context.instructions_verified` | repo | node --version && npm --version (ran in a clean container) | pass: .cursor/skills/verify/SKILL.md:15 `node --version && npm --version` replays |
-| `ev-018` | `context.instructions_verified` | repo | npm run test (ran in a clean container) | pass: .cursor/skills/verify/SKILL.md:56 `npm run test` replays |
-| `ev-019` | `context.instructions_verified` | repo | npm run test -w shared (ran in a clean container) | pass: AGENTS.md:6 `npm run test -w shared` replays |
-| `ev-020` | `context.instructions_verified` | repo | npm test (ran in a clean container) | pass: AGENTS.md:7 `npm test` replays |
+| `ev-017` | `context.instructions_verified` | repo | npm run test -w shared (ran in a clean container) | pass: AGENTS.md:6 `npm run test -w shared` replays |
+| `ev-018` | `context.instructions_verified` | repo | npm test (ran in a clean container) | pass: AGENTS.md:7 `npm test` replays |
+| `ev-019` | `context.instructions_verified` | repo | node --version && npm --version (ran in a clean container) | pass: .cursor/skills/verify/SKILL.md:15 `node --version && npm --version` replays |
+| `ev-020` | `context.instructions_verified` | repo | npm run test (ran in a clean container) | pass: .cursor/skills/verify/SKILL.md:56 `npm run test` replays |
 
 </details>
 
@@ -253,14 +314,14 @@ Evidence strength, weakest to strongest: stated in docs, read from files, ran on
 
 ## About this report
 
-Audited Nov 30, 2026 at 9a2c092. Eval run with a pinned seed; not a production result. Outcomes come from a recorded PR file, not GitHub; not a production result. Scripts match the agent-readiness-v0.1.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it.
+Audited Nov 30, 2026 at 9a2c092. Eval run with a pinned seed; not a production result. Outcomes come from a recorded PR file, not GitHub; not a production result. Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it.
 
 - **Audit:** aud-2026-11-30-9a2c092-ae7a
 - **Commit:** 9a2c092 (clean tree)
-- **Rubric:** 2026-11-alpha
+- **Rubric:** 2026-11-beta
 - **Permission tier:** local-exec
-- **Seal:** Scripts match the agent-readiness-v0.1.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
-- **Skill digest:** a3f4148e45a5
+- **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
+- **Skill digest:** 3931ccf0600a
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** docker container, node:22-bookworm
 - **Stored in:** .agent-readiness/history/audits/aud-2026-11-30-9a2c092-ae7a

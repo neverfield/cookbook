@@ -2,15 +2,15 @@
  "schema": "agent-readiness/report@1",
  "repo": "healthy-node",
  "audit": {
-  "id": "aud-2026-11-02-3743e7e-989e",
-  "date": "2026-11-02",
-  "commit": "3743e7e",
+  "id": "aud-2026-11-15-0686138-d280",
+  "date": "2026-11-15",
+  "commit": "0686138",
   "dirtyTree": false,
-  "rubric": "2026-11-alpha",
+  "rubric": "2026-11-beta",
   "tier": "local-exec",
-  "scriptsDigest": "08c095446d663c1b8169943a35b3aa6ff60d99fca15dab7b3eba6904d6269057",
+  "scriptsDigest": "acdc0e64206948514fbd03536e857e82ececadaa557b183e86909de9b4167762",
   "seedPinned": true,
-  "sealStatus": "Scripts match the agent-readiness-v0.1.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
+  "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
   "staleCopy": null,
   "previous": null,
   "storedAt": ".agent-readiness/history/audits"
@@ -145,8 +145,9 @@
    }
   ],
   "ask": "Decision needed: the merge rate, first-time CI pass rate and review load that mean agents handle work here. Also name an owner for agent readiness.",
-  "coverage": "The level covers 1 component. Agent PRs weren't measured.",
-  "noBlocker": true
+  "coverage": "The level covers 1 component.",
+  "noBlocker": true,
+  "unassessed": null
  },
  "actions": [
   {
@@ -163,7 +164,8 @@
    "doneWhen": "Targets are recorded with `readiness roadmap targets`.",
    "dependsOn": [],
    "impact": 0,
-   "effort": "small"
+   "effort": "small",
+   "evidence": []
   },
   {
    "rank": 2,
@@ -179,7 +181,8 @@
    "doneWhen": "Agent PRs in healthy-node appear in the outcome numbers.",
    "dependsOn": [],
    "impact": 0,
-   "effort": "small"
+   "effort": "small",
+   "evidence": []
   }
  ],
  "matrix": {
@@ -198,7 +201,8 @@
     "status": "next",
     "statusText": "next",
     "unlocks": "a named owner for approvals, targets and the weekly recheck",
-    "decision": "Who owns agent readiness for this repo"
+    "decision": "Who owns agent readiness for this repo",
+    "level": null
    },
    {
     "id": "delegate:healthy-node",
@@ -207,16 +211,18 @@
     "status": "start_now",
     "statusText": "can start now",
     "unlocks": "measured agent work in healthy-node",
-    "decision": "Which tasks go to agents first, and who reviews them"
+    "decision": "Which tasks go to agents first, and who reviews them",
+    "level": 3
    },
    {
     "id": "targets",
     "order": 3,
     "title": "Set your Level 3 targets",
     "status": "next",
-    "statusText": "next",
+    "statusText": "next, alongside step 1",
     "unlocks": "a definition of Level 3 for this repo",
-    "decision": "The merge rate, first-time CI pass rate and review load that mean agents handle work here"
+    "decision": "The merge rate, first-time CI pass rate and review load that mean agents handle work here",
+    "level": 3
    }
   ]
  },
@@ -319,11 +325,7 @@
      "failed": 0,
      "notRun": 0
     },
-    "evidence": [
-     "ev-010",
-     "ev-011",
-     "ev-012"
-    ]
+    "evidence": []
    },
    {
     "id": "safety.execution_boundary",
@@ -362,7 +364,7 @@
     "authors": [
      "Contributor A"
     ],
-    "lastChanged": "2026-07-05",
+    "lastChanged": "2026-07-18",
     "status": "Replays",
     "ok": true
    }
@@ -481,51 +483,24 @@
     "id": "ev-009",
     "check": "verify.behavioral_oracle",
     "component": "healthy-node",
-    "ran": "caught 5 of 5 planted faults (tried: change_constant, drop_throw_or_return)",
+    "ran": "caught 5 of 5 planted faults (tried: shift_by_one, swap_return, negate_condition, boundary_flip)",
     "where": "ran in a clean container",
     "result": "pass",
-    "summary": "caught 5 of 5 planted faults (tried: change_constant, drop_throw_or_return)"
-   },
-   {
-    "id": "ev-010",
-    "check": "context.instructions_verified",
-    "component": null,
-    "ran": "npm test",
-    "where": "ran in a clean container",
-    "result": "pass",
-    "summary": "AGENTS.md:5 `npm test` replays"
-   },
-   {
-    "id": "ev-011",
-    "check": "context.instructions_verified",
-    "component": null,
-    "ran": "npm run build",
-    "where": "ran in a clean container",
-    "result": "pass",
-    "summary": "AGENTS.md:6 `npm run build` replays"
-   },
-   {
-    "id": "ev-012",
-    "check": "context.instructions_verified",
-    "component": null,
-    "ran": "npm run lint",
-    "where": "ran in a clean container",
-    "result": "pass",
-    "summary": "AGENTS.md:7 `npm run lint` replays"
+    "summary": "caught 5 of 5 planted faults (tried: shift_by_one, swap_return, negate_condition, boundary_flip)"
    }
   ],
   "record": [
    {
     "label": "Audit",
-    "value": "aud-2026-11-02-3743e7e-989e"
+    "value": "aud-2026-11-15-0686138-d280"
    },
    {
     "label": "Commit",
-    "value": "3743e7e (clean tree)"
+    "value": "0686138 (clean tree)"
    },
    {
     "label": "Rubric",
-    "value": "2026-11-alpha"
+    "value": "2026-11-beta"
    },
    {
     "label": "Permission tier",
@@ -533,11 +508,11 @@
    },
    {
     "label": "Seal",
-    "value": "Scripts match the agent-readiness-v0.1.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it"
+    "value": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it"
    },
    {
     "label": "Skill digest",
-    "value": "08c095446d66"
+    "value": "acdc0e642069"
    },
    {
     "label": "Planted faults",
@@ -549,8 +524,156 @@
    },
    {
     "label": "Stored in",
-    "value": ".agent-readiness/history/audits/aud-2026-11-02-3743e7e-989e"
+    "value": ".agent-readiness/history/audits/aud-2026-11-15-0686138-d280"
    }
   ]
- }
+ },
+ "notices": [],
+ "waivers": null,
+ "explanations": [
+  {
+   "kind": "level",
+   "subject": "repo",
+   "result": "Level 2",
+   "ran": "the level rules over the active component, healthy-node",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "Set by healthy-node, held by repo: agent PRs meet the team's targets, not met (no Level 3 targets are recorded).",
+   "rule": "The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it."
+  },
+  {
+   "kind": "level",
+   "subject": "healthy-node",
+   "result": "Level 2",
+   "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run build` (pass), `npm run lint` (pass) and `npm run test` (pass)",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "Held at Level 2 by agent PRs meet the team's targets: not met (no Level 3 targets are recorded)",
+   "rule": "Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
+  },
+  {
+   "kind": "condition",
+   "subject": "healthy-node: installs from the lockfile in a clean container",
+   "result": "met",
+   "ran": "`npm ci` (pass)",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "install passed",
+   "rule": "Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "healthy-node: builds in a clean container",
+   "result": "met",
+   "ran": "`npm run build` (pass)",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "build passed",
+   "rule": "Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "healthy-node: passes every test in a clean container",
+   "result": "met",
+   "ran": "`npm run test` (pass)",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "test passed (5 of 5 tests)",
+   "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "healthy-node: build, lint, type-check and test commands pass",
+   "result": "met",
+   "ran": "`npm run lint` (pass), `npm run build` (pass) and `npm run test` (pass)",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "3 commands pass",
+   "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "healthy-node: tests catch planted faults",
+   "result": "met",
+   "ran": "caught 5 of 5 planted faults (tried: shift_by_one, swap_return, negate_condition, boundary_flip)",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "caught 5 of 5 planted faults (tried: shift_by_one, swap_return, negate_condition, boundary_flip)",
+   "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "repo: agent instructions are accurate",
+   "result": "met",
+   "ran": "`npm run lint` (pass), `npm run build` (pass) and `npm run test` (pass)",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "5 instruction items check out",
+   "rule": "Level 2 needs it: agent instructions are accurate (Agent instructions are accurate). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "repo: normal work needs no production access",
+   "result": "met",
+   "ran": "nothing ran for it",
+   "where": "read from the audited commit's files, nothing ran",
+   "happened": "no blocking safety findings",
+   "rule": "Level 2 needs it: normal work needs no production access (Normal work needs no production access). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "repo: toolchain versions are pinned",
+   "result": "met",
+   "ran": "nothing ran for it",
+   "where": "read from the audited commit's files, nothing ran",
+   "happened": "pinned in .nvmrc",
+   "rule": "Reported with Level 1; no level waits on it alone: toolchain versions are pinned (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "condition",
+   "subject": "repo: a frozen install reproduces the lockfile",
+   "result": "met",
+   "ran": "frozen install reproduced the lockfile",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "frozen install reproduced the lockfile",
+   "rule": "Reported with Level 1; no level waits on it alone: a frozen install reproduces the lockfile (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+  },
+  {
+   "kind": "instruction",
+   "subject": "AGENTS.md:3",
+   "result": "checks out",
+   "ran": "checked that `src/pricing.js` exists",
+   "where": "read from the audited commit's files, nothing ran",
+   "happened": "it exists",
+   "rule": "A file or folder the instructions name must exist in the repo, next to the instruction file, at the root or inside the package that owns it."
+  },
+  {
+   "kind": "instruction",
+   "subject": "AGENTS.md:3",
+   "result": "checks out",
+   "ran": "checked that `test/` exists",
+   "where": "read from the audited commit's files, nothing ran",
+   "happened": "it exists",
+   "rule": "A file or folder the instructions name must exist in the repo, next to the instruction file, at the root or inside the package that owns it."
+  },
+  {
+   "kind": "instruction",
+   "subject": "AGENTS.md:5",
+   "result": "checks out",
+   "ran": "`npm test`",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "it runs the same command as the test check, which passed",
+   "rule": "An instruction that runs the same command as a check the audit already ran takes that check's result, and a failure counts once, under the check, not again as a wrong instruction."
+  },
+  {
+   "kind": "instruction",
+   "subject": "AGENTS.md:6",
+   "result": "checks out",
+   "ran": "`npm run build`",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "it runs the same command as the build check, which passed",
+   "rule": "An instruction that runs the same command as a check the audit already ran takes that check's result, and a failure counts once, under the check, not again as a wrong instruction."
+  },
+  {
+   "kind": "instruction",
+   "subject": "AGENTS.md:7",
+   "result": "checks out",
+   "ran": "`npm run lint`",
+   "where": "in a clean docker container (node:22-bookworm)",
+   "happened": "it runs the same command as the lint check, which passed",
+   "rule": "An instruction that runs the same command as a check the audit already ran takes that check's result, and a failure counts once, under the check, not again as a wrong instruction."
+  }
+ ]
 }

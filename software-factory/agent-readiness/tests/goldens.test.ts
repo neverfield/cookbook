@@ -54,23 +54,23 @@ describe("public goldens", () => {
     const result = (id: string, scoring: string): GoldenResult => ({ id, sha: set.goldens.find((g) => g.id === id)!.sha, minutes: 0, repoLevel: null, outcome: "proven", levels: {}, excluded: [], failures: [], scoring, commit: "x" });
     const run: LastRun = { ranAt: "", results: set.goldens.map((g) => result(g.id, "d1")), violations: [], pending: [] };
     assert.deepEqual(staleResults(set, run, "d1"), []);
-    assert.deepEqual(staleResults(set, run, "d2").map((s) => s.id), set.goldens.map((g) => g.id), "changing score.ts or levels.ts makes every result stale");
+    assert.deepEqual(staleResults(set, run, "d2").map((s) => s.id), set.goldens.map((g) => g.id), "changing the scoring files makes every result stale");
     const moved: LastRun = { ...run, results: run.results.map((r, i) => (i === 0 ? { ...r, sha: "0".repeat(40) } : r)).slice(0, -1) };
     assert.deepEqual(staleResults(set, moved, "d1").map((s) => s.why.split(",")[0]), ["recorded at 0000000", "no recorded result"]);
     assert.notEqual(scoringDigest(), "", "the digest covers the scoring files");
   });
 
-  // The freshness check: last-run.json must show what the current score.ts and levels.ts give. A
-  // result `npm run goldens -- --only` couldn't rerun (no network for PyPI, say) is listed as pending
+  // The freshness check: last-run.json must show what the current scoring files (score.ts, levels.ts,
+  // mutate.ts and the newest rubric) give. A result `npm run goldens -- --only` couldn't rerun (no network for PyPI, say) is listed as pending
   // and shows here as a TODO; `npm run goldens -- --check` fails on it, so the release gate does.
   for (const p of loadLastRun()?.pending ?? []) test(`golden ${p.id} is pending a rerun`, { todo: p.reason }, () => {});
 
-  test("last-run.json is fresh against score.ts and levels.ts, and the recorded run holds every assertion", () => {
+  test("last-run.json is fresh against the scoring files, and the recorded run holds every assertion", () => {
     const set = loadGoldens();
     const run = loadLastRun();
     const pending = new Map((run?.pending ?? []).map((p) => [p.id, p.reason]));
     const stale = staleResults(set, run).filter((s) => !pending.has(s.id));
-    assert.deepEqual(stale, [], "rerun the goldens (`npm run goldens`) after changing scripts/lib/score.ts or scripts/lib/levels.ts");
+    assert.deepEqual(stale, [], "rerun the goldens (`npm run goldens`) after changing score.ts, levels.ts, mutate.ts or the newest rubric");
     const current = run!.results.filter((r) => !pending.has(r.id));
     assert.deepEqual(current.flatMap((r) => r.failures.map((f) => `${r.id}: ${f}`)), []);
     assert.deepEqual(set.goldens.filter((g) => !pending.has(g.id)).flatMap((g) => levelViolations(g, run!.results.find((r) => r.id === g.id)?.levels ?? {})), []);
