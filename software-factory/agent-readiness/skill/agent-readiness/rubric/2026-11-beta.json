@@ -1,7 +1,7 @@
 {
   "version": "2026-11-beta",
   "changes": [
-    "Planted faults: a component passes when its tests catch at least mutation.killRate (60%) of the planted faults that gave a clear result, instead of every one, and at least mutation.minForPass (3) must give a clear result. Calibrated on the pinned trial repos: at 5 faults per component, a higher rate changes verdicts on reasonable suites from one draw of faults to the next.",
+    "Planted faults: a component passes when its tests catch at least mutation.killRate (60%) of the planted faults that gave a clear result, instead of every one, and at least mutation.minForPass (3) must give a clear result. Calibrated on the pinned trial repos with five draws of faults per component: requiring every fault failed 19 of 39 component audits of suites the reviews judged reasonable, and 60% failed 7.",
     "Faults come from the code (mutation.seedFrom \"code\"): the same code and tests get the same faults, so the fault check, and the level, change only when the files a component's tests import or the tests themselves change. Earlier rubrics plant faults from a fresh seed each audit.",
     "Up to 10 components are assessed (components.maxAssessed, up from 6), so every component that can reach the 10% active share is assessed."
   ],

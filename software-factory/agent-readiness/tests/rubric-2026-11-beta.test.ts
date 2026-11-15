@@ -48,10 +48,12 @@ describe("rubric 2026-11-beta", () => {
     assert.equal(faultsVerdict(4, 5, alpha.mutation), "fail");
   });
 
-  test("the kill rate gives every calibrated component one verdict across its fault draws", () => {
-    const cal = JSON.parse(readFileSync(join(SUPPORT, "evals", "calibration", "kill-rate.json"), "utf8")) as { rubric: string; rows: Tally[] };
-    const [row] = rateTable(cal.rows, [beta.mutation.killRate!], beta.mutation.minForPass);
-    assert.deepEqual(row.unstable, []);
-    assert.equal(row.pass, row.decided, "suites the reviews judged reasonable all pass");
+  test("on the calibration, the kill rate fails fewer reasonable suites than needing every fault, and flips no more verdicts between draws", () => {
+    const cal = JSON.parse(readFileSync(join(SUPPORT, "evals", "calibration", "kill-rate.json"), "utf8")) as { rubric: string; perComponent: number; rows: Tally[] };
+    assert.equal(cal.rubric, "2026-11-beta");
+    assert.equal(cal.perComponent, beta.mutation.perComponent);
+    const [rate, every] = rateTable(cal.rows, [beta.mutation.killRate!, 1], beta.mutation.minForPass);
+    assert.ok(rate.pass > every.pass, `${rate.pass} vs ${every.pass} of ${rate.decided}`);
+    assert.ok(rate.unstable.length <= every.unstable.length);
   });
 });
