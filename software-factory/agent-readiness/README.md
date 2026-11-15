@@ -70,13 +70,12 @@ Check the Node version first. The skill needs 22.14 or later and stops with a me
 node -e 'const [a, b] = process.versions.node.split(".").map(Number); if (a < 22 || (a === 22 && b < 14)) { console.error(`Node ${process.versions.node}: agent-readiness needs 22.14 or later`); process.exit(1); }'
 ```
 
-Copy the skill into the repository you want to audit. `REPO` is that repository's root; the commands work from any folder:
+Copy the skill into the repository you want to audit, from that repository's root:
 
 ```bash
-REPO=/path/to/your/repo
 git clone --depth 1 https://github.com/cursor/cookbook /tmp/cookbook
-mkdir -p "$REPO/.cursor/skills"
-cp -R /tmp/cookbook/software-factory/agent-readiness/skill/agent-readiness "$REPO/.cursor/skills/"
+mkdir -p .cursor/skills
+cp -R /tmp/cookbook/software-factory/agent-readiness/skill/agent-readiness .cursor/skills/
 ```
 
 `.cursor/skills/agent-readiness` is the usual place, and any skills folder your agent reads works. The skill carries its own `package.json`, so it runs whatever module type the repo's `package.json` sets. Pin the cookbook to a commit when you copy it, and copy the whole folder: the seal checks a digest of the scripts, rubric and `package.json`.
