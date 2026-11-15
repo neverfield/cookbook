@@ -24,7 +24,31 @@ The executive fields (heading, headline, numbers, next-level line, gaps, ask and
 2. **Have I improved.** From the second audit on, what changed since the last audit, read from its sealed report: level changes, conditions now met or now failing, and checks that flipped. Then levels over time, what each closed step was expected to deliver against what it did, and the weakened-test check. A first audit says there is nothing to compare yet.
 3. **What moves the needle next.** The one ask first; one line on what the next level still needs; at most three gaps, one plain line each; one ask, the single decision that unblocks the top gap, plus naming an owner when none is recorded; an effort-against-impact view; then each step, numbered as in the roadmap: why it matters, the level it unlocks and the share of recent changes that covers, the metric to watch with its baseline, any verified research, effort and owner role, the decision needed, the evidence it was raised from, and a re-runnable "done when". A "can start now" action follows when some component is already ready.
 4. **Roadmap to the max level.** Each level from 1 to 4 with what it needs and its steps, each with its status (done, in progress, next, can start now, waiting on step N, later), then the steps that serve every level.
-5. **Audit details.** The three numbers with their sealed comparisons, the confidence, the coverage note and the history; exact steps for each action; every check with why it matters, its result with exact counts, and its evidence IDs; what isn't assessed; levels by component, with any scenarios nested under each, and the repo level with its rule; agent PR outcomes; agent assets; the evidence log.
+5. **Audit details.** The three numbers with their sealed comparisons, the confidence, the coverage note and the history; exact steps for each action; every check with why it matters, its result with exact counts, and its evidence IDs; what isn't assessed; levels by component, with any scenarios nested under each, and the repo level with its rule; agent PR outcomes; agent assets; how each result was reached; the waivers; the evidence log.
+
+## How each result was reached
+
+`report.json` `explanations[]` holds one entry for the repo level, each component's level, each component left out, each condition of each assessed component, each instruction item and each safety finding. Every entry says what ran, where it ran (a clean container and its image, a fresh copy on the host, or the audited commit's files with nothing run), what happened, and the rule that produced the result. Part 5 prints them as tables. The seal refuses a report in which any result lacks one of these, or reads "undefined".
+
+When most recent changes sit in components the audit doesn't assess, such as a Go backend next to a small web UI, the heading says how much of the repo the level covers.
+
+## Waivers
+
+A repo lists findings it has reviewed as false positives in `.agent-readiness/waivers.json`:
+
+```json
+{
+  "schema": "agent-readiness/waivers@1",
+  "waivers": [
+    { "id": "readme-install", "check": "context.instructions_verified", "match": "README.md:72", "reason": "Install line for the package's users", "by": "Contributor A", "expires": "2027-05-15" }
+  ]
+}
+```
+
+- Only `context.instructions_verified` and `safety.execution_boundary` findings can be waived. A waiver that names a Level 1 check is refused.
+- `match` is a file and line, or a file for every finding in it. `reason` and `by` are required; `expires` is optional, and an expired waiver is refused. At most 50 waivers count.
+- The audit reads the file from the audited commit only. A copy edited during the audit, by the agent or anyone else, doesn't count, and the report says so. The agent never writes this file.
+- A waived finding stops counting, keeps what it was, and is listed in part 5 with the waiver's reason and reviewer. Part 5 also lists waivers that matched nothing and waivers that were refused. The coverage note counts the waived findings. The waivers are sealed with the audit.
 6. **About this report.** When and where it ran, the seal status, eval-mode notes and the audit record. The footer names `SA_READINESS_SEAL_KEY` for signed reports when the seal is unkeyed.
 
 ## Part 1 rules (enforced by `seal`)

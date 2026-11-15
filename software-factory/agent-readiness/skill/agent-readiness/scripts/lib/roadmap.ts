@@ -44,6 +44,12 @@ function stateMaps(ctx: RoadmapContext): Map<string, StateMap> {
   return out;
 }
 
+// Every condition the item fixes is met in every component it targets; a component the scan no
+// longer finds has nothing left to fix.
+function fixesMet(item: RoadmapItem, real: Map<string, StateMap>): boolean {
+  return item.fixes.every((f) => (f.component === "*" ? [...real.keys()] : [f.component]).every((id) => !real.has(id) || real.get(id)![f.condition] === "met"));
+}
+
 function standardLevels(rubric: Rubric, maps: Map<string, StateMap>): Map<string, Level> {
   const out = new Map<string, Level>();
   for (const [id, m] of maps) out.set(id, componentLevel(rubric, m).level);
@@ -68,9 +74,11 @@ export function candidates(ctx: RoadmapContext): Candidate[] {
   const goalNeedsFaults = rubric.level2.includes("faults");
   const anyRepo = assessed[0] ? ctx.states.get(assessed[0].id) : undefined;
   const credentialComps: string[] = [];
-  if (assessed.some((c) => ctx.states.get(c.id)?.["clean.install"].state === "not_met")) {
+  // The repo-wide install step is credited only to the components whose own install failed.
+  const failedInstall = assessed.filter((c) => ctx.states.get(c.id)?.["clean.install"].state === "not_met");
+  if (failedInstall.length) {
     const ev = latestEvidence(audit, (e) => e.kind === "install" && e.result === "fail") ?? latestEvidence(audit, (e) => e.kind === "install");
-    out.push({ id: "clean.install:repo", template: "clean.install", kind: "fix", component: "*", fixes: assessed.map((c) => ({ condition: "clean.install" as CondId, component: c.id })), vars: { component: "the repo", diagnosis: ev?.diagnosis?.detail ?? ev?.summary ?? "the install failed" }, evidence: ev ? [ev.id] : [] });
+    out.push({ id: "clean.install:repo", template: "clean.install", kind: "fix", component: "*", fixes: failedInstall.map((c) => ({ condition: "clean.install" as CondId, component: c.id })), vars: { component: failedInstall.length === assessed.length ? "the repo" : failedInstall.map((c) => c.id).join(", "), diagnosis: ev?.diagnosis?.detail ?? ev?.summary ?? "the install failed" }, evidence: ev ? [ev.id] : [] });
   }
   // A component's commands include the repo-wide ones, and a replay result outranks a host run.
   const replayed = (e: { where: string }) => e.where === "container" || e.where === "fresh_copy";
@@ -163,7 +171,7 @@ function statsFor(o: OutcomesSnapshot | null, scope: string): OutcomeStats | nul
 
 export function watchFor(metric: string, scope: string, o: OutcomesSnapshot | null, rubric: Rubric, pattern?: string): Watch {
   const s = statsFor(o, scope);
-  if (!o || !s) return { metric, scope, baseline: "not measured (outcomes need the external-systems tier)", n: null, window: null };
+  if (!o || !s) return { metric: pattern ? `${metric}:${pattern}` : metric, scope, baseline: "not measured (outcomes need the external-systems tier)", n: null, window: null };
   const w = windowLabel(o);
   let r;
   if (metric === "first_time_ci_pass") r = rate(s.firstTimeCiPass, s.firstTimeCiKnown, rubric, w);
@@ -239,6 +247,15 @@ function fromTemplate(t: RubricTemplate, vars: Record<string, string | number>) 
   };
 }
 
+// The rubric's templates say a step failed "in a clean container"; when the evidence behind it ran
+// in a fresh copy on the host, the text says where it really ran.
+function placeWording(filled: ReturnType<typeof fromTemplate>, c: Candidate, audit: Audit): ReturnType<typeof fromTemplate> {
+  const evs = audit.evidence.filter((e) => c.evidence.includes(e.id));
+  if (!evs.length || evs.some((e) => e.where === "container") || !evs.some((e) => e.where === "fresh_copy" || e.where === "host")) return filled;
+  const fix = (s: string) => s.replace(/\bin a clean container\b/g, "in a fresh copy on this machine").replace(/\bIn a clean container\b/g, "In a fresh copy on this machine");
+  return { ...filled, title: fix(filled.title), why: fix(filled.why), doneWhen: fix(filled.doneWhen), steps: filled.steps.map((s) => ({ title: fix(s.title), detail: fix(s.detail) })) };
+}
+
 export interface RoadmapResult {
   roadmap: Roadmap;
   top: RoadmapItem[];
@@ -272,7 +289,7 @@ export function updateRoadmap(prev: Roadmap | null, ctx: RoadmapContext): Roadma
   for (const c of [...cands, ...decisions]) {
     currentIds.add(c.id);
     const t = rubric.templates[c.template];
-    const filled = fromTemplate(t, c.vars);
+    const filled = placeWording(fromTemplate(t, c.vars), c, audit);
     const existing = byId.get(c.id);
     const base = {
       kind: c.kind,
@@ -305,7 +322,9 @@ export function updateRoadmap(prev: Roadmap | null, ctx: RoadmapContext): Roadma
   }
   for (const item of roadmap.items) {
     if (currentIds.has(item.id) || ctx.decisionsOnly) continue;
-    if (item.kind === "fix" && item.status !== "done") {
+    // A step is done only when this audit shows every condition it fixes met; a condition left
+    // unknown or blocked, by --no-mutants, a cut-off budget or a machine without Docker, keeps it open.
+    if (item.kind === "fix" && item.status !== "done" && fixesMet(item, real)) {
       item.status = "done";
       item.closedAt = date;
       item.closedBy = audit.id;

@@ -225,6 +225,28 @@
         }
       }
     }
+,
+    "explanations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "subject", "result", "ran", "where", "happened", "rule"],
+        "properties": {
+          "kind": { "enum": ["level", "condition", "not_assessed", "instruction", "safety"] },
+          "subject": { "type": "string", "minLength": 1 },
+          "result": { "type": "string", "minLength": 1 },
+          "ran": { "type": "string", "minLength": 1 },
+          "where": { "type": "string", "minLength": 1 },
+          "happened": { "type": "string", "minLength": 1 },
+          "rule": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "waivers": {
+      "type": ["object", "null"],
+      "required": ["file", "digest", "ignored", "applied", "unused", "rejected"],
+      "properties": { "applied": { "type": "array" }, "unused": { "type": "array" }, "rejected": { "type": "array" } }
+    }
   },
   "$defs": {
     "level": { "type": "integer", "minimum": 0, "maximum": 4 },

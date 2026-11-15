@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { dirname, join, normalize } from "node:path";
 import { diagnose } from "./diagnose.ts";
 import { addEvidence } from "./evidence.ts";
 import { redact, tail } from "./redact.ts";
@@ -8,8 +8,25 @@ import { SUDO_SHIM_MARK } from "./run.ts";
 import { CUT_OFF } from "./scope.ts";
 import type { Audit } from "./types.ts";
 import { exists, sha256 } from "./util.ts";
+import { applyWaivers } from "./waivers.ts";
 
 export const INSTRUCTION_TIMEOUT_SEC = 300;
+
+// `npm test`, `npm run test` and `pnpm test` all run the test script; anything else compares as written.
+function commandKey(cmd: string): string {
+  const m = cmd.trim().match(/^(npm|pnpm|yarn|bun)\s+(?:run(?:-script)?\s+)?([\w:.-]+)\s*$/);
+  return m && !["install", "i", "ci", "add"].includes(m[2]) ? `script:${m[2]}` : cmd.trim().replace(/\s+/g, " ");
+}
+
+function sameAsCheck(audit: Audit, text: string, cwd: string): { id: string; kind: string; result: string } | null {
+  const key = commandKey(text);
+  for (const k of audit.contract) {
+    if (k.kind === "start" || k.kind === "doctor" || commandKey(k.declared ?? k.command) !== key || normalize(k.cwd) !== normalize(cwd)) continue;
+    const ev = [...audit.evidence].reverse().find((e) => e.contractId === k.id && e.where !== "static");
+    if (ev) return { id: ev.id, kind: k.kind === "typecheck" ? "type-check" : k.kind, result: ev.result };
+  }
+  return null;
+}
 
 // Documented commands run one by one in the replay copy, inside the audit's overall time budget:
 // each gets what is left of it, and none starts once it is spent.
@@ -19,20 +36,44 @@ export async function replayInstructions(audit: Audit, ex: Executor, copyDir: st
       item.result = "not_run";
       item.reason = notInstalled.blocked ? "not replayed because the install was blocked on this machine" : "not replayed because the install failed";
       item.blocked = notInstalled.blocked;
+      item.rule = "replay-install";
       continue;
     }
     const leftSec = Math.floor((budget.totalMs - (Date.now() - budget.startedAt)) / 1000);
     if (overBudget(budget, "*") || leftSec < 1) {
       item.result = "not_run";
       item.reason = CUT_OFF;
+      item.rule = "replay-budget";
       continue;
     }
-    const cwd = dirname(item.source) === "" ? "." : dirname(item.source);
-    const out = await ex.exec(item.text, exists(join(copyDir, cwd)) ? cwd : ".", Math.min(INSTRUCTION_TIMEOUT_SEC, leftSec));
+    const wanted = item.cwd ?? (dirname(item.source) === "" ? "." : dirname(item.source));
+    const cwd = exists(join(copyDir, wanted)) ? wanted : ".";
+    // The same command a check already ran, such as `npm run test` next to the test check's
+    // `npm test`: its result is that check's, counted once, there.
+    const same = sameAsCheck(audit, item.text, cwd);
+    if (same) {
+      item.cwd = cwd;
+      if (same.result === "pass") {
+        item.result = "pass";
+        item.reason = `it runs the same command as the ${same.kind} check, which passed`;
+        item.rule = "same-as-check";
+        item.evidenceId = same.id;
+      } else {
+        item.category = "skipped";
+        item.result = "not_run";
+        item.reason = `not replayed again: it runs the same command as the ${same.kind} check, which ${same.result === "fail" ? "failed" : "didn't run"}; that result counts under the ${same.kind} check`;
+        item.rule = "same-as-check";
+      }
+      continue;
+    }
+    const limit = Math.min(INSTRUCTION_TIMEOUT_SEC, leftSec);
+    const out = await ex.exec(item.text, cwd, limit);
     charge(budget, "*", out.durationMs);
     const ok = out.exitCode === 0 && !out.timedOut;
     const redacted = redact(out.output, registryValues);
     const why = ok ? null : diagnose(out.output, out.timedOut, "instruction");
+    item.cwd = cwd;
+    item.rule = "replay-environment";
     if (!ok && ex.where !== "container" && out.output.includes(SUDO_SHIM_MARK)) {
       item.result = "not_run";
       item.reason = "not replayed: it uses sudo, which the audit never runs on the host";
@@ -62,6 +103,23 @@ export async function replayInstructions(audit: Audit, ex: Executor, copyDir: st
     if (out.timedOut && overBudget(budget, "*")) {
       item.result = "not_run";
       item.reason = CUT_OFF;
+      item.rule = "replay-budget";
+      continue;
+    }
+    // On the host the copy isn't a clean environment: a failure there can come from this machine,
+    // so it leaves the instruction unproven rather than wrong.
+    if (!ok && ex.where !== "container") {
+      item.result = "not_run";
+      item.reason = `not proven: it failed in a fresh copy on this machine (${why!.detail}), and only a clean container can show an instruction is wrong`;
+      item.blocked = "it ran on this machine, not in a clean container";
+      continue;
+    }
+    // A command that is still running at the limit, such as a full pre-push gate, isn't shown wrong.
+    if (out.timedOut) {
+      item.category = "long_running";
+      item.result = "not_run";
+      item.reason = `not replayed to the end: it was still running after ${limit} seconds, the limit for one instruction`;
+      item.rule = "long-running";
       continue;
     }
     const ev = addEvidence(audit, {
@@ -82,6 +140,8 @@ export async function replayInstructions(audit: Audit, ex: Executor, copyDir: st
     });
     item.result = ok ? "pass" : "fail";
     item.reason = ok ? undefined : why!.detail;
+    item.rule = "replay";
     item.evidenceId = ev.id;
   }
+  applyWaivers(audit);
 }

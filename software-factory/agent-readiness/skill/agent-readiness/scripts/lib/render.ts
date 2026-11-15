@@ -10,6 +10,7 @@ import { NOT_SUPPORTED, SUPPORTED_DOC } from "./support.ts";
 import type { Asset, Audit, CondId, Component, ComponentLevel, HistoryLine, Level, OutcomeStats, OutcomesSnapshot, ReportAction, ReportChanges, ReportJson, Roadmap, RoadmapItem, ScenarioId } from "./types.ts";
 import { EMOJI, fmtDate, fmtShortDate, pct, wordCount } from "./util.ts";
 import { serviceLabel } from "./diagnose.ts";
+import { explanationsOf, waiversOf } from "./explain.ts";
 
 export interface RenderInput {
   audit: Audit;
@@ -503,6 +504,23 @@ function coverageLine(input: RenderInput): string {
     if (missing.length) line += ` On this machine ${list(missing)}, an environment limit rather than a repo defect${inImage.length ? `; the declared image installs ${list(inImage)}` : ""}.`;
     if (audit.evidence.some((e) => /uses sudo/.test(e.blocked ?? ""))) line += " Setup commands that use sudo weren't run on this machine.";
   }
+  // Findings that don't block are still named, such as host mode being able to read local files.
+  const listed = audit.safety.filter((s) => !s.blocking && !s.waived).sort((a, b) => Number(a.kind === "secret") - Number(b.kind === "secret"));
+  if (listed.length) {
+    const banned = (t: string) => input.rubric.part1.bannedTerms.some((b) => t.toLowerCase().includes(b.toLowerCase()));
+    const shown = listed.slice(0, 5).map((s) => {
+      const where = `${s.file}${s.line ? `:${s.line}` : ""}`;
+      const text = s.detail.replace(/`/g, "");
+      return s.file === "." || banned(where) ? text : `${text} (${where})`;
+    }).filter((t) => !banned(t));
+    line += ` Listed for review, not blocking: ${shown.join("; ")}${listed.length > 5 ? `; and ${listed.length - 5} more in part 5` : ""}.`;
+  }
+  const w = audit.waivers;
+  if (w) {
+    const waived = audit.instructions.filter((i) => i.waived).length + audit.safety.filter((s) => s.waived).length;
+    const refused = w.rejected.length ? `; ${w.rejected.length} ${w.rejected.length === 1 ? "waiver was" : "waivers were"} refused` : "";
+    line += ` Waivers: ${waived} ${waived === 1 ? "finding is" : "findings are"} treated as a false positive by ${w.file}, as of the audited commit${refused}${w.ignored ? `; ${w.ignored}` : ""}. Part 5 lists each with its reason.`;
+  }
   // With no outcomes, the numbers already say agent PRs weren't measured.
   const f = audit.outcomes?.filter;
   if (f) line += ` Agent PRs are matched by ${describeFilter(f)}.`;
@@ -602,9 +620,9 @@ export function buildReport(input: RenderInput): ReportJson {
     ? `Decision needed: where to rerun this audit so it can prove Level ${L + 1}, for example a CI job.${top.some((t) => t.status === "start_now") ? ` Meanwhile, ${lower(gapText(top.find((t) => t.status === "start_now")!))} can start now.` : ""}`
     : first?.decision
       ? `Decision needed: ${lower(first.decision)}.`
-      : noBlocker
+        : noBlocker
         ? "Decision needed: which work goes to agents first."
-        : `Approve the agent's fix for "${gapText(first)}".`;
+        : `Decision needed: who takes on "${gapText(first)}", the first step in part 3.`;
   let ask = (narr.ask ?? defaultAsk).trim();
   if (!/[.!?]$/.test(ask)) ask += ".";
   if (!roadmap.owner && !/\bowner\b/i.test(ask)) ask += " Also name an owner for agent readiness.";
@@ -697,9 +715,7 @@ export function buildReport(input: RenderInput): ReportJson {
         ? "Not assessed: none of the components found can be assessed yet"
         : none
           ? `Not assessed: ${audit.tier === "read-only" ? "the read-only tier runs no repo code" : "no check could run on this machine"}`
-          : !none && unprovenLevel1(L, input.rollup.couldBe, caps)
-            ? unprovenHeading(caps)
-            : `Level ${L} of 4, ${rubric.scale[L].plain}${outcome === "blocked" ? `; Level ${L + 1} is blocked on this machine` : ""}`,
+          : `${!none && unprovenLevel1(L, input.rollup.couldBe, caps) ? unprovenHeading(caps) : `Level ${L} of 4, ${rubric.scale[L].plain}${outcome === "blocked" ? `; Level ${L + 1} is blocked on this machine` : ""}`}${mostlyUnassessed(input) ? `; it covers only ${pct(1 - input.partial.unassessedShare, 1)}% of recent changes, and the rest isn't assessed` : ""}`,
       headline: narr.headline ?? headlineFor(input, ready, setByShare),
       numbers: stats3(input),
       nextLine: nextLine(input),
@@ -795,7 +811,15 @@ export function buildReport(input: RenderInput): ReportJson {
   };
   if (report.progress) report.progress.changes = input.previousReport ? changesOf(input.previousReport, report, rubric) : null;
   report.notices = noticesOf(input);
+  report.waivers = waiversOf(audit);
+  report.explanations = explanationsOf(input, report);
   return report;
+}
+
+// Most of the repo's recent changes sit in components the audit doesn't assess, such as a Go
+// backend next to a small web UI, so the level speaks for the minority and the heading says so.
+function mostlyUnassessed(input: RenderInput): boolean {
+  return !notAssessed(input) && input.partial.partial && input.partial.unassessedShare > 0.5;
 }
 
 // Only what the reader should act on reaches page 1, phrased as the action. An eval seed, a recorded
@@ -1144,6 +1168,37 @@ function holdsText(r: ReportJson, c: ReportJson["components"]["included"][number
   return `${cap ? `${cap.label}: ${shortReason(cap.reason)}`.replace(/\|/g, "\\|") : ""}${item ? ` (step ${item.order})` : ""}`;
 }
 
+function cell(s: string): string {
+  return s.replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
+
+// Part 5's account of every result: what ran, where it ran, what happened and the rule behind it.
+function explanationLines(r: ReportJson): string[] {
+  const ex = r.explanations ?? [];
+  if (!ex.length) return [];
+  const head = "| Result for | Result | What ran | Where it ran | What happened | Rule |";
+  const rows = (kinds: string[]) => ex.filter((e) => kinds.includes(e.kind)).map((e) => `| ${cell(e.subject)} | ${cell(e.result)} | ${cell(e.ran)} | ${cell(e.where)} | ${cell(e.happened)} | ${cell(e.rule)} |`);
+  const out = ["### How each result was reached", "", "Every level, every unproven or not-assessed result and every finding, with what ran, where it ran, what happened and the rule that produced the result.", "", "#### Levels", "", head, "|---|---|---|---|---|---|", ...rows(["level", "not_assessed"]), ""];
+  const conds = rows(["condition"]);
+  if (conds.length) out.push("#### Conditions", "", head, "|---|---|---|---|---|---|", ...conds, "");
+  const ins = rows(["instruction"]);
+  if (ins.length) out.push("#### Agent instructions", "", "<details><summary>Every instruction item</summary>", "", head, "|---|---|---|---|---|---|", ...ins, "", "</details>", "");
+  const saf = rows(["safety"]);
+  if (saf.length) out.push("#### Safety findings", "", head, "|---|---|---|---|---|---|", ...saf, "");
+  const w = r.waivers;
+  if (w) {
+    out.push("#### Waivers", "", `Read from ${w.file} at the audited commit${w.digest ? ` (sha256 ${w.digest.slice(0, 12)})` : ""}, never from the working copy. A waiver can't cover a Level 1 check.${w.ignored ? ` ${w.ignored.charAt(0).toUpperCase()}${w.ignored.slice(1)}.` : ""}`, "");
+    if (w.applied.length) {
+      out.push("| Waiver | Check | Finding | Reviewed by | Reason | Findings waived |", "|---|---|---|---|---|---|");
+      for (const a of w.applied) out.push(`| ${cell(a.id)} | \`${a.check}\` | ${cell(a.match)} | ${cell(a.by)} | ${cell(a.reason)} | ${a.findings} |`);
+      out.push("");
+    }
+    if (w.unused.length) out.push(`Unused, because they match no finding in this audit: ${w.unused.map((u) => `${u.id} (${u.match})`).join("; ")}.`, "");
+    if (w.rejected.length) out.push(`Refused: ${w.rejected.map((x) => `${x.id} (${x.reason})`).join("; ")}.`, "");
+  }
+  return out;
+}
+
 export function renderMarkdown(r: ReportJson, rubric: Rubric): string {
   const out: string[] = [];
   const ex = r.executive;
@@ -1302,6 +1357,7 @@ export function renderMarkdown(r: ReportJson, rubric: Rubric): string {
     for (const s of r.details.signals) out.push(`| ${s.label} | ${s.found === null ? "n/a" : s.found ? "yes" : "no"} | ${s.detail.replace(/\|/g, "\\|")} |`);
     out.push("", "These don't set a level or add a roadmap step.", "");
   }
+  out.push(...explanationLines(r));
   // Five columns: where a check ran goes with its result, and a check read from files names no command.
   out.push("### Evidence log", "", "<details><summary>All evidence</summary>", "", "| ID | Check | Component | What ran | Result |", "|---|---|---|---|---|");
   for (const e of r.details.evidence) {

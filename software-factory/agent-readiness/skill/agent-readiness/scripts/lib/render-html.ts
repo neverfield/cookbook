@@ -368,6 +368,32 @@ function measures(r: ReportJson): string {
   return out.join("");
 }
 
+// Every result with what ran, where it ran, what happened and the rule behind it; the long lists
+// of instruction items fold away.
+function explanationsHtml(r: ReportJson): string {
+  const ex = r.explanations ?? [];
+  if (!ex.length) return "";
+  const table = (kinds: string[]) => {
+    const rows = ex.filter((e) => kinds.includes(e.kind));
+    return rows.length ? `<table><thead><tr><th>Result for</th><th>Result</th><th>What ran</th><th>Where it ran</th><th>What happened</th><th>Rule</th></tr></thead><tbody>${rows.map((e) => `<tr><td><code>${esc(e.subject)}</code></td><td>${esc(e.result)}</td><td>${inline(e.ran)}</td><td>${esc(e.where)}</td><td>${inline(e.happened)}</td><td class="small">${inline(e.rule)}</td></tr>`).join("")}</tbody></table>` : "";
+  };
+  const out = [`<h3 id="how-each-result">How each result was reached</h3><p class="small">Every level, every unproven or not-assessed result and every finding, with what ran, where it ran, what happened and the rule that produced the result.</p>`, `<h4>Levels</h4>${table(["level", "not_assessed"])}`];
+  const conds = table(["condition"]);
+  if (conds) out.push(`<h4>Conditions</h4>${conds}`);
+  const ins = table(["instruction"]);
+  if (ins) out.push(`<details><summary>Agent instructions: every item</summary>${ins}</details>`);
+  const saf = table(["safety"]);
+  if (saf) out.push(`<h4>Safety findings</h4>${saf}`);
+  const w = r.waivers;
+  if (w) {
+    out.push(`<h4>Waivers</h4><p class="small">Read from <code>${esc(w.file)}</code> at the audited commit, never from the working copy. A waiver can't cover a Level 1 check.${w.ignored ? ` ${esc(w.ignored)}.` : ""}</p>`);
+    if (w.applied.length) out.push(`<table><thead><tr><th>Waiver</th><th>Check</th><th>Finding</th><th>Reviewed by</th><th>Reason</th><th class="num">Waived</th></tr></thead><tbody>${w.applied.map((a) => `<tr><td>${esc(a.id)}</td><td><code>${esc(a.check)}</code></td><td>${esc(a.match)}</td><td>${esc(a.by)}</td><td>${esc(a.reason)}</td><td class="num">${a.findings}</td></tr>`).join("")}</tbody></table>`);
+    if (w.unused.length) out.push(`<p class="small">Unused, because they match no finding in this audit: ${esc(w.unused.map((u) => `${u.id} (${u.match})`).join("; "))}.</p>`);
+    if (w.rejected.length) out.push(`<p class="small">Refused: ${esc(w.rejected.map((x) => `${x.id} (${x.reason})`).join("; "))}.</p>`);
+  }
+  return out.join("");
+}
+
 function details(r: ReportJson): string {
   const out: string[] = [`<section id="details"><h2>Audit details</h2>`, measures(r)];
   for (const s of r.details.steps) {
@@ -414,6 +440,7 @@ function details(r: ReportJson): string {
   if (r.details.assets.length) out.push(`<table><thead><tr><th style="width:110px">Asset</th><th>Path</th><th>Authors</th><th style="width:90px">Last changed</th><th>Status</th></tr></thead><tbody>${r.details.assets.map((a) => `<tr><td>${esc(a.kind)}</td><td><code>${esc(a.path)}</code></td><td>${esc(a.authors.join(", ") || "unknown")}</td><td>${esc(a.lastChanged ? fmtShortDate(a.lastChanged) : "n/a")}</td><td>${esc(a.status)}</td></tr>`).join("")}</tbody></table>`);
   if (r.details.missingAssets.length) out.push(`<p class="small">Missing: ${esc(list(r.details.missingAssets))}.</p>`);
   if (r.details.signals.length) out.push(`<h3>Other signals (informational, not scored)</h3><table><thead><tr><th>Signal</th><th style="width:70px">Found</th><th>Detail</th></tr></thead><tbody>${r.details.signals.map((s) => `<tr><td>${esc(s.label)}</td><td>${s.found === null ? "n/a" : s.found ? "yes" : "no"}</td><td>${esc(s.detail)}</td></tr>`).join("")}</tbody></table><p class="small muted">These don't set a level or add a roadmap step.</p>`);
+  out.push(explanationsHtml(r));
   out.push(`<h3>Evidence log</h3><table><thead><tr><th style="width:64px">ID</th><th style="width:24%">Check</th><th style="width:12%">Component</th><th style="width:24%">What ran</th><th>Result</th></tr></thead><tbody>`);
   for (const e of r.details.evidence) {
     const cls = e.result === "pass" ? "ok" : e.result === "fail" ? "bad" : "warn";

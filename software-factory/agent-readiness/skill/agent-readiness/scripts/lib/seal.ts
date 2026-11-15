@@ -20,6 +20,8 @@ import type { CompStates } from "./score.ts";
 import { componentStates, noRealResults } from "./score.ts";
 import type { Audit, CondId, CondState, HistoryLine, Level, OutcomeStats, ReportJson, Roadmap, ScenarioId, Targets } from "./types.ts";
 import { SUPPORTED_DOC } from "./support.ts";
+import { WAIVER_FILE, applyWaivers, loadWaivers } from "./waivers.ts";
+import { explanationGaps } from "./explain.ts";
 import { SKILL_ROOT, exists, fail, fmtShortDate, gitOrThrow, nowIso, randomHex, readText, sha256, stableStringify, today } from "./util.ts";
 import type { LocalInfo, Paths } from "./workspace.ts";
 import { clearCurrent, exportTree, realSeed, releaseManifest, skillDigest } from "./workspace.ts";
@@ -50,6 +52,7 @@ export interface ComponentResult {
   level: Level;
   couldBe: Level | null;
   outcomeReasons: string[];
+  unproven?: boolean;
 }
 
 export interface Computed {
@@ -59,7 +62,7 @@ export interface Computed {
   // Tier 3: only the scenarios a user added, under the components they apply to.
   scenarioLevels: Map<string, Map<ScenarioId, LevelResult>>;
   // Tier 1: the repo rollup over the active components.
-  repo: { level: Level; couldBe: Level | null; setBy: string[]; outcomeReasons: string[] };
+  repo: { level: Level; couldBe: Level | null; setBy: string[]; outcomeReasons: string[]; unproven?: boolean };
   active: Set<string>;
 }
 
@@ -75,13 +78,13 @@ export function compute(audit: Audit, rubric: Rubric, history: HistoryLine[], ta
     const s = statesOf(states.get(c.id)!);
     const proven = componentLevel(rubric, s);
     const measured = outcomeLevel(rubric, { level2: proven.level === 2, targets, outcomes: o ? { agent: o.byComponent[c.id] ?? emptyStats(), control: o.control, truncated: o.truncated, windowDays: o.window.days } : null, previousAtLevel3: previousAtLevel3(history, c.id), level3Run: level3Run(history, c.id, run) });
-    levels.set(c.id, { level: measured.level ?? proven.level, couldBe: measured.level ? null : proven.couldBe, outcomeReasons: measured.reasons });
+    levels.set(c.id, { level: measured.level ?? proven.level, couldBe: measured.level ? null : proven.couldBe, outcomeReasons: measured.reasons, ...(!measured.level && proven.unproven ? { unproven: true } : {}) });
     const m = new Map<ScenarioId, LevelResult>();
     for (const id of scenariosFor(rubric, audit.scenarios ?? [], c.id)) m.set(id, componentLevel(rubric, s, id));
     scenarioLevels.set(c.id, m);
   }
   const active = activeComponents(rubric, audit.profile!.components, history);
-  const r = repoLevel(new Map([...levels.entries()].map(([id, l]) => [id, { level: l.level, couldBe: l.couldBe, missing: [], unknown: [] }])), active);
+  const r = repoLevel(new Map([...levels.entries()].map(([id, l]) => [id, { level: l.level, couldBe: l.couldBe, missing: [], unknown: [], ...(l.unproven ? { unproven: true } : {}) }])), active);
   const outcomeReasons = [...new Set(r.setBy.flatMap((id) => levels.get(id)?.outcomeReasons ?? []))];
   return { states, levels, scenarioLevels, repo: { ...r, outcomeReasons }, active };
 }
@@ -134,6 +137,7 @@ export function buildSealedReport(audit: Audit, rubric: Rubric, history: History
     repoLevel: c.repo.level,
     scenarioLevels: Object.fromEntries([...c.scenarioLevels.entries()].filter(([, m]) => m.size).map(([id, m]) => [id, Object.fromEntries([...m.entries()].map(([k, v]) => [k, v.level]))])),
     ...(noResults ? { noLevel: true } : {}),
+    ...(c.repo.unproven ? { noLevel: true, unproven: true } : {}),
     shares: Object.fromEntries(audit.profile.components.map((x) => [x.id, x.changeShare])),
     active: [...c.active],
     outcomes: o ? { window: `${o.window.from} to ${o.window.to}`, agent: o.agent, control: o.control, byComponent: o.byComponent, source: o.source } : null,
@@ -239,6 +243,12 @@ export function seal(audit: Audit, local: LocalInfo, p: Paths, log: (s: string) 
   const rubric = loadRubric(audit.rubric);
   if (audit.skill.scriptsDigest !== skillDigest()) fail("The skill's scripts changed since this audit started. Start a new audit with `readiness init --force`.");
   revealMutants(audit, local.tree);
+  const workingCopy = join(p.repo, WAIVER_FILE);
+  const waivers = loadWaivers(local.tree, rubric, today(), exists(workingCopy) ? readText(workingCopy) : null);
+  if (waivers) {
+    audit.waivers = waivers;
+    applyWaivers(audit);
+  }
   audit.seed.value = realSeed(audit, local);
   const storedAt = join(p.history, "audits", audit.id).replace(p.repo + "/", "");
   const history = trustedHistory(p, readHistory(p), log);
@@ -246,6 +256,7 @@ export function seal(audit: Audit, local: LocalInfo, p: Paths, log: (s: string) 
   const errors = [
     ...consistencyErrors(audit, report, roadmap),
     ...danglingEvidence(report, audit).map((id) => `the report cites ${id}, which isn't in the audit`),
+    ...explanationGaps(report, audit),
     ...validatePart1(report, rubric, audit.narration ? allowedNumbers(report) : null),
     ...validateAgainst("report", report).map((e) => `report.json ${e}`),
     ...validateAgainst("roadmap", roadmap).map((e) => `roadmap.json ${e}`),

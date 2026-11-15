@@ -126,20 +126,60 @@ function workspacePatterns(tree: string): string[] {
       }
     }
   }
-  return [...fromPkg, ...fromPnpm].filter((p) => !p.startsWith("!"));
+  return [...fromPkg, ...fromPnpm];
 }
 
-function expandPattern(tree: string, pattern: string): string[] {
+// The workspace members the patterns name, less the ones a `!` pattern excludes.
+function workspaceDirs(tree: string, patterns: string[]): { members: string[]; excluded: string[] } {
+  const rules = patterns.filter((p) => p.startsWith("!")).map((p) => globRegex(p.slice(1).replace(/^\.\//, "")));
+  const dirs = [...new Set(patterns.filter((p) => !p.startsWith("!")).flatMap((p) => expandPattern(tree, p)))];
+  return { members: dirs.filter((d) => !rules.some((re) => re.test(d))), excluded: dirs.filter((d) => rules.some((re) => re.test(d))) };
+}
+
+function globRegex(pattern: string): RegExp {
   const clean = pattern.replace(/\/+$/, "");
-  if (clean.endsWith("/*") || clean.endsWith("/**")) {
-    const base = clean.replace(/\/\*\*?$/, "");
+  const body = clean
+    .split("/")
+    .map((seg) => (seg === "**" ? "\u0000" : seg.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]")))
+    .join("/")
+    .replace(/\/?\u0000\/?/g, (m) => (m.startsWith("/") ? "(?:/.*)?/?" : "(?:.*/)?"));
+  return new RegExp(`^${body}$`);
+}
+
+const WALK_SKIP = /^(node_modules|\.git|dist|build|coverage)$/;
+
+// Folders the pattern matches, at any depth for `**`. Only folders holding a manifest matter, so the
+// walk below a `**` skips installed and built folders.
+function expandPattern(tree: string, pattern: string): string[] {
+  const clean = pattern.replace(/^\.\//, "").replace(/\/+$/, "");
+  if (!/[*?]/.test(clean)) return exists(join(tree, clean)) ? [clean] : [];
+  const segments = clean.split("/");
+  const out: string[] = [];
+  const walk = (base: string, i: number) => {
+    if (i === segments.length) {
+      out.push(base);
+      return;
+    }
+    const seg = segments[i];
     const dir = join(tree, base);
-    if (!exists(dir)) return [];
-    return readdirSync(dir)
-      .filter((n) => statSync(join(dir, n)).isDirectory())
-      .map((n) => `${base}/${n}`);
-  }
-  return exists(join(tree, clean)) ? [clean] : [];
+    if (!exists(dir)) return;
+    let names: string[];
+    try {
+      names = readdirSync(dir).filter((n) => !WALK_SKIP.test(n) && statSync(join(dir, n)).isDirectory());
+    } catch {
+      return;
+    }
+    const at = (n: string) => (base === "." ? n : `${base}/${n}`);
+    if (seg === "**") {
+      walk(base, i + 1);
+      for (const n of names) if (!n.startsWith(".")) walk(at(n), i);
+      return;
+    }
+    const re = globRegex(seg);
+    for (const n of names.filter((x) => re.test(x))) walk(at(n), i + 1);
+  };
+  walk(".", 0);
+  return out.filter((d) => d !== ".");
 }
 
 function languageOf(tree: string, path: string, files: string[]): Language {
@@ -330,8 +370,10 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
   const memberSatellites: Profile["satellites"] = [];
   const members = new Set<string>();
   const patterns = workspacePatterns(tree);
-  if (patterns.length > 0) {
-    const all = [...new Set(patterns.flatMap((p) => expandPattern(tree, p)))].filter((d) => exists(join(tree, d, "package.json"))).sort();
+  // Folders the workspace leaves out on purpose aren't components of their own either.
+  const excludedDirs = patterns.some((p) => p.startsWith("!")) ? workspaceDirs(tree, patterns).excluded : [];
+  if (patterns.some((p) => !p.startsWith("!"))) {
+    const all = workspaceDirs(tree, patterns).members.filter((d) => exists(join(tree, d, "package.json"))).sort();
     // Workspace members under tooling/ or examples/ are satellites too, unless nothing else exists.
     const reasons = new Map(all.map((d) => [d, d === "." ? null : satelliteReason(tree, { dir: d, kind: "js", manifest: `${d}/package.json` })]));
     const product = all.filter((d) => !reasons.get(d));
@@ -381,7 +423,7 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
       comps.push(app);
     }
   }
-  const { found, satellites } = discoverManifests(tree, files, [...comps.filter((c) => c.path !== ".").map((c) => c.path), ...memberSatellites.map((s) => s.path)], hasRoot, repoName);
+  const { found, satellites } = discoverManifests(tree, files, [...comps.filter((c) => c.path !== ".").map((c) => c.path), ...memberSatellites.map((s) => s.path), ...excludedDirs], hasRoot, repoName);
   const deferred = comps.length === 0 && found.length === 0;
   for (const m of deferred ? satellites : found) {
     const pkg = m.kind === "js" ? readPackageJson(join(tree, m.dir)) : null;
@@ -588,11 +630,24 @@ const INSTRUCTION_PATTERNS: RegExp[] = [
   /^\.github\/copilot-instructions\.md$/,
   /^\.github\/instructions\/.+\.instructions\.md$/,
   /^\.(cursor|claude|agents)\/skills\/[^/]+\/SKILL\.md$/,
+  /^(\.github\/|docs\/)?CONTRIBUTING\.md$/i,
   /^README\.md$/i,
 ];
 
+// Agent instructions and contributor guides come first and the README last, so a README command
+// they already give is checked once, where it's written for people working on the repo.
+function instructionRank(f: string): number {
+  if (/^README\.md$/i.test(f)) return 2;
+  if (/(^|\/)SKILL\.md$/.test(f)) return 1;
+  return 0;
+}
+
 export function instructionFiles(files: string[]): string[] {
-  return files.filter((f) => INSTRUCTION_PATTERNS.some((p) => p.test(f)) && !f.startsWith(".cursor/skills/agent-readiness/"));
+  return files
+    .filter((f) => INSTRUCTION_PATTERNS.some((p) => p.test(f)) && !f.startsWith(".cursor/skills/agent-readiness/"))
+    .map((f, i) => ({ f, i }))
+    .sort((a, b) => instructionRank(a.f) - instructionRank(b.f) || a.i - b.i)
+    .map((x) => x.f);
 }
 
 // Lockfiles of package managers supported after a rubric's list was written. A frozen install has

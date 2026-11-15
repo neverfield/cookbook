@@ -73,6 +73,9 @@ export function testCounts(output: string): { passed: number; failed: number; to
 // TLS interception, proxies and resets show up as these, not only as DNS failures. Returns what
 // failed in plain words, or null.
 const NETWORK: { re: RegExp; detail: string }[] = [
+  { re: /There was an issue establishing a connection while requesting https?:\/\/\S+|Failed to (fetch|download) (font|`[^`\n]+` from Google Fonts)|request to https?:\/\/fonts\.(googleapis|gstatic)\.com\S* failed/i, detail: "a failed font download on the network" },
+  { re: /Error when performing the request to https?:\/\/\S+|ERR_PNPM_META_FETCH_FAIL|npm (error|ERR!) network\b|YN0001[^\n]*(RequestError|getaddrinfo|ENOTFOUND|ECONNREFUSED)/, detail: "an unreachable package registry on the network" },
+  { re: /\bcurl: \((5|6|7|28|35|52|56)\)/, detail: "it tried to reach the network" },
   { re: /ProxyError|407 Proxy Authentication|tunneling socket could not be established|proxy[^\n]{0,40}(refused|error|failed)/i, detail: "a proxy error on the network" },
   { re: /CERT_|certificate verify failed|unable to (get|verify) (the )?(local issuer|first) certificate|self[- ]signed certificate|SSLError|SSL: [A-Z_]+|ERR_SSL|SSL routines|tlsv1 alert|TLS handshake|Client network socket disconnected before secure TLS/i, detail: "a TLS or certificate error on the network" },
   { re: /ENOTFOUND|EAI_AGAIN|getaddrinfo|Temporary failure in name resolution|Could not resolve host/, detail: "it tried to reach the network" },
@@ -161,9 +164,63 @@ const MISSING_MODULE = [
   /["']([^"'\n]+)["'] is imported by [^\n]+, but could not be resolved/,
 ];
 
+// Check marks as escapes: U+2714 is an emoji code point, which the skill's files never contain.
+const PASSED_LINE = /^\s*(ok \d+\b|[\u2713\u2714\u221a]|PASS\s|PASSED\b|test [^\n]* \.\.\. ok$)/;
+
+// The part of the output that explains the failure: the TAP `not ok` blocks, the first failing
+// jest, vitest or pytest section, or else the output without the lines of tests that passed, so a
+// passing test named "handles network errors" never reads as a network failure.
+export function failingPart(output: string): string {
+  const lines = output.split("\n");
+  const blocks: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const head = lines[i].match(/^(\s*)not ok \d+/);
+    if (!head) continue;
+    const indent = head[1].length;
+    const block = [lines[i]];
+    while (i + 1 < lines.length) {
+      const next = lines[i + 1];
+      if (next.trim() !== "" && (next.match(/^\s*/)?.[0].length ?? 0) <= indent) break;
+      block.push(next);
+      i++;
+    }
+    blocks.push(block.join("\n"));
+  }
+  if (blocks.length) return blocks.join("\n");
+  const section = lines.findIndex((l) => /^\s*(FAIL\s|\u25cf\s|[\u00d7\u2717\u2715]\s|=+ (FAILURES|ERRORS) =+$)/.test(l));
+  const kept = (section >= 0 ? lines.slice(section) : lines).filter((l) => !PASSED_LINE.test(l));
+  return kept.join("\n");
+}
+
+// Tools wrap long messages across lines and inside JSON strings; matching runs on a copy with the
+// lines joined as well as on the lines themselves.
+function unwrap(text: string): string {
+  return text.replace(/\\n/g, "\n").replace(/^[\s│|>]+/gm, (m) => m.replace(/[│|>]/g, "")).replace(/\s*\n\s*/g, " ");
+}
+
+// A tool or setting this machine lacks, as package managers, Node and git say it.
+function toolchainGap(text: string): string | null {
+  const env = text.match(/env: ['‘"]?([\w.+-]+)['’"]?: No such file or directory/);
+  if (env) return `${env[1]} is not installed`;
+  const spawn = text.match(/\bspawn ([\w.+-]+) ENOENT\b/);
+  if (spawn) return `${spawn[1]} is not installed`;
+  const pnpmNode = text.match(/This version of pnpm requires at least Node\.js v?([\d.]+)/);
+  if (pnpmNode) return `Node ${pnpmNode[1]} or later is not installed`;
+  const engine = text.match(/The engine "node" is incompatible with this module\. Expected version "([^"]+)"/) ?? text.match(/Unsupported engine[\s\S]{0,200}?required: \{[^}]*node: '([^']+)'/) ?? text.match(/ERR_PNPM_UNSUPPORTED_ENGINE[\s\S]{0,200}?Expected version: ([^\n]+)/);
+  if (engine) return `Node ${engine[1].trim()} is not installed`;
+  const corepack = text.match(/This project is configured to use (\w+)(?: because [^\n]*)?/) ?? text.match(/Usage Error: This project's package\.json defines "packageManager": "(\w+)@/);
+  if (corepack) return `${corepack[1]} is not installed`;
+  if (/Please tell me who you are|Author identity unknown|unable to auto-detect email address/.test(text)) return "git has no user identity (user.name and user.email) on this machine";
+  return null;
+}
+
 export function diagnose(rawOutput: string, timedOut: boolean, phase: string): Diagnosis {
-  const output = rawOutput.replace(/\x1b\[[0-9;]*m/g, "");
+  const clean = rawOutput.replace(/\x1b\[[0-9;]*m/g, "");
   if (timedOut) return { cause: "timeout", detail: `the ${phase} step ran out of time` };
+  const focus = failingPart(clean);
+  const output = `${focus}\n${unwrap(focus)}`;
+  const gap = toolchainGap(output);
+  if (gap) return { cause: "missing_tool", detail: gap };
   const permission = permissionLimit(output);
   if (permission) return { cause: "permission", detail: permission };
   const python = pythonMismatch(output);
@@ -187,7 +244,7 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   // A refused package download explains whatever is missing after it.
   const mirror = mirrorRefused(output);
   if (mirror) return { cause: "network", detail: mirror };
-  if (/ensurepip is not available|No module named venv\b/.test(output)) return { cause: "missing_tool", detail: "python3-venv is not installed" };
+  if (/ensurepip is not\s+available|No module named venv\b/.test(output)) return { cause: "missing_tool", detail: "python3-venv is not installed" };
   const tool = output.match(/(?:^|\n)(?:[^\n:]*: line \d+: |[^\n:]*: \d+: |(?:ba)?sh: )?([\w.+-]+): (?:command )?not found/);
   if (tool) return { cause: "missing_tool", detail: `${tool[1]} is not installed` };
   const mod = MISSING_MODULE.map((re) => output.match(re)).filter((m): m is RegExpMatchArray => m !== null).sort((a, b) => (a.index ?? 0) - (b.index ?? 0))[0];
@@ -195,7 +252,7 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   const network = networkFailure(output);
   if (network) return { cause: "network", detail: network };
   if (/SyntaxError|error TS\d{4}|IndentationError/.test(output)) return { cause: "compile", detail: "the code doesn't compile" };
-  const lines = output.split("\n").map((l) => l.trim()).filter(Boolean);
+  const lines = (focus.trim() ? focus : clean).split("\n").map((l) => l.trim()).filter(Boolean);
   // node --test's TAP block lists code, failureType and the like after the error itself.
   const noise = /^(npm (error|ERR!|warn)|ELIFECYCLE|error Command failed|>\s|\$ |command failed|at |# |(code|failureType|type|location|duration_ms|stack): )/i;
   const meaningful = lines.filter((l) => !noise.test(l));
