@@ -18,6 +18,8 @@ Every audit reports levels in three tiers, in the report, the seal, `report.json
 
 An audit never claims Level 3 or 4 by itself. A condition the audit couldn't run counts as not met, and the report says "could be Level N" when that's the only thing missing. A condition blocked by a limit of the machine never counts against the repo.
 
+**Unproven on this machine** is a result of its own, not Level 0: no Level 1 condition failed, and every one left was blocked here. The report names each blocked condition and its reason. With no container runtime, or a container that doesn't start, nothing runs outside a container unless the user allows host mode (`--allow-host`), so the result is unproven, with that reason. Host mode can't prove Level 1 either: it runs on whatever this machine has installed.
+
 ## A component's standard level
 
 - **Level 1:** the frozen install, the build and every test pass in a clean container.
@@ -32,7 +34,8 @@ The repo level is the lowest level among active components:
 - A component joins or leaves the active set only after two consecutive audits on the same side of the line. From rubric 2026-11-alpha, a component the last audit didn't have joins at once.
 - Components the audit can't assess, such as a .NET service, never set the repo level. They keep their share of changes, and when more than 20% of changes are in them the report says "partial coverage".
 - Scenarios never change a component's standard level or the repo level.
-- With no real check result, there is no level at any tier: the report says "not assessed" and why.
+- With no component to assess, or at the read-only tier, there is no level at any tier: the report says "not assessed" and why. Checks blocked on this machine give an unproven result instead, with their reasons.
+- The repo is unproven when every active component at the lowest level is unproven.
 
 ## Scenarios
 

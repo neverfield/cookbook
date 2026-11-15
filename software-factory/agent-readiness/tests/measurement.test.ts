@@ -348,7 +348,7 @@ describe("control arms and holdouts", () => {
   test("in an eval workspace, where the skill is committed, change shares are the fixture's own", () => {
     for (const id of ["partial-coverage", "python-behind-root-package"]) {
       const base = fixtureCases.find((c) => c.id === id)!;
-      const c: EvalCase = { ...base, id: `fixtures/${id}`, env: { ...base.env, SA_READINESS_RUNTIME: "none" } };
+      const c: EvalCase = { ...base, id: `fixtures/${id}`, env: { ...base.env, SA_READINESS_RUNTIME: "none", SA_READINESS_ALLOW_HOST: "1" } };
       const ws = prepare(c);
       assert.equal(scriptedAudit(ws, c).error, null);
       const want = expected(c.fixture).runs[0];
@@ -360,7 +360,7 @@ describe("control arms and holdouts", () => {
 
   test("a scripted audit with no narration passes the narration and action gates; a narrated invented cause fails", () => {
     const base = fixtureCases.find((c) => c.id === "hidden-service")!;
-    const c: EvalCase = { ...base, id: "fixtures/hidden-service", env: { ...base.env, SA_READINESS_RUNTIME: "none" } };
+    const c: EvalCase = { ...base, id: "fixtures/hidden-service", env: { ...base.env, SA_READINESS_RUNTIME: "none", SA_READINESS_ALLOW_HOST: "1" } };
     const ws = prepare(c);
     const t: Trajectory = scriptedAudit(ws, c);
     assert.equal(t.error, null);

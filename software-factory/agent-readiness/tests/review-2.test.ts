@@ -15,11 +15,14 @@ import { exportTree } from "../skill/agent-readiness/scripts/lib/workspace.ts";
 import { commitAll, materialize, readiness } from "../support/tools/fixture.ts";
 import { instruction, makeAudit, reportFor, stats } from "./helpers.ts";
 
+// These replays exercise host mode, which runs only on the user's yes.
+const HOST = { SA_READINESS_ALLOW_HOST: "1" };
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const next = loadRubric("2026-11-alpha");
 const targets = { mergeRate: 0.7, firstPass: 0.6, maxChangesRequested: 0.3, minAgentPrs: 20 };
 const control = stats(40, 35, 30, 5);
-const hostAudit = (repo: string, env: Record<string, string> = {}) => assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], env).code, 0);
+const hostAudit = (repo: string, env: Record<string, string> = {}) => assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], { ...HOST, ...env }).code, 0);
 const draftDir = (repo: string) => join(repo, ".agent-readiness/work", readFileSync(join(repo, ".agent-readiness/work/CURRENT"), "utf8").trim());
 
 function line(id: string, level: Level, web: ReturnType<typeof stats> | null, extra: Partial<HistoryLine> = {}, window = "2026-09-01 to 2026-10-01"): HistoryLine {
@@ -47,7 +50,7 @@ describe("fixes from the second independent review", () => {
   test("with a seal key set, seal leaves out unkeyed history lines, which anyone could have written", () => {
     const repo = materialize("healthy-node");
     hostAudit(repo, { SA_READINESS_SEAL_KEY: "" });
-    const r = readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], { SA_READINESS_SEAL_KEY: "ci-key" });
+    const r = readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], { ...HOST, SA_READINESS_SEAL_KEY: "ci-key" });
     assert.equal(r.code, 0, r.out);
     assert.match(r.out, /Left out 1 history line that don't match a sealed audit/);
   });
@@ -158,7 +161,7 @@ describe("fixes from the second independent review", () => {
     const seed = readFileSync(join(tree, "..", "seed.txt"), "utf8").trim();
     assert.notEqual(draft.seed.value, seed);
     assert.ok(!readFileSync(join(dir, "audit.json"), "utf8").includes(seed));
-    for (const args of [["scan"], ["replay", "--runtime", "none", "--no-mutants"], ["seal"]]) assert.equal(readiness(repo, args).code, 0, args.join(" "));
+    for (const args of [["scan"], ["replay", "--runtime", "none", "--no-mutants"], ["seal"]]) assert.equal(readiness(repo, args, HOST).code, 0, args.join(" "));
     const sealed = JSON.parse(readFileSync(join(repo, ".agent-readiness/history/audits", draft.id, "audit.json"), "utf8")) as Audit;
     assert.equal(sealed.seed.value, seed);
   });
@@ -218,7 +221,7 @@ describe("fixes from the second independent review", () => {
     const hist = join(repo, ".agent-readiness/history/history.jsonl");
     const forged = { ...JSON.parse(readFileSync(hist, "utf8").trim()), id: "aud-forged", levels: { "healthy-node": 3 } };
     writeFileSync(hist, readFileSync(hist, "utf8") + JSON.stringify(forged) + "\n");
-    const r = readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"]);
+    const r = readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], HOST);
     assert.equal(r.code, 0, r.out);
     assert.match(r.out, /Left out 1 history line that don't match a sealed audit: aud-forged/);
   });
@@ -270,7 +273,7 @@ describe("fixes from the second independent review", () => {
     hostAudit(repo);
     writeFileSync(join(repo, "test/pricing.test.js"), 'import test from "node:test";\nimport assert from "node:assert";\ntest("broken", () => assert.fail("x"));\n');
     commitAll(repo, "Break a test");
-    readiness(repo, ["recheck", "--runtime", "none"]);
+    readiness(repo, ["recheck", "--runtime", "none"], HOST);
     const last = JSON.parse(readFileSync(join(repo, ".agent-readiness/history/history.jsonl"), "utf8").trim().split("\n").pop()!) as HistoryLine;
     assert.equal(last.result, "failed");
     assert.equal(last.noLevel, true);

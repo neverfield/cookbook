@@ -64,7 +64,9 @@ export function blockedBy(ev: Evidence): string | null {
 }
 
 // No real results, no level: a level needs at least one Level 1 check that ran and passed, or failed
-// for a reason in the repo. Returns why there is none, or null when there is one.
+// for a reason in the repo. Returns why there is none, or null when there is one. Checks that this
+// machine blocked aren't "no result": they make the level unproven here, which levels.ts reports
+// with the reasons, so a missing Docker reads as unproven rather than as not assessed.
 export function noRealResults(audit: Audit, states: Map<string, CompStates>): string | null {
   const assessed = audit.profile?.components.filter((c) => c.assessed) ?? [];
   if (assessed.length === 0) return "no component could be assessed";
@@ -73,20 +75,28 @@ export function noRealResults(audit: Audit, states: Map<string, CompStates>): st
   const noTests = assessed.some((c) => states.get(c.id)?.["clean.test"].state === "not_met");
   if (ran || noTests) return null;
   if (audit.tier === "read-only") return "the read-only tier runs no repo code";
-  const causes = [...new Set(audit.evidence.map(blockedBy).filter((b): b is string => Boolean(b) && b !== "the install was blocked on this machine"))];
-  if (causes.length) return `nothing could run on this machine: ${causes.join(" and ")}`;
+  const blockedHere = assessed.some((c) => {
+    const s = states.get(c.id);
+    return s !== undefined && (["clean.install", "clean.build", "clean.test"] as const).some((k) => s[k].state === "blocked");
+  });
+  if (blockedHere) return null;
   return "no check produced a result";
 }
 
-function fromEvidence(rubric: Rubric, ev: Evidence | undefined, check: string, missingReason: string): CondDetail {
+function fromEvidence(rubric: Rubric, ev: Evidence | undefined, check: string, missingReason: string, componentId?: string): CondDetail {
   if (!ev) return { state: "unknown", reason: missingReason, evidence: [] };
   const blocked = blockedBy(ev);
   if (blocked) return { state: "blocked", reason: ev.where === "container" ? `${blocked}, a limit of the audit's environment rather than a repo defect` : `${blocked}, an environment limit rather than a repo defect; Level 1 needs a clean container`, evidence: [ev.id] };
+  // A repo-wide run whose every failing file is in other components passes for this one.
+  if (ev.result === "fail" && componentId && ev.failedIn?.length && !ev.failedIn.includes(componentId)) {
+    const passed = fromEvidence(rubric, { ...ev, result: "pass", failedIn: undefined }, check, missingReason);
+    return passed.state === "met" ? { ...passed, reason: `the repo-wide ${ev.kind ?? "command"} passes for ${componentId}: every failure is in ${ev.failedIn.join(", ")}` } : passed;
+  }
   if (ev.result === "fail") return { state: "not_met", reason: ev.summary, evidence: [ev.id] };
   if (ev.result === "not_run") return { state: "unknown", reason: ev.summary, evidence: [ev.id] };
   const min = rubric.checks.find((c) => c.id === check)?.minStrengthForPass ?? "executed";
   if (strengthRank(rubric, ev.strength) < strengthRank(rubric, min)) {
-    if (needsContainer(rubric, check)) return { state: "blocked", reason: "passed on the host, but Level 1 needs a clean container: no container runtime on this machine", evidence: [ev.id] };
+    if (needsContainer(rubric, check)) return { state: "blocked", reason: "passed in host mode, which ran on this machine and could read its local files, so it isn't a sandbox; Level 1 needs a clean container", evidence: [ev.id] };
     return { state: "unknown", reason: `passed, but only ${rubric.strengthLabels[ev.strength]}`, evidence: [ev.id] };
   }
   return { state: "met", reason: ev.summary, evidence: [ev.id] };
@@ -105,20 +115,20 @@ export function componentStates(audit: Audit, rubric: Rubric, componentId: strin
   if (builds.length === 0) {
     states["clean.build"] = { state: states["clean.install"].state, reason: "no build step; follows the install", evidence: states["clean.install"].evidence };
   } else {
-    states["clean.build"] = allPass(builds.map((c) => fromEvidence(rubric, commandEvidence(evs, c.id, true), "bootstrap.cold_replay", "the clean build hasn't run")), `${builds.length} build commands pass`);
+    states["clean.build"] = allPass(builds.map((c) => fromEvidence(rubric, commandEvidence(evs, c.id, true), "bootstrap.cold_replay", "the clean build hasn't run", componentId)), `${builds.length} build commands pass`);
   }
   const tests = commandsFor(contract, componentId, "test");
   if (tests.length === 0) {
     states["clean.test"] = { state: "not_met", reason: "no test command was found", evidence: [] };
   } else {
-    states["clean.test"] = allPass(tests.map((c) => fromEvidence(rubric, commandEvidence(evs, c.id, true), "bootstrap.cold_replay", "the clean test run hasn't run")), `${tests.length} test commands pass`);
+    states["clean.test"] = allPass(tests.map((c) => fromEvidence(rubric, commandEvidence(evs, c.id, true), "bootstrap.cold_replay", "the clean test run hasn't run", componentId)), `${tests.length} test commands pass`);
   }
   const cmdKinds = ["build", "lint", "typecheck", "test"] as const;
   const discovered = cmdKinds.flatMap((k) => commandsFor(contract, componentId, k));
   if (!discovered.some((c) => c.kind === "test")) {
     states.commands = { state: "not_met", reason: "no test command was found", evidence: [] };
   } else {
-    const parts = discovered.map((c) => fromEvidence(rubric, commandEvidence(evs, c.id, false), "verify.canonical_interface", `${c.kind} hasn't run`));
+    const parts = discovered.map((c) => fromEvidence(rubric, commandEvidence(evs, c.id, false), "verify.canonical_interface", `${c.kind} hasn't run`, componentId));
     states.commands = allPass(parts, `${discovered.length} commands pass`, true);
   }
   const faults = latest(evs.filter((e) => e.condition === "faults" && e.component === componentId));

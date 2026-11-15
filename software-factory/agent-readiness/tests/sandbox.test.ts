@@ -20,6 +20,9 @@ import type { ContractCommand, InstructionItem } from "../skill/agent-readiness/
 import { materialize, readiness } from "../support/tools/fixture.ts";
 import { makeAudit } from "./helpers.ts";
 
+// These replays exercise host mode, which runs only on the user's yes.
+const HOST = { SA_READINESS_ALLOW_HOST: "1" };
+
 const rubric = loadRubric();
 const tmp = () => mkdtempSync(join(tmpdir(), "readiness-sandbox-"));
 
@@ -129,7 +132,7 @@ describe("lint runs before the build, and a check that rewrites code fails", () 
       writeFileSync(join(d, "src/a.js"), "export const a = 1;\n");
     }
     const rewrite = `node -e "require('fs').writeFileSync('src/a.js', 'export const a = 1\\n')"`;
-    const [r] = await runContract(hostExecutor(copy, [], false), [cmd("l", "lint", rewrite)], { components: new Set(["app"]), budget: newBudget(10, 10), registryValues: [], tree });
+    const [r] = await runContract(hostExecutor(copy, [], false, "fresh_copy", true), [cmd("l", "lint", rewrite)], { components: new Set(["app"]), budget: newBudget(10, 10), registryValues: [], tree });
     assert.equal(r.status, "fail");
     assert.equal(r.diagnosis!.detail, `it changed 1 file (src/a.js), ${REWROTE}`);
     assert.equal(readFileSync(join(copy, "src/a.js"), "utf8"), "export const a = 1;\n", "restored for the steps after it");
@@ -251,7 +254,7 @@ describe("the read-only tier", () => {
     const replayed: Trajectory = { ...none, driver: "sdk", toolCalls: [{ name: "shell", status: "completed", args: { command: `node ${cli} replay --no-mutants` } }] };
     assert.match(gradeCase(ws, replayed, c).find((g) => g.name === "no replay or run")!.detail, /replay --no-mutants/);
     const local = prepare(c);
-    assert.equal(readiness(local.dir, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], caseEnv(c), join(local.dir, ".cursor/skills/agent-readiness/scripts/readiness.ts")).code, 0);
+    assert.equal(readiness(local.dir, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], { ...HOST, ...caseEnv(c) }, join(local.dir, ".cursor/skills/agent-readiness/scripts/readiness.ts")).code, 0);
     assert.equal(gradeCase(local, none, c).find((g) => g.name.startsWith("read-only audit"))!.pass, false, "a local-exec audit fails the read-only gate");
   });
 });
@@ -259,7 +262,7 @@ describe("the read-only tier", () => {
 describe("new fixtures on a host fallback", { concurrency: 2 }, () => {
   const host = (fixture: string) => {
     const repo = materialize(fixture);
-    const r = readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none"], { SA_READINESS_EVAL_SEED: "fixture-seed" });
+    const r = readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none"], { ...HOST, SA_READINESS_EVAL_SEED: "fixture-seed" });
     assert.equal(r.code, 0, r.out);
     const report = JSON.parse(readFileSync(join(repo, ".agent-readiness/latest/report.json"), "utf8"));
     return { out: r.out, report, audit: JSON.parse(readFileSync(join(repo, ".agent-readiness/history/audits", report.audit.id, "audit.json"), "utf8")) };

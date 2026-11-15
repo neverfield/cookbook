@@ -44,8 +44,9 @@ export const STACKS: Stack[] = [
   { id: "dart", label: "Dart", kind: "stack", tier: "not_assessed", files: /\.dart$|(^|\/)pubspec\.(yaml|lock)$/, proof: ["fixtures/dart-packages", "dart-lang/http@8c0d66a"] },
   { id: "terraform", label: "Terraform", kind: "stack", tier: "not_assessed", files: /\.(tf|tfvars)$/, proof: ["fixtures/terraform-modules", "fixtures/monorepo-mixed", "terraform-aws-modules/terraform-aws-vpc@b3abd6d"] },
   { id: "docker", label: "Docker", kind: "machine", tier: "supported", proof: ["tests/fixtures.test.ts"] },
-  { id: "host-fallback", label: "No container runtime on Linux or macOS", kind: "machine", tier: "supported", reason: "setup runs in a scrubbed copy on the host, so Level 1 can't be proved there", proof: ["fixtures/declared-image-missing-toolchain", "fixtures/sudo-start"] },
-  { id: "windows", label: "Windows without Docker or Podman", kind: "machine", tier: "not_yet", reason: "the host fallback runs bash; run the audit in WSL 2 or with Docker Desktop", proof: ["tests/supported.test.ts"] },
+  { id: "no-container", label: "No container runtime on Linux or macOS", kind: "machine", tier: "supported", reason: "nothing runs outside a container without the user's yes: Level 1 is unproven on this machine, and the report says why", proof: ["fixtures/declared-image-missing-toolchain", "fixtures/sudo-start", "tests/safety.test.ts"] },
+  { id: "host-mode", label: "Host mode on Linux or macOS, with --allow-host", kind: "machine", tier: "supported", reason: "only on the user's yes; the repo's commands run in a copy with a throwaway home and no account credentials, but can read this user's local files, so Level 1 can't be proved there", proof: ["tests/safety.test.ts"] },
+  { id: "windows", label: "Native Windows", kind: "machine", tier: "not_yet", reason: "the audit drives its container and host mode through bash; run it in WSL 2", proof: ["tests/supported.test.ts", "tests/safety.test.ts"] },
   { id: "podman", label: "Podman", kind: "machine", tier: "not_assessed", reason: "the audit drives it like Docker, but no fixture run has used it", proof: [] },
 ];
 

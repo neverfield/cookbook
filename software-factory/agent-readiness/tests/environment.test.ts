@@ -67,7 +67,7 @@ describe("a home or cache directory the audit's user can't write is this machine
     const args = imageUserArgs("c", "npm install -g bun@1");
     assert.deepEqual(args.slice(0, 4), ["exec", "-e", `HOME=${SETUP_HOME}`, "c"]);
     assert.notEqual(SETUP_HOME, HOME_DIR);
-    assert.equal(homeCommand("501:20"), `mkdir -p ${HOME_DIR} && chmod 1777 ${HOME_DIR} && chown -R 501:20 ${HOME_DIR}`);
+    assert.equal(homeCommand("501:20"), `mkdir -p ${HOME_DIR} && chmod 1777 ${HOME_DIR} && find ${HOME_DIR} -xdev -uid 0 -exec chown -h 501:20 {} + 2>/dev/null; true`);
     assert.equal(homeCommand(null), `mkdir -p ${HOME_DIR} && chmod 1777 ${HOME_DIR}`);
   });
 

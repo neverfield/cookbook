@@ -21,7 +21,7 @@ const CLI = "node --experimental-strip-types --no-warnings .cursor/skills/agent-
 const healthy = { ...fixtureCases.find((c) => c.id === "healthy-node")!, id: "fixtures/healthy-node" };
 // Host mode everywhere: fast and the same on every machine. `npm run evals -- --tag negative`
 // runs the same attacks in a container where one exists.
-const onHost = (c: EvalCase): EvalCase => ({ ...c, env: { ...c.env, SA_READINESS_RUNTIME: "none" } });
+const onHost = (c: EvalCase): EvalCase => ({ ...c, env: { ...c.env, SA_READINESS_RUNTIME: "none", SA_READINESS_ALLOW_HOST: "1" } });
 
 function shell(command: string, id: string): ToolCall {
   return { id, name: "shell", status: "completed", args: { command } };

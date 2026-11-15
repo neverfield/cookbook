@@ -245,7 +245,7 @@ describe("part 1 rules", () => {
     assert.equal(r.maturity.confidence.level, "low");
     assert.ok(r.maturity.capReasons.some((c) => c.component === "app" && c.condition === "clean.test" && c.state === "blocked"), JSON.stringify(r.maturity.capReasons));
     const md = renderMarkdown(r, rubric);
-    assert.match(md, /What keeps Level 1 unproven on this machine:\n\n- `app`: [^\n]+, blocked on this machine \(passed on the host, but Level 1 needs a clean container/);
+    assert.match(md, /What keeps Level 1 unproven on this machine:\n\n- `app`: [^\n]+, blocked on this machine \(passed in host mode, which ran on this machine and could read its local files, so it isn't a sandbox; Level 1 needs a clean container/);
     assert.match(md, /\| `app` \|[^\n]*\| Level 1 unproven on this machine \(could be 1\) \|/);
     assert.match(md, /Repo level: Level 1 unproven on this machine \(could be 1\)\./);
     assert.doesNotMatch(md, /Not bootable \(could be/);
@@ -302,34 +302,30 @@ describe("part 1 rules", () => {
     assert.deepEqual(validateAgainst("report", r), []);
   });
 
-  test("no real results, no level: when the only checks were blocked on this machine, the report says so and plans nothing", () => {
+  test("every Level 1 check blocked on this machine: the result is unproven, not a level, and the report plans nothing", () => {
     const audit = makeAudit({ components: [{ id: "buyer-web", share: 0.6, test: "not_run" }, { id: "commerce-core", share: 0.4, assessed: false }] });
     audit.environment.containerRuntime = null;
     const install = audit.evidence.find((e) => e.kind === "install")!;
     Object.assign(install, { where: "fresh_copy", strength: "executed", result: "fail", summary: "install failed: dotnet is not installed", diagnosis: { cause: "missing_tool", detail: "dotnet is not installed" }, blocked: "dotnet is not installed on this machine" });
+    Object.assign(audit.evidence.find((e) => e.kind === "test")!, { summary: "test not run because the install was blocked on this machine", blocked: "the install was blocked on this machine" });
     const r = reportFor(audit);
     const ex = r.executive;
-    assert.equal(r.maturity.outcome, "not_assessed");
-    assert.equal(ex.heading, "Not assessed: no check could run on this machine");
-    assert.equal(ex.headline, "Nothing could be checked on this machine, so this audit gives no level: dotnet is not installed on this machine. A rerun where Docker or Podman is available, such as CI, can give one.");
-    assert.equal(ex.nextLine, "Next: Level 1, bootable, once a check can run. No condition has been checked yet.");
-    assert.deepEqual(ex.numbers.map((n) => n.value), ["none checked", "not measured", "100%"]);
-    assert.deepEqual([r.actions.length, ex.gaps.length, r.matrix.points.length, ex.noBlocker], [0, 0, 0, false]);
-    assert.match(ex.ask, /^Decision needed: where to rerun this audit so its checks can run/);
+    assert.deepEqual([r.maturity.outcome, r.maturity.unproven], ["blocked", true]);
+    assert.equal(ex.heading, "Level 1 unproven on this machine: no Level 1 check failed, and 3 were blocked here");
+    assert.equal(ex.headline, "Level 1 couldn't be proved for buyer-web because this machine has no container runtime and dotnet is not installed on this machine. A rerun where Docker or Podman is available, such as CI, can prove it.");
+    assert.deepEqual([r.actions.length, ex.gaps.length, ex.noBlocker], [0, 0, false]);
+    assert.match(ex.ask, /^Decision needed: where to rerun this audit so it can prove Level 1/);
     assert.match(ex.coverage, /On this machine dotnet is not installed, an environment limit rather than a repo defect/);
     assert.equal(r.maturity.confidence.level, "low");
-    assert.doesNotMatch(scaleLine(r), /\[/);
     assert.equal(r.details.evidence.find((e) => e.id === install.id)!.result, "blocked");
     const md = renderMarkdown(r, rubric);
-    assert.match(md, /No actions can be planned yet: this audit has no real check results to plan from/);
-    assert.match(md, /This audit added no steps/);
-    assert.ok(r.components.included.every((c) => c.level === null && c.capReasons.length === 0), "no component level when part 1 has none");
-    assert.match(md, /\| `buyer-web` \| `buyer-web` \|[^\n]*\| not assessed \|/);
-    assert.match(md, /Repo level: not assessed\./);
+    assert.match(md, /No actions are open: nothing in the repo blocks Level 1\. Proving it needs a rerun/);
+    assert.deepEqual(r.components.included.map((c) => [c.level, c.unproven]), [[0, true]]);
+    assert.match(md, /\| `buyer-web` \| `buyer-web` \|[^\n]*\| Level 1 unproven on this machine \(could be 1\) \|/);
+    assert.match(md, /Repo level: Level 1 unproven on this machine \(could be 1\)\./);
     assert.doesNotMatch(md, /\| 0 Not bootable/);
     assert.deepEqual(r.roadmap.items.map((i) => i.id), ["owner", "targets"], "the owner step stays, so the ask to name one has a step behind it");
     assert.match(ex.ask, /Also name an owner for agent readiness\.$/);
-    assert.match(md, /Recent changes this audit couldn't check:\*\* 100%\. Counting the last 90 days/);
     assert.doesNotMatch(md, /blocked: blocked:/);
     assert.deepEqual(validatePart1(r, rubric, null), []);
     assert.deepEqual(validateAgainst("report", r), []);

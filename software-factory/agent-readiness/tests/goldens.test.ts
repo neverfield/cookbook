@@ -8,9 +8,12 @@ import { goldenProblems, levelViolations, loadGoldens, loadLastRun, rankViolatio
 import type { GoldenResult, GoldenSet, LastRun } from "../support/evals/lib/goldens.ts";
 import { materialize, readiness } from "../support/tools/fixture.ts";
 
+// These replays exercise host mode, which runs only on the user's yes.
+const HOST = { SA_READINESS_ALLOW_HOST: "1" };
+
 function audited(fixture: string): { repo: string; report: ReportJson; audit: Audit } {
   const repo = materialize(fixture);
-  const r = readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"]);
+  const r = readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], HOST);
   assert.equal(r.code, 0, r.out);
   const dir = join(repo, ".agent-readiness/history/audits");
   return {

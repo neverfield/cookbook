@@ -118,6 +118,9 @@ export interface Evidence {
   skipped?: string;
   // For a fault check, the planted faults the tests missed; the seal names where they were.
   missedFaults?: string[];
+  // For a repo-wide command that failed, the components every failing file belongs to, when the
+  // output names them all. The other components aren't failed by it.
+  failedIn?: string[];
   at: string;
 }
 
@@ -148,7 +151,7 @@ export interface InstructionItem {
 
 export interface SafetyFinding {
   id: string;
-  kind: "secret" | "lifecycle_hook" | "network_piped" | "destructive" | "deploy_publish" | "credential_needed" | "elevated";
+  kind: "secret" | "lifecycle_hook" | "network_piped" | "destructive" | "deploy_publish" | "credential_needed" | "elevated" | "host_mode";
   file: string;
   line?: number;
   detail: string;
@@ -239,7 +242,22 @@ export interface Audit {
   skill: AuditSkillInfo;
   seed: { value: string; pinned: boolean };
   // tools: what the audit added to its own image for the frozen install, such as bun@1.2.19, and whether it could.
-  environment: { containerRuntime: string | null; image: string | null; imageOverride?: string; registryEnv: string[]; inheritEnv: boolean; tools?: { spec: string; added: boolean }[] };
+  environment: {
+    containerRuntime: string | null;
+    image: string | null;
+    imageOverride?: string;
+    registryEnv: string[];
+    inheritEnv: boolean;
+    tools?: { spec: string; added: boolean }[];
+    // The digest the audit's image was pulled at, when the audit pins it.
+    imageDigest?: string;
+    // The container's CPU, memory and process limits.
+    limits?: { cpus: number | null; memoryMb: number; pids: number };
+    // The user allowed repo commands to run on this machine, outside a container.
+    hostMode?: boolean;
+    // Why no repo command ran: no container runtime, or a container that didn't start, and host mode not allowed.
+    notRun?: string;
+  };
   profile: Profile | null;
   assets: Asset[];
   contract: ContractCommand[];
@@ -341,6 +359,8 @@ export interface HistoryLine {
   // Only the scenarios a user added, under the components they apply to.
   scenarioLevels: Record<string, Partial<Record<ScenarioId, Level>>>;
   noLevel?: boolean;
+  // Level 1 was unproven on this machine: every Level 1 condition left was blocked here and none failed.
+  unproven?: boolean;
   shares: Record<string, number>;
   active: string[];
   outcomes?: { window: string; agent: OutcomeStats; control: OutcomeStats; byComponent: Record<string, OutcomeStats>; source?: "gh" | "file" } | null;

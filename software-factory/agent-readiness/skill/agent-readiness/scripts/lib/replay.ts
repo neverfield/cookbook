@@ -1,13 +1,14 @@
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
-import { ContainerSession, buildImage, detectRuntime } from "./container.ts";
+import { ContainerSession, NETWORK_ENV, buildImage, detectRuntime, hostUser, probeLimits } from "./container.ts";
 import { containerImage, toolSetup } from "./contract.ts";
 import { diagnose, testCounts } from "./diagnose.ts";
 import { addEvidence } from "./evidence.ts";
+import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
 import { applySite, chooseSites } from "./mutate.ts";
-import { redact, tail } from "./redact.ts";
+import { proxyPasswords, redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { SUDO_SHIM_MARK, runCommand, scrubbedEnv } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
@@ -26,11 +27,14 @@ export interface Executor {
   imageSource: "audit" | "override" | "repo" | null;
   root: string;
   // imageUser: the repo's declared setup, run as its image's own user rather than an ordinary one.
-  exec(command: string, cwd: string, timeoutSec: number, opts?: { imageUser?: boolean }): Promise<RunOutcome>;
+  // registry: a setup step (the doctor or an install), the only commands the registry variables reach.
+  exec(command: string, cwd: string, timeoutSec: number, opts?: { imageUser?: boolean; registry?: boolean }): Promise<RunOutcome>;
   offline(): boolean;
   // Whether the last offline() call cut the network; null before it runs and on the host.
   networkOff: boolean | null;
   close(): void;
+  // Set when nothing may run here, with the reason: every command is recorded as not run, blocked by it.
+  unavailable?: string;
 }
 
 export const SUDO = /(^|[\s;&|(`]|\$\()sudo(\s|$)/;
@@ -39,12 +43,29 @@ export const NETWORK_ON = "the network couldn't be switched off for the test pha
 
 const SECRET_NAME = /(KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|AUTH)/i;
 
-// Values to redact from command output: the registry variables, and with --inherit-env every
-// inherited variable whose name looks like a secret.
+// Values to redact from command output: the registry variables, the passwords in proxy settings,
+// and with --inherit-env every inherited variable whose name looks like a secret.
 export function registryValuesOf(audit: Audit): string[] {
   const names = new Set(audit.environment.registryEnv);
   if (audit.environment.inheritEnv) for (const k of Object.keys(process.env)) if (SECRET_NAME.test(k)) names.add(k);
-  return [...names].map((k) => process.env[k] ?? "").filter(Boolean);
+  return [...[...names].map((k) => process.env[k] ?? ""), ...proxyPasswords(process.env, NETWORK_ENV)].filter(Boolean);
+}
+
+// Host mode: the repo's commands run on this machine instead of in a container. Only on the user's
+// explicit yes (`--allow-host`, which sets this variable), never as a fallback.
+export const ALLOW_HOST_ENV = "SA_READINESS_ALLOW_HOST";
+
+export function hostAllowed(explicit?: boolean): boolean {
+  return explicit ?? process.env[ALLOW_HOST_ENV] === "1";
+}
+
+export const HOST_NOT_ALLOWED = `host mode wasn't allowed (--allow-host), so no repo command ran outside a container`;
+export const HOST_MODE_NOTE = "host mode was allowed: the repo's commands ran on this machine as this user, outside a container, with a throwaway home and no account credentials, but they could read this user's local files; it isn't a sandbox, and Level 1 can't be proved there";
+
+// Linux, macOS and cloud agents. The audit drives its container through bash on the host and its
+// host mode runs bash, joins PATH with ":" and writes bash shims, none of which native Windows has.
+export function assertPlatformSupported(platform: string = process.platform): void {
+  if (platform === "win32") fail(`The audit doesn't run on native Windows: ${notSupportedReason("windows")}. See ${SUPPORTED_DOC} in the skill.`);
 }
 
 // A path from .cursor/environment.json, refused when it leaves the audited tree.
@@ -52,25 +73,44 @@ export function insideTree(root: string, ...parts: string[]): string {
   return containedPath(root, parts, ".cursor/environment.json");
 }
 
-// The host fallback runs bash, joins PATH with ":" and writes bash shims, none of which native
-// Windows has.
-export function assertHostFallbackSupported(platform: string = process.platform): void {
-  if (platform === "win32") fail(`This machine has no Docker or Podman, and the audit can't run repo commands on Windows without one: ${notSupportedReason("windows")}. See ${SUPPORTED_DOC} in the skill.`);
-}
+export const assertHostFallbackSupported = assertPlatformSupported;
 
-export function hostExecutor(root: string, registryEnv: string[], inheritEnv: boolean, where: Where = "fresh_copy"): Executor {
-  assertHostFallbackSupported();
-  const env = scrubbedEnv({ registryEnv, inheritEnv });
+// allowHost: the user's yes for this run; without it the opt-in variable decides. Refused otherwise,
+// so `readiness run` needs the same yes as a replay in host mode.
+export function hostExecutor(root: string, registryEnv: string[], inheritEnv: boolean, where: Where = "fresh_copy", allowHost?: boolean): Executor {
+  assertPlatformSupported();
+  if (!hostAllowed(allowHost)) fail(`This runs the repo's commands on this machine, outside a container, which needs the user's yes first: ${HOST_NOT_ALLOWED}. Ask the user, then rerun with --allow-host.`);
+  // --inherit-env is host mode's alone: a container never inherits this shell's variables.
+  const setupEnv = scrubbedEnv({ registryEnv, inheritEnv });
+  const env = { ...setupEnv };
+  for (const k of registryEnv) delete env[k];
   return {
     where,
     strength: "executed",
     image: null,
     imageSource: null,
     root,
-    exec: (command, cwd, timeoutSec) => (SUDO.test(command) ? Promise.resolve({ exitCode: null, timedOut: false, durationMs: 0, output: `readiness: ${SUDO_REFUSED}` }) : runCommand(command, join(root, cwd), env, timeoutSec)),
+    exec: (command, cwd, timeoutSec, opts) => (SUDO.test(command) ? Promise.resolve({ exitCode: null, timedOut: false, durationMs: 0, output: `readiness: ${SUDO_REFUSED}` }) : runCommand(command, join(root, cwd), opts?.registry ? setupEnv : env, timeoutSec)),
     offline: () => false,
     networkOff: null,
     close: () => {},
+  };
+}
+
+// Nothing runs: no container runtime or a container that didn't start, and host mode not allowed.
+// Every command is recorded as not run, blocked by the reason, so the result is unproven here.
+export function unavailableExecutor(root: string, reason: string): Executor {
+  return {
+    where: "container",
+    strength: "clean_replay",
+    image: null,
+    imageSource: null,
+    root,
+    exec: () => Promise.resolve({ exitCode: null, timedOut: false, durationMs: 0, output: `readiness: not run: ${reason}` }),
+    offline: () => false,
+    networkOff: null,
+    close: () => {},
+    unavailable: reason,
   };
 }
 
@@ -220,9 +260,11 @@ export async function runContract(
     opts.onResult?.(r);
   };
   const wanted = (c: ContractCommand) => c.component === "*" || opts.components.has(c.component);
-  // Lint runs before the build, so it never reads the build's output.
+  // Lint runs first, so it never reads the build's output; one that fails runs again after the build
+  // (below). A repo-wide command of a kind runs before the components' own, as CI builds the root
+  // first.
   const order: CommandKind[] = ["doctor", "install", "lint", "build", "start"];
-  const online = contract.filter((c) => order.includes(c.kind) && wanted(c)).sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+  const online = contract.filter((c) => order.includes(c.kind) && wanted(c)).sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || Number(b.component === "*") - Number(a.component === "*"));
   const offlineCmds = contract.filter((c) => !order.includes(c.kind) && wanted(c));
   const failedInstalls = new Set<string>();
   const blockedInstalls = new Set<string>();
@@ -235,7 +277,15 @@ export async function runContract(
     return failedInstalls.has("*") && !rescued.has(cmd.component) && !rescued.has("*");
   };
   const attempt = async (cmd: ContractCommand): Promise<PhaseResult | null> => {
-    if (cmd.fallbackFor && !blockedIds.has(cmd.fallbackFor)) return null;
+    if (cmd.fallbackFor && (ex.unavailable || !blockedIds.has(cmd.fallbackFor))) return null;
+    if (ex.unavailable) {
+      if (cmd.kind === "install") {
+        failedInstalls.add(cmd.component);
+        blockedInstalls.add(cmd.component);
+        blockedIds.add(cmd.id);
+      }
+      return { cmd, status: "not_run", outcome: null, diagnosis: null, note: `not run: ${ex.unavailable}`, blocked: ex.unavailable };
+    }
     const cutOff = (): PhaseResult => {
       if (cmd.kind === "install") {
         failedInstalls.add(cmd.component);
@@ -259,7 +309,7 @@ export async function runContract(
     }
     const watched = cmd.kind === "lint" || cmd.kind === "typecheck" ? snapshot(ex.root, opts.tree ?? ex.root, cmd.cwd) : null;
     const limit = capped(opts.budget, cmd.component, cmd.timeoutSec);
-    const out = await ex.exec(cmd.command, cmd.cwd, limit.sec, { imageUser: cmd.source.startsWith(".cursor/environment.json") });
+    const out = await ex.exec(cmd.command, cmd.cwd, limit.sec, { imageUser: cmd.source.startsWith(".cursor/environment.json"), registry: cmd.kind === "doctor" || cmd.kind === "install" });
     charge(opts.budget, cmd.component, out.durationMs);
     if (out.timedOut && limit.byBudget) return cutOff();
     // A check that changes the code it checks has to fail, and the code goes back for the steps after it.
@@ -299,8 +349,10 @@ export async function runContract(
   const firstOffline = results.length;
   const wentOffline = ex.offline();
   for (const first of beforeBuild.values()) {
+    // One build that passed is enough to try again: a sibling package's failing build shouldn't keep
+    // a lint that needs the root build's types from its second run.
     const built = results.filter((r) => r.cmd.kind === "build" && (r.cmd.component === first.cmd.component || r.cmd.component === "*" || first.cmd.component === "*"));
-    const again = built.length && built.every((r) => r.status === "pass") ? await attempt(first.cmd) : null;
+    const again = built.some((r) => r.status === "pass") ? await attempt(first.cmd) : null;
     if (again?.status === "pass") push({ ...again, note: "failed before the build and passed after it" });
     else push({ ...first, note: again ? "failed before the build and again after it" : first.note });
   }
@@ -324,6 +376,8 @@ export function evidenceFromPhase(audit: Audit, ex: Executor, r: PhaseResult, re
   else summary = `${r.cmd.kind} failed: ${r.diagnosis?.detail ?? "non-zero exit"}${counts && counts.failed ? ` (${counts.failed} of ${counts.total} tests failed)` : ""}`;
   if (r.status === "fail" && r.diagnosis?.cause === "registry" && audit.environment.registryEnv.length === 0) summary = `${r.cmd.kind} failed: registry credentials not provided (pass them with --registry-env)`;
   if (r.cmd.declared && r.status !== "not_run") summary += `; ran check-only, without the write flags in \`${r.cmd.declared}\``;
+  const failedIn = r.status === "fail" && r.cmd.component === "*" && ATTRIBUTED.has(r.cmd.kind) && r.outcome && !r.blocked ? failingComponents(r.outcome.output, r.cmd.cwd, audit.profile?.components.filter((c) => c.assessed) ?? [], ex.root) : null;
+  if (failedIn) summary += `; every failure is in ${failedIn.join(", ")}`;
   return addEvidence(audit, {
     checkId: map.check,
     condition: map.condition,
@@ -344,7 +398,39 @@ export function evidenceFromPhase(audit: Audit, ex: Executor, r: PhaseResult, re
     summary,
     diagnosis: r.diagnosis ?? undefined,
     blocked: r.blocked,
+    ...(failedIn ? { failedIn } : {}),
   });
+}
+
+const ATTRIBUTED = new Set<CommandKind>(["build", "lint", "typecheck", "test"]);
+
+// Files a failing run names as failing: a test runner's FAIL line (vitest, jest, node --test with
+// a file), pytest's FAILED, a TypeScript error, or an ESLint file header followed by an error.
+const FAILING_FILE = [
+  /^\s*(?:FAIL|×|✗|❯)\s+(\S+?\.[cm]?[jt]sx?)\b/gm,
+  /^FAILED\s+(\S+?\.py)::/gm,
+  /^(\S+?\.(?:[cm]?tsx?|vue|svelte))[(:]\d+[,:]\d+\)?:?\s+(?:-\s+)?error\b/gm,
+  /^(\/?\S+?\.[cm]?[jt]sx?)\n(?:\s+\d+:\d+\s+(?:warning|error)\b.*\n)*?\s+\d+:\d+\s+error\b/gm,
+];
+
+// The components a repo-wide command's failures land in, by the paths of the files that failed.
+// Null when the output names none, or names one outside every assessed component: then the failure
+// can't be pinned and counts against every component, as before.
+export function failingComponents(output: string, cwd: string, components: { id: string; path: string }[], root = "/work"): string[] | null {
+  const files = new Set<string>();
+  for (const re of FAILING_FILE) for (const m of output.matchAll(re)) files.add(m[1]);
+  if (files.size === 0) return null;
+  const owners = new Set<string>();
+  const byDepth = components.filter((c) => c.path !== ".").sort((a, b) => b.path.length - a.path.length);
+  for (const f of files) {
+    const absolute = [`${root}/`, "/work/"].find((p) => f.startsWith(p));
+    const rel = (absolute ? f.slice(absolute.length) : f).replace(/^\.\//, "");
+    const path = absolute || cwd === "." ? rel : join(cwd, rel);
+    const owner = byDepth.find((c) => path === c.path || path.startsWith(`${c.path}/`));
+    if (!owner) return null;
+    owners.add(owner.id);
+  }
+  return [...owners].sort();
 }
 
 // When the repo's declared image installs the tool this machine lacks, say so: it is the clearest
@@ -365,6 +451,8 @@ export interface ReplayOptions {
   budgetComponentMinutes: number;
   budgetTotalMinutes: number;
   log: (line: string) => void;
+  // The user's yes to host mode for this run; without it the opt-in variable decides.
+  allowHost?: boolean;
 }
 
 const FROZEN = /(\bci\b|--frozen|--immutable|--frozen-lockfile|\bpoetry (sync\b|install\b.*--sync))/;
@@ -461,15 +549,19 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
   let result: "pass" | "fail" | "not_run";
   let summary: string;
   const cutNote = cut ? `; the time budget cut off ${cut} of ${sites.length}` : "";
+  const need = killRate(rubric);
   if (counted.length < rubric.mutation.minForPass) {
     result = "not_run";
     summary = `only ${counted.length} planted faults gave a clear result; at least ${rubric.mutation.minForPass} are needed${cutNote}`;
   } else if (caught === counted.length) {
     result = "pass";
     summary = `caught ${caught} of ${counted.length} planted faults (tried: ${operators})${cutNote}`;
+  } else if (caught / counted.length >= need) {
+    result = "pass";
+    summary = `caught ${caught} of ${counted.length} planted faults, at or above the ${Math.round(need * 100)}% the rubric requires (tried: ${operators})${cutNote}; missed ${missed.length}${MISSED_AFTER_SEAL}`;
   } else {
     result = "fail";
-    summary = `caught ${caught} of ${counted.length} planted faults${cutNote}; missed ${missed.length}${MISSED_AFTER_SEAL}`;
+    summary = `caught ${caught} of ${counted.length} planted faults${need < 1 ? `, below the ${Math.round(need * 100)}% the rubric requires` : ""}${cutNote}; missed ${missed.length}${MISSED_AFTER_SEAL}`;
   }
   log(`  faults in ${comp.id}: ${summary}`);
   // Too few results because the budget ran out is the audit's limit, not weak tests.
@@ -478,6 +570,13 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
 }
 
 const MISSED_AFTER_SEAL = " (the sealed report says where)";
+
+// The share of planted faults the tests must catch. A rubric without mutation.killRate, every one
+// released so far, keeps the old rule: all of them.
+export function killRate(rubric: Rubric): number {
+  const rate = (rubric.mutation as { killRate?: number }).killRate;
+  return typeof rate === "number" && rate > 0 && rate <= 1 ? rate : 1;
+}
 
 // Next to the audit tree, outside the repository, and deleted with it once the seal copies it in.
 export function mutantsFile(tree: string): string {
@@ -505,7 +604,17 @@ export function revealMutants(audit: Audit, tree: string): void {
 
 const TOOL_SETUP_MS = 10 * 60 * 1000;
 
-export function makeExecutor(audit: Audit, copyDir: string, runtimePref: string, log: (s: string) => void, imageOverride?: string): Executor {
+// The last line of a runtime's error that says something: Docker ends with "Run 'docker run --help'".
+function startError(output: string): string {
+  const lines = output.trim().split("\n").map((l) => l.trim()).filter((l) => l && !/^Run '.+--help'/.test(l) && !/^See '.+--help'/.test(l));
+  return (lines.pop() ?? "no output").replace(/^docker: /, "").slice(0, 300);
+}
+
+// A clean container, or host mode when the user allowed it, or nothing: never a silent fallback to
+// the host. With nothing, every command is recorded as not run with the reason, so Level 1 is
+// unproven on this machine and the report says why.
+export function makeExecutor(audit: Audit, copyDir: string, runtimePref: string, log: (s: string) => void, imageOverride?: string, allowHost?: boolean): Executor {
+  assertPlatformSupported();
   const runtime = detectRuntime(runtimePref);
   let image = imageOverride ?? containerImage(audit.profile!, copyDir);
   let imageSource: Executor["imageSource"] = imageOverride ? "override" : "audit";
@@ -520,14 +629,20 @@ export function makeExecutor(audit: Audit, copyDir: string, runtimePref: string,
     image = tag;
     imageSource = "repo";
   }
+  let notStarted: string | null = null;
   if (runtime) {
-    const session = new ContainerSession(runtime, `readiness-${audit.id}-${randomHex(3)}`, image, copyDir, audit.environment.registryEnv);
+    const limits = probeLimits(runtime);
+    const session = new ContainerSession(runtime, `readiness-${audit.id}-${randomHex(3)}`, image, copyDir, audit.environment.registryEnv, hostUser(), limits);
     const started = session.start();
     if (started.ok) {
       session.enableCorepack();
       audit.environment.containerRuntime = runtime.bin;
       audit.environment.image = image;
-      log(`Replaying in a clean ${runtime.bin} container (${image}).`);
+      audit.environment.limits = limits;
+      const digest = digestOf(image);
+      if (digest) audit.environment.imageDigest = digest;
+      else delete audit.environment.imageDigest;
+      log(`Replaying in a clean ${runtime.bin} container (${image}${digest ? `, pinned at ${digest.slice(0, 19)}` : ""}; ${limits.cpus ? `${limits.cpus} CPUs, ` : ""}${limits.memoryMb} MB, ${limits.pids} processes).`);
       // Python components next to Node ones run in the Node image, which has python3 but no venv.
       if (image.startsWith("node:") && audit.profile!.components.some((c) => c.assessed && c.language === "py")) {
         const added = session.asImageUser("python3 -m venv /tmp/venv-probe >/dev/null 2>&1 || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv >/dev/null)", 600000);
@@ -538,20 +653,38 @@ export function makeExecutor(audit: Audit, copyDir: string, runtimePref: string,
       if (imageSource !== "repo") {
         for (const t of toolSetup(audit.profile!, copyDir)) {
           if (session.asImageUser(`command -v ${t.tool}`, 30000).ok) continue;
-          const added = session.asImageUser(t.install, TOOL_SETUP_MS);
+          const added = session.asImageUser(t.install, TOOL_SETUP_MS, { registry: true });
           (audit.environment.tools ??= []).push({ spec: t.spec, added: added.ok });
           log(added.ok ? `Added ${t.spec} to the image for the frozen install.` : `Couldn't add ${t.spec} to the image, so its install will be blocked: ${tail(added.output, 300)}`);
         }
       }
       session.reclaimHome();
+      delete audit.environment.notRun;
       return containerExecutor(session, copyDir, imageSource);
     }
-    log(`Could not start a container: ${started.output.trim().split("\n").pop()}`);
+    session.remove();
+    notStarted = `the audit's ${runtime.bin} container (${image}) didn't start: ${startError(started.output)}`;
+    log(`Could not start a container: ${startError(started.output)}`);
   }
-  audit.environment.containerRuntime = null;
-  audit.environment.image = null;
-  log("No container runtime: replaying in a fresh copy on the host. Level 1 can't be proved on this machine.");
-  return hostExecutor(copyDir, audit.environment.registryEnv, audit.environment.inheritEnv);
+  delete audit.environment.limits;
+  delete audit.environment.imageDigest;
+  if (hostAllowed(allowHost)) {
+    audit.environment.containerRuntime = null;
+    audit.environment.image = null;
+    audit.environment.hostMode = true;
+    delete audit.environment.notRun;
+    if (!audit.safety.some((s) => s.kind === "host_mode")) audit.safety.push({ id: `saf-${String(audit.safety.length + 1).padStart(3, "0")}`, kind: "host_mode", file: ".", detail: HOST_MODE_NOTE, blocking: false });
+    log(`${notStarted ? "No container" : "No container runtime"}: host mode is allowed, so the repo's commands run in a fresh copy on this machine. They can read this user's local files, and Level 1 can't be proved here.`);
+    return hostExecutor(copyDir, audit.environment.registryEnv, audit.environment.inheritEnv, "fresh_copy", true);
+  }
+  // A runtime that couldn't start the container stays recorded, so the report names the container
+  // and its error rather than a missing runtime.
+  audit.environment.containerRuntime = notStarted && runtime ? runtime.bin : null;
+  audit.environment.image = notStarted ? image : null;
+  const reason = notStarted ? `${notStarted}, and ${HOST_NOT_ALLOWED}` : HOST_NOT_ALLOWED;
+  audit.environment.notRun = reason;
+  log(`${notStarted ? "No container" : "No container runtime"}: nothing runs outside a container without the user's yes, so Level 1 is unproven on this machine (${reason}).`);
+  return unavailableExecutor(copyDir, reason);
 }
 
 export async function replay(audit: Audit, repo: string, tree: string, rubric: Rubric, opts: ReplayOptions): Promise<void> {
@@ -568,7 +701,7 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
   const before = new Map<string, string>();
   for (const f of profile.lockfiles) before.set(f, sha256(readText(join(copyDir, f))));
   if (opts.image) audit.environment.imageOverride = opts.image;
-  const ex = makeExecutor(audit, copyDir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride);
+  const ex = makeExecutor(audit, copyDir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost);
   const registryValues = registryValuesOf(audit);
   const components = new Set(profile.components.filter((c) => c.assessed && (!opts.component || c.id === opts.component)).map((c) => c.id));
   if (opts.component && components.size === 0) fail(`No assessed component named ${opts.component}`);

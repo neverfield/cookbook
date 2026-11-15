@@ -1,5 +1,5 @@
 {
-  "purpose": "A healthy app whose declared start command runs sudo, plus a package script that does. The safety check lists both without blocking. The environment setup still counts as a working setup with the sudo command flagged, and with no container runtime the host fallback never runs the sudo command.",
+  "purpose": "A healthy app whose declared start command runs sudo, plus a package script that does. The safety check lists both without blocking. The environment setup still counts as a working setup with the sudo command flagged. With no container runtime and no yes to host mode nothing runs, so no sudo command can run on the host; host mode refusing sudo is covered in tests/units.test.ts.",
   "runs": [
     {
       "name": "default",
@@ -39,7 +39,7 @@
       "assets": {
         ".cursor/environment.json": true
       },
-      "coverage": "Setup commands that use sudo weren't run on this machine\\."
+      "diagnosis": "not run: host mode wasn't allowed"
     }
   ]
 }

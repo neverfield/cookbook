@@ -103,9 +103,9 @@ describe("failures from the audit's own environment are blocked, not the repo's"
   });
 
   test("the container gets the host's proxy settings and CA files", () => {
-    const args = startArgs("c", "node:22", "/h", ["NPM_TOKEN"], { HTTPS_PROXY: "http://proxy:3128", NO_PROXY: "localhost", NODE_EXTRA_CA_CERTS: "/etc/corp/ca.pem", SSL_CERT_FILE: "relative.pem", HTTP_PROXY: "" }, (p) => p === "/etc/corp/ca.pem");
+    const args = startArgs("c", "node:22", "/h", null, { HTTPS_PROXY: "http://proxy:3128", NO_PROXY: "localhost", NODE_EXTRA_CA_CERTS: "/etc/corp/ca.pem", SSL_CERT_FILE: "relative.pem", HTTP_PROXY: "" }, (p) => p === "/etc/corp/ca.pem");
     const pairs = args.map((a, i) => `${a} ${args[i + 1]}`);
-    assert.ok(pairs.includes("-e HTTPS_PROXY") && pairs.includes("-e NO_PROXY") && pairs.includes("-e NPM_TOKEN"));
+    assert.ok(pairs.includes("-e HTTPS_PROXY") && pairs.includes("-e NO_PROXY"));
     assert.ok(pairs.includes("-e NODE_EXTRA_CA_CERTS") && pairs.includes("-v /etc/corp/ca.pem:/etc/corp/ca.pem:ro"));
     assert.ok(!args.includes("HTTP_PROXY") && !args.includes("SSL_CERT_FILE"), "unset or relative values aren't passed");
   });

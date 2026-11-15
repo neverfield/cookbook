@@ -13,6 +13,9 @@ import type { HistoryLine } from "../skill/agent-readiness/scripts/lib/types.ts"
 import { SKILL, commitAll, materialize, readiness } from "../support/tools/fixture.ts";
 import { makeAudit, outcomes, reportFor, stats } from "./helpers.ts";
 
+// These replays exercise host mode, which runs only on the user's yes.
+const HOST = { SA_READINESS_ALLOW_HOST: "1" };
+
 const rubric = loadRubric("2026-10-alpha");
 const L = (spec: Parameters<typeof makeAudit>[0], comp: string, act: "first_pr" | "bug_fixes" | "features") => componentLevel(rubric, statesOf(componentStates(makeAudit(spec), rubric, comp)), act).level;
 
@@ -101,7 +104,7 @@ describe("regressions from the four-model review of the mock report", () => {
     assert.equal(firstSeed.pinned, false);
     assert.notEqual(firstSeed.value, secondSeed.value, "a fresh seed for each audit");
     assert.equal(readiness(repo, ["scan"]).code, 0);
-    assert.equal(readiness(repo, ["replay", "--runtime", "none"]).code, 0);
+    assert.equal(readiness(repo, ["replay", "--runtime", "none"], HOST).code, 0);
     const draftText = readFileSync(join(repo, ".agent-readiness/work", id, "audit.json"), "utf8");
     const draft = JSON.parse(draftText);
     const tree = JSON.parse(readFileSync(join(repo, ".agent-readiness/work", id, "local.json"), "utf8")).tree;
@@ -127,7 +130,7 @@ describe("regressions from the four-model review of the mock report", () => {
     commitAll(flaky, "Add a flaky test");
     readiness(flaky, ["init"]);
     readiness(flaky, ["scan"]);
-    readiness(flaky, ["replay", "--runtime", "none"]);
+    readiness(flaky, ["replay", "--runtime", "none"], HOST);
     const out = readiness(flaky, ["status", "--json"]).out;
     assert.match(out, /passed once and failed on a second run/);
   });
@@ -138,7 +141,7 @@ describe("regressions from the four-model review of the mock report", () => {
     appendFileSync(join(copy, "scripts/lib/util.ts"), "\n// an edit after release\n");
     const repo = materialize("healthy-node");
     const cli = join(copy, "scripts/readiness.ts");
-    const run = (args: string[]) => readiness(repo, args, {}, cli);
+    const run = (args: string[]) => readiness(repo, args, HOST, cli);
     assert.equal(run(["audit", "--runtime", "none", "--no-mutants"]).code, 0);
     const v = run(["verify-seal"]);
     assert.equal(v.code, 2, v.out);
@@ -150,7 +153,7 @@ describe("regressions from the four-model review of the mock report", () => {
   test("registry variable names are recorded and their values never are", () => {
     const repo = materialize("needs-private-registry");
     const value = "registry-value-" + "7d3f9a".repeat(3);
-    const r = readiness(repo, ["audit", "--runtime", "none", "--no-mutants", "--registry-env", "NPM_TOKEN"], { NPM_TOKEN: value });
+    const r = readiness(repo, ["audit", "--runtime", "none", "--no-mutants", "--registry-env", "NPM_TOKEN"], { ...HOST, NPM_TOKEN: value });
     assert.equal(r.code, 0, r.out);
     const dir = join(repo, ".agent-readiness/history/audits");
     const audit = readFileSync(join(dir, readdirSync(dir)[0], "audit.json"), "utf8");
