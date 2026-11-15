@@ -62,13 +62,13 @@
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
-          "level": 2,
+          "level": 1,
           "outcome": "proven",
           "unproven": false,
-          "couldBe": null,
+          "couldBe": 2,
           "components": {
             "zustand": {
-              "level": 2,
+              "level": 1,
               "unproven": false
             }
           },
