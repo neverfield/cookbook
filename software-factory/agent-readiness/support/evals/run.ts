@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ApiExhaustedError, apiRefusals, modelCatalog } from "./lib/api.ts";
 import { HILL_CLIMB_MIN_REPEATS, compare, crashedRun, isInfraError, summarize, withControls, writeJunit } from "./lib/baseline.ts";
 import type { Baseline } from "./lib/baseline.ts";
 import { currentBinding } from "./lib/binding.ts";
@@ -117,8 +118,17 @@ async function worker(flags: Record<string, string | true>): Promise<void> {
   const t = c.attack ? runAttack(ws, c) : arm === "scripted" ? scriptedAudit(ws, c) : await runWithSdk(ws, c, model, process.env.CURSOR_API_KEY!, timeoutMs, { skill: arm !== "skill-off" });
   const gates = t.error && c.attack ? [{ name: "the attack ran", pass: false, detail: t.error }] : gradeCase(ws, t, arm === "no-docker" ? { ...c, gates: NO_DOCKER_GATES } : c);
   const report = latestReport(ws);
-  const [h, p] = c.attack ? [NOT_JUDGED, NOT_JUDGED] : await judgeRun(report, arm, judgeModels, samples);
-  const byModel = Object.keys(h.byModel).length ? { judgeByModel: h.byModel, pageByModel: p.byModel } : {};
+  let judgeError: string | undefined;
+  const [h, p] = c.attack
+    ? [NOT_JUDGED, NOT_JUDGED]
+    : await judgeRun(report, arm, judgeModels, samples).catch((e: Error): [PanelResult, PanelResult] => {
+        // Kept out of run.error, so the parent doesn't redo the agent's run as an infrastructure loss.
+        if (!(e instanceof ApiExhaustedError)) throw e;
+        judgeError = e.message;
+        const none: PanelResult = { score: null, reasons: [`judge refused: ${e.message}`], byModel: {} };
+        return [none, none];
+      });
+  const byModel = { ...(Object.keys(h.byModel).length ? { judgeByModel: h.byModel, pageByModel: p.byModel } : {}), ...(judgeError ? { judgeError } : {}) };
   const run: CaseRun = { id: c.id, repeat: Number(flags.repeat), model, driver: t.driver, arm, judgeModel: c.attack || !judgeModels.length ? null : judgeModels.join(","), rubric: report?.audit.rubric ?? null, isolation: iso.id, workspace: ws.dir, grade: { gates, soft: { judge: h.score, judgeReasons: h.reasons, page: p.score, pageReasons: p.reasons, ...byModel, wallMs: t.durationMs, toolCalls: t.toolCalls.length, tokens: t.tokens } }, error: t.error };
   writeResult(String(flags.out), { run, trajectory: t });
 }
@@ -362,6 +372,8 @@ async function main(): Promise<void> {
     if (!drivenArms.length) driven = [];
     if (!driven.length && !scripted.length) return;
   }
+  // The model catalog is fetched once here and handed to every worker through the environment.
+  if (driven.length && process.env.CURSOR_API_KEY) await modelCatalog(process.env.CURSOR_API_KEY);
   const judges = driven.length ? await pickJudges(flags, models[0]) : null;
   // Recorded before any run starts, so a change made while the runs go can't be passed off as measured.
   const binding = currentBinding();
@@ -382,6 +394,14 @@ async function main(): Promise<void> {
     }),
   );
   const done = collect(outDir);
+  // A run the API refused after every retry, or a judge call it refused, would leave a draw out of
+  // the summary. The run fails, and no baseline is written from it.
+  const refused = apiRefusals(done);
+  for (const r of refused) process.stdout.write(`FAIL ${r}\n`);
+  if (refused.length) {
+    process.stdout.write(`FAIL ${refused.length} run${refused.length === 1 ? "" : "s"} lost a call the API kept refusing; rerun them. No baseline is written from this run.\n`);
+    delete flags["write-baseline"];
+  }
   const drivenIds = new Set(driven.map((c) => c.id));
   const of = (arm: Arm, m?: string) => done.filter((r) => drivenIds.has(r.id) && (r.arm ?? "agent") === arm && (!m || r.model === m));
   let code = 0;
@@ -400,7 +420,7 @@ async function main(): Promise<void> {
     const own = driven.length ? Object.fromEntries(Object.entries(rest).filter(([k]) => k !== "json" && k !== "junit")) : rest;
     code = report(done.filter((r) => !drivenIds.has(r.id)), own, { model: "scripted", driver: "scripted", repeats, holdout }) || code;
   }
-  process.exitCode = code;
+  process.exitCode = refused.length ? Math.max(code, 1) : code;
 }
 
 main().catch((e: Error) => {

@@ -119,6 +119,17 @@ npm run evals -- --release-check support/evals/runs/result.json --release-record
 
 `compare()` against the baseline still runs alongside, to catch drift case by case. The release verdict doesn't depend on a baseline.
 
+### API rate limits
+
+Every Cursor API call the evals make goes through [lib/api.ts](lib/api.ts):
+
+- **One model catalog per process.** The catalog is fetched once, retried if refused, and published as `CURSOR_SDK_LOCAL_MODEL_CATALOG_JSON`. The SDK then checks each `Agent.create` against it instead of calling the `get_models` endpoint (30 calls a minute per key). `run.ts` fetches it before spawning workers, so the workers inherit it and make no catalog calls of their own.
+- **A shared limiter.** At most `SA_READINESS_API_CONCURRENCY` calls run at once in a process (default 4), and their starts are spaced at least `SA_READINESS_API_GAP_MS` apart (default 250).
+- **Retries.** A rate limit, 502, 503, 504 or network reset is retried up to `SA_READINESS_API_ATTEMPTS` times (default 8). The wait is full jitter on an exponential step from 2 s, capped at 90 s, or `Retry-After` plus under a second when the API sends one.
+- **Failing loudly.** A call still refused after the last attempt throws `ApiExhaustedError`:
+  - `npm run labels` stops and writes no `last-check.json`. It does the same when any judge call gave no score, so a calibration never has a draw missing.
+  - `npm run evals` keeps the agent's run but marks the judge failure, prints a `FAIL` line for it and for any run lost to rate limits, writes no baseline, and exits 1.
+
 ### Planted faults and the kill rate
 
 Faults are chosen from the code ([../../skill/agent-readiness/scripts/lib/mutate.ts](../../skill/agent-readiness/scripts/lib/mutate.ts) `chooseSites()`): the pick is seeded by a digest of the files the tests import and of the tests themselves, so the same code gets the same faults and a fault result changes only when the code does. A non-empty seed, such as an eval's pinned seed or the grader's own for `freshFaultsCaught`, salts that digest to get other faults. Faults never land in docstrings, block comments or template literals that span lines, type-only lines, or timing constants, and never as a boundary flip on a clamp guard that returns its own bound, which no test can tell apart. Tests reach code through relative imports, tsconfig `paths` and `baseUrl`, package.json `imports`, and barrel files; a target in `dist/` or `build/` moves to its source under `src/`, or is dropped.

@@ -57,6 +57,8 @@ export interface Grade {
     // Each judge's median score when a panel judged the run (judge.ts judgePanel).
     judgeByModel?: Record<string, number | null>;
     pageByModel?: Record<string, number | null>;
+    // Set when a judge call was still refused after every retry: the run fails loudly (run.ts).
+    judgeError?: string;
     wallMs: number;
     toolCalls: number;
     tokens: number | null;
