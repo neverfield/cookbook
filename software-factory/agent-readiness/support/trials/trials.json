@@ -384,9 +384,17 @@
               "level": 0,
               "unproven": false
             },
+            "dag-task-runner": {
+              "level": 0,
+              "unproven": false
+            },
             "grok-coding-agent-cli": {
               "level": 0,
               "unproven": true
+            },
+            "quickstart": {
+              "level": 0,
+              "unproven": false
             },
             "agent-readiness": {
               "level": 0,
@@ -398,8 +406,6 @@
             }
           },
           "notAssessed": [
-            "dag-task-runner",
-            "quickstart",
             "self-hosted-cloud-agent-ecs-terraform",
             "terraform"
           ],
