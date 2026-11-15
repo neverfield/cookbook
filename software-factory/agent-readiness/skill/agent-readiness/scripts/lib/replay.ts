@@ -37,6 +37,28 @@ export interface Executor {
   close(): void;
   // Set when nothing may run here, with the reason: every command is recorded as not run, blocked by it.
   unavailable?: string;
+  // exec without the ban on rerunning a command line that timed out: a run with a planted fault is
+  // different code, even when the command line is the same.
+  execFresh?: Executor["exec"];
+}
+
+export const RAN_OUT_BEFORE = "not run again: this command line timed out earlier in this audit";
+
+// A command line that timed out once is never run again in the same audit, on any executor, so a
+// server or a stalled install can't spend its timeout over and over. The repeat returns at once,
+// as timed out, with the reason in its output.
+export function banRepeats(ex: Executor, timedOut: Set<string>): Executor {
+  if (ex.execFresh) return ex;
+  const raw = ex.exec;
+  ex.execFresh = raw;
+  ex.exec = async (command, cwd, timeoutSec, opts) => {
+    const key = `${cwd}\u0000${command}`;
+    if (timedOut.has(key)) return { exitCode: null, timedOut: true, durationMs: 0, output: `readiness: ${RAN_OUT_BEFORE}` };
+    const out = await raw(command, cwd, timeoutSec, opts);
+    if (out.timedOut) timedOut.add(key);
+    return out;
+  };
+  return ex;
 }
 
 export const SUDO = /(^|[\s;&|(`]|\$\()sudo(\s|$)/;
@@ -585,8 +607,18 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
   const mutants: Mutant[] = [];
   let n = audit.mutants.filter((m) => m.component === comp.id).length + 1;
   let cut = 0;
+  // Runs with a planted fault that timed out on their own, not by the budget. Two in a row means the
+  // runs stall whatever the fault, so the rest aren't run.
+  let stalls = 0;
+  let stalledOut = 0;
+  const fresh = ex.execFresh ?? ex.exec;
   for (const site of sites) {
     const id = `mut-${comp.id}-${n++}`;
+    if (stalls >= 2) {
+      stalledOut++;
+      mutants.push({ id, component: comp.id, file: site.file, line: site.line, operator: site.operator, before: redact(site.before), after: redact(site.after), result: "not_run", exitCodes: [] });
+      continue;
+    }
     if (overBudget(budget, comp.id) || budgetLeftSec(budget, comp.id) < 1) {
       cut++;
       mutants.push({ id, component: comp.id, file: site.file, line: site.line, operator: site.operator, before: redact(site.before), after: redact(site.after), result: "not_run", exitCodes: [] });
@@ -599,7 +631,7 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
     let result: Mutant["result"] = "survived";
     try {
       if (probe) {
-        const compiled = await ex.exec(probe.command, probe.cwd, capped(budget, comp.id, runSec).sec);
+        const compiled = await fresh(probe.command, probe.cwd, capped(budget, comp.id, runSec).sec);
         charge(budget, comp.id, compiled.durationMs);
         if (compiled.exitCode !== 0 && !compiled.timedOut && compileFailed(comp, compiled.output, "typecheck")) {
           codes.push(compiled.exitCode ?? -1);
@@ -608,11 +640,12 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
       }
       for (let run = 0; run < rubric.mutation.flakeRuns && result !== "discarded"; run++) {
         const limit = capped(budget, comp.id, runSec);
-        const out = await ex.exec(testCmd.command, testCmd.cwd, limit.sec);
+        const out = await fresh(testCmd.command, testCmd.cwd, limit.sec);
         charge(budget, comp.id, out.durationMs);
         codes.push(out.exitCode ?? -1);
         if (out.timedOut) {
           if (limit.byBudget) cut++;
+          else stalls++;
           result = "not_run";
           break;
         }
@@ -637,7 +670,7 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
   const caught = counted.filter((m) => m.result === "caught").length;
   const operators = [...new Set(mutants.map((m) => m.operator))].join(", ");
   const missed = mutants.filter((m) => m.result === "survived").map((m) => m.id);
-  const cutNote = cut ? `; the time budget cut off ${cut} of ${sites.length}` : "";
+  const cutNote = (cut ? `; the time budget cut off ${cut} of ${sites.length}` : "") + (stalledOut ? `; ${stalledOut} weren't run after two runs with planted faults timed out` : "");
   const need = killRateOf(rubric.mutation);
   const result = faultsVerdict(caught, counted.length, rubric.mutation);
   const share = need < 1 ? ` the ${Math.round(need * 100)}% the rubric requires` : "";
@@ -651,7 +684,7 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
           : `caught ${caught} of ${counted.length} planted faults${share ? `, below${share}` : ""}${cutNote}; missed ${missed.length}${MISSED_AFTER_SEAL}`;
   log(`  faults in ${comp.id}: ${summary}`);
   // Too few results because the budget ran out is the audit's limit, not weak tests.
-  const blocked = cut && result === "not_run" ? { blocked: BUDGET_OUT } : {};
+  const blocked = cut && result === "not_run" ? { blocked: BUDGET_OUT } : stalledOut && result === "not_run" ? { blocked: "test runs with planted faults kept timing out, so the fault check couldn't finish" } : {};
   addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp.id, strength: ex.strength, where: ex.where, result, summary, image: ex.image ?? undefined, ...(missed.length ? { missedFaults: missed } : {}), ...blocked });
 }
 
@@ -713,6 +746,8 @@ export interface Executors {
 }
 
 function executorSet(groups: ExecutorGroup[], profile: Profile): Executors {
+  const timedOut = new Set<string>();
+  for (const g of groups) banRepeats(g.ex, timedOut);
   const forComponent = (id: string) => (groups.find((g) => g.components.includes(id)) ?? groups[0]).ex;
   const top = profile.components.filter((c) => c.assessed).sort((a, b) => b.changeShare - a.changeShare)[0];
   const repo = groups.find((g) => g.repoWide)?.ex ?? (top ? forComponent(top.id) : groups[0].ex);
@@ -982,6 +1017,14 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
         if (second) charge(budget, comp, second.durationMs);
         if (!second || (second.timedOut && limit.byBudget)) {
           addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "faults weren't planted: the time budget ran out first", blocked: BUDGET_OUT });
+          continue;
+        }
+        // The unmutated tests timing out means every run with a planted fault would too: the fault
+        // check is unproven here, said once, rather than a timeout per fault.
+        if (second.timedOut) {
+          const why = diagnose(second.output, true, "test").detail;
+          const stalled = `the unmutated test run timed out (${why}), so each planted fault would time out too`;
+          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `faults weren't planted: ${stalled}`, blocked: stalled });
           continue;
         }
         if (second.exitCode !== 0 || (countTests(profile, comp, second.output)?.failed ?? 0) > 0) {

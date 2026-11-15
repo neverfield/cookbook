@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { isAbsolute } from "node:path";
+import { IDLE_MARK, IDLE_OFFLINE } from "./diagnose.ts";
 import { pinnedRef } from "./images.ts";
 import { runCommand } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
@@ -107,6 +108,13 @@ export function execArgs(name: string, command: string, cwd: string, user: strin
   return ["exec", ...(user ? ["-u", user] : []), "-w", dir, ...vars, name, ...loginShell(command, true)];
 }
 
+// Prints "idle" when the command's processes used no CPU over two seconds, "busy" otherwise: user
+// plus system ticks from /proc/<pid>/stat, summed over every process carrying the command's id.
+export function idleCommand(execId: string): string {
+  const ticks = `t=0; for p in /proc/[0-9]*; do tr '\\0' '\\n' < "$p/environ" 2>/dev/null | grep -qx '${EXEC_ID}=${execId}' || continue; s=$(sed 's/^.*) //' "$p/stat" 2>/dev/null) || continue; set -- $s; t=$((t + \${12:-0} + \${13:-0})); done; echo $t`;
+  return `a=$(${ticks}); sleep 2; b=$(${ticks}); [ "$a" = "$b" ] && echo idle || echo busy`;
+}
+
 // Run as the same user as the command, which may read its processes' environment.
 export function killCommand(execId: string): string {
   return `for p in /proc/[0-9]*; do tr '\\0' '\\n' < "$p/environ" 2>/dev/null | grep -qx '${EXEC_ID}=${execId}' && kill -9 "\${p#/proc/}" 2>/dev/null; done; true`;
@@ -179,6 +187,8 @@ export class ContainerSession {
   // Whether the ordinary user has an /etc/passwd line in the container; null when commands run as
   // the image's own user.
   userEntry: UserEntry | null = null;
+  // Set once disconnectNetwork() has cut every network.
+  offline = false;
 
   constructor(runtime: Runtime, name: string, image: string, hostDir: string, registryEnv: string[], user: string | null = hostUser(), limits: Limits | null = null) {
     this.runtime = runtime;
@@ -208,8 +218,12 @@ export class ContainerSession {
     const user = opts.imageUser ? null : this.user;
     const execId = randomHex(6);
     const argv = [this.runtime.bin, ...execArgs(this.name, command, cwd, user, opts.registry ? this.registryEnv : [], execId)].map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(" ");
-    const out = await runCommand(argv, process.cwd(), process.env as Record<string, string>, timeoutSec);
-    if (out.timedOut) spawnSync(this.runtime.bin, ["exec", ...(user ? ["-u", user] : []), this.name, "bash", "-c", killCommand(execId)], { encoding: "utf8", timeout: 30000 });
+    let out = await runCommand(argv, process.cwd(), process.env as Record<string, string>, timeoutSec);
+    if (out.timedOut) {
+      const idle = spawnSync(this.runtime.bin, ["exec", ...(user ? ["-u", user] : []), this.name, "bash", "-c", idleCommand(execId)], { encoding: "utf8", timeout: 15000 });
+      if ((idle.stdout ?? "").trim() === "idle") out = { ...out, output: `${out.output}\n${IDLE_MARK}: no CPU in its last 2 seconds${this.offline ? `, ${IDLE_OFFLINE}` : ""}\n` };
+      spawnSync(this.runtime.bin, ["exec", ...(user ? ["-u", user] : []), this.name, "bash", "-c", killCommand(execId)], { encoding: "utf8", timeout: 30000 });
+    }
     if (opts.imageUser && this.user) {
       this.asImageUser(reclaimCommand(this.user, ["/work"]));
       this.reclaimHome();
@@ -239,7 +253,8 @@ export class ContainerSession {
     if (r.status !== 0) return false;
     for (const net of r.stdout.trim().split(/\s+/).filter(Boolean)) spawnSync(this.runtime.bin, disconnectArgs(this.name, net), { encoding: "utf8" });
     const probe = this.asImageUser('for i in /sys/class/net/*; do [ -f "$i/operstate" ] && echo "$(basename "$i") $(cat "$i/operstate")"; done; true', 30000);
-    return probe.ok && probe.output.trim().split("\n").every((l) => l.startsWith("lo ") || l.endsWith(" down"));
+    this.offline = probe.ok && probe.output.trim().split("\n").every((l) => l.startsWith("lo ") || l.endsWith(" down"));
+    return this.offline;
   }
 
   // The work tree is the audit's throwaway copy, so what root left in it is deleted from inside the
