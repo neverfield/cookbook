@@ -24,13 +24,13 @@
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
-          "level": 2,
+          "level": 1,
           "outcome": "proven",
           "unproven": false,
           "couldBe": null,
           "components": {
             "ms": {
-              "level": 2,
+              "level": 1,
               "unproven": false
             }
           },
@@ -208,13 +208,13 @@
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
-          "level": 1,
+          "level": 2,
           "outcome": "proven",
           "unproven": false,
           "couldBe": null,
           "components": {
             "commander": {
-              "level": 1,
+              "level": 2,
               "unproven": false
             }
           },
