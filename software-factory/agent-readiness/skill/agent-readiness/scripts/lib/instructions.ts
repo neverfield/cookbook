@@ -5,6 +5,7 @@ import { redact, tail } from "./redact.ts";
 import { charge, overBudget } from "./replay.ts";
 import type { Budget, Executor } from "./replay.ts";
 import { SUDO_SHIM_MARK } from "./run.ts";
+import { makeRecipe } from "./static.ts";
 import { CUT_OFF } from "./scope.ts";
 import type { Audit } from "./types.ts";
 import { existsExact, sha256 } from "./util.ts";
@@ -12,14 +13,69 @@ import { applyWaivers } from "./waivers.ts";
 
 export const INSTRUCTION_TIMEOUT_SEC = 300;
 
-// `npm test`, `npm run test` and `pnpm test` all run the test script; anything else compares as written.
-function commandKey(cmd: string): string {
-  const m = cmd.trim().match(/^(npm|pnpm|yarn|bun)\s+(?:run(?:-script)?\s+)?([\w:.-]+)\s*$/);
-  return m && !["install", "i", "ci", "add"].includes(m[2]) ? `script:${m[2]}` : cmd.trim().replace(/\s+/g, " ");
+// Flags of the test runners below that take the next word as their value.
+const VALUE_FLAGS = new Set(["-run", "-skip", "-timeout", "-tags", "-p", "-parallel", "-count", "-coverprofile", "-covermode", "-coverpkg", "-bench", "-benchtime", "-exec", "--package", "-p", "--features", "--target", "--manifest-path", "-k", "-m", "--project", "--configuration", "-c", "--filter", "--framework", "--format", "-f", "--require", "-r", "--tag", "-t", "--seed"]);
+
+// What a test run selects, without its flags: the tool and the packages or paths it names.
+// `go test ./...` and `go test -count=1 -v ./...` are one run; so are `pytest` and
+// `uv run pytest -q`, `./gradlew test` and `gradle test --no-daemon`.
+function testRunKey(cmd: string): string | null {
+  const words = cmd.trim().split(/\s+/).filter((w) => !/^[A-Za-z_]\w*=/.test(w));
+  while (words.length > 1 && /^(uv|poetry|pipenv|hatch|pdm) run$|^bundle exec$/.test(`${words[0]} ${words[1]}`)) words.splice(0, 2);
+  const tool = words[0]?.replace(/^\.\//, "").replace(/^.*\/(python3?|pytest|phpunit|rspec)$/, "$1");
+  const positional = (from: number) => {
+    const out: string[] = [];
+    for (let i = from; i < words.length; i++) {
+      const w = words[i];
+      if (w === "--") break;
+      if (w.startsWith("-")) {
+        if (VALUE_FLAGS.has(w)) i++;
+        continue;
+      }
+      out.push(w);
+    }
+    return out.sort().join(" ");
+  };
+  if (tool === "go" && words[1] === "test") return `go-test:${positional(2) || "."}`;
+  if (tool === "cargo" && words[1] === "test") {
+    // Which packages run is part of what the run selects.
+    const picked = words.flatMap((w, i) => (w === "-p" || w === "--package" ? [`p=${words[i + 1]}`] : w.startsWith("--package=") ? [`p=${w.slice(10)}`] : w === "--workspace" || w === "--all" ? ["workspace"] : [])).sort().join(" ");
+    return `cargo-test:${picked}|${positional(2)}`;
+  }
+  if (tool === "pytest") return `pytest:${positional(1)}`;
+  if (/^python3?$/.test(tool ?? "") && words[1] === "-m" && words[2] === "pytest") return `pytest:${positional(3)}`;
+  if (/^(mvn|mvnw)$/.test(tool ?? "")) return `maven:${positional(1)}`;
+  if (/^(gradle|gradlew)$/.test(tool ?? "")) return `gradle:${positional(1)}`;
+  if (tool === "dotnet" && words[1] === "test") return `dotnet-test:${positional(2)}`;
+  if (tool === "phpunit") return `phpunit:${positional(1)}`;
+  if (tool === "rspec") return `rspec:${positional(1)}`;
+  if (tool === "rake" && words[1] === "test") return "rake:test";
+  return null;
 }
 
-function sameAsCheck(audit: Audit, text: string, cwd: string): { id: string; kind: string; result: string } | null {
-  const key = commandKey(text);
+// `npm test`, `npm run test` and `pnpm test` all run the test script; a test runner's command is
+// keyed by what it selects; anything else compares as written.
+function commandKey(cmd: string): string {
+  const m = cmd.trim().match(/^(npm|pnpm|yarn|bun)\s+(?:run(?:-script)?\s+)?([\w:.-]+)\s*$/);
+  if (m && !["install", "i", "ci", "add"].includes(m[2])) return `script:${m[2]}`;
+  return testRunKey(cmd) ?? cmd.trim().replace(/\s+/g, " ");
+}
+
+// The key a documented command is compared with the contract's by, following a one-line Make target.
+export function instructionKey(text: string, tree: string, cwd: string): string {
+  return commandKey(throughMake(text, tree, cwd));
+}
+
+// `make test` whose recipe is one command is that command, so its result is the check's too.
+function throughMake(text: string, tree: string, cwd: string): string {
+  const target = text.trim().match(/^make\s+([\w.-]+)\s*$/)?.[1];
+  if (!target) return text;
+  const lines = makeRecipe(tree, cwd, target).split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  return lines.length === 1 ? lines[0] : text;
+}
+
+function sameAsCheck(audit: Audit, text: string, cwd: string, tree: string): { id: string; kind: string; result: string } | null {
+  const key = instructionKey(text, tree, cwd);
   for (const k of audit.contract) {
     if (k.kind === "start" || k.kind === "doctor" || commandKey(k.declared ?? k.command) !== key || normalize(k.cwd) !== normalize(cwd)) continue;
     const ev = [...audit.evidence].reverse().find((e) => e.contractId === k.id && e.where !== "static");
@@ -52,7 +108,7 @@ export async function replayInstructions(audit: Audit, executors: Executor | ((c
     const cwd = existsExact(copyDir, wanted) ? wanted : ".";
     // The same command a check already ran, such as `npm run test` next to the test check's
     // `npm test`: its result is that check's, counted once, there.
-    const same = sameAsCheck(audit, item.text, cwd);
+    const same = sameAsCheck(audit, item.text, cwd, copyDir);
     if (same) {
       item.cwd = cwd;
       if (same.result === "pass") {

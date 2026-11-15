@@ -11,7 +11,8 @@ const SHELL_LANGS = new Set(["", "sh", "bash", "shell", "console", "zsh", "termi
 const PATH_LIKE = /^(?:\.{1,2}\/)[\w./-]+$|^[\w.-]+(?:\/[\w.-]+)*\/$|^(?:[\w.-]+\/)*[\w.-]+\.(md|mdc|ts|tsx|js|mjs|cjs|json|py|ya?ml|sh|toml|txt|sql)$/;
 
 const INSTALL = /^(npm (ci|install|i)\b|pnpm (install|i)\b|yarn( install)?\s*$|yarn install\b|corepack \w+ install\b|bun (install|i)\b|pip3? install\b|python3? -m pip install\b|uv sync\b|poetry (install|sync)\b)/;
-const LONG_RUNNING = /\b(run )?(dev|start|serve|watch)(\s|$)|--watch\b|compose up\b|docker run\b/;
+// A server or watcher that never exits: `npm run dev`, `npm run start:sse`, `make serve`, `--watch`.
+const LONG_RUNNING = /\b(run )?(dev|start|serve|watch)([:_-][\w:.-]*)?(\s|$)|--watch\b|compose up\b|docker run\b/;
 const NETWORK_PIPED = /\b(curl|wget)\b[^|;&]*\|\s*(sudo\s+)?(ba|z)?sh\b/;
 const DESTRUCTIVE = /rm -rf\s+(\/|~|\*|\$HOME)|\bdrop (database|table)\b|db:(reset|drop)|migrate(:| )reset|\btruncate\b|prisma migrate reset/i;
 const DEPLOY = /\b(npm|pnpm|yarn) publish\b|\bdeploy\b|vercel --prod|firebase deploy|terraform (apply|destroy)|kubectl (apply|delete)|helm (upgrade|install)|gh release create|fly deploy|seed-prod/i;
@@ -112,12 +113,7 @@ function inLinkText(raw: string, start: number, end: number): boolean {
   return open >= 0 && raw.indexOf("]", open) >= end && /^[^[]*\]\(/.test(raw.slice(end));
 }
 
-const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+/;
 const BACK_TO_ROOT = /\b(root (project )?(directory|folder)|repo(sitory)? root|top[- ]level (directory|folder))\b/i;
-
-function leadingSpaces(raw: string): number {
-  return raw.match(/^\s*/)![0].length;
-}
 
 function indentOf(raw: string): number {
   return raw.match(/^\s*(?:(?:[-*+]|\d+[.)])\s+)?/)?.[0].length ?? 0;
@@ -133,9 +129,9 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
   const headings: { level: number; text: string }[] = [];
   let away: { target: string; indent: number } | null = null;
   // A folder of this repo a step says to work in, such as "Navigate to the `ui` directory". It holds
-  // for the step's own block: its sibling steps, what is indented under it and the code blocks after
-  // it, until the next paragraph at its indent, a heading, or a line that says to go back to the root.
-  let within: { dir: string; indent: number } | null = null;
+  // to the end of the step's section (the next heading of the same or a higher level), or until a
+  // line says to work from the root again, such as "(while in the root project directory)".
+  let within: { dir: string; level: number } | null = null;
   lines.forEach((raw, i) => {
     const lineNo = i + 1;
     if (inFrontmatter) {
@@ -143,7 +139,6 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
       return;
     }
     const fence = raw.match(/^\s*```(\w*)/);
-    if (!inFence && within && raw.trim() && !fence && !LIST_ITEM.test(raw) && leadingSpaces(raw) <= within.indent) within = null;
     if (!inFence && within && BACK_TO_ROOT.test(raw)) within = null;
     if (!inFence && away && raw.trim() && indentOf(raw) <= away.indent && !fence) away = null;
     if (fence) {
@@ -174,14 +169,14 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
       while (headings.length && headings[headings.length - 1].level >= level) headings.pop();
       headings.push({ level, text: heading[2].replace(/`/g, "") });
       away = null;
-      within = null;
+      if (within && level <= within.level) within = null;
     }
     const scope = raw.match(ELSEWHERE_CUE);
     if (scope && opts.exists) {
       const target = scope[3].replace(/\/$/, "");
       const named = Boolean(scope[4]) || /^(navigate|go|switch|cd)/i.test(scope[1]);
       if (!opts.exists(target) && (target.includes("/") || scope[4])) away = { target: scope[3], indent: indentOf(raw) };
-      else if (opts.exists(target) && named && !/\.\w+$/.test(target)) within = { dir: target, indent: leadingSpaces(raw) };
+      else if (opts.exists(target) && named && !/\.\w+$/.test(target)) within = { dir: target, level: headings.length ? headings[headings.length - 1].level : 0 };
     }
     for (const m of raw.matchAll(/`([^`]+)`/g)) {
       const span = m[1].trim();
@@ -538,11 +533,17 @@ const MACHINE_PATH = /(^|\s|=)(~\/|\$HOME\b|\/Users\/|\/home\/[a-z])/;
 
 export const ELEVATED = /(^|[\s;&|(`]|\$\()sudo(\s|$)/;
 
-function categorize(cmd: string): InstructionItem["category"] {
+// `tree` and `dir` let a Make target whose recipe only launches a server count as long-running too.
+function categorize(cmd: string, tree?: string, dir?: string): InstructionItem["category"] {
   if (isRisky(cmd)) return "risky";
   if (ELEVATED.test(cmd)) return "needs_access";
   if (INSTALL.test(cmd)) return "install";
   if (LONG_RUNNING.test(cmd)) return "long_running";
+  const target = tree !== undefined ? cmd.trim().match(/^make\s+([\w.-]+)\s*$/)?.[1] : undefined;
+  if (target) {
+    const recipe = makeRecipe(tree!, dir ?? ".", target).split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+    if (recipe.length > 0 && recipe.every((l) => LONG_RUNNING.test(l))) return "long_running";
+  }
   if (MACHINE_PATH.test(cmd)) return "needs_access";
   return "replay";
 }
@@ -727,7 +728,7 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
         const w = writesFiles(e.text, tree, fileDir, profile);
         return w ? { reason: w, rule: "rewrites" } : null;
       })());
-      const category = skip ? "skipped" : categorize(e.text);
+      const category = skip ? "skipped" : categorize(e.text, tree, e.within ?? fileDir);
       let result: InstructionItem["result"];
       let reason: string | undefined;
       let rule = s.rule;
