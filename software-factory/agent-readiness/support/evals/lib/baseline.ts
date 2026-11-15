@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { bootstrapDiff, bootstrapMean, kOfN, wilson } from "./stats.ts";
 import type { MeanCi, Rate } from "./stats.ts";
+import type { Binding } from "./binding.ts";
 import type { Arm, CaseRun } from "./types.ts";
 
 // What produced a baseline. compare() refuses to read a run made with a different one as a trend.
@@ -14,6 +15,8 @@ export interface Instrument {
   judgePrompt: string | null;
   // Which rules and skills the agent could load (isolation.ts); null for runs from before it was recorded.
   isolation: string | null;
+  // Calls per judge model per report, whose median is that judge's score; absent before the panel.
+  judgeSamples?: number | null;
 }
 
 export interface CaseSummary {
@@ -56,6 +59,9 @@ export interface RunRow {
   judge: number | null;
   page: number | null;
   judgeModel: string | null;
+  // Each judge's median score, when a panel judged the run.
+  judgeByModel?: Record<string, number | null>;
+  pageByModel?: Record<string, number | null>;
   infraLost: boolean;
   error: string | null;
 }
@@ -63,6 +69,9 @@ export interface RunRow {
 export interface Lift {
   // Agent pass rate minus the control's, over every usable case-run.
   pooled: number | null;
+  // Per-case all-gates pass-rate differences, bootstrapped over cases both arms have. Absent in
+  // baselines recorded before the lift gate.
+  gates?: MeanCi;
   // Per-case mean differences, bootstrapped over cases both arms have.
   judge: MeanCi;
   page: MeanCi;
@@ -81,6 +90,8 @@ export interface Baseline {
   holdout: Totals | null;
   runs: RunRow[];
   controls?: Partial<Record<Arm, { totals: Totals; lift: Lift }>>;
+  // The commit and code digests the run measured (binding.ts); absent before release binding.
+  binding?: Binding;
 }
 
 // The pooled all-gates pass rate's 95% lower bound must reach this. With 25 cases × 3 runs, 72
@@ -156,6 +167,8 @@ export interface SummaryOptions {
   arm?: Arm;
   holdout?: Set<string>;
   judgePrompt?: string | null;
+  judgeSamples?: number | null;
+  binding?: Binding;
 }
 
 export function summarize(runs: CaseRun[], o: SummaryOptions): Baseline {
@@ -193,12 +206,13 @@ export function summarize(runs: CaseRun[], o: SummaryOptions): Baseline {
     recordedAt: new Date().toISOString(),
     note: o.note,
     arm: o.arm ?? "agent",
-    instrument: { driverModel: o.model, judgeModel: joinSet(runs.filter((r) => r.grade.soft.judge !== null || r.grade.soft.page !== null).map((r) => r.judgeModel)), driver: o.driver, rubric: joinSet(runs.map((r) => r.rubric)), judgePrompt: o.judgePrompt ?? null, isolation: joinSet(runs.map((r) => r.isolation)) },
+    instrument: { driverModel: o.model, judgeModel: joinSet(runs.filter((r) => r.grade.soft.judge !== null || r.grade.soft.page !== null).map((r) => r.judgeModel)), driver: o.driver, rubric: joinSet(runs.map((r) => r.rubric)), judgePrompt: o.judgePrompt ?? null, isolation: joinSet(runs.map((r) => r.isolation)), judgeSamples: o.judgeSamples ?? null },
     repeats: o.repeats,
     cases,
     totals: totalsOf(inSample),
     holdout: heldOut.size ? totalsOf(heldOut) : null,
-    runs: runs.map((r) => ({ id: r.id, repeat: r.repeat, arm: r.arm ?? "agent", gates: Object.fromEntries(r.grade.gates.map((g) => [g.name, g.pass])), judge: r.grade.soft.judge, page: r.grade.soft.page, judgeModel: r.judgeModel ?? null, infraLost: Boolean(r.infra?.lost), error: r.error })),
+    ...(o.binding ? { binding: o.binding } : {}),
+    runs: runs.map((r) => ({ id: r.id, repeat: r.repeat, arm: r.arm ?? "agent", gates: Object.fromEntries(r.grade.gates.map((g) => [g.name, g.pass])), judge: r.grade.soft.judge, page: r.grade.soft.page, judgeModel: r.judgeModel ?? null, ...(r.grade.soft.judgeByModel ? { judgeByModel: r.grade.soft.judgeByModel } : {}), ...(r.grade.soft.pageByModel ? { pageByModel: r.grade.soft.pageByModel } : {}), infraLost: Boolean(r.infra?.lost), error: r.error })),
   };
 }
 
@@ -209,9 +223,14 @@ export function lift(agent: CaseRun[], control: CaseRun[]): Lift {
     for (const r of runs.filter(usable)) if (typeof r.grade.soft[k] === "number") m.set(r.id, [...(m.get(r.id) ?? []), r.grade.soft[k] as number]);
     return m;
   };
+  const passes = (runs: CaseRun[]) => {
+    const m = new Map<string, number[]>();
+    for (const r of runs.filter(usable)) m.set(r.id, [...(m.get(r.id) ?? []), allPass(r) ? 1 : 0]);
+    return m;
+  };
   const a = totalsOf(byCase(agent)).pooled.rate;
   const c = totalsOf(byCase(control)).pooled.rate;
-  return { pooled: a === null || c === null ? null : Math.round((a - c) * 1000) / 1000, judge: bootstrapDiff(scores(agent, "judge"), scores(control, "judge")), page: bootstrapDiff(scores(agent, "page"), scores(control, "page")) };
+  return { pooled: a === null || c === null ? null : Math.round((a - c) * 1000) / 1000, gates: bootstrapDiff(passes(agent), passes(control)), judge: bootstrapDiff(scores(agent, "judge"), scores(control, "judge")), page: bootstrapDiff(scores(agent, "page"), scores(control, "page")) };
 }
 
 export function withControls(base: Baseline, agent: CaseRun[], controls: Partial<Record<Arm, CaseRun[]>>, holdout?: Set<string>): Baseline {
@@ -241,6 +260,7 @@ const INSTRUMENT_FIELDS: [keyof Instrument, string][] = [
   ["rubric", "rubric"],
   ["judgePrompt", "judge prompt"],
   ["isolation", "agent isolation"],
+  ["judgeSamples", "calls per judge"],
 ];
 
 export interface CompareOptions {
@@ -256,7 +276,8 @@ export function compare(current: Baseline, base: Baseline, opts: CompareOptions 
     return { regressions: [`the baseline is ${(base as { schema: string }).schema}, which records no driver model, judge model, rubric or per-run results; re-record it with --write-baseline`], flags };
   }
   // A judge that didn't run (no key) isn't a different judge; one that ran as another model is.
-  const mismatched = INSTRUMENT_FIELDS.filter(([k]) => !(k === "judgeModel" && current.instrument.judgeModel === null) && current.instrument[k] !== base.instrument[k]);
+  const noJudge = current.instrument.judgeModel === null;
+  const mismatched = INSTRUMENT_FIELDS.filter(([k]) => !((k === "judgeModel" || k === "judgeSamples") && noJudge) && (current.instrument[k] ?? null) !== (base.instrument[k] ?? null));
   if (mismatched.length) {
     return { regressions: mismatched.map(([k, label]) => `the ${label} differs from the baseline's: ${base.instrument[k] ?? "none"} in the baseline, ${current.instrument[k] ?? "none"} in this run. Re-record the baseline with this instrument, or rerun with --model and --judge-model set to the baseline's`), flags };
   }

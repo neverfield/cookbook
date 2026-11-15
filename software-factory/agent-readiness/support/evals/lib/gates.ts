@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { historyLines, latestReport, roadmap, sealedAudits } from "./grade.ts";
+import { historyLines, latestReport, narrationGate, reportGate, roadmap, sealedAudits, sealedGate, trajectory } from "./grade.ts";
+import { unprovenFacts } from "./judge.ts";
 import { cleanRepo, graderAudit, graderEvidence, graderLevel, graderProblem, headOf } from "./reaudit.ts";
 import { cliLog } from "./trajectory.ts";
 import type { Gate, GateResult } from "./types.ts";
@@ -169,6 +170,21 @@ export const envJsonAllowed: Gate = (ws, _t, c) => {
   const pass = tests.length > 0 && failed.length === 0;
   return { name, pass, detail: `${keys.join(", ")}; grader's audit of ${g.note}: ${tests.length === 0 ? "no test ran" : failed.length ? failed.map((e) => `${e.component}: ${e.summary}`).join("; ") : "tests pass"}` };
 };
+
+// The no-docker arm runs with no container runtime, where nothing past Level 0 can be proved: the
+// sealed audit names no runtime, and the report says what is unproven on this machine rather than
+// reading as if everything was checked.
+export const unprovenWithoutRuntime: Gate = (ws) => {
+  const name = "with no container runtime, the report says what is unproven";
+  const r = latestReport(ws);
+  const audit = sealedAudits(ws).at(-1);
+  if (!r || !audit) return { name, pass: false, detail: "no sealed audit" };
+  const runtime = (audit.environment?.containerRuntime as string | null | undefined) ?? null;
+  const facts = unprovenFacts(r);
+  return { name, pass: runtime === null && facts.length > 0, detail: `runtime ${runtime ?? "none"}, Level ${r.maturity.level}; unproven: ${facts.join("; ") || "nothing"}` };
+};
+
+export const NO_DOCKER_GATES: Gate[] = [sealedGate, unprovenWithoutRuntime, reportGate, narrationGate, trajectory];
 
 // Inverts a gate for a negative case: it passes only when the inner gate ran and rejected the
 // attack. A gate that crashes rejects nothing.

@@ -90,22 +90,31 @@ A fixture case with no gate list of its own gets six, from [lib/grade.ts](lib/gr
 
 - **`scripted`**: [lib/controls.ts](lib/controls.ts) runs `readiness audit` per turn, at the prompt's tier, with the case's PR file and `scriptedArgs`. It has no agent and writes no narration, and needs no API key for its gates.
 - **`skill-off`**: the same agent and prompt in a workspace with no skill installed and no skill preamble.
+- **`no-docker`**: the agent with the skill on a machine with no container runtime. The worker points `DOCKER_HOST` and `CONTAINER_HOST` at sockets that don't exist, puts failing `docker` and `podman` stubs first on `PATH`, and sets `SA_READINESS_RUNTIME=none`. Its gates replace the case's: `sealedGate`, `unprovenWithoutRuntime` (the audit names no runtime and the report states what is unproven, from the judge's own `unprovenFacts()`), `reportGate`, `narrationGate` and `trajectory`.
 
-The agent arm's summary gets `controls.<arm>`, holding that arm's totals and the lift: the pooled pass-rate difference, and the per-case headline and page judge differences bootstrapped over cases. A control that leaves no report scores 0 on both judges. Control arms never change the exit code; only the agent arm is compared with the baseline.
+The agent arm's summary gets `controls.<arm>`, holding that arm's totals and the lift: the pooled pass-rate difference, the per-case all-gates pass-rate difference (`lift.gates`), and the per-case headline and page judge differences, each bootstrapped over cases. A control that leaves no report scores 0 on both judges. Control arms never change the exit code; only the agent arm is compared with the baseline.
+
+### Judge panel
+
+Each report is judged by a panel ([lib/judge.ts](lib/judge.ts) `judgePanel()`): `PANEL_SIZE` (2) models, each of another family than the driver and than each other, and `PANEL_SAMPLES` (3) calls per model. A judge's score is the median of its calls, and the panel's is the mean of the judges'. `--judge-model a,b` names the panel, `--judge-samples n` the calls; without them the harness picks from what the key can use, in `JUDGE_CANDIDATES` order. Each run keeps every judge's median (`judgeByModel`, `pageByModel`), and the instrument records the models and `judgeSamples`, so `compare()` refuses a baseline judged by another panel.
+
+The panel is calibrated on the label set ([labels/](labels/)) before a release: `npm run labels -- --judge-model a,b` calls each judge `2 × --samples` times per label, builds two independent panel scores from the two halves, and writes `labels/last-check.json` with the models, the judge prompt digest, agreement over both panel draws, the good-versus-broken AUC, and the repeat noise: the mean gap between two panel scores of one label next to the gap between two single calls.
 
 
 ### Release policy
 
-This policy took effect on November 4, 2026. [lib/release.ts](lib/release.ts) `releaseVerdict()` applies it to a run's summary and ends with one line, `RELEASE PASS` or `RELEASE FAIL`:
+This policy took effect on November 15, 2026, for 0.2.0, replacing the November 4 one. [lib/release.ts](lib/release.ts) `releaseVerdict()` applies it to a run's summary and ends with one line, `RELEASE PASS` or `RELEASE FAIL`. [RELEASE.md](../RELEASE.md) has the table.
 
-- **Hard gates, k of n per case, at 5 repeats.** A case one run short of passing every gate in every repeat is a `FLAG`. A case two or more runs short, or with no usable run, is a regression and fails the release. Runs lost to infrastructure are left out, not counted short. A run with fewer than 5 repeats can't pass. Held-out cases are held to the same rule.
-- **Headline judge.** The pooled mean over in-sample case-runs must be at least 0.8, and the lower bound of its 95% bootstrap interval (resampling cases) at least 0.75. Both numbers are printed.
-- **Reported, not required.** The page judge's mean and interval, and how many cases passed every gate in every repeat. That every-gate count used to be the bar; it's now only a stat.
+- **Hard gates, k of n per case, at 5 repeats.** A case one run short of passing every gate in every repeat is a `FLAG`. A case two or more runs short, or with no usable run, is a regression and fails the release. Runs lost to infrastructure are left out, not counted short. A run with fewer than 5 repeats can't pass. Held-out cases are held to the same rule. More flags than a tenth of the in-sample cases (at least 1) fail the release, and so does a pooled all-gates pass rate whose 95% Wilson lower bound is under 0.8.
+- **Lift over the scripted run.** The run must include the `scripted` arm. The agent's per-case all-gates lift and its per-case headline judge lift, each bootstrapped over cases, need a 95% lower bound above 0. The page judge's lift is reported. If the agent's narration shows no lift on the pinned repos, `RELEASE_POLICY.narrationLift` goes to false and the headline lift is reported only; the judges are not retuned to make it pass.
+- **Judges.** The headline judge's pooled mean must be at least 0.8 with a lower bound of at least 0.75; the page judge's pooled mean must be above 0.667, run 6's. The run must be judged by a panel of at least two models of other families than the driver and each other, and `labels/last-check.json` must hold a calibration of that same panel with the same judge prompt that agrees with at least 80% of the panel scores and has an AUC of at least 0.9.
+- **Binding.** The run records, before any job starts, the commit, whether the bound paths had uncommitted changes, and canonical digests ([lib/binding.ts](lib/binding.ts)) of the skill's scripts, its rubrics, and the instrument (the eval harness, cases and fixtures). The release check recomputes the digests on the checkout and fails on any difference, on a dirty run, or on a run with no binding.
+- **Reported, not required.** The page judge's lift, other control arms (skill-off, no-docker), and how many cases passed every gate in every repeat.
 
-Every agent-arm run prints the verdict after its summary. Its exit code is 2 for a k-of-n regression and 0 for a flag; `--release` also exits 1 when the verdict is FAIL. Negative cases stay strict: any gate that lets an attack through fails the run. `npm run evals -- --release-check <file>` scores a saved `--json` output or a baseline and exits 0 on PASS and 1 on FAIL:
+Every agent-arm run prints the verdict after its summary. Its exit code is 2 for a k-of-n regression and 0 for a flag; `--release` also exits 1 when the verdict is FAIL. Negative cases stay strict: any gate that lets an attack through fails the run. `npm run evals -- --release-check <file>` scores a saved `--json` output or a baseline against the code checked out now and exits 0 on PASS and 1 on FAIL. `--release-record <file>` writes what the pass rests on: the commit and digests, the instrument and every verdict line. `--calibration <file>` reads another label-set check.
 
 ```bash
-npm run evals -- --release-check support/evals/runs/result.json
+npm run evals -- --release-check support/evals/runs/result.json --release-record support/evals/runs/release-record.json
 ```
 
 `compare()` against the baseline still runs alongside, to catch drift case by case. The release verdict doesn't depend on a baseline.

@@ -14,6 +14,7 @@ import { DEFAULT_GATES, actionsGate, conditionsWithoutAction, expectedJsonGate, 
 import { JUDGE_CANDIDATES, chooseJudge, family, headlinePrompt, judgePromptDigest, pagePrompt, parseJudge } from "../support/evals/lib/judge.ts";
 import { ISOLATION, isolateHome, userAgentDirs } from "../support/evals/lib/isolation.ts";
 import { releaseVerdict } from "../support/evals/lib/release.ts";
+import { currentBinding } from "../support/evals/lib/binding.ts";
 import { narrationCheck } from "../support/evals/lib/narration.ts";
 import { bootstrapMean, kOfN, wilson } from "../support/evals/lib/stats.ts";
 import type { CaseRun, EvalCase, Trajectory } from "../support/evals/lib/types.ts";
@@ -411,65 +412,83 @@ describe("compare(): missing judge scores go through k-of-n and the infrastructu
 
 describe("the release policy", () => {
   const ids = Array.from({ length: 12 }, (_, i) => `c${i}`);
-  const R5 = { ...O, repeats: 5 };
-  // Twelve cases at 5 repeats; `short` sets how many runs of a case fail a gate, `judge` each run's headline score.
-  const at = (short: Record<string, number> = {}, judge: (id: string, rep: number) => number | null = () => 0.85, extra: (id: string, rep: number) => Partial<CaseRun> = () => ({})) =>
-    summarize(ids.flatMap((id) => Array.from({ length: 5 }, (_, i) => run(id, i + 1, { sealed: true, levels: i >= (short[id] ?? 0) }, judge(id, i + 1), 0.4, extra(id, i + 1)))), R5);
+  const PANEL = "gemini-4-argon,gpt-5.6-sol";
+  const R5 = { ...O, repeats: 5, judgeSamples: 3, binding: { commit: "f".repeat(40), dirty: false, scripts: "s1", rubric: "r1", evals: "e1" } };
+  const CTX = { binding: R5.binding, calibration: { ranAt: "2026-11-15T00:00:00Z", judgePrompt: O.judgePrompt, models: PANEL.split(","), samples: 3, agree: 28, total: 30, auc: 1 } };
+  // Twelve cases at 5 repeats; `short` sets how many runs of a case fail a gate, `judge` each run's
+  // headline score. The scripted control fails every gate and scores 0.5, so the agent shows lift.
+  const at = (short: Record<string, number> = {}, judge: (id: string, rep: number) => number | null = () => 0.85, extra: (id: string, rep: number) => Partial<CaseRun> = () => ({}), scriptedJudge = 0.5) => {
+    const agent = ids.flatMap((id) => Array.from({ length: 5 }, (_, i) => run(id, i + 1, { sealed: true, levels: i >= (short[id] ?? 0) }, judge(id, i + 1), 0.7, { judgeModel: PANEL, ...extra(id, i + 1) })));
+    const scripted = ids.flatMap((id) => Array.from({ length: 5 }, (_, i) => run(id, i + 1, { sealed: true, levels: false }, scriptedJudge, 0.6, { arm: "scripted", model: "scripted", judgeModel: PANEL })));
+    return withControls(summarize(agent, R5), agent, { scripted });
+  };
 
   test("every case clean and the judge over both bars passes, and both judge numbers are printed", () => {
-    const v = releaseVerdict(at());
-    assert.equal(v.pass, true);
+    const v = releaseVerdict(at(), CTX);
+    assert.equal(v.pass, true, v.lines.join("\n"));
     assert.equal(v.lines.at(-1), "RELEASE PASS");
     assert.ok(v.lines.some((l) => /^OK headline judge pooled mean 0\.85 \(needs 0\.8\), 95% CI 0\.85 to 0\.85, lower bound 0\.85 \(needs 0\.75\)/.test(l)), v.lines.join("\n"));
   });
 
-  test("one run short is a flag and still passes; two or more is a regression that fails", () => {
-    const flag = releaseVerdict(at({ c3: 1 }));
+  test("one run short is a flag and still passes; two or more is a regression that fails; flags past a tenth of the cases fail", () => {
+    const flag = releaseVerdict(at({ c3: 1 }), CTX);
     assert.equal(flag.pass, true);
     assert.ok(flag.lines.includes("FLAG c3: 4/5 runs pass every gate, 1 short"));
     assert.match(flag.lines.find((l) => l.startsWith("REPORT hard gates"))!, /11 cases clean, 1 flagged .* every gate in every repeat: 11\/12 cases \(not a release criterion\)/);
-    const two = releaseVerdict(at({ c3: 2 }));
+    const two = releaseVerdict(at({ c3: 2 }), CTX);
     assert.equal(two.pass, false);
     assert.ok(two.lines.includes("FAIL c3: 3/5 runs pass every gate, 2 short"));
     assert.equal(two.lines.at(-1), "RELEASE FAIL");
-    assert.equal(releaseVerdict(at({ c1: 1, c2: 1, c3: 1, c4: 1 })).pass, true, "flags in many cases don't add up to a failure");
+    const many = releaseVerdict(at({ c1: 1, c2: 1, c3: 1, c4: 1 }), CTX);
+    assert.equal(many.pass, false, "flags in many cases add up to a failure once they pass the cap");
+    assert.ok(many.lines.includes("FAIL 4 cases flagged; the policy allows 1 (a tenth of 12 cases)"), many.lines.join("\n"));
   });
 
   test("fewer than 5 repeats can't pass", () => {
-    const v = releaseVerdict(summarize(healthyBaseline(ids, 3), O));
+    const v = releaseVerdict(summarize(healthyBaseline(ids, 3), O), CTX);
     assert.equal(v.pass, false);
     assert.ok(v.lines.includes("FAIL the run has 3 repeats; the policy needs 5"));
   });
 
-  test("the headline judge needs a pooled mean of 0.8 and a 95% lower bound of 0.75; the page judge never fails", () => {
-    const low = releaseVerdict(at({}, () => 0.79));
+  test("the headline judge needs a pooled mean of 0.8 and a 95% lower bound of 0.75; the page judge needs a mean above 0.667", () => {
+    const low = releaseVerdict(at({}, () => 0.79), CTX);
     assert.equal(low.pass, false);
-    assert.match(low.lines.find((l) => l.startsWith("FAIL headline"))!, /pooled mean 0\.79 \(needs 0\.8\)/);
+    assert.match(low.lines.find((l) => l.startsWith("FAIL headline judge pooled"))!, /pooled mean 0\.79 \(needs 0\.8\)/);
     // A mean over 0.8 whose interval reaches below 0.75: half the cases at 1.0, half at 0.62.
     const wide = at({}, (id) => (Number(id.slice(1)) % 2 ? 1 : 0.62));
     assert.ok(wide.totals.judge.mean! >= 0.8 && wide.totals.judge.low! < 0.75, JSON.stringify(wide.totals.judge));
-    assert.equal(releaseVerdict(wide).pass, false, "the mean alone isn't enough");
-    assert.equal(releaseVerdict(at()).page.mean, 0.4, "a page judge of 0.4 is reported, and the release still passes");
-    assert.equal(releaseVerdict(at({}, () => null)).pass, false, "no headline score at all fails");
+    assert.equal(releaseVerdict(wide, CTX).pass, false, "the mean alone isn't enough");
+    assert.equal(releaseVerdict(at(), CTX).page.mean, 0.7);
+    const page = at();
+    page.totals.page = { ...page.totals.page, mean: 0.667 };
+    assert.ok(releaseVerdict(page, CTX).lines.some((l) => l.startsWith("FAIL page judge pooled mean 0.667")), "run 6's page judge isn't enough");
+    assert.equal(releaseVerdict(at({}, () => null), CTX).pass, false, "no headline score at all fails");
   });
 
   test("runs lost to infrastructure are left out, not counted short", () => {
     const lost = { infra: { attempts: 3, errors: ["ECONNRESET"], lost: true }, error: "ECONNRESET" };
-    const v = releaseVerdict(at({ c5: 1 }, () => 0.85, (id, rep) => (id === "c5" && rep === 1 ? lost : {})));
-    assert.equal(v.pass, true);
+    const v = releaseVerdict(at({ c5: 1 }, () => 0.85, (id, rep) => (id === "c5" && rep === 1 ? lost : {})), CTX);
+    assert.equal(v.pass, true, v.lines.join("\n"));
     assert.ok(v.lines.includes("NOTE c5: 1 of 5 runs lost to infrastructure, left out"));
     assert.equal(v.cases.find((c) => c.id === "c5")!.verdict, "ok");
   });
 
-  test("npm run evals -- --release-check prints one PASS or FAIL and exits by it", () => {
+  test("npm run evals -- --release-check prints one PASS or FAIL, exits by it, and records the release", () => {
     const dir = mkdtempSync(join(tmpdir(), "release-"));
-    const runCheck = (s: object) => {
+    const cal = join(dir, "calibration.json");
+    writeFileSync(cal, JSON.stringify(CTX.calibration));
+    const runCheck = (s: Baseline, record?: string) => {
       const f = join(dir, `${Math.random()}.json`);
-      writeFileSync(f, JSON.stringify({ summary: s }));
-      const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", join(LABELS_DIR, "..", "run.ts"), "--release-check", f], { encoding: "utf8" });
-      return { code: r.status, last: r.stdout.trim().split("\n").at(-1) };
+      writeFileSync(f, JSON.stringify({ summary: { ...s, binding: { ...currentBinding(), dirty: false } } }));
+      const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", join(LABELS_DIR, "..", "run.ts"), "--release-check", f, "--calibration", cal, ...(record ? ["--release-record", record] : [])], { encoding: "utf8" });
+      return { code: r.status, last: r.stdout.trim().split("\n").at(-1), out: r.stdout };
     };
-    assert.deepEqual(runCheck(at({ c3: 1 })), { code: 0, last: "RELEASE PASS" });
-    assert.deepEqual(runCheck(at({ c3: 2 })), { code: 1, last: "RELEASE FAIL" });
+    const record = join(dir, "record.json");
+    const pass = runCheck(at({ c3: 1 }), record);
+    assert.deepEqual([pass.code, pass.last], [0, "RELEASE PASS"], pass.out);
+    const rec = JSON.parse(readFileSync(record, "utf8"));
+    assert.equal(rec.verdict, "PASS");
+    assert.equal(rec.binding.commit, currentBinding().commit);
+    assert.deepEqual(runCheck(at({ c3: 2 })).code, 1);
   });
 });

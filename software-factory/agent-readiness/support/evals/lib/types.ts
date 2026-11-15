@@ -49,7 +49,18 @@ export interface GateResult {
 
 export interface Grade {
   gates: GateResult[];
-  soft: { judge: number | null; judgeReasons: string[]; page: number | null; pageReasons: string[]; wallMs: number; toolCalls: number; tokens: number | null };
+  soft: {
+    judge: number | null;
+    judgeReasons: string[];
+    page: number | null;
+    pageReasons: string[];
+    // Each judge's median score when a panel judged the run (judge.ts judgePanel).
+    judgeByModel?: Record<string, number | null>;
+    pageByModel?: Record<string, number | null>;
+    wallMs: number;
+    toolCalls: number;
+    tokens: number | null;
+  };
 }
 
 export type Gate = (ws: Workspace, t: Trajectory, c: EvalCase) => GateResult;
@@ -76,8 +87,9 @@ export interface EvalCase {
 
 // agent: the agent with the skill, the arm the baseline measures. skill-off: the same agent with
 // the skill removed. scripted: `readiness audit` with no agent and no narration. The two controls
-// show what the agent and the skill add over the scripts alone.
-export type Arm = "agent" | "skill-off" | "scripted";
+// show what the agent and the skill add over the scripts alone. no-docker: the agent with the
+// skill on a machine with no container runtime, graded on saying what is unproven there.
+export type Arm = "agent" | "skill-off" | "scripted" | "no-docker";
 
 export interface CaseRun {
   id: string;
