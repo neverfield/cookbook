@@ -173,7 +173,7 @@ export function family(model: string): string {
 
 // In order of preference. The first one whose family differs from the driver's and that the key
 // can use is the judge.
-export const JUDGE_CANDIDATES = ["gpt-5.6-sol", "claude-opus-5-5", "gemini-4-argon", "grok-4.7"];
+export const JUDGE_CANDIDATES = ["gpt-5.6-sol", "claude-opus-5-5", "gemini-4-argon", "gemini-4-hydrogen", "grok-4.7"];
 
 export interface JudgeChoice {
   model: string;
@@ -194,6 +194,69 @@ export function chooseJudge(driverModel: string, available: string[] | null, exp
     return { model: guess, why: `the model list couldn't be read; ${guess} is the preferred judge of another family` };
   }
   return { model: driverModel, why: "no model of another family is available to this key, so the driver judges itself" };
+}
+
+// The release policy needs at least this many judges, each of another family than the driver and
+// than each other, so no single family's taste decides a score.
+export const PANEL_SIZE = 2;
+// Calls per judge per report. A judge's score is the median of its calls, which cuts its run-to-run
+// noise (the label set shows single calls on one report ranging from 0.2 to 0.8).
+export const PANEL_SAMPLES = 3;
+
+export function chooseJudges(driverModel: string, available: string[] | null, explicit: string[] = [], n = PANEL_SIZE): JudgeChoice[] {
+  if (explicit.length) return explicit.map((m) => chooseJudge(driverModel, [], m));
+  const out: JudgeChoice[] = [];
+  const families = new Set([family(driverModel)]);
+  const has = (m: string) => available?.some((a) => a === m || a.startsWith(`${m}-`)) ?? false;
+  const take = (m: string, why: string) => {
+    out.push({ model: m, why });
+    families.add(family(m));
+  };
+  for (const m of JUDGE_CANDIDATES) if (out.length < n && !families.has(family(m)) && (available === null || has(m))) take(m, available === null ? `the model list couldn't be read; ${m} is a preferred judge of another family` : `another family (${family(m)}) than the driver and the other judges, available to this key`);
+  for (const m of available ?? []) if (out.length < n && !families.has(family(m))) take(m, `the first model of another family (${family(m)}) this key can use`);
+  return out;
+}
+
+export interface PanelResult extends JudgeResult {
+  // Each judge's median score, or null when every call it made failed.
+  byModel: Record<string, number | null>;
+}
+
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+};
+const r3 = (x: number) => Math.round(x * 1000) / 1000;
+
+// Combines judge calls into the panel's score: each model's median, then the mean over models. A
+// model with no score is left out and named; with no model scored, the first failure's reason
+// leads, so an infrastructure failure is still recognised as one (baseline.ts judgeLost).
+export function panelScore(calls: Record<string, JudgeResult[]>): PanelResult {
+  const byModel: Record<string, number | null> = {};
+  const reasons: string[] = [];
+  const failures: string[] = [];
+  for (const [model, results] of Object.entries(calls)) {
+    const scored = results.filter((x): x is JudgeResult & { score: number } => x.score !== null);
+    if (!scored.length) {
+      byModel[model] = null;
+      failures.push(...results.map((x) => x.reasons[0] ?? "no score").map((x) => `${x} (${model})`));
+      continue;
+    }
+    const m = median(scored.map((x) => x.score));
+    byModel[model] = r3(m);
+    const closest = scored.reduce((a, b) => (Math.abs(b.score - m) < Math.abs(a.score - m) ? b : a));
+    reasons.push(...closest.reasons.map((x) => `${model}: ${x}`));
+  }
+  const got = Object.values(byModel).filter((x): x is number => x !== null);
+  if (!got.length) return { score: null, reasons: failures.length ? failures : ["no judge model"], byModel };
+  const missing = Object.entries(byModel).filter(([, v]) => v === null).map(([k]) => k);
+  return { score: r3(got.reduce((a, b) => a + b, 0) / got.length), reasons: [...reasons, ...(missing.length ? [`no score from ${missing.join(", ")}: ${failures[0]}`] : [])], byModel };
+}
+
+export async function judgePanel(kind: JudgeKind, r: ReportJson | null, models: string[], apiKey: string | undefined, samples = PANEL_SAMPLES): Promise<PanelResult> {
+  const calls = await Promise.all(models.map(async (m) => [m, await Promise.all(Array.from({ length: samples }, () => judge(kind, r, m, apiKey)))] as const));
+  return panelScore(Object.fromEntries(calls));
 }
 
 export async function availableModels(apiKey: string): Promise<string[] | null> {

@@ -15,6 +15,9 @@ export interface Segment {
   // so on, or "$(" inside a command substitution. They tell whether a definition always takes effect.
   sep: string;
   end: string;
+  // The last heredoc fed to this command, so a script read from stdin (`python3 - <<'EOF'`) can be
+  // judged; expands is false when the delimiter is quoted and the shell leaves the body as is.
+  stdin?: { body: string; expands: boolean };
 }
 
 const OPERATORS = ["&&", "||", ";;", ";", "|&", "|", "&", "\n", "(", ")"];
@@ -54,7 +57,8 @@ function closing(text: string, start: number, open: string, close: string): numb
 }
 
 // Splits a command line into simple commands. Command substitutions (`$(...)`, backticks) become
-// segments of their own, heredoc bodies are dropped, and unquoted `#` starts a comment.
+// segments of their own, heredoc bodies are kept only as the stdin of their command, and unquoted
+// `#` starts a comment.
 export function segments(cmd: string): Segment[] {
   const out: Segment[] = [];
   let words: string[] = [];
@@ -62,7 +66,7 @@ export function segments(cmd: string): Segment[] {
   let word = "";
   let inWord = false;
   let redirect: "write" | "read" | null = null;
-  const heredocs: string[] = [];
+  const heredocs: { tag: string; quoted: boolean; seg: Segment | null }[] = [];
   let lastOp = "start";
   const endWord = () => {
     if (!inWord) return;
@@ -74,7 +78,10 @@ export function segments(cmd: string): Segment[] {
   };
   const endSegment = (op: string) => {
     endWord();
-    if (words.length || writes.length) out.push({ words, writes, sep: lastOp, end: op });
+    if (words.length || writes.length) {
+      out.push({ words, writes, sep: lastOp, end: op });
+      for (const h of heredocs) h.seg ??= out[out.length - 1];
+    }
     words = [];
     writes = [];
     lastOp = op;
@@ -148,7 +155,7 @@ export function segments(cmd: string): Segment[] {
       endWord();
       const m = cmd.slice(i + 2).match(/^-?\s*(['"]?)(\w+)\1/);
       if (m) {
-        heredocs.push(m[2]);
+        heredocs.push({ tag: m[2], quoted: Boolean(m[1]), seg: null });
         i += 1 + m[0].length;
         continue;
       }
@@ -175,9 +182,10 @@ export function segments(cmd: string): Segment[] {
     if (op) {
       endSegment(op);
       if (op === "\n" && heredocs.length) {
-        for (const tag of heredocs.splice(0)) {
+        for (const h of heredocs.splice(0)) {
           const rest = cmd.slice(i + 1);
-          const m = rest.match(new RegExp(`(^|\\n)\\t*${tag}[ \\t]*(\\n|$)`));
+          const m = rest.match(new RegExp(`(^|\\n)\\t*${h.tag}[ \\t]*(\\n|$)`));
+          if (h.seg) h.seg.stdin = { body: m ? rest.slice(0, m.index) : rest, expands: !h.quoted };
           i = m ? i + 1 + m.index! + m[0].length - 1 : cmd.length;
         }
       } else i += op.length - 1;
@@ -414,6 +422,7 @@ export interface Expanded {
   via: string | null;
   // False when it runs through a name whose definition couldn't be followed.
   known: boolean;
+  stdin?: { body: string; expands: boolean };
 }
 
 // `ln [-s] target [link]`: remember where the link points. A link that might not have been made
@@ -511,7 +520,7 @@ function walk(segs: Segment[], bodies: string[], ctx: Context, defs: Definitions
       if (args) w = w.flatMap((x) => (x === "$@" || x === "$*" ? args : [x.replace(/\$\{?([1-9])\}?/g, (_m, n: string) => args[Number(n) - 1] ?? "")]));
       w = w.flatMap((x) => expandVars(x, view, cwd));
       const writes = s.writes.map((x) => expandVars(x, view, cwd).join(" "));
-      const here = () => ({ writes, cwd, tmpdir: typeof lookup("TMPDIR", view, cwd) === "string" ? (lookup("TMPDIR", view, cwd) as string) : null, links: new Map(defs.links) });
+      const here = () => ({ writes, ...(s.stdin ? { stdin: s.stdin } : {}), cwd, tmpdir: typeof lookup("TMPDIR", view, cwd) === "string" ? (lookup("TMPDIR", view, cwd) as string) : null, links: new Map(defs.links) });
       const decl = DECLARE.has(w[0]) ? w.slice(1).filter((x) => !x.startsWith("-")) : w;
       if (decl.length && decl.every((x) => ASSIGN.test(x))) {
         for (const x of decl) {
@@ -897,7 +906,144 @@ function sideEffect(c: Expanded, repo: string): string | null {
     const sub = args.find((a) => !a.startsWith("-")) ?? (args.includes("--version") ? "--version" : undefined);
     return !sub || DOCKER_READS.has(sub) ? null : `\`${line}\` isn't read-only`;
   }
+  if (PYTHON.test(p)) {
+    const script = args.filter((a) => !/^-[BIEsSuOq]+$/.test(a));
+    if (c.stdin && (script.length === 0 || (script.length === 1 && script[0] === "-"))) return pythonStdinEffect(c, repo);
+  }
   return `\`${line}\` isn't a readiness CLI call or a read-only command`;
+}
+
+// What a Python script fed on stdin may do next to a CLI call: read and rewrite files outside the
+// repo, such as the narration JSON SKILL.md has the agent edit in $TMPDIR. It may import only data
+// and path modules, may not run commands, load code, delete or move files, and every file it opens
+// for writing must be a path outside the repo: a literal, one under the temp folder, or a name
+// assigned one earlier in the script. A script that names the records is never let through.
+const PY_MODULES = new Set(["json", "os", "sys", "re", "tempfile", "pathlib", "textwrap", "datetime", "collections", "io"]);
+const PY_EFFECTS = /\b(subprocess|shutil|importlib|runpy|ctypes|socket|urllib|requests|pty|__import__|__builtins__)\b|(?<![.\w])(exec|eval|compile|globals|setattr|getattr)\s*\(|\bos\s*\.\s*(system|popen|exec\w*|spawn\w*|remove|unlink|rename|replace|rmdir|removedirs|makedirs|mkdir|chmod|chown|symlink|link|truncate|fork|kill|chdir|putenv|open|fdopen|write)\b|\bsys\s*\.\s*(path|modules)\b|\.\s*(unlink|rename|replace|rmdir|mkdir|touch|symlink_to|hardlink_to|chmod)\s*\(/;
+const PY_ENV = /os\s*\.\s*(?:environ\s*(?:\[\s*|\.get\s*\(\s*)|getenv\s*\(\s*)\$S(\d+)\$/;
+
+// The script with each string literal replaced by a `$S<n>$` token and comments dropped, so code
+// patterns never match text inside strings.
+function maskPython(body: string): { code: string; strings: string[] } {
+  const strings: string[] = [];
+  let code = "";
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (ch === "#") {
+      while (i + 1 < body.length && body[i + 1] !== "\n") i++;
+      continue;
+    }
+    if (ch !== "'" && ch !== '"') {
+      code += ch;
+      continue;
+    }
+    const q = body.startsWith(ch.repeat(3), i) ? ch.repeat(3) : ch;
+    let j = i + q.length;
+    let text = "";
+    for (; j < body.length && !body.startsWith(q, j) && (q.length === 3 || body[j] !== "\n"); j++) {
+      if (body[j] === "\\") text += body[j++];
+      text += body[j] ?? "";
+    }
+    strings.push(text);
+    code += `$S${strings.length - 1}$`;
+    i = j + q.length - 1;
+  }
+  return { code, strings };
+}
+
+// The expression a method is called on: the names, calls and brackets right before `.` at `dot`.
+function receiverBefore(code: string, dot: number): string {
+  let i = dot - 1;
+  while (i >= 0 && /\s/.test(code[i])) i--;
+  const end = i + 1;
+  while (i >= 0) {
+    if (code[i] === ")" || code[i] === "]") {
+      const open = code[i] === ")" ? "(" : "[";
+      let depth = 0;
+      for (; i >= 0; i--) {
+        if (code[i] === ")" || code[i] === "]") depth++;
+        else if ((code[i] === "(" || code[i] === "[") && --depth === 0) break;
+      }
+      if (code[i] !== open) return code.slice(0, end);
+      i--;
+    } else if (/[\w.$]/.test(code[i])) i--;
+    else break;
+  }
+  return code.slice(i + 1, end);
+}
+
+function pythonStdinEffect(c: Expanded, repo: string): string | null {
+  const why = (s: string) => `a Python script on stdin ${s}`;
+  let body = c.stdin!.body;
+  if (c.stdin!.expands) body = body.replace(/\$\{?TMPDIR\}?/g, c.tmpdir ?? "$TMPDIR");
+  if (/\.agent-readiness|readiness-aud-|mutants?\.json|seed\.txt|draft\.digest/.test(body)) return why("names the audit records or the fault store");
+  const { code, strings } = maskPython(body);
+  for (const m of code.matchAll(/^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w., ]+))/gm)) {
+    for (const mod of (m[1] ?? m[2]).split(",").map((x) => x.trim().split(/\s+as\s+/)[0].split(".")[0])) if (!PY_MODULES.has(mod)) return why(`imports ${mod}`);
+  }
+  const effect = code.match(PY_EFFECTS);
+  if (effect) return why(`uses ${effect[0].trim()}`);
+  const safe = new Set<string>();
+  const outside = (expr: string): boolean => {
+    const e = expr.trim();
+    const env = e.match(PY_ENV);
+    if (/^tempfile\s*\./.test(e) || (env && strings[Number(env[1])] === "TMPDIR" && e.startsWith(env[0]))) return true;
+    const lit = e.match(/^[rbfuRBFU]{0,2}\$S(\d+)\$/);
+    if (lit) {
+      const path = strings[Number(lit[1])].replace(/\{[^}]*\}[\s\S]*$/, "");
+      return isAbsolute(path) && writesOutsideRepo(path, c, repo);
+    }
+    if (e.startsWith("(")) return outside(e.slice(1));
+    const inner = e.match(/^(?:pathlib\s*\.\s*)?(?:Path|str|os\s*\.\s*path\s*\.\s*(?:join|expanduser|abspath|realpath))\s*\(([\s\S]*)$/);
+    if (inner) return outside(inner[1]);
+    const name = e.match(/^([A-Za-z_]\w*)\b/);
+    return Boolean(name && safe.has(name[1]));
+  };
+  for (const m of code.matchAll(/^\s*([A-Za-z_]\w*)\s*=(?!=)\s*(.+)$/gm)) {
+    if (outside(m[2])) safe.add(m[1]);
+    else safe.delete(m[1]);
+  }
+  const mode = (args: string) => {
+    const m = args.match(/(?:^|,)\s*(?:mode\s*=\s*)?[rbfuRBFU]{0,2}\$S(\d+)\$\s*(?:,|$)/);
+    return m ? strings[Number(m[1])] : "r";
+  };
+  for (const m of code.matchAll(/(?<![.\w])(?:io\s*\.\s*)?open\s*\(/g)) {
+    const args = callArgs(code, m.index! + m[0].length);
+    const [first, ...rest] = splitArgs(args);
+    if (/[wax+]/.test(mode(rest.join(","))) && !outside(first ?? "")) return why(`writes ${(first ?? "").trim()}, which isn't known to be outside the repo`);
+  }
+  for (const m of code.matchAll(/\.\s*(write_text|write_bytes|open)\s*\(/g)) {
+    if (m[1] === "open" && !/[wax+]/.test(mode(callArgs(code, m.index! + m[0].length)))) continue;
+    const recv = receiverBefore(code, m.index!);
+    if (!outside(recv)) return why(`writes through ${recv || "an expression"}, which isn't known to be outside the repo`);
+  }
+  return null;
+}
+
+// The text between the parenthesis that opens at `from` and its match.
+function callArgs(code: string, from: number): string {
+  let depth = 1;
+  for (let i = from; i < code.length; i++) {
+    if (code[i] === "(" || code[i] === "[") depth++;
+    else if ((code[i] === ")" || code[i] === "]") && --depth === 0) return code.slice(from, i);
+  }
+  return code.slice(from);
+}
+
+function splitArgs(args: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of args) {
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") depth--;
+    if (ch === "," && depth === 0) {
+      out.push(cur);
+      cur = "";
+    } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
 }
 
 // The substitutions a wrapper may use to build the CLI's path.

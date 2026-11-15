@@ -1,0 +1,272 @@
+{
+  "rubric": "2026-11-alpha",
+  "minForPass": 3,
+  "perComponent": 5,
+  "rows": [
+    {
+      "repo": "ms",
+      "audit": "aud-2026-11-14-4ff48ce-1ae9",
+      "component": "ms",
+      "caught": 3,
+      "counted": 5,
+      "missed": [
+        "boundary_flip at src/index.ts:165",
+        "boundary_flip at src/index.ts:194"
+      ]
+    },
+    {
+      "repo": "ms",
+      "audit": "aud-2026-11-14-4ff48ce-725b",
+      "component": "ms",
+      "caught": 5,
+      "counted": 5,
+      "missed": []
+    },
+    {
+      "repo": "ms",
+      "audit": "aud-2026-11-14-4ff48ce-a5a2",
+      "component": "ms",
+      "caught": 4,
+      "counted": 5,
+      "missed": [
+        "boundary_flip at src/index.ts:194"
+      ]
+    },
+    {
+      "repo": "ms",
+      "audit": "aud-2026-11-14-4ff48ce-bf4c",
+      "component": "ms",
+      "caught": 4,
+      "counted": 5,
+      "missed": [
+        "boundary_flip at src/index.ts:165"
+      ]
+    },
+    {
+      "repo": "ms",
+      "audit": "aud-2026-11-14-4ff48ce-f879",
+      "component": "ms",
+      "caught": 5,
+      "counted": 5,
+      "missed": []
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-8581",
+      "component": "everything",
+      "caught": 4,
+      "counted": 5,
+      "missed": [
+        "drop_throw_or_return at src/everything/transports/sse.ts:88"
+      ]
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-8581",
+      "component": "filesystem",
+      "caught": 4,
+      "counted": 5,
+      "missed": [
+        "shift_by_one at src/filesystem/lib.ts:935"
+      ]
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-8581",
+      "component": "memory",
+      "caught": 5,
+      "counted": 5,
+      "missed": []
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-8581",
+      "component": "sequentialthinking",
+      "caught": 4,
+      "counted": 5,
+      "missed": [
+        "boundary_flip at src/sequentialthinking/lib.ts:46"
+      ]
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-864f",
+      "component": "everything",
+      "caught": 3,
+      "counted": 5,
+      "missed": [
+        "change_constant at src/everything/tools/get-env.ts:118",
+        "drop_throw_or_return at src/everything/transports/streamableHttp.ts:297"
+      ]
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-864f",
+      "component": "filesystem",
+      "caught": 5,
+      "counted": 5,
+      "missed": []
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-864f",
+      "component": "memory",
+      "caught": 5,
+      "counted": 5,
+      "missed": []
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-864f",
+      "component": "sequentialthinking",
+      "caught": 3,
+      "counted": 5,
+      "missed": [
+        "boundary_flip at src/sequentialthinking/lib.ts:46",
+        "boundary_flip at src/sequentialthinking/lib.ts:48"
+      ]
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-b0a6",
+      "component": "everything",
+      "caught": 4,
+      "counted": 4,
+      "missed": []
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-b0a6",
+      "component": "filesystem",
+      "caught": 5,
+      "counted": 5,
+      "missed": []
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-b0a6",
+      "component": "memory",
+      "caught": 4,
+      "counted": 5,
+      "missed": [
+        "change_constant at src/memory/index.ts:40"
+      ]
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-b0a6",
+      "component": "sequentialthinking",
+      "caught": 3,
+      "counted": 4,
+      "missed": [
+        "boundary_flip at src/sequentialthinking/lib.ts:209"
+      ]
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-b21b",
+      "component": "everything",
+      "caught": 5,
+      "counted": 5,
+      "missed": []
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-b21b",
+      "component": "filesystem",
+      "caught": 4,
+      "counted": 5,
+      "missed": [
+        "boundary_flip at src/filesystem/lib.ts:847"
+      ]
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-b21b",
+      "component": "memory",
+      "caught": 4,
+      "counted": 5,
+      "missed": [
+        "boundary_flip at src/memory/index.ts:341"
+      ]
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-b21b",
+      "component": "sequentialthinking",
+      "caught": 4,
+      "counted": 5,
+      "missed": [
+        "change_constant at src/sequentialthinking/index.ts:193"
+      ]
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-cbc3",
+      "component": "everything",
+      "caught": 4,
+      "counted": 4,
+      "missed": []
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-cbc3",
+      "component": "filesystem",
+      "caught": 4,
+      "counted": 4,
+      "missed": []
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-cbc3",
+      "component": "memory",
+      "caught": 3,
+      "counted": 5,
+      "missed": [
+        "swap_return at src/memory/index.ts:269",
+        "change_constant at src/memory/index.ts:1456"
+      ]
+    },
+    {
+      "repo": "mcp-servers",
+      "audit": "aud-2026-11-14-e1dc4b1-cbc3",
+      "component": "sequentialthinking",
+      "caught": 3,
+      "counted": 5,
+      "missed": [
+        "change_constant at src/sequentialthinking/lib.ts:32",
+        "boundary_flip at src/sequentialthinking/lib.ts:47"
+      ]
+    }
+  ],
+  "table": [
+    {
+      "rate": 1,
+      "pass": 10,
+      "decided": 25,
+      "unstable": [
+        "ms/ms",
+        "mcp-servers/everything",
+        "mcp-servers/filesystem",
+        "mcp-servers/memory"
+      ]
+    },
+    {
+      "rate": 0.8,
+      "pass": 19,
+      "decided": 25,
+      "unstable": [
+        "ms/ms",
+        "mcp-servers/everything",
+        "mcp-servers/memory",
+        "mcp-servers/sequentialthinking"
+      ]
+    },
+    {
+      "rate": 0.6,
+      "pass": 25,
+      "decided": 25,
+      "unstable": []
+    }
+  ]
+}

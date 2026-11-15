@@ -1,11 +1,15 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HILL_CLIMB_MIN_REPEATS, compare, crashedRun, isInfraError, summarize, withControls, writeJunit } from "./lib/baseline.ts";
 import type { Baseline } from "./lib/baseline.ts";
+import { currentBinding } from "./lib/binding.ts";
+import type { Binding } from "./lib/binding.ts";
 import { scriptedAudit } from "./lib/controls.ts";
-import { releaseVerdict } from "./lib/release.ts";
+import { NO_DOCKER_GATES } from "./lib/gates.ts";
+import { loadCalibration, releaseRecord, releaseVerdict } from "./lib/release.ts";
 import { isolateHome } from "./lib/isolation.ts";
 import { loadCases, planJobs, select } from "./lib/plan.ts";
 import type { Job } from "./lib/plan.ts";
@@ -13,8 +17,8 @@ import { gradeCase, latestReport } from "./lib/grade.ts";
 import { renderMarkdown } from "../../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric } from "../../skill/agent-readiness/scripts/lib/rubric.ts";
 import type { ReportJson } from "../../skill/agent-readiness/scripts/lib/types.ts";
-import { PROMPTS, availableModels, chooseJudge, judge, judgePromptDigest } from "./lib/judge.ts";
-import type { JudgeResult } from "./lib/judge.ts";
+import { PANEL_SAMPLES, PANEL_SIZE, PROMPTS, availableModels, chooseJudges, judgePanel, judgePromptDigest } from "./lib/judge.ts";
+import type { JudgeResult, PanelResult } from "./lib/judge.ts";
 import { rerenderLatest } from "./lib/rerender.ts";
 import { runWithSdk } from "./lib/sdk.ts";
 import type { Arm, CaseRun, EvalCase, Trajectory } from "./lib/types.ts";
@@ -23,7 +27,9 @@ import { applyTurnHook, externalPreamble, fillPrompt, loadWorkspace, prepare, sk
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_MODEL = process.env.SA_READINESS_EVAL_MODEL ?? "composer-2";
-const ARMS: Arm[] = ["agent", "skill-off", "scripted"];
+const ARMS: Arm[] = ["agent", "skill-off", "scripted", "no-docker"];
+// Arms the agent drives; the scripted arm runs `readiness audit` alone.
+const CONTROL_ARMS: Arm[] = ["skill-off", "scripted", "no-docker"];
 
 function args() {
   const a = process.argv.slice(2);
@@ -67,15 +73,32 @@ function runAttack(ws: ReturnType<typeof prepare>, c: EvalCase): Trajectory {
   }
 }
 
-const NOT_JUDGED: JudgeResult = { score: null, reasons: ["negative cases aren't judged"] };
+const NOT_JUDGED: PanelResult = { score: null, reasons: ["negative cases aren't judged"], byModel: {} };
 
-async function judgeRun(r: ReportJson | null, arm: Arm, judgeModel: string | null): Promise<[JudgeResult, JudgeResult]> {
+async function judgeRun(r: ReportJson | null, arm: Arm, judgeModels: string[], samples: number): Promise<[PanelResult, PanelResult]> {
   const key = process.env.CURSOR_API_KEY;
   // A control arm that left no report has nothing a reader could use: it scores 0, so the agent's lift counts it.
-  if (!r && arm !== "agent" && key && judgeModel) return [{ score: 0, reasons: ["no report: 0 for a control arm"] }, { score: 0, reasons: ["no report: 0 for a control arm"] }];
-  if (!judgeModel) return [{ score: null, reasons: ["no judge model"] }, { score: null, reasons: ["no judge model"] }];
-  const [h, p] = await Promise.all((["headline", "page"] as const).map((k) => judge(k, r, judgeModel, key)));
+  const zero: PanelResult = { score: 0, reasons: ["no report: 0 for a control arm"], byModel: {} };
+  if (!r && arm !== "agent" && key && judgeModels.length) return [zero, zero];
+  const none: PanelResult = { score: null, reasons: ["no judge model"], byModel: {} };
+  if (!judgeModels.length) return [none, none];
+  const [h, p] = await Promise.all((["headline", "page"] as const).map((k) => judgePanel(k, r, judgeModels, key, samples)));
   return [h, p];
+}
+
+// The no-docker arm: no container runtime is reachable, whatever is installed. The variables point
+// the docker and podman clients at a socket that doesn't exist, and stubs earlier on PATH stand in
+// for the binaries, as on a machine without a runtime.
+function withoutRuntime(): void {
+  const bin = mkdtempSync(join(tmpdir(), "no-runtime-"));
+  for (const name of ["docker", "podman"]) {
+    writeFileSync(join(bin, name), `#!/bin/sh\necho "$0: not installed (eval arm without a container runtime)" >&2\nexit 127\n`);
+    chmodSync(join(bin, name), 0o755);
+  }
+  process.env.PATH = `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`;
+  process.env.DOCKER_HOST = "unix:///nonexistent/docker.sock";
+  process.env.CONTAINER_HOST = "unix:///nonexistent/podman.sock";
+  process.env.SA_READINESS_RUNTIME = "none";
 }
 
 async function worker(flags: Record<string, string | true>): Promise<void> {
@@ -86,14 +109,17 @@ async function worker(flags: Record<string, string | true>): Promise<void> {
   const c = all.find((x) => x.id === flags.case)!;
   const model = String(flags.model);
   const arm = (typeof flags.arm === "string" ? flags.arm : "agent") as Arm;
-  const judgeModel = typeof flags["judge-model"] === "string" ? flags["judge-model"] : null;
+  const judgeModels = typeof flags["judge-model"] === "string" ? flags["judge-model"].split(",").filter(Boolean).sort() : [];
+  const samples = Number(flags["judge-samples"] ?? PANEL_SAMPLES);
+  if (arm === "no-docker") withoutRuntime();
   const ws = prepare(c, { skill: arm !== "skill-off" });
   const timeoutMs = Number(flags["timeout-min"] ?? 30) * 60000;
   const t = c.attack ? runAttack(ws, c) : arm === "scripted" ? scriptedAudit(ws, c) : await runWithSdk(ws, c, model, process.env.CURSOR_API_KEY!, timeoutMs, { skill: arm !== "skill-off" });
-  const gates = t.error && c.attack ? [{ name: "the attack ran", pass: false, detail: t.error }] : gradeCase(ws, t, c);
+  const gates = t.error && c.attack ? [{ name: "the attack ran", pass: false, detail: t.error }] : gradeCase(ws, t, arm === "no-docker" ? { ...c, gates: NO_DOCKER_GATES } : c);
   const report = latestReport(ws);
-  const [h, p] = c.attack ? [NOT_JUDGED, NOT_JUDGED] : await judgeRun(report, arm, judgeModel);
-  const run: CaseRun = { id: c.id, repeat: Number(flags.repeat), model, driver: t.driver, arm, judgeModel: c.attack ? null : judgeModel, rubric: report?.audit.rubric ?? null, isolation: iso.id, workspace: ws.dir, grade: { gates, soft: { judge: h.score, judgeReasons: h.reasons, page: p.score, pageReasons: p.reasons, wallMs: t.durationMs, toolCalls: t.toolCalls.length, tokens: t.tokens } }, error: t.error };
+  const [h, p] = c.attack ? [NOT_JUDGED, NOT_JUDGED] : await judgeRun(report, arm, judgeModels, samples);
+  const byModel = Object.keys(h.byModel).length ? { judgeByModel: h.byModel, pageByModel: p.byModel } : {};
+  const run: CaseRun = { id: c.id, repeat: Number(flags.repeat), model, driver: t.driver, arm, judgeModel: c.attack || !judgeModels.length ? null : judgeModels.join(","), rubric: report?.audit.rubric ?? null, isolation: iso.id, workspace: ws.dir, grade: { gates, soft: { judge: h.score, judgeReasons: h.reasons, page: p.score, pageReasons: p.reasons, ...byModel, wallMs: t.durationMs, toolCalls: t.toolCalls.length, tokens: t.tokens } }, error: t.error };
   writeResult(String(flags.out), { run, trajectory: t });
 }
 
@@ -101,8 +127,13 @@ async function worker(flags: Record<string, string | true>): Promise<void> {
 const RESULT_GRACE_MS = Number(process.env.SA_READINESS_EVAL_RESULT_GRACE_SEC ?? 60) * 1000;
 
 
-async function spawnOnce(j: Job, out: string, timeoutMin: string, judgeModel: string | null): Promise<void> {
-  const argv = [fileURLToPath(import.meta.url), "--worker", "--case", j.c.id, "--repeat", String(j.r), "--model", j.m, "--arm", j.arm, "--out", out, "--timeout-min", timeoutMin, ...(judgeModel ? ["--judge-model", judgeModel] : [])];
+interface JudgeSetup {
+  models: string[];
+  samples: number;
+}
+
+async function spawnOnce(j: Job, out: string, timeoutMin: string, judges: JudgeSetup | null): Promise<void> {
+  const argv = [fileURLToPath(import.meta.url), "--worker", "--case", j.c.id, "--repeat", String(j.r), "--model", j.m, "--arm", j.arm, "--out", out, "--timeout-min", timeoutMin, ...(judges?.models.length ? ["--judge-model", judges.models.join(","), "--judge-samples", String(judges.samples)] : [])];
   const child = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", ...argv], { stdio: ["ignore", "inherit", "inherit"], env: process.env });
   // The worker cancels its own turn at the timeout and exits once its result is written; this
   // catches one that hangs past either, keeping a result that is already complete.
@@ -112,11 +143,11 @@ async function spawnOnce(j: Job, out: string, timeoutMin: string, judgeModel: st
 
 // Infrastructure errors (capacity, network, a crashed worker) are retried in a fresh workspace and
 // recorded separately; a run that fails that way every time is lost, not failed.
-async function spawnWorker(j: Job, out: string, timeoutMin: string, judgeModel: string | null, retries: number): Promise<void> {
+async function spawnWorker(j: Job, out: string, timeoutMin: string, judges: JudgeSetup | null, retries: number): Promise<void> {
   const errors: string[] = [];
   for (let attempt = 1; ; attempt++) {
     rmSync(out, { force: true });
-    await spawnOnce(j, out, timeoutMin, judgeModel);
+    await spawnOnce(j, out, timeoutMin, judges);
     const saved = JSON.parse(readFileSync(out, "utf8")) as { run: CaseRun; trajectory?: Trajectory };
     const infra = isInfraError(saved.run.error);
     if (infra) errors.push(saved.run.error!);
@@ -153,11 +184,13 @@ interface ReportOptions {
   holdout: Set<string>;
   selected?: string[];
   controls?: Partial<Record<Arm, CaseRun[]>>;
+  judgeSamples?: number | null;
+  binding?: Binding;
 }
 
 function report(runs: CaseRun[], flags: Record<string, string | true>, o: ReportOptions): number {
   const arm = runs[0]?.arm ?? "agent";
-  let summary = summarize(runs, { model: o.model, driver: o.driver, repeats: o.repeats, note: typeof flags.note === "string" ? flags.note : undefined, arm, holdout: o.holdout, judgePrompt: judgePromptDigest() });
+  let summary = summarize(runs, { model: o.model, driver: o.driver, repeats: o.repeats, note: typeof flags.note === "string" ? flags.note : undefined, arm, holdout: o.holdout, judgePrompt: judgePromptDigest(), judgeSamples: o.judgeSamples ?? null, binding: o.binding });
   if (o.controls) summary = withControls(summary, runs, o.controls, o.holdout);
   for (const [id, s] of Object.entries(summary.cases)) process.stdout.write(`${s.allGatesPass.padStart(5)}  ${(id + (s.holdout ? " (held out)" : "")).padEnd(60)} judge ${s.judge ?? "n/a"} page ${s.page ?? "n/a"}${s.infraLost ? `  ${s.infraLost} lost to infrastructure` : ""}  ${Object.entries(s.gates).filter(([, v]) => !v.startsWith(String(s.usable))).map(([g, v]) => `${g} ${v}`).join("; ")}\n`);
   const t = summary.totals;
@@ -189,7 +222,7 @@ function report(runs: CaseRun[], flags: Record<string, string | true>, o: Report
     if (runs.some((r) => !r.infra?.lost && !r.grade.gates.every((g) => g.pass))) code = code || 2;
   } else if (arm === "agent") {
     // The release policy (release.ts): k of n per case; one run short is a flag, two a regression.
-    const verdict = releaseVerdict(summary);
+    const verdict = releaseVerdict(summary, { binding: currentBinding(), calibration: loadCalibration() });
     for (const line of verdict.lines) process.stdout.write(`${line}\n`);
     if (verdict.cases.some((c) => c.verdict === "regression")) code = code || 2;
     if (flags.release && !verdict.pass) code = code || 1;
@@ -198,13 +231,18 @@ function report(runs: CaseRun[], flags: Record<string, string | true>, o: Report
   return code;
 }
 
-async function pickJudgeModel(flags: Record<string, string | true>, driverModel: string): Promise<string | null> {
+// --judge-model takes a comma-separated panel; without it, PANEL_SIZE judges of other families
+// than the driver and each other are picked from what the key can use.
+async function pickJudges(flags: Record<string, string | true>, driverModel: string): Promise<JudgeSetup | null> {
   const key = process.env.CURSOR_API_KEY;
-  const explicit = typeof flags["judge-model"] === "string" ? flags["judge-model"] : process.env.SA_READINESS_JUDGE_MODEL;
-  if (!key) return explicit ?? null;
-  const choice = chooseJudge(driverModel, explicit ? [] : await availableModels(key), explicit);
-  process.stdout.write(`Judge: ${choice.model} (${choice.why}).\n`);
-  return choice.model;
+  const raw = typeof flags["judge-model"] === "string" ? flags["judge-model"] : process.env.SA_READINESS_JUDGE_MODEL;
+  const explicit = (raw ?? "").split(",").filter(Boolean);
+  const samples = Number(flags["judge-samples"] ?? PANEL_SAMPLES);
+  if (!key) return explicit.length ? { models: explicit.sort(), samples } : null;
+  const choices = chooseJudges(driverModel, explicit.length ? [] : await availableModels(key), explicit);
+  for (const c of choices) process.stdout.write(`Judge: ${c.model} (${c.why}), ${samples} call${samples === 1 ? "" : "s"} per report.\n`);
+  if (choices.length < PANEL_SIZE) process.stdout.write(`NOTE ${choices.length} judge${choices.length === 1 ? "" : "s"}; the release policy needs a panel of ${PANEL_SIZE}.\n`);
+  return { models: choices.map((c) => c.model).sort(), samples };
 }
 
 async function main(): Promise<void> {
@@ -233,8 +271,13 @@ async function main(): Promise<void> {
   // Scores a saved run (--json output or a baseline) against the release policy: one PASS or FAIL.
   if (typeof flags["release-check"] === "string") {
     const saved = JSON.parse(readFileSync(resolve(flags["release-check"]), "utf8")) as { summary?: Baseline } & Baseline;
-    const verdict = releaseVerdict(saved.summary ?? saved);
+    const b = saved.summary ?? saved;
+    const verdict = releaseVerdict(b, { binding: currentBinding(), calibration: loadCalibration(typeof flags.calibration === "string" ? resolve(flags.calibration) : undefined) });
     for (const line of verdict.lines) process.stdout.write(`${line}\n`);
+    if (typeof flags["release-record"] === "string") {
+      mkdirSync(dirname(resolve(flags["release-record"])), { recursive: true });
+      writeFileSync(resolve(flags["release-record"]), JSON.stringify(releaseRecord(b, verdict, new Date().toISOString()), null, 2) + "\n");
+    }
     process.exitCode = verdict.pass ? 0 : 1;
     return;
   }
@@ -310,7 +353,7 @@ async function main(): Promise<void> {
   }
   const scripted = selected.filter((c) => c.attack);
   let driven = selected.filter((c) => !c.attack);
-  // The scripted control arm needs no key; the agent and skill-off arms do.
+  // The scripted control arm needs no key; the arms an agent drives do.
   let drivenArms = arms;
   if (driven.length && !process.env.CURSOR_API_KEY) {
     drivenArms = arms.filter((a) => a === "scripted");
@@ -319,7 +362,9 @@ async function main(): Promise<void> {
     if (!drivenArms.length) driven = [];
     if (!driven.length && !scripted.length) return;
   }
-  const judgeModel = driven.length ? await pickJudgeModel(flags, models[0]) : null;
+  const judges = driven.length ? await pickJudges(flags, models[0]) : null;
+  // Recorded before any run starts, so a change made while the runs go can't be passed off as measured.
+  const binding = currentBinding();
   const maxRuns = Number(flags["max-runs"] ?? 120);
   const jobs = planJobs([...driven, ...scripted], drivenArms, models, repeats);
   if (jobs.length > maxRuns) throw new Error(`${jobs.length} runs exceed --max-runs ${maxRuns}.`);
@@ -332,7 +377,7 @@ async function main(): Promise<void> {
     Array.from({ length: concurrency }, async () => {
       while (next < jobs.length) {
         const j = jobs[next++];
-        await spawnWorker(j, join(outDir, `${j.c.id.replace(/\//g, "__")}.${j.arm}.${j.m}.${j.r}.run.json`), String(flags["timeout-min"] ?? 30), j.c.attack ? null : judgeModel, retries);
+        await spawnWorker(j, join(outDir, `${j.c.id.replace(/\//g, "__")}.${j.arm}.${j.m}.${j.r}.run.json`), String(flags["timeout-min"] ?? 30), j.c.attack ? null : judges, retries);
       }
     }),
   );
@@ -340,13 +385,14 @@ async function main(): Promise<void> {
   const drivenIds = new Set(driven.map((c) => c.id));
   const of = (arm: Arm, m?: string) => done.filter((r) => drivenIds.has(r.id) && (r.arm ?? "agent") === arm && (!m || r.model === m));
   let code = 0;
-  const controls = { "skill-off": drivenArms.includes("skill-off") ? of("skill-off") : [], scripted: drivenArms.includes("scripted") ? of("scripted") : [] };
+  const controls = Object.fromEntries(CONTROL_ARMS.map((a) => [a, drivenArms.includes(a) ? of(a) : []])) as Record<Arm, CaseRun[]>;
   const selectedIds = driven.map((c) => c.id);
-  for (const m of drivenArms.includes("agent") ? models : []) code = report(of("agent", m), flags, { model: m, driver: "sdk", repeats, holdout, selected: selectedIds, controls: { "skill-off": controls["skill-off"].filter((r) => r.model === m), scripted: controls.scripted } }) || code;
+  const own = { judgeSamples: judges?.models.length ? judges.samples : null, binding };
+  for (const m of drivenArms.includes("agent") ? models : []) code = report(of("agent", m), flags, { model: m, driver: "sdk", repeats, holdout, selected: selectedIds, ...own, controls: { "skill-off": controls["skill-off"].filter((r) => r.model === m), scripted: controls.scripted, "no-docker": controls["no-docker"].filter((r) => r.model === m) } }) || code;
   // Control arms alone (no agent arm) still print their own summary; the baseline is for the agent.
   if (!drivenArms.includes("agent")) {
     const { "write-baseline": _w, compare: _c, ...rest } = flags;
-    for (const arm of drivenArms) code = report(of(arm), rest, { model: arm === "scripted" ? "scripted" : models[0], driver: arm === "scripted" ? "scripted" : "sdk", repeats, holdout }) || code;
+    for (const arm of drivenArms) code = report(of(arm), rest, { model: arm === "scripted" ? "scripted" : models[0], driver: arm === "scripted" ? "scripted" : "sdk", repeats, holdout, ...own }) || code;
   }
   // The baseline is for agent runs; a negative case fails the run by failing its gates.
   if (scripted.length) {

@@ -3,7 +3,9 @@
 # or evals also run the smoke skill evals against the real Cursor agent; full runs weekly and when the
 # default model changes. Without the CURSOR_API_KEY secret (for example on forks) the skill evals skip
 # with a notice. A hard-gate regression against support/evals/baseline.json fails the job, and so does a run
-# whose driver model, judge model, driver, rubric or judge prompt differs from the baseline's.
+# whose driver model, judge models, driver, rubric or judge prompt differs from the baseline's.
+# A dispatch with release=true runs the release policy (support/RELEASE.md) on the run and uploads
+# the release record, which names the commit and code digests the pass was measured on.
 name: agent-readiness-evals
 on:
   pull_request:
@@ -17,8 +19,12 @@ on:
         description: smoke or full
         default: full
       arms:
-        description: agent, plus control arms to measure the agent's lift over (scripted, skill-off)
+        description: agent, plus control arms to measure the agent's lift over (scripted, skill-off, no-docker)
         default: agent,scripted
+      release:
+        description: apply the release policy and record the release (needs tag full and arms agent,scripted)
+        type: boolean
+        default: false
 permissions:
   contents: read
 defaults:
@@ -53,15 +59,17 @@ jobs:
   skill-evals:
     needs: check
     runs-on: ubuntu-latest
-    # A full run with every arm is about 650 runs at 3 repeats, roughly 3 hours at concurrency 3.
+    # The release run (full, agent and scripted, 5 repeats) is about 760 runs, roughly 5 hours at concurrency 4.
     timeout-minutes: 360
     env:
       CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
       SA_READINESS_GRADER_SEED: ${{ secrets.SA_READINESS_GRADER_SEED }}
       # Pinned to the instrument support/evals/baseline.json was recorded with; compare() refuses any other.
-      # Change them only together with a re-recorded baseline.
+      # Change them only together with a re-recorded baseline. The judges are a comma-separated panel of
+      # two, each of another family than the driver; empty picks them from what the key can use. The
+      # harness reads it when no --judge-model is given.
       SA_READINESS_EVAL_MODEL: ${{ vars.SA_READINESS_EVAL_MODEL || 'claude-opus-5-5' }}
-      SA_READINESS_JUDGE_MODEL: ${{ vars.SA_READINESS_JUDGE_MODEL || 'gpt-5.6-sol' }}
+      SA_READINESS_JUDGE_MODEL: ${{ vars.SA_READINESS_JUDGE_MODEL || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,12 +91,53 @@ jobs:
           node-version-file: software-factory/agent-readiness/.nvmrc
       - if: steps.set.outputs.tag != ''
         run: npm ci
-      # --max-runs covers the full suite with all three arms at 3 repeats; tests/workflow.test.ts checks it.
+      # 5 repeats, as the release policy needs. --max-runs covers the full suite with three arms at 5
+      # repeats; tests/workflow.test.ts checks it.
       - name: Skill evals
         if: steps.set.outputs.tag != ''
-        run: npm run evals -- --tag ${{ steps.set.outputs.tag }} --arm ${{ steps.set.outputs.arms }} --model "$SA_READINESS_EVAL_MODEL" --judge-model "$SA_READINESS_JUDGE_MODEL" --repeats 3 --concurrency 3 --max-runs 800 --json support/evals/runs/result.json --junit support/evals/runs/junit.xml --compare support/evals/baseline.json
+        run: npm run evals -- --tag ${{ steps.set.outputs.tag }} --arm ${{ steps.set.outputs.arms }} --model "$SA_READINESS_EVAL_MODEL" --repeats 5 --concurrency 4 --max-runs 1200 --json support/evals/runs/result.json --junit support/evals/runs/junit.xml --compare support/evals/baseline.json
+      - name: Release check
+        if: steps.set.outputs.tag != '' && github.event.inputs.release == 'true'
+        run: npm run evals -- --release-check support/evals/runs/result.json --release-record support/evals/runs/release-record.json
       - uses: actions/upload-artifact@v4
         if: always() && steps.set.outputs.tag != ''
         with:
           name: agent-readiness-evals
+          path: software-factory/agent-readiness/support/evals/runs/
+
+  # Weekly, the same suite on a second agent model, and the smoke set on a machine with no container
+  # runtime. Both are reported, not compared with the baseline, which is the first model's.
+  eval-matrix:
+    needs: check
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: second-model
+            model: gpt-5.6-sol
+            tag: full
+            arms: agent,scripted
+          - name: no-docker
+            model: claude-opus-5-5
+            tag: smoke
+            arms: no-docker
+    env:
+      CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+      SA_READINESS_GRADER_SEED: ${{ secrets.SA_READINESS_GRADER_SEED }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: software-factory/agent-readiness/.nvmrc
+      - run: npm ci
+      - name: Skill evals (${{ matrix.name }})
+        if: env.CURSOR_API_KEY != ''
+        run: npm run evals -- --tag ${{ matrix.tag }} --arm ${{ matrix.arms }} --model ${{ matrix.model }} --repeats 3 --concurrency 4 --max-runs 800 --json support/evals/runs/result.json --junit support/evals/runs/junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-readiness-evals-${{ matrix.name }}
           path: software-factory/agent-readiness/support/evals/runs/
