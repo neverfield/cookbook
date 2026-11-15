@@ -73,6 +73,9 @@ export const PNPM_STORE = "/tmp/home/.pnpm-store";
 export function startArgs(name: string, image: string, hostDir: string, limits: Limits | null = null, env: Record<string, string | undefined> = process.env, pathExists: (p: string) => boolean = existsSync): string[] {
   const args = ["run", "-d", "--name", name, "-v", `${hostDir}:/work`, "-w", "/work", "-e", "CI=1", "-e", `HOME=${HOME_DIR}`, "-e", `npm_config_store_dir=${PNPM_STORE}`, "-e", `pnpm_config_store_dir=${PNPM_STORE}`];
   args.push("--cap-drop=ALL", ...CAPS_ADDED.map((c) => `--cap-add=${c}`), "--security-opt", "no-new-privileges");
+  // An init as PID 1 reaps orphaned processes. Without it a killed child stays a zombie, and a test
+  // that checks its process tree was stopped (kill -0) sees it as still running.
+  args.push("--init");
   if (limits) {
     if (limits.cpus) args.push("--cpus", String(limits.cpus));
     args.push("--memory", `${limits.memoryMb}m`, "--memory-swap", `${limits.memoryMb}m`, "--pids-limit", String(limits.pids));
