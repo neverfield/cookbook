@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-11-15T09:39:51.980Z",
+  "ranAt": "2026-11-15T09:52:34.181Z",
   "results": [
     {
       "id": "slugify",
@@ -34,9 +34,9 @@
     {
       "id": "starlette",
       "sha": "2745bbc5afa2f8ce900d290bedca2bc5d3f3cfe8",
-      "scoring": "49f487f90db58eec829ba410bd6725cba5150591e8d541fffbe801b101e715d3",
-      "commit": "3766065149b611e0dad7d632c7c44829304dc389",
-      "minutes": 4.5,
+      "scoring": "bdd96582aec18dbfce421cfcfb1143d8f135f233e09d06aab8f8a5418db43dc4",
+      "commit": "f0bedf527290c21d8510ec663a6e59ba30cec9a9",
+      "minutes": 1.8,
       "repoLevel": 2,
       "outcome": "proven",
       "levels": {
@@ -140,10 +140,5 @@
   "violations": [
     "slugify:slugify is Level 1, which should be above express:express at Level 1"
   ],
-  "pending": [
-    {
-      "id": "starlette",
-      "reason": "recorded under scoring 49f487f90db5, current is bdd96582aec1; not rerun in this pass"
-    }
-  ]
+  "pending": []
 }
