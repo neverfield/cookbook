@@ -43,7 +43,7 @@ Each row comes from the ecosystem's file under `scripts/lib/languages/`, and a t
 | `go` | Go | `go mod download` with `-mod=readonly`, from a committed `go.sum` that covers every module `go.mod` requires; a committed `vendor/modules.txt` counts as the lock |
 | `cargo` | Rust | `cargo fetch --locked` from a committed `Cargo.lock`; a workspace's members share the root's |
 | `maven` | JVM | `mvn dependency:go-offline` through the committed Maven Wrapper when there is one, with every dependency and plugin version fixed in `pom.xml`: no version ranges, `LATEST` or `RELEASE` |
-| `gradle` | JVM | `gradle dependencies` through the committed Gradle Wrapper, with dependency locking (`gradle.lockfile`) committed, or with no dynamic versions (`1.+`, `latest.release`, ranges) in the build |
+| `gradle` | JVM | every resolvable configuration's dependencies downloaded through the committed Gradle Wrapper, with dependency locking (`gradle.lockfile`) committed, or with no dynamic versions (`1.+`, `latest.release`, ranges) in the build |
 | `nuget` | .NET | `dotnet restore --locked-mode` with a committed `packages.lock.json` next to every project that references packages |
 | `composer` | PHP | `composer install` from a committed `composer.lock` |
 | `bundler` | Ruby | `bundle install` in frozen mode (`BUNDLE_FROZEN=true`) from a committed `Gemfile.lock` |
