@@ -6,11 +6,11 @@
     "date": "2026-10-27",
     "commit": "7070f44",
     "dirtyTree": false,
-    "rubric": "2026-11-alpha",
+    "rubric": "2026-11-beta",
     "tier": "local-exec",
-    "scriptsDigest": "a3f4148e45a559312005617065824af2fdc3f309ce9007a68089c537ff3e15bb",
+    "scriptsDigest": "3931ccf0600aa0220d5d98fa66d98edec71ee3f4566610590c565d684bd998f9",
     "seedPinned": true,
-    "sealStatus": "Scripts match the agent-readiness-v0.1.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
+    "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
     "previous": null,
     "storedAt": ".agent-readiness/history/audits/aud-2026-10-27-7070f44-e101"
@@ -151,7 +151,7 @@
             "condition": "faults",
             "label": "tests catch planted faults",
             "state": "not_met",
-            "reason": "caught 0 of 5 planted faults; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:12, change_constant at packages/worker/src/retry.js:5"
+            "reason": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12"
           },
           {
             "component": "worker",
@@ -251,7 +251,7 @@
       "itemId": "instructions:repo",
       "title": "Fix the stale agent instructions",
       "startNow": false,
-      "why": "3 instructions agents would follow are wrong: npm run changelog (no \"changelog\" script in package.json), pnpm test (uses pnpm, but the repo uses npm).",
+      "why": "3 instructions agents would follow are wrong: pnpm test (uses pnpm, but the repo uses npm), docs/architecture.md (docs/architecture.md doesn't exist).",
       "movesTheNeedle": "Takes shared to Level 2, covering 15% of recent changes. Agents stop following stale steps, such as running pnpm in a repo that doesn't use it.",
       "watch": "Agent PRs that add a stray pnpm-lock.yaml. Now: 11% (1 of 9), Sep 27 to Oct 27, 2026.",
       "research": null,
@@ -278,7 +278,7 @@
       "research": "OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. https://openai.com/index/separating-signal-from-noise-coding-evaluations",
       "effortAndOwner": "Medium: tests in worker only. Component owner.",
       "decision": "What the untested behavior in packages/worker/src/retry.js should be",
-      "doneWhen": "A new audit's fresh planted faults in worker are all caught.",
+      "doneWhen": "An audit after the change catches at least 60% of the faults it plants in worker.",
       "dependsOn": [],
       "impact": 0,
       "effort": "medium",
@@ -423,7 +423,7 @@
         "steps": [
           {
             "title": "Fix each listed item",
-            "detail": "`.cursor/skills/release-notes/SKILL.md:8` `npm run changelog`: no \"changelog\" script in package.json; `AGENTS.md:7` `pnpm test`: uses pnpm, but the repo uses npm; `AGENTS.md:8` `docs/architecture.md`: docs/architecture.md doesn't exist"
+            "detail": "`AGENTS.md:7` `pnpm test`: uses pnpm, but the repo uses npm; `AGENTS.md:8` `docs/architecture.md`: docs/architecture.md doesn't exist; `.cursor/skills/release-notes/SKILL.md:8` `npm run changelog`: no \"changelog\" script in package.json"
           },
           {
             "title": "Prove it",
@@ -444,8 +444,8 @@
             "detail": "Assert results and edge cases, not just that code runs."
           },
           {
-            "title": "Prove it with fresh faults",
-            "detail": "Run a new audit. It plants different faults than this one, so tests aimed at one audit's faults don't help."
+            "title": "Prove it with a new audit",
+            "detail": "Run a new audit. Faults come from the code and the tests, so changing the tests plants different faults than this audit did, and tests aimed at one audit's faults don't help."
           },
           {
             "title": "Review",
@@ -543,7 +543,7 @@
             "url": "https://openai.com/index/separating-signal-from-noise-coding-evaluations"
           }
         ],
-        "result": "api: tests must pass before faults can be planted; shared: caught 5 of 5 planted faults; worker: caught 0 of 5 planted faults",
+        "result": "api: tests must pass before faults can be planted; shared: caught 5 of 5 planted faults; worker: caught 0 of 5 planted faults, below the 60% the rubric requires",
         "ok": false,
         "counts": {
           "passed": 1,
@@ -796,28 +796,28 @@
         "id": "ev-001",
         "check": "context.instructions_verified",
         "component": null,
-        "ran": ".cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no \"changelog\" script in package.json",
-        "where": "read from files",
-        "result": "fail",
-        "summary": ".cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no \"changelog\" script in package.json"
-      },
-      {
-        "id": "ev-002",
-        "check": "context.instructions_verified",
-        "component": null,
         "ran": "AGENTS.md:7 `pnpm test`: uses pnpm, but the repo uses npm",
         "where": "read from files",
         "result": "fail",
         "summary": "AGENTS.md:7 `pnpm test`: uses pnpm, but the repo uses npm"
       },
       {
-        "id": "ev-003",
+        "id": "ev-002",
         "check": "context.instructions_verified",
         "component": null,
         "ran": "AGENTS.md:8 `docs/architecture.md`: docs/architecture.md doesn't exist",
         "where": "read from files",
         "result": "fail",
         "summary": "AGENTS.md:8 `docs/architecture.md`: docs/architecture.md doesn't exist"
+      },
+      {
+        "id": "ev-003",
+        "check": "context.instructions_verified",
+        "component": null,
+        "ran": ".cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no \"changelog\" script in package.json",
+        "where": "read from files",
+        "result": "fail",
+        "summary": ".cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no \"changelog\" script in package.json"
       },
       {
         "id": "ev-004",
@@ -931,19 +931,19 @@
         "id": "ev-016",
         "check": "verify.behavioral_oracle",
         "component": "shared",
-        "ran": "caught 5 of 5 planted faults (tried: drop_throw_or_return, change_constant, negate_condition)",
+        "ran": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "caught 5 of 5 planted faults (tried: drop_throw_or_return, change_constant, negate_condition)"
+        "summary": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)"
       },
       {
         "id": "ev-017",
         "check": "verify.behavioral_oracle",
         "component": "worker",
-        "ran": "caught 0 of 5 planted faults; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:12, change_constant at packages/worker/src/retry.js:5",
+        "ran": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12",
         "where": "ran in a clean container",
         "result": "fail",
-        "summary": "caught 0 of 5 planted faults; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:12, change_constant at packages/worker/src/retry.js:5"
+        "summary": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12"
       },
       {
         "id": "ev-018",
@@ -975,7 +975,7 @@
       },
       {
         "label": "Rubric",
-        "value": "2026-11-alpha"
+        "value": "2026-11-beta"
       },
       {
         "label": "Permission tier",
@@ -983,11 +983,11 @@
       },
       {
         "label": "Seal",
-        "value": "Scripts match the agent-readiness-v0.1.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it"
+        "value": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it"
       },
       {
         "label": "Skill digest",
-        "value": "a3f4148e45a5"
+        "value": "3931ccf0600a"
       },
       {
         "label": "Planted faults",
@@ -1003,5 +1003,287 @@
       }
     ]
   },
-  "notices": []
+  "notices": [],
+  "waivers": null,
+  "explanations": [
+    {
+      "kind": "level",
+      "subject": "repo",
+      "result": "Level 0",
+      "ran": "the level rules over the active components, api, shared and worker",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "Set by api, held by api: passes every test in a clean container, not met (test failed: connection refused on port 5432 (1 of 1 tests failed)).",
+      "rule": "The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it."
+    },
+    {
+      "kind": "level",
+      "subject": "api",
+      "result": "Level 0",
+      "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (fail)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "Held at Level 0 by passes every test in a clean container: not met (test failed: connection refused on port 5432 (1 of 1 tests failed))",
+      "rule": "Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
+    },
+    {
+      "kind": "level",
+      "subject": "shared",
+      "result": "Level 1",
+      "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (pass)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "Held at Level 1 by agent instructions are accurate: not met (3 of 7 instruction items are wrong)",
+      "rule": "Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
+    },
+    {
+      "kind": "level",
+      "subject": "worker",
+      "result": "Level 1",
+      "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (pass)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "Held at Level 1 by tests catch planted faults: not met (caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12) and agent instructions are accurate: not met (3 of 7 instruction items are wrong)",
+      "rule": "Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
+    },
+    {
+      "kind": "not_assessed",
+      "subject": "infra",
+      "result": "not assessed",
+      "ran": "nothing: the audit runs commands only for assessed components",
+      "where": "not run",
+      "happened": "Terraform isn't supported yet",
+      "rule": "Only components on a supported toolchain are assessed, up to the 10 most active by share of recent changes; the support list says which toolchains are supported."
+    },
+    {
+      "kind": "condition",
+      "subject": "api: installs from the lockfile in a clean container",
+      "result": "met",
+      "ran": "`npm ci` (pass)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "install passed",
+      "rule": "Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "api: builds in a clean container",
+      "result": "met",
+      "ran": "`npm ci` (pass)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "no build step; follows the install",
+      "rule": "Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "api: passes every test in a clean container",
+      "result": "not met",
+      "ran": "`npm run test` (fail)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "test failed: connection refused on port 5432 (1 of 1 tests failed)",
+      "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Not met means it ran and failed, or the repo lacks what it needs."
+    },
+    {
+      "kind": "condition",
+      "subject": "api: build, lint, type-check and test commands pass",
+      "result": "not met",
+      "ran": "`npm run lint` (pass) and `npm run test` (fail)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "test failed: connection refused on port 5432 (1 of 1 tests failed)",
+      "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Not met means it ran and failed, or the repo lacks what it needs."
+    },
+    {
+      "kind": "condition",
+      "subject": "api: tests catch planted faults",
+      "result": "not proven",
+      "ran": "tests must pass before faults can be planted",
+      "where": "not run",
+      "happened": "tests must pass before faults can be planted",
+      "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not proven means it didn't run, or ran below the strength the check requires."
+    },
+    {
+      "kind": "condition",
+      "subject": "repo: agent instructions are accurate",
+      "result": "not met",
+      "ran": "AGENTS.md:7 `pnpm test`: uses pnpm, but the repo uses npm, AGENTS.md:8 `docs/architecture.md`: docs/architecture.md doesn't exist, .cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no \"changelog\" script in package.json `npm run lint -w api` (pass), and 1 more",
+      "where": "read from the audited commit's files, nothing ran and in a clean docker container (node:22-bookworm)",
+      "happened": "3 of 7 instruction items are wrong",
+      "rule": "Level 2 needs it: agent instructions are accurate (Agent instructions are accurate). Not met means it ran and failed, or the repo lacks what it needs."
+    },
+    {
+      "kind": "condition",
+      "subject": "repo: normal work needs no production access",
+      "result": "met",
+      "ran": "nothing ran for it",
+      "where": "read from the audited commit's files, nothing ran",
+      "happened": "no blocking safety findings",
+      "rule": "Level 2 needs it: normal work needs no production access (Normal work needs no production access). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "repo: toolchain versions are pinned",
+      "result": "met",
+      "ran": "nothing ran for it",
+      "where": "read from the audited commit's files, nothing ran",
+      "happened": "pinned in .nvmrc",
+      "rule": "Reported with Level 1; no level waits on it alone: toolchain versions are pinned (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "repo: a frozen install reproduces the lockfile",
+      "result": "met",
+      "ran": "frozen install reproduced the lockfile",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "frozen install reproduced the lockfile",
+      "rule": "Reported with Level 1; no level waits on it alone: a frozen install reproduces the lockfile (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "shared: installs from the lockfile in a clean container",
+      "result": "met",
+      "ran": "`npm ci` (pass)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "install passed",
+      "rule": "Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "shared: builds in a clean container",
+      "result": "met",
+      "ran": "`npm ci` (pass)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "no build step; follows the install",
+      "rule": "Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "shared: passes every test in a clean container",
+      "result": "met",
+      "ran": "`npm run test` (pass)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "test passed (3 of 3 tests)",
+      "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "shared: build, lint, type-check and test commands pass",
+      "result": "met",
+      "ran": "`npm run lint` (pass) and `npm run test` (pass)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "2 commands pass",
+      "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "shared: tests catch planted faults",
+      "result": "met",
+      "ran": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)",
+      "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "worker: installs from the lockfile in a clean container",
+      "result": "met",
+      "ran": "`npm ci` (pass)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "install passed",
+      "rule": "Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "worker: builds in a clean container",
+      "result": "met",
+      "ran": "`npm ci` (pass)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "no build step; follows the install",
+      "rule": "Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "worker: passes every test in a clean container",
+      "result": "met",
+      "ran": "`npm run test` (pass)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "test passed (2 of 2 tests)",
+      "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "worker: build, lint, type-check and test commands pass",
+      "result": "met",
+      "ran": "`npm run lint` (pass) and `npm run test` (pass)",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "2 commands pass",
+      "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "worker: tests catch planted faults",
+      "result": "not met",
+      "ran": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12",
+      "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not met means it ran and failed, or the repo lacks what it needs."
+    },
+    {
+      "kind": "instruction",
+      "subject": ".cursor/rules/style.mdc:6",
+      "result": "checks out",
+      "ran": "`npm run lint -w api`",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "it exited 0",
+      "rule": "A command that passes the static checks runs in a copy of the repo and must exit 0."
+    },
+    {
+      "kind": "instruction",
+      "subject": "AGENTS.md:3",
+      "result": "checks out",
+      "ran": "checked that `packages/` exists",
+      "where": "read from the audited commit's files, nothing ran",
+      "happened": "it exists",
+      "rule": "A file or folder the instructions name must exist in the repo, next to the instruction file, at the root or inside the package that owns it."
+    },
+    {
+      "kind": "instruction",
+      "subject": "AGENTS.md:5",
+      "result": "checks out",
+      "ran": "`npm ci`",
+      "where": "read from the audited commit's files, nothing ran",
+      "happened": "install commands are checked statically; the clean replay runs the frozen install",
+      "rule": "Install commands are checked statically; the clean replay runs the frozen install instead."
+    },
+    {
+      "kind": "instruction",
+      "subject": "AGENTS.md:6",
+      "result": "checks out",
+      "ran": "`npm run test -w shared`",
+      "where": "in a clean docker container (node:22-bookworm)",
+      "happened": "it exited 0",
+      "rule": "A command that passes the static checks runs in a copy of the repo and must exit 0."
+    },
+    {
+      "kind": "instruction",
+      "subject": "AGENTS.md:7",
+      "result": "wrong",
+      "ran": "`pnpm test`",
+      "where": "read from the audited commit's files, nothing ran",
+      "happened": "uses pnpm, but the repo uses npm",
+      "rule": "Install and add commands must use the repo's package manager, and only npm, which every Node install has, may run scripts in a repo that uses another one."
+    },
+    {
+      "kind": "instruction",
+      "subject": "AGENTS.md:8",
+      "result": "wrong",
+      "ran": "checked that `docs/architecture.md` exists",
+      "where": "read from the audited commit's files, nothing ran",
+      "happened": "docs/architecture.md doesn't exist",
+      "rule": "A file or folder the instructions name must exist in the repo, next to the instruction file, at the root or inside the package that owns it."
+    },
+    {
+      "kind": "instruction",
+      "subject": ".cursor/skills/release-notes/SKILL.md:8",
+      "result": "wrong",
+      "ran": "`npm run changelog`",
+      "where": "read from the audited commit's files, nothing ran",
+      "happened": "no \"changelog\" script in package.json",
+      "rule": "A package-manager script the instructions run must be in the package.json of the folder it runs in."
+    }
+  ]
 }
