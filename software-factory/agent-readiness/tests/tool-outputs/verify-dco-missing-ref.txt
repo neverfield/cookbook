@@ -1,0 +1,5 @@
+
+> @modelcontextprotocol/servers@0.6.2 verify:dco
+> node scripts/verify-dco.mjs
+
+verify:dco: cannot resolve origin/v2/main. Fetch it (`git fetch origin v2/main`), or name another base with --base.

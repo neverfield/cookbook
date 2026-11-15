@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
-import { ContainerSession, IMAGE_PATH_VAR, detectRuntime, hostUser, loginShell, parseUserEntry, userEntryCommand } from "../skill/agent-readiness/scripts/lib/container.ts";
+import { ContainerSession, IMAGE_PATH_VAR, detectRuntime, hostUser, loginShell, parseUserEntry, startArgs, userEntryCommand } from "../skill/agent-readiness/scripts/lib/container.ts";
 import { chmodSync } from "node:fs";
 import { commandTimeout, discoverContract, imagePlan } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { IMAGE_DIGESTS } from "../skill/agent-readiness/scripts/lib/images.ts";
@@ -17,10 +17,10 @@ import { chooseSites, targetFiles, testFiles } from "../skill/agent-readiness/sc
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { RAN_OUT_BEFORE, banRepeats, budgetFloors, environmentLimit, instructionExecutor, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
-import { IDLE_MARK, IDLE_OFFLINE, compilerError, diagnose, failingTests } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
+import { IDLE_MARK, IDLE_OFFLINE, compilerError, diagnose, failingTests, missingRef } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { extractFromMarkdown, instructionItems } from "../skill/agent-readiness/scripts/lib/static.ts";
 import { staticSignals } from "../skill/agent-readiness/scripts/lib/signals.ts";
-import { instructionKey } from "../skill/agent-readiness/scripts/lib/instructions.ts";
+import { instructionKey, packageCommand } from "../skill/agent-readiness/scripts/lib/instructions.ts";
 import { existsExact } from "../skill/agent-readiness/scripts/lib/util.ts";
 import { scanText } from "../skill/agent-readiness/scripts/lib/redact.ts";
 import { jvm } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
@@ -785,5 +785,83 @@ describe("the targeted-tests signal knows every scored toolchain's runner", () =
   test("a command that runs no test runner still shows no way to run one file", () => {
     assert.equal(signal("go", "go vet ./...").found, false);
     assert.equal(signal("java", "./mvnw -B package -DskipTests=false").found, false);
+  });
+});
+
+// modelcontextprotocol/servers@e1dc4b1: each class of instruction the open-network replay found, from
+// the command's real output in the audit's images (Nov 15, 2026), offline, in a one-commit clone.
+describe("mcp-servers' instruction findings are explained on their merits", () => {
+  const out = (name: string) => readFileSync(join(dirname(new URL(import.meta.url).pathname), "tool-outputs", `${name}.txt`), "utf8");
+
+  test("a ref the one-commit clean copy doesn't have is an environment limit, named", () => {
+    for (const name of ["local-gate-missing-ref", "interface-diff-missing-ref", "verify-dco-missing-ref", "changeset-prompt"]) {
+      const d = diagnose(out(name), false, "instruction");
+      assert.equal(d.cause, "missing_ref", name);
+      assert.match(d.detail, /^the clean copy has no (origin\/v2\/main|v2\/main) ref; it is one commit with no remote$/, name);
+      assert.ok(environmentLimit(inContainer, install, d, []), "a contract command hitting it is blocked too");
+    }
+    assert.equal(missingRef("fatal: ambiguous argument 'origin/main': unknown revision or path not in the working tree."), "the clean copy has no origin/main ref; it is one commit with no remote");
+  });
+
+  test("a CLI a repo script can't find on PATH is a missing tool, named", () => {
+    assert.deepEqual(diagnose(out("skills-eval-no-claude"), false, "instruction"), { cause: "missing_tool", detail: "claude is not installed" });
+    assert.deepEqual(diagnose(out("coverage-py-no-uv"), false, "instruction"), { cause: "missing_tool", detail: "uv is not installed" });
+  });
+
+  test("a network lookup during the offline replay needs the network", () => {
+    assert.equal(diagnose(out("uv-run-offline"), false, "instruction").cause, "network");
+  });
+
+  test("a command that needs a logged-in account needs access", () => {
+    assert.deepEqual(diagnose(out("npm-whoami"), false, "instruction"), { cause: "credential", detail: "needs a logged-in npm account" });
+  });
+
+  test("a prompt that waits for a person is interactive", () => {
+    assert.equal(diagnose("◻ @modelcontextprotocol/server-everything\n↑/↓ to navigate • Space: select • Enter: confirm\n", false, "instruction").cause, "interactive");
+  });
+
+  test("a per-package command run at the root, where its manifest isn't, belongs to one of the packages", () => {
+    const dir = repo({ "package.json": "{}", "src/fetch/pyproject.toml": "", "src/git/pyproject.toml": "", "src/time/pyproject.toml": "" });
+    const audit = makeAudit({ components: [] });
+    audit.profile!.components = ["fetch", "git", "time"].map((s) => ({ id: s, path: `src/${s}`, language: "py" as const, manifest: `src/${s}/pyproject.toml`, scripts: {}, changes: 1, changeShare: 0.3, assessed: true }));
+    assert.deepEqual(packageCommand(out("uv-lock-at-root"), audit, dir, "."), { manifest: "pyproject.toml", paths: ["src/fetch", "src/git", "src/time"] });
+    assert.equal(packageCommand(out("uv-lock-at-root"), audit, dir, "src/git"), null, "in a package folder it's that package's own failure");
+  });
+
+  test("a script run without the arguments it requires stays a real finding", () => {
+    const d = diagnose(out("release-notes-no-flags"), false, "instruction");
+    assert.deepEqual([d.cause, d.detail], ["unknown", "release-notes: --milestone, --merge-sha, --merge-branch and --ledger-url are all required"]);
+  });
+
+  test("steps that can't be replayed as written are skipped with a reason, before anything runs", () => {
+    const dir = repo({
+      "package.json": '{"name":"servers","scripts":{"verify:dco":"node v.mjs","test:scripts":"node --test scripts/"}}',
+      "src/fetch/pyproject.toml": "",
+      "AGENTS.md": "# Servers\n\n```sh\n# Python: per server\ncd src/<server>\nuv run pytest\n```\n\n| Server | Runner |\n| --- | --- |\n| Root tooling | `node --test` |\n\n| Task | Command |\n| --- | --- |\n| One Python server | `uv run pytest -q` in `src/<server>` |\n\n`uv run` creates the server's `.venv` on first use. Check yours with `npm run verify:dco -- --base <lower branch>`.\n",
+      "scripts/guard.mjs": "",
+      ".claude/skills/release/SKILL.md": "# Release\n\n```sh\ncd ../servers-release && npm ci\nfor s in a b; do\n  node scripts/guard.mjs \"src/$s\"\ndone\n```\n",
+    });
+    const items = Object.fromEntries(instructionItems(dir, buildProfile(dir, dir, rubric)).filter((i) => i.kind === "command").map((i) => [i.text, [i.category, i.reason]]));
+    assert.deepEqual(items["uv run pytest"], ["skipped", "not replayed: it runs in src/<server>, a folder the docs leave to the reader"]);
+    assert.deepEqual(items["uv run pytest -q"], ["skipped", "not replayed: it runs in src/<server>, a folder the docs leave to the reader"]);
+    assert.deepEqual(items["node --test"], ["skipped", "not replayed: it names a tool in a table's runner or tool column, not a command to run"]);
+    assert.deepEqual(items["uv run"], ["skipped", "not replayed: it names the launcher, not a command for it to run"]);
+    assert.deepEqual(items["npm run verify:dco -- --base <lower branch>"], ["skipped", "not replayed: it has a placeholder to fill in"]);
+    assert.deepEqual(items["cd ../servers-release && npm ci"], ["skipped", "not replayed: it works in ../servers-release, outside this repository"]);
+    assert.deepEqual(items['node scripts/guard.mjs "src/$s"'], ["skipped", "not replayed: it uses $s, a shell variable the lines around it set"]);
+  });
+
+  test("the audit's container reaps orphaned processes, so a killed process tree is gone", { skip: detectRuntime("auto") ? false : "no container runtime: this needs docker or podman", timeout: 5 * 60 * 1000 }, async () => {
+    assert.ok(startArgs("c", "node:22", "/w").includes("--init"));
+    const s = session(NODE_IMAGE, hostUser() ?? NO_ENTRY_UID);
+    const started = s.start();
+    assert.ok(started.ok, started.output);
+    try {
+      assert.equal((await s.exec("sleep 300 & echo $! > /tmp/home/child", ".", 30)).exitCode, 0);
+      const gone = await s.exec("kill $(cat /tmp/home/child) && sleep 1 && test ! -e /proc/$(cat /tmp/home/child)", ".", 30);
+      assert.equal(gone.exitCode, 0, `the orphan stayed a zombie: ${gone.output}`);
+    } finally {
+      s.remove();
+    }
   });
 });

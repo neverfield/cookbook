@@ -1,0 +1,5 @@
+
+> @modelcontextprotocol/servers@0.6.2 interface-diff
+> node scripts/interface-diff.mjs
+
+interface-diff: origin/v2/main is not available to compare against. Run `git fetch origin v2/main`, or name a base with --base <ref>.

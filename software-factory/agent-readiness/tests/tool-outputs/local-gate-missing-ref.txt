@@ -1,0 +1,19 @@
+
+> @modelcontextprotocol/servers@0.6.2 local:gate
+> node scripts/gate-lease.mjs npm run local:gate:stages
+
+
+> @modelcontextprotocol/servers@0.6.2 local:gate:stages
+> npm run verify:install-fresh && npm run verify:dco && npm run validate && npm run coverage && npm run validate:py && npm run coverage:py && npm run verify:skills:cli && npm run smoke && npm run interface-diff
+
+
+> @modelcontextprotocol/servers@0.6.2 verify:install-fresh
+> node scripts/verify-install-fresh.mjs
+
+verify:install-fresh — OK (388 lockfile entries match node_modules)
+
+> @modelcontextprotocol/servers@0.6.2 verify:dco
+> node scripts/verify-dco.mjs
+
+verify:dco: cannot resolve origin/v2/main. Fetch it (`git fetch origin v2/main`), or name another base with --base.
+gate-lease: released after 0s.

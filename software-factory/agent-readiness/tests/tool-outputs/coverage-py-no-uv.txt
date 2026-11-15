@@ -1,0 +1,15 @@
+
+> @modelcontextprotocol/servers@0.6.2 coverage:py
+> node scripts/coverage-py.mjs
+
+
+[coverage:py] fetch: sync
+
+[coverage:py] git: sync
+
+[coverage:py] time: sync
+
+[coverage:py] summary
+  FAIL  fetch — sync (uv not found on PATH (install uv: https://docs.astral.sh/uv/))
+  FAIL  git — sync (uv not found on PATH (install uv: https://docs.astral.sh/uv/))
+  FAIL  time — sync (uv not found on PATH (install uv: https://docs.astral.sh/uv/))
