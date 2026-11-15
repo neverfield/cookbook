@@ -66,7 +66,7 @@ export function isRisky(cmd: string): boolean {
   return NETWORK_PIPED.test(cmd) || DESTRUCTIVE.test(cmd) || DEPLOY.test(cmd);
 }
 
-export type Cue = "example" | "negated" | "link_text" | "deleted";
+export type Cue = "example" | "negated" | "link_text" | "deleted" | "table_name";
 
 interface Extracted {
   kind: "command" | "path";
@@ -115,6 +115,13 @@ function inLinkText(raw: string, start: number, end: number): boolean {
 
 const BACK_TO_ROOT = /\b(root (project )?(directory|folder)|repo(sitory)? root|top[- ]level (directory|folder))\b/i;
 
+// A table column that names tools rather than giving commands: Runner, Tool, Framework.
+const TOOL_COLUMN = /^(test )?(runner|tool|framework)s?$/i;
+
+function tableCells(raw: string): string[] {
+  return raw.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim().replace(/`/g, ""));
+}
+
 function indentOf(raw: string): number {
   return raw.match(/^\s*(?:(?:[-*+]|\d+[.)])\s+)?/)?.[0].length ?? 0;
 }
@@ -132,6 +139,11 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
   // to the end of the step's section (the next heading of the same or a higher level), or until a
   // line says to work from the root again, such as "(while in the root project directory)".
   let within: { dir: string; level: number } | null = null;
+  // A `cd dir` line inside a code block sets the folder for the rest of that block: a folder of this
+  // repo, or one the block leaves to the reader, such as `cd src/<server>`.
+  let fenceDir: { within: string } | { elsewhere: string } | null = null;
+  // The header cells of the markdown table the line is in.
+  let tableHeader: string[] | null = null;
   lines.forEach((raw, i) => {
     const lineNo = i + 1;
     if (inFrontmatter) {
@@ -147,6 +159,7 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
         fenceLang = fence[1].toLowerCase();
       } else inFence = false;
       pending = null;
+      fenceDir = null;
       return;
     }
     const where = { headings: headings.map((h) => h.text), ...(away ? { elsewhere: away.target } : {}), ...(within ? { within: within.dir } : {}) };
@@ -160,9 +173,19 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
       }
       pending = null;
       const cmd = joined.text.replace(/\s+#(\s.*)?$/, "").trim();
-      if (cmd && !cmd.startsWith("#") && COMMAND_START.test(cmd)) out.push({ kind: "command", text: cmd, line: joined.line, via: "fence", ...where });
+      const cd = cmd.match(/^cd\s+(\S+)$/)?.[1];
+      if (cd) {
+        const target = cd.replace(/\/$/, "");
+        fenceDir = !PLACEHOLDER.test(target) && opts.exists?.(target) ? { within: target } : { elsewhere: target };
+        return;
+      }
+      const inBlock = fenceDir ? ("within" in fenceDir ? { ...where, within: fenceDir.within } : { ...where, elsewhere: fenceDir.elsewhere }) : where;
+      if (cmd && !cmd.startsWith("#") && COMMAND_START.test(cmd)) out.push({ kind: "command", text: cmd, line: joined.line, via: "fence", ...inBlock });
       return;
     }
+    if (/^\s*\|/.test(raw)) {
+      if (/^\s*\|?\s*:?-{3,}/.test(lines[i + 1] ?? "")) tableHeader = tableCells(raw);
+    } else tableHeader = null;
     const heading = raw.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
     if (heading) {
       const level = heading[1].length;
@@ -171,6 +194,8 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
       away = null;
       if (within && level <= within.level) within = null;
     }
+    const awayStart = away;
+    const withinStart = within;
     const scope = raw.match(ELSEWHERE_CUE);
     if (scope && opts.exists) {
       const target = scope[3].replace(/\/$/, "");
@@ -178,18 +203,31 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
       if (!opts.exists(target) && (target.includes("/") || scope[4])) away = { target: scope[3], indent: indentOf(raw) };
       else if (opts.exists(target) && named && !/\.\w+$/.test(target)) within = { dir: target, level: headings.length ? headings[headings.length - 1].level : 0 };
     }
+    // A folder cue on this line holds for the spans before it ("`uv run pytest` in `src/<server>`")
+    // when it points elsewhere, and for the spans after it when it names a folder to work in; never
+    // for the folder it names.
+    const cueStart = scope?.index ?? Infinity;
+    const cueEnd = scope ? scope.index! + scope[0].length : Infinity;
+    const headingTexts = headings.map((h) => h.text);
+    const placeAt = (at: number) => {
+      const a = away !== awayStart && at < cueStart ? away : awayStart;
+      const w = within !== withinStart && at >= cueEnd ? within : withinStart;
+      return { headings: headingTexts, ...(a ? { elsewhere: a.target } : {}), ...(w ? { within: w.dir } : {}) };
+    };
+    const here = placeAt(Infinity);
     for (const m of raw.matchAll(/`([^`]+)`/g)) {
       const span = m[1].trim();
       const before = clauseBefore(raw.slice(0, m.index));
-      const cue: Cue | undefined = inLinkText(raw, m.index!, m.index! + m[0].length) ? "link_text" : EXAMPLE_CUE.test(before) ? "example" : NEGATED_CUE.test(before) ? "negated" : DELETED_CUE.test(sentenceAt(raw, m.index!)) ? "deleted" : undefined;
-      const base = { line: lineNo, via: "code" as const, ...where, ...(cue ? { cue } : {}) };
+      const column = tableHeader ? tableHeader[raw.slice(0, m.index).split("|").length - 2] : undefined;
+      const cue: Cue | undefined = inLinkText(raw, m.index!, m.index! + m[0].length) ? "link_text" : column && TOOL_COLUMN.test(column) ? "table_name" : EXAMPLE_CUE.test(before) ? "example" : NEGATED_CUE.test(before) ? "negated" : DELETED_CUE.test(sentenceAt(raw, m.index!)) ? "deleted" : undefined;
+      const base = { line: lineNo, via: "code" as const, ...placeAt(m.index!), ...(cue ? { cue } : {}) };
       if (COMMAND_START.test(span) && span.includes(" ")) out.push({ kind: "command", text: span, ...base });
       else if (PATH_LIKE.test(span) && !span.startsWith("http") && !span.includes("<")) out.push({ kind: "path", text: span, ...base });
     }
     for (const m of raw.matchAll(/\[[^\]]*\]\(([^)\s#]+)(?:#[^)]*)?\)/g)) {
       const target = m[1];
       if (/^([a-z][\w+.-]*:|#)/i.test(target) || target.includes("<")) continue;
-      out.push({ kind: "path", text: target, line: lineNo, via: "link", ...where });
+      out.push({ kind: "path", text: target, line: lineNo, via: "link", ...here });
     }
   });
   const seen = new Set<string>();
@@ -552,13 +590,23 @@ const FUTURE = /\b(will (be )?(add|creat|live|hold|contain)\w*|(to be|not yet) (
 
 // Commands an instruction shows as a template, asks questions, or changes the dependencies with.
 // None of them can be replayed as written, so they are listed as skipped instead.
-const PLACEHOLDER = /<[A-Za-z][\w.:/-]*>|\{\{[^}]+\}\}|…|(^|\s)\.\.\.(\s|$)/;
+const PLACEHOLDER = /<[A-Za-z][\w.:/ -]*[\w.]>|<[A-Za-z]>|\{\{[^}]+\}\}|…|(^|\s)\.\.\.(\s|$)/;
+// A launcher with nothing after it, as prose names it: "`uv run` creates the venv".
+const LAUNCHER_ONLY = /^(uv run|uvx|npx|pnpx|bunx|npm (run|exec)|pnpm (run|exec|dlx)|yarn (run|exec|dlx)|poetry run|pipenv run|bundle exec|go run|cargo run)$/;
+// A lowercase shell variable, which only the lines around it (a loop, an earlier assignment) set.
+const SHELL_VARIABLE = /\$\{?([a-z_][a-z0-9_]*)\}?/;
 const RUNNER = String.raw`(npx|bunx|pnpx|(corepack\s+)?(pnpm|yarn)\s+dlx)\s+(-\S+\s+)*`;
 const INTERACTIVE = new RegExp(String.raw`^(corepack\s+)?(npm|pnpm|yarn|bun)\s+(init|create|login|adduser)\b|^${RUNNER}(create-[\w-]+|\S+\s+init)\b|(^|\s)(auth\s+)?login(\s|$)|\s(-i|--interactive)(\s|$)|^(node|python3?)\s*$`);
 const ADDS_PACKAGES = new RegExp(String.raw`^(corepack\s+)?(pnpm|yarn|bun)\s+(add|remove|rm|uninstall)\b|^npm\s+(i|install|add|uninstall|rm|remove)\b(\s+-\S+)*\s+[^-\s]|^(python3?\s+-m\s+)?pip3?\s+install\s+(?!.*(\s|^)(-r|-e|--requirement|--editable|\.)(\s|$))|^(uv|poetry|pdm)\s+(add|remove)\b|^${RUNNER}\S+\s+add\b`);
 
-function skippedReason(cmd: string): { reason: string; rule: string } | null {
+// `cwd`: the folder the command runs in, so a path that climbs out of the repository is seen.
+function skippedReason(cmd: string, cwd = "."): { reason: string; rule: string } | null {
   if (PLACEHOLDER.test(cmd)) return { reason: "not replayed: it has a placeholder to fill in", rule: "placeholder" };
+  if (LAUNCHER_ONLY.test(cmd.trim())) return { reason: "not replayed: it names the launcher, not a command for it to run", rule: "mention" };
+  const outside = [...cmd.matchAll(/(?:^|[\s=])(\.\.(?:\/[^\s"'`;&|]*)?)/g)].map((m) => m[1]).find((p) => normalize(join(cwd, p)).startsWith(".."));
+  if (outside) return { reason: `not replayed: it works in ${outside}, outside this repository`, rule: "outside-repo" };
+  const variable = cmd.match(SHELL_VARIABLE);
+  if (variable) return { reason: `not replayed: it uses $${variable[1]}, a shell variable the lines around it set`, rule: "placeholder" };
   if (INTERACTIVE.test(cmd)) return { reason: "not replayed: it asks questions as it runs", rule: "interactive" };
   if (ADDS_PACKAGES.test(cmd)) return { reason: "not replayed: it adds or removes packages", rule: "adds-packages" };
   return null;
@@ -630,6 +678,7 @@ const CUE_SKIP: Record<Cue, { reason: string; rule: string }> = {
   link_text: { reason: "not replayed: it's the text of a link, not a step", rule: "mention" },
   negated: { reason: "not replayed: the instructions say not to run it", rule: "negated" },
   deleted: { reason: "", rule: "path-exists" },
+  table_name: { reason: "not replayed: it names a tool in a table's runner or tool column, not a command to run", rule: "mention" },
 };
 
 export function instructionItems(tree: string, profile: Profile): InstructionItem[] {
@@ -649,6 +698,8 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
     if (real && real !== file && listed.has(real)) continue;
     if (duplicateOf(tree, file, seen)) continue;
     const fileDir = dirname(file) === "" ? "." : dirname(file);
+    // A skill's commands are written for the repository root, where the agent runs them.
+    const cmdDir = SKILL_FILE.test(file) ? "." : fileDir;
     const pkgDir = packageDirOf(tree, file);
     const text = readText(join(tree, file));
     const lines = text.split("\n");
@@ -692,7 +743,8 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
         continue;
       }
       if (e.elsewhere) {
-        skipped(`not checked: it's a step for ${e.elsewhere}, not this repo`, "elsewhere");
+        if (PLACEHOLDER.test(e.elsewhere)) skipped(`not replayed: it runs in ${e.elsewhere}, a folder the docs leave to the reader`, "placeholder");
+        else skipped(`not checked: it's a step for ${e.elsewhere}, not this repo`, "elsewhere");
         continue;
       }
       if (e.cue && e.cue !== "deleted") {
@@ -700,7 +752,7 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
         continue;
       }
       if (PLACEHOLDER.test(e.text)) {
-        const s = skippedReason(e.text)!;
+        const s = skippedReason(e.text, e.within ?? cmdDir)!;
         skipped(s.reason, s.rule);
         continue;
       }
@@ -724,7 +776,7 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
         items.push({ ...base, category: "needs_access", staticResult: "pass", result: "not_run", reason: s.access, rule: s.rule });
         continue;
       }
-      const skip = isRisky(e.text) ? null : (skippedReason(e.text) ?? (() => {
+      const skip = isRisky(e.text) ? null : (skippedReason(e.text, e.within ?? cmdDir) ?? (() => {
         const w = writesFiles(e.text, tree, fileDir, profile);
         return w ? { reason: w, rule: "rewrites" } : null;
       })());
