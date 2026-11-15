@@ -2,7 +2,7 @@ name: agent-readiness
 
 on:
   push:
-    branches: [main, "cursor/agent-readiness-**"]
+    branches: [main, "cursor/agent-readiness-0.2"]
     paths: ["software-factory/agent-readiness/**", ".github/workflows/agent-readiness.yml"]
   pull_request:
     paths: ["software-factory/agent-readiness/**", ".github/workflows/agent-readiness.yml"]

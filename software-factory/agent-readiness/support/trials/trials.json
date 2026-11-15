@@ -253,11 +253,7 @@
       "commit": "e1dc4b18dbb948921da37f3d4224a628730b43b0",
       "runtime": "docker",
       "review": "customer-trial-carbon.md",
-      "truth": "Monorepo of 4 TypeScript npm workspaces and 2 uv Python servers. The TypeScript workspaces install, build and pass 1,747 vitest tests. All 17 instruction findings were false: trailing semicolons kept on script names, a deleted file named in a never-re-add rule, package-relative paths checked from the root, and an example worktree path. 3 of the 6 missed planted faults were genuine gaps; the rest were equivalent mutants or a stale dist/.",
-      "egress": [
-        "pypi.org",
-        "files.pythonhosted.org"
-      ],
+      "truth": "Monorepo of 4 TypeScript npm workspaces and 2 uv Python servers. The TypeScript workspaces install, build and pass 1,747 vitest tests. All 17 instruction findings were false: trailing semicolons kept on script names, a deleted file named in a never-re-add rule, package-relative paths checked from the root, and an example worktree path. 3 of the 6 missed planted faults were genuine gaps; the rest were equivalent mutants or a stale dist/. The audit runs the whole repo in one node:22-bookworm image with no uv, so the 2 Python servers are blocked on any network until each component gets its own image (wave 2).",
       "realInstructionFindings": [],
       "falseInstructionFindings": 17,
       "target": {
@@ -267,7 +263,7 @@
         "blockingSafety": 0
       },
       "recorded": {
-        "restricted": {
+        "any": {
           "exit": 0,
           "sealed": true,
           "runtime": "docker",

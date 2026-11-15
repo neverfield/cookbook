@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, test } from "node:test";
+import { before, describe, test } from "node:test";
 import { detectRuntime } from "../../skill/agent-readiness/scripts/lib/container.ts";
 import { readiness, SKILL, SUPPORT } from "../tools/fixture.ts";
 
@@ -97,13 +97,22 @@ function noRuntimePath(): string {
   return `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`;
 }
 
+// Any HTTP response counts as reachable. Every host is probed once, before any audit starts, so the
+// audits' load can't time a probe out.
 async function reachable(host: string): Promise<boolean> {
-  try {
-    await fetch(`https://${host}/`, { method: "HEAD", signal: AbortSignal.timeout(5000) });
-    return true;
-  } catch {
-    return false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await fetch(`https://${host}/`, { signal: AbortSignal.timeout(15_000) });
+      return true;
+    } catch {}
   }
+  return false;
+}
+
+const network = new Map<string, Promise<boolean>>();
+function probe(host: string): Promise<boolean> {
+  if (!network.has(host)) network.set(host, reachable(host));
+  return network.get(host)!;
 }
 
 function observe(repo: string, code: number): Observed {
@@ -157,11 +166,14 @@ const trials = spec.trials.filter((t) => ONLY.length === 0 || ONLY.includes(t.id
 const runtime = detectRuntime("docker");
 
 describe("pinned trial repos", { concurrency: 2 }, () => {
+  before(async () => {
+    await Promise.all(trials.flatMap((t) => t.egress ?? []).map(probe));
+  });
   for (const t of trials) {
     const skip = t.runtime === "docker" && !runtime ? "no docker: this trial runs in a container" : false;
     test(`${t.id} (${t.repo}@${t.commit.slice(0, 7)}, ${t.runtime === "docker" ? "docker" : "no container runtime"})`, { skip, timeout: 30 * 60_000 }, async (ctx) => {
       const blocked: string[] = [];
-      for (const h of t.egress ?? []) if (!(await reachable(h))) blocked.push(h);
+      for (const h of t.egress ?? []) if (!(await probe(h))) blocked.push(h);
       const key = !t.egress?.length ? "any" : blocked.length ? "restricted" : "open";
       const repo = checkout(t);
       const env: Record<string, string> = { SA_READINESS_EVAL_SEED: spec.seed, SA_READINESS_NOW: spec.now, SA_READINESS_RUNTIME: t.runtime };
@@ -194,7 +206,6 @@ describe("pinned trial repos", { concurrency: 2 }, () => {
       const { instructionFailures: _b, ...exp } = want;
       assert.deepEqual(got, exp, `${t.id} changed from its recorded result; if that is intended, re-record it and say why in the PR`);
       if (TARGET) assert.deepEqual(gaps, [], `${t.id} is short of its target`);
-      rmSync(join(repo, ".agent-readiness"), { recursive: true, force: true });
     });
   }
 });
