@@ -444,6 +444,48 @@ export function equivalentBoundary(lines: string[], i: number): boolean {
   return Boolean(set && set[1] === left && set[2] === bound);
 }
 
+const COMPARE: Record<string, (a: number, b: number) => boolean> = { "<": (a, b) => a < b, "<=": (a, b) => a <= b, ">": (a, b) => a > b, ">=": (a, b) => a >= b, "==": (a, b) => a === b, "===": (a, b) => a === b, "!=": (a, b) => a !== b, "!==": (a, b) => a !== b };
+const FLIPPED: Record<string, string> = { "<": ">", "<=": ">=", ">": "<", ">=": "<=" };
+
+// A constant changed from C to C + 1 where it is a variable's whole value in one branch (the
+// variable itself, a `|| C`, `?? C` or `or C` fallback, or an arm of a conditional), and every other
+// mention of the variable in the file compares it with a number that C and C + 1 fall on the same
+// side of. `const seen = counts.get(key) || 0` used only as `seen > 2` is one: no test can tell 0
+// from 1 there. Any other use, a reassignment or a mention in a comment, keeps the fault.
+export function equivalentConstant(lines: string[], i: number, before: string, after: string): boolean {
+  const decl = before.match(/^\s*(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*)\s*=(?![=>])\s*(.*)$/);
+  if (!decl) return false;
+  const [, name, rhs] = decl;
+  let at = 0;
+  while (at < before.length && before[at] === after[at]) at++;
+  const num = before.slice(at).match(/^\d+/);
+  if (!num || at < before.length - rhs.length) return false;
+  const c = Number(num[0]);
+  const pre = before.slice(before.length - rhs.length, at).trimEnd();
+  const post = before.slice(at + num[0].length).trim().replace(/;$/, "").trim();
+  if (!(pre === "" || /(\|\||\?\?|\bor|\?|:|\belse)$/.test(pre)) || !(post === "" || /^(:|if\b|else\b)/.test(post))) return false;
+  const esc = name.replace(/\$/g, "\\$");
+  const mention = new RegExp(`(?<![\\w$.])${esc}(?![\\w$])`, "g");
+  const cmp = new RegExp(`^(?:(?<![\\w$.])${esc}\\s*(===|!==|==|!=|<=|>=|<|>)\\s*(-?\\d+(?:\\.\\d+)?)(?![\\w.])|(-?\\d+(?:\\.\\d+)?)\\s*(===|!==|==|!=|<=|>=|<|>)\\s*${esc}(?![\\w$]))`);
+  let uses = 0;
+  for (let j = 0; j < lines.length; j++) {
+    if (j === i) continue;
+    for (const m of lines[j].matchAll(mention)) {
+      const from = lines[j].slice(m.index!);
+      const back = lines[j].slice(0, m.index!).match(/(-?\d+(?:\.\d+)?)\s*(===|!==|==|!=|<=|>=|<|>)\s*$/);
+      const fwd = from.match(cmp);
+      let op: string;
+      let k: number;
+      if (fwd?.[1]) [op, k] = [fwd[1], Number(fwd[2])];
+      else if (back) [op, k] = [FLIPPED[back[2]] ?? back[2], Number(back[1])];
+      else return false;
+      if (COMPARE[op](c, k) !== COMPARE[op](c + 1, k)) return false;
+      uses++;
+    }
+  }
+  return uses > 0;
+}
+
 export function allSites(tree: string, files: string[], lang: Language): Site[] {
   const sites: Site[] = [];
   for (const file of files) {
@@ -454,6 +496,7 @@ export function allSites(tree: string, files: string[], lang: Language): Site[] 
       if (quoted.has(i)) return;
       for (const s of sitesForLine(line, lang)) {
         if (s.operator === "boundary_flip" && equivalentBoundary(lines, i)) continue;
+        if (s.operator === "change_constant" && equivalentConstant(lines, i, s.before, s.after)) continue;
         sites.push({ file, line: i + 1, ...s });
       }
     });
