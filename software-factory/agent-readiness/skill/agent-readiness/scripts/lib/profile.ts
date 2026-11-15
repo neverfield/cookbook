@@ -549,6 +549,8 @@ export function buildProfile(repo: string, tree: string, rubric: Rubric, commit 
   const supported = components.filter((c) => !c.notAssessedReason && rubric.mutation.languages.includes(c.language === "other" ? "x" : c.language));
   for (const c of components) {
     if (!c.notAssessedReason && c.language === "other") c.notAssessedReason = "no supported toolchain found";
+    // A supported stack whose language an older rubric doesn't list: say so, rather than no reason.
+    else if (!c.notAssessedReason && !rubric.mutation.languages.includes(c.language)) c.notAssessedReason = `${c.stack ? stack(c.stack).label : c.language} isn't scored under rubric ${rubric.version}`;
   }
   supported.sort((a, b) => b.changeShare - a.changeShare);
   supported.slice(0, rubric.components.maxAssessed).forEach((c) => (c.assessed = true));
