@@ -4,7 +4,8 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
-import { ContainerSession, IMAGE_PATH_VAR, detectRuntime, hostUser, loginShell } from "../skill/agent-readiness/scripts/lib/container.ts";
+import { ContainerSession, IMAGE_PATH_VAR, detectRuntime, hostUser, loginShell, parseUserEntry, userEntryCommand } from "../skill/agent-readiness/scripts/lib/container.ts";
+import { chmodSync } from "node:fs";
 import { commandTimeout, discoverContract, imagePlan } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { IMAGE_DIGESTS } from "../skill/agent-readiness/scripts/lib/images.ts";
 import { inComponent, namedAfter, sameFolder, withInlineTests } from "../skill/agent-readiness/scripts/lib/languages/coverage.ts";
@@ -449,3 +450,76 @@ describe("a root build a language file refines keeps its source folders", () => 
   });
 });
 
+// GitHub runs as uid 1001 and a Mac as 501, which images have no /etc/passwd line for. The .NET SDK
+// then fails every restore, new and build on its NuGet migrations; with a line it works under the
+// audit's dropped capabilities. Digests: sdk:8.0 from dotnet/versions image-info (Nov 10, 2026);
+// mcr.microsoft.com is blocked on cloud VMs, so that test passes on GitHub and the Mac only.
+const SDK_IMAGE = "mcr.microsoft.com/dotnet/sdk:8.0@sha256:1b955f179b02df4f0eb5fadedaa898cbe44d620a64aab52eec72c8e91d1355b5";
+const NODE_IMAGE = "node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb";
+// Runs as uid 101 by default, with /etc/passwd owned by root and not writable by it.
+const NON_ROOT_IMAGE = "nginxinc/nginx-unprivileged:1.27-bookworm@sha256:f9dfa9c20b2b0b7c5cc830374f22f23dee3f750b6c5291ca7e0330b5c88e6403";
+const NO_ENTRY_UID = "4242:4242";
+
+function session(image: string, user: string): ContainerSession {
+  const dir = mkdtempSync(join(tmpdir(), "lang-user-"));
+  chmodSync(dir, 0o777);
+  return new ContainerSession(detectRuntime("auto")!, `readiness-user-${Date.now()}-${Math.floor(Math.random() * 1e6)}`, image, dir, [], user);
+}
+
+describe("the ordinary user gets an /etc/passwd entry", () => {
+  test("the entry is added only when the uid and gid have none, and the outcome is read back", () => {
+    const cmd = userEntryCommand("1001:121");
+    assert.match(cmd, /getent passwd 1001/);
+    assert.match(cmd, /readiness:x:1001:121:readiness:\/tmp\/home:\/bin\/sh' >> \/etc\/passwd/);
+    assert.match(cmd, /getent group 121/);
+    assert.equal(parseUserEntry(true, "added\n"), "added");
+    assert.equal(parseUserEntry(true, "present\n"), "present");
+    assert.equal(parseUserEntry(true, "missing\n"), "missing");
+    assert.equal(parseUserEntry(true, "present\ngroup-missing\n"), "missing");
+    assert.equal(parseUserEntry(false, ""), "missing");
+  });
+
+  const docker = { skip: detectRuntime("auto") ? false : "no container runtime: this needs docker or podman", timeout: 10 * 60 * 1000 };
+
+  test("a uid the image doesn't know gets a name, a group and the shared home", docker, async () => {
+    const s = session(NODE_IMAGE, NO_ENTRY_UID);
+    const started = s.start();
+    assert.ok(started.ok, started.output);
+    try {
+      assert.equal(s.userEntry, "added");
+      const out = await s.exec("whoami && id -gn && getent passwd 4242 | cut -d: -f6", ".", 60);
+      assert.equal(out.exitCode, 0, out.output);
+      assert.deepEqual(out.output.trim().split("\n"), ["readiness", "readiness", "/tmp/home"]);
+      const again = s.asImageUser(userEntryCommand(NO_ENTRY_UID));
+      assert.equal(parseUserEntry(again.ok, again.output), "present", "a second start adds nothing");
+    } finally {
+      s.remove();
+    }
+  });
+
+  test("an image whose user can't write /etc/passwd still starts, and says the entry is missing", docker, async () => {
+    const s = session(NON_ROOT_IMAGE, NO_ENTRY_UID);
+    const started = s.start();
+    assert.ok(started.ok, started.output);
+    try {
+      assert.equal(s.userEntry, "missing");
+      assert.equal((await s.exec("true", ".", 60)).exitCode, 0);
+    } finally {
+      s.remove();
+    }
+  });
+
+  test("the .NET SDK builds under a uid with no entry of its own", docker, async () => {
+    const s = session(SDK_IMAGE, NO_ENTRY_UID);
+    const started = s.start();
+    assert.ok(started.ok, started.output);
+    try {
+      assert.equal(s.userEntry, "added");
+      const out = await s.exec("dotnet --info >/dev/null && dotnet new console -o app >/dev/null && cd app && dotnet build -p:NuGetAudit=false", ".", 400);
+      assert.equal(out.exitCode, 0, out.output.slice(-3000));
+      assert.doesNotMatch(out.output, /NuGet-Migrations/);
+    } finally {
+      s.remove();
+    }
+  });
+});

@@ -314,6 +314,9 @@ export interface Audit {
     // One entry per image the replay used, the repo's first. A mixed-language repo runs each
     // component in its own toolchain's image; `image` above is the first entry's.
     images?: ImageRun[];
+    // Images where the ordinary user has no /etc/passwd line and the audit couldn't add one, with
+    // the uid, so a tool that looks up its user and fails there is explained.
+    userEntryMissing?: { uid: string; images: string[] };
   };
   profile: Profile | null;
   assets: Asset[];

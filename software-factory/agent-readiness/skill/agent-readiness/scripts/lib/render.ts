@@ -804,9 +804,9 @@ export function buildReport(input: RenderInput): ReportJson {
         {
           label: "Replay environment",
           value: audit.environment.containerRuntime
-            ? imagesUsed(audit.environment)
-              ? `${audit.environment.containerRuntime} containers, ${imagesUsed(audit.environment)}`
-              : `${audit.environment.containerRuntime} container, ${audit.environment.image}`
+            ? (imagesUsed(audit.environment)
+                ? `${audit.environment.containerRuntime} containers, ${imagesUsed(audit.environment)}`
+                : `${audit.environment.containerRuntime} container, ${audit.environment.image}`) + userEntryNote(audit.environment)
             : audit.evidence.some((e) => e.where === "fresh_copy" || e.where === "container")
               ? "fresh copy on the host (no container runtime)"
               : `none: no repo command ran${noneAssessed(input) ? ", because no component could be assessed" : ""}`,
@@ -918,6 +918,11 @@ function componentsOf(input: RenderInput): ReportJson["components"] {
       ...(input.audit.profile?.satellites ?? []).map((s) => ({ id: s.path.split("/").pop()!, path: s.path, toolchain: s.toolchain, manifest: s.manifest, lockfile: null, changeShare: 0, reason: `not a component: ${s.reason}` })),
     ],
   };
+}
+
+function userEntryNote(env: Audit["environment"]): string {
+  const m = env.userEntryMissing;
+  return m ? `; uid ${m.uid} has no /etc/passwd entry in ${m.images.join(", ")}, and the image's user couldn't add one` : "";
 }
 
 function toolchainOf(c: Component): string {

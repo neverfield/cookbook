@@ -728,6 +728,11 @@ function startContainer(audit: Audit, runtime: NonNullable<ReturnType<typeof det
     return { error: startError(started.output) };
   }
   session.enableCorepack();
+  if (session.userEntry === "missing" && session.user) {
+    const missing = (audit.environment.userEntryMissing ??= { uid: session.user.split(":")[0], images: [] });
+    if (!missing.images.includes(image)) missing.images.push(image);
+    log(`The image's user can't write /etc/passwd, so uid ${missing.uid} has no entry in ${image}; a tool that looks up its user may fail there.`);
+  }
   const digest = digestOf(image);
   log(`Replaying${forWhom} in a clean ${runtime.bin} container (${image}${digest ? `, pinned at ${digest.slice(0, 19)}` : ""}; ${limits.cpus ? `${limits.cpus} CPUs, ` : ""}${limits.memoryMb} MB, ${limits.pids} processes).`);
   // Python components in the Node image, as with --image, need the venv module it lacks.
@@ -774,6 +779,7 @@ export function makeExecutors(audit: Audit, copyDir: string, runtimePref: string
     single = tag;
     imageSource = "repo";
   }
+  delete audit.environment.userEntryMissing;
   const plan = imagePlan(profile, copyDir, single);
   const assessed = profile.components.filter((c) => c.assessed);
   const wanted = plan.filter((g, i) => g.components.length > 0 || (i === 0 && repoWide));

@@ -140,6 +140,25 @@ export function homeCommand(user: string | null): string {
   return `mkdir -p ${HOME_DIR} && chmod 1777 ${HOME_DIR}${user ? ` && ${reclaimCommand(user, [HOME_DIR])}` : ""}`;
 }
 
+// The ordinary user is the host's uid, which the image usually has no /etc/passwd line for (1001 on
+// GitHub's runners, 501 on a Mac). Tools that look up their own user fail without one, such as the
+// .NET SDK's NuGet migrations. So the audit adds one, as OpenShift does for arbitrary uids, and a
+// group line when the gid has none. An image whose user can't write /etc/passwd keeps it as it is:
+// prints "present", "added" or "missing".
+export function userEntryCommand(user: string): string {
+  const [uid, gid] = user.split(":");
+  const has = (file: string, id: string) => `{ getent ${file === "/etc/passwd" ? "passwd" : "group"} ${id} >/dev/null 2>&1 || grep -q '^[^:]*:[^:]*:${id}:' ${file} 2>/dev/null; }`;
+  const group = `if ! ${has("/etc/group", gid)}; then echo 'readiness:x:${gid}:' >> /etc/group 2>/dev/null || echo group-missing; fi`;
+  return `if ${has("/etc/passwd", uid)}; then echo present; elif echo 'readiness:x:${uid}:${gid}:readiness:${HOME_DIR}:/bin/sh' >> /etc/passwd 2>/dev/null; then echo added; else echo missing; fi; ${group}`;
+}
+
+export type UserEntry = "present" | "added" | "missing";
+
+export function parseUserEntry(ok: boolean, output: string): UserEntry {
+  if (!ok || /\bmissing\b/.test(output)) return "missing";
+  return /\badded\b/.test(output) ? "added" : "present";
+}
+
 export function disconnectArgs(name: string, network = "bridge"): string[] {
   return ["network", "disconnect", network, name];
 }
@@ -157,6 +176,9 @@ export class ContainerSession {
   registryEnv: string[];
   user: string | null;
   limits: Limits | null;
+  // Whether the ordinary user has an /etc/passwd line in the container; null when commands run as
+  // the image's own user.
+  userEntry: UserEntry | null = null;
 
   constructor(runtime: Runtime, name: string, image: string, hostDir: string, registryEnv: string[], user: string | null = hostUser(), limits: Limits | null = null) {
     this.runtime = runtime;
@@ -171,7 +193,13 @@ export class ContainerSession {
   start(): { ok: boolean; output: string } {
     const env = { ...process.env } as Record<string, string>;
     const r = spawnSync(this.runtime.bin, startArgs(this.name, this.image, this.hostDir, this.limits), { encoding: "utf8", env, timeout: 300000 });
-    if (r.status === 0) this.reclaimHome();
+    if (r.status === 0) {
+      if (this.user) {
+        const entry = this.asImageUser(userEntryCommand(this.user), 30000);
+        this.userEntry = parseUserEntry(entry.ok, entry.output);
+      }
+      this.reclaimHome();
+    }
     return { ok: r.status === 0, output: (r.stdout ?? "") + (r.stderr ?? "") };
   }
 
