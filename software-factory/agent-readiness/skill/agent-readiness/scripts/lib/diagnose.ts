@@ -94,6 +94,8 @@ const NETWORK: { re: RegExp; detail: string }[] = [
   // Go: `Get "https://proxy.golang.org/...": EOF`, or a dial, TLS or reset error after the URL.
   { re: /Get "https?:\/\/[^"]+": (EOF|dial tcp|net\/http: TLS handshake timeout|read tcp [^\n]*connection reset|tls: |x509: )/, detail: "an unreachable package registry on the network" },
   { re: /java\.net\.(UnknownHostException|ConnectException|NoRouteToHostException)|Remote host terminated the handshake|java\.net\.SocketException: (Connection reset|Network is unreachable)/, detail: "a network connection failed" },
+  // uv and other Rust tools: "Caused by: dns error" / "failed to lookup address information: Try again".
+  { re: /failed to lookup address information|Caused by: dns error/, detail: "it tried to reach the network" },
   { re: /\bcurl: \((5|6|7|28|35|52|56)\)/, detail: "it tried to reach the network" },
   { re: /ProxyError|407 Proxy Authentication|tunneling socket could not be established|proxy[^\n]{0,40}(refused|error|failed)/i, detail: "a proxy error on the network" },
   { re: /CERT_|certificate verify failed|unable to (get|verify) (the )?(local issuer|first) certificate|self[- ]signed certificate|SSLError|SSL: [A-Z_]+|ERR_SSL|SSL routines|tlsv1 alert|TLS handshake|Client network socket disconnected before secure TLS/i, detail: "a TLS or certificate error on the network" },
@@ -247,6 +249,28 @@ export function compilerError(output: string): string | null {
   return null;
 }
 
+// A remote-tracking ref or remote the audit's clean copy doesn't have: it is one commit with no
+// remote, so "origin/v2/main", "upstream/main" and the like never resolve there.
+const REF = String.raw`["'\`]?((?:origin|upstream)\/[\w.\/-]*[\w-]|[\w.-]+\/main|[\w.-]+\/master)["'\`]?`;
+const MISSING_REF: RegExp[] = [
+  new RegExp(String.raw`(?:cannot resolve|could not resolve|can't resolve|unable to resolve)\s+${REF}`, "i"),
+  new RegExp(String.raw`${REF}\s+is not available`, "i"),
+  new RegExp(String.raw`Failed to find where HEAD diverged from\s+${REF}`, "i"),
+  new RegExp(String.raw`(?:fatal: )?(?:ambiguous argument|bad revision|unknown revision|Not a valid object name)\s+${REF}`, "i"),
+  new RegExp(String.raw`fatal: '(origin|upstream)' does not appear to be a git repository|fatal: No such remote '?(origin|upstream)'?`, "i"),
+];
+
+export function missingRef(output: string): string | null {
+  for (const re of MISSING_REF) {
+    const m = output.match(re);
+    if (m) return `the clean copy has no ${m.slice(1).find(Boolean) ?? "remote"} ref; it is one commit with no remote`;
+  }
+  return null;
+}
+
+// An interactive prompt: arrow-key pickers and y/N questions.
+const PROMPT = /↑\/↓ to navigate|Use arrow keys|\(y\/N\)\s*$|\[y\/N\]\s*$/m;
+
 // The tests a Go or Rust run names as failing: go test's "--- FAIL: TestX" (a subtest only when its
 // parent isn't listed) and cargo test's "test name ... FAILED". Their last line is just "FAIL" or
 // "error: test failed", which says nothing about which test.
@@ -296,6 +320,14 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   const mirror = mirrorRefused(output);
   if (mirror) return { cause: "network", detail: mirror };
   if (/ensurepip is not\s+available|No module named venv\b/.test(output)) return { cause: "missing_tool", detail: "python3-venv is not installed" };
+  const ref = missingRef(output);
+  if (ref) return { cause: "missing_ref", detail: ref };
+  if (PROMPT.test(output)) return { cause: "interactive", detail: "it stopped at a prompt that waits for a person's answer" };
+  if (/\bENEEDAUTH\b|This command requires you to be logged in/.test(output)) return { cause: "credential", detail: "needs a logged-in npm account" };
+  // A repo script's own words for a tool it can't find: "no usable `claude` CLI on PATH",
+  // "uv not found on PATH".
+  const onPath = output.match(/\bno usable [`'"]?([\w.+-]+)[`'"]? CLI\b|\b[`'"]?([\w.+-]+)[`'"]? (?:CLI )?(?:not found|is not installed|is not available) on (?:your |the )?PATH\b/i);
+  if (onPath) return { cause: "missing_tool", detail: `${onPath[1] ?? onPath[2]} is not installed` };
   const tool = output.match(/(?:^|\n)(?:[^\n:]*: line \d+: |[^\n:]*: \d+: |(?:ba)?sh: )?([\w.+-]+): (?:command )?not found/);
   if (tool) return { cause: "missing_tool", detail: `${tool[1]} is not installed` };
   // GNU make runs a simple recipe line itself, so a missing tool reads "make: golangci-lint: No such

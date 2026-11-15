@@ -223,6 +223,7 @@ export function environmentLimit(ex: Pick<Executor, "where" | "image" | "imageSo
     if (ex.where !== "container") return `${d.detail} on this machine`;
     if (ex.imageSource !== "repo") return `${d.detail} in the audit's image (${ex.image})`;
   }
+  if (d.cause === "missing_ref") return d.detail;
   if (d.cause === "network" && ONLINE_KINDS.has(cmd.kind)) return `the ${cmd.kind} hit ${d.detail}`;
   // The audit picks the user commands run as and the home they share, so this is never the repo's.
   if (d.cause === "permission") return `${d.detail} on this machine`;

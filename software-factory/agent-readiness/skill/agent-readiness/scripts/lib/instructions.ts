@@ -86,6 +86,25 @@ function sameAsCheck(audit: Audit, text: string, cwd: string, tree: string): { i
 
 // Documented commands run one by one in the replay copy, inside the audit's overall time budget:
 // each gets what is left of it, and none starts once it is spent.
+// What a tool prints when the folder it runs in has no manifest, and which manifest that is.
+const NO_MANIFEST: [RegExp, string][] = [
+  [/No `pyproject\.toml` found in current directory or any parent directory/, "pyproject.toml"],
+  [/could not find `Cargo\.toml` in/, "Cargo.toml"],
+  [/go\.mod file not found in current directory or any parent directory/, "go.mod"],
+  [/Composer could not find a composer\.json file/, "composer.json"],
+  [/Could not locate Gemfile/, "Gemfile"],
+  [/there is no POM in this directory/, "pom.xml"],
+  [/npm (?:error|ERR!) (?:code ENOENT|enoent)[\s\S]{0,400}?package\.json/, "package.json"],
+];
+
+// The packages a command that needs a manifest the working folder lacks could have meant.
+export function packageCommand(output: string, audit: Audit, tree: string, cwd: string): { manifest: string; paths: string[] } | null {
+  const manifest = NO_MANIFEST.find(([re]) => re.test(output))?.[1];
+  if (!manifest || existsExact(tree, join(cwd, manifest))) return null;
+  const paths = (audit.profile?.components ?? []).filter((c) => c.path !== cwd && c.manifest !== null && c.manifest.split("/").pop() === manifest).map((c) => c.path).sort();
+  return paths.length ? { manifest, paths } : null;
+}
+
 // `executors`: one executor for every command, or a choice per command, so a command runs in the image
 // of the component it targets.
 export async function replayInstructions(audit: Audit, executors: Executor | ((cwd: string, command: string) => Executor), copyDir: string, budget: Budget, registryValues: string[], notInstalled: { blocked?: string } | null): Promise<void> {
@@ -137,6 +156,30 @@ export async function replayInstructions(audit: Audit, executors: Executor | ((c
       item.result = "not_run";
       item.reason = "not replayed: it uses sudo, which the audit never runs on the host";
       item.blocked = "it uses sudo, which the audit never runs on the host";
+      continue;
+    }
+    // A per-package command written without its folder, such as "run `uv lock` in that server", fails
+    // at the root for want of the package's manifest. It belongs to one of the packages that have one,
+    // and the line doesn't say which, so it can't be replayed as written.
+    const packages = ok ? null : packageCommand(out.output, audit, copyDir, cwd);
+    if (packages) {
+      item.category = "skipped";
+      item.result = "not_run";
+      item.reason = `not replayed: it runs in one of the packages that have a ${packages.manifest} (${packages.paths.join(", ")}), and the line doesn't say which`;
+      item.rule = "per-package";
+      continue;
+    }
+    if (why?.cause === "missing_ref") {
+      item.result = "not_run";
+      item.reason = `not replayed to the end: ${why.detail}, an environment limit rather than a repo defect`;
+      item.blocked = why.detail;
+      continue;
+    }
+    if (why?.cause === "interactive") {
+      item.category = "skipped";
+      item.result = "not_run";
+      item.reason = `not replayed: ${why.detail}`;
+      item.rule = "interactive";
       continue;
     }
     if (why?.cause === "permission") {

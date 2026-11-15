@@ -138,7 +138,9 @@ export interface Evidence {
 }
 
 export interface Diagnosis {
-  cause: "service" | "credential" | "registry" | "missing_tool" | "missing_module" | "network" | "permission" | "timeout" | "compile" | "unknown";
+  // missing_ref: a git ref or remote the audit's single-commit clean copy doesn't have, such as origin/main.
+  // interactive: the command stopped at a prompt that wants a person's answer.
+  cause: "service" | "credential" | "registry" | "missing_tool" | "missing_module" | "network" | "permission" | "timeout" | "compile" | "missing_ref" | "interactive" | "unknown";
   detail: string;
   // For a refused connection, the service usually on that port. It names the service in report text
   // only when serviceNamed says the output named it; otherwise it only guides remediation drafts.
