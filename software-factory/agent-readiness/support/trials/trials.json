@@ -194,7 +194,7 @@
       "review": "customer-trial-carbon.md",
       "truth": "Single npm JavaScript package. npm ci and all 1,430 node --test and tsd tests pass, and 5 of 5 planted faults were caught. All 7 README instruction findings were false: consumer CLI examples and commands quoted in prose such as node --eval. In a container 2 of 1,430 tests fail because tests/fixtures/pmlink, a committed symlink, is missing from the audit's clean copy: an audit defect, not the repo's. Host runs passed.",
       "realInstructionFindings": [],
-      "falseInstructionFindings": 1,
+      "falseInstructionFindings": 0,
       "target": {
         "sealed": true,
         "runtime": "docker",
@@ -219,9 +219,7 @@
             }
           },
           "notAssessed": [],
-          "instructionFailures": [
-            "CONTRIBUTING.md:27"
-          ],
+          "instructionFailures": [],
           "blockingSafety": []
         }
       }
@@ -292,7 +290,7 @@
       "review": "customer-trial-carbon.md",
       "truth": "Go backend with 90% of changes, not assessed, plus a Svelte and Vite ui/ that builds and has no test script, so ui at Level 0 is correct. Both blocking private-key findings were false: a Go doc comment and a textarea placeholder. The README's Go tutorial and release-binary commands are not instructions for ui.",
       "realInstructionFindings": [],
-      "falseInstructionFindings": 2,
+      "falseInstructionFindings": 0,
       "target": {
         "sealed": true,
         "runtime": "docker",
@@ -318,10 +316,7 @@
             "examples",
             "pocketbase"
           ],
-          "instructionFailures": [
-            "CONTRIBUTING.md:51",
-            "CONTRIBUTING.md:60"
-          ],
+          "instructionFailures": [],
           "blockingSafety": []
         }
       }
