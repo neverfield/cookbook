@@ -8,6 +8,7 @@ import { SUDO_SHIM_MARK } from "./run.ts";
 import { CUT_OFF } from "./scope.ts";
 import type { Audit } from "./types.ts";
 import { exists, sha256 } from "./util.ts";
+import { applyWaivers } from "./waivers.ts";
 
 export const INSTRUCTION_TIMEOUT_SEC = 300;
 
@@ -19,20 +20,26 @@ export async function replayInstructions(audit: Audit, ex: Executor, copyDir: st
       item.result = "not_run";
       item.reason = notInstalled.blocked ? "not replayed because the install was blocked on this machine" : "not replayed because the install failed";
       item.blocked = notInstalled.blocked;
+      item.rule = "replay-install";
       continue;
     }
     const leftSec = Math.floor((budget.totalMs - (Date.now() - budget.startedAt)) / 1000);
     if (overBudget(budget, "*") || leftSec < 1) {
       item.result = "not_run";
       item.reason = CUT_OFF;
+      item.rule = "replay-budget";
       continue;
     }
-    const cwd = dirname(item.source) === "" ? "." : dirname(item.source);
-    const out = await ex.exec(item.text, exists(join(copyDir, cwd)) ? cwd : ".", Math.min(INSTRUCTION_TIMEOUT_SEC, leftSec));
+    const wanted = item.cwd ?? (dirname(item.source) === "" ? "." : dirname(item.source));
+    const cwd = exists(join(copyDir, wanted)) ? wanted : ".";
+    const limit = Math.min(INSTRUCTION_TIMEOUT_SEC, leftSec);
+    const out = await ex.exec(item.text, cwd, limit);
     charge(budget, "*", out.durationMs);
     const ok = out.exitCode === 0 && !out.timedOut;
     const redacted = redact(out.output, registryValues);
     const why = ok ? null : diagnose(out.output, out.timedOut, "instruction");
+    item.cwd = cwd;
+    item.rule = "replay-environment";
     if (!ok && ex.where !== "container" && out.output.includes(SUDO_SHIM_MARK)) {
       item.result = "not_run";
       item.reason = "not replayed: it uses sudo, which the audit never runs on the host";
@@ -62,6 +69,15 @@ export async function replayInstructions(audit: Audit, ex: Executor, copyDir: st
     if (out.timedOut && overBudget(budget, "*")) {
       item.result = "not_run";
       item.reason = CUT_OFF;
+      item.rule = "replay-budget";
+      continue;
+    }
+    // A command that is still running at the limit, such as a full pre-push gate, isn't shown wrong.
+    if (out.timedOut) {
+      item.category = "long_running";
+      item.result = "not_run";
+      item.reason = `not replayed to the end: it was still running after ${limit} seconds, the limit for one instruction`;
+      item.rule = "long-running";
       continue;
     }
     const ev = addEvidence(audit, {
@@ -82,6 +98,8 @@ export async function replayInstructions(audit: Audit, ex: Executor, copyDir: st
     });
     item.result = ok ? "pass" : "fail";
     item.reason = ok ? undefined : why!.detail;
+    item.rule = "replay";
     item.evidenceId = ev.id;
   }
+  applyWaivers(audit);
 }

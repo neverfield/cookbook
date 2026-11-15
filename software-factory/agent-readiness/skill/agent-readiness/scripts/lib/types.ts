@@ -147,6 +147,11 @@ export interface InstructionItem {
   reason?: string;
   blocked?: string;
   evidenceId?: string;
+  // The folder a command runs in: the package that owns the instruction file, or the repo root.
+  cwd?: string;
+  // The id of the rule in INSTRUCTION_RULES (static.ts) that produced the result.
+  rule?: string;
+  waived?: AppliedWaiver;
 }
 
 export interface SafetyFinding {
@@ -156,6 +161,36 @@ export interface SafetyFinding {
   line?: number;
   detail: string;
   blocking: boolean;
+  // The id of the rule in SAFETY_RULES (static.ts) that decided whether it blocks.
+  rule?: string;
+  waived?: AppliedWaiver;
+}
+
+// A finding a committed waiver file treats as a false positive. The finding keeps what it was, so
+// the report can show it next to the waiver's reason.
+export interface AppliedWaiver {
+  waiver: string;
+  reason: string;
+  by: string;
+  was: string;
+}
+
+export interface WaiverEntry {
+  id: string;
+  check: string;
+  match: string;
+  reason: string;
+  by: string;
+  expires?: string;
+}
+
+// The waiver file as read from the audited commit, the waivers that apply, and the ones refused.
+export interface WaiverRecord {
+  file: string;
+  digest: string | null;
+  entries: WaiverEntry[];
+  rejected: { id: string; reason: string }[];
+  ignored: string | null;
 }
 
 // Where a fault was planted stays outside the repository until the seal: the draft holds only
@@ -268,6 +303,8 @@ export interface Audit {
   outcomes: OutcomesSnapshot | null;
   narration: Narration | null;
   signals?: Signal[];
+  // Read by the scan from the audited commit's waiver file; sealed with the rest of the audit.
+  waivers?: WaiverRecord;
   sealed?: { at: string; digest: string; reportJsonDigest: string; reportMdDigest: string; reportHtmlDigest?: string; roadmapItemsDigest?: string; historyLineDigest?: string; keyed?: boolean };
 }
 
@@ -441,6 +478,28 @@ export interface ReportJson {
   roadmap: { owner: string | null; doneCount: number; total: number; items: ReportRoadmapItem[] };
   progress: ReportProgress | null;
   details: ReportDetails;
+  // How each result was reached: every level, unproven or not-assessed result and every finding.
+  explanations?: Explanation[];
+  waivers?: ReportWaivers | null;
+}
+
+export interface Explanation {
+  kind: "level" | "condition" | "not_assessed" | "instruction" | "safety";
+  subject: string;
+  result: string;
+  ran: string;
+  where: string;
+  happened: string;
+  rule: string;
+}
+
+export interface ReportWaivers {
+  file: string;
+  digest: string | null;
+  ignored: string | null;
+  applied: { id: string; check: string; match: string; reason: string; by: string; findings: number }[];
+  unused: { id: string; match: string }[];
+  rejected: { id: string; reason: string }[];
 }
 
 export interface CapReason {
