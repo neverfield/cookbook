@@ -97,7 +97,7 @@ describe("claims outside the tree", () => {
   });
 
   test("a claimed config, script or path that isn't in the tree is caught", () => {
-    const { repo, report, audit } = audited("nested-apps-dotnet");
+    const { repo, report, audit } = audited("nested-apps-swift");
     report.components.included[0].manifest = "apps/ghost/package.json";
     report.components.excluded[0].path = "services/ghost";
     report.details.assets.push({ kind: "environment", path: ".cursor/environment.json.bak", authors: [], lastChanged: null, status: "Present", ok: true });
