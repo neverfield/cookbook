@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { loadCases, planJobs, select } from "../evals/lib/plan.ts";
-import type { Arm } from "../evals/lib/types.ts";
+import { loadCases, planJobs, select } from "../support/evals/lib/plan.ts";
+import type { Arm } from "../support/evals/lib/types.ts";
 
-const workflow = readFileSync(join(import.meta.dirname, "..", "examples/github-workflows/skill-evals.yml"), "utf8");
+const workflow = readFileSync(join(import.meta.dirname, "..", "support/examples/github-workflows/skill-evals.yml"), "utf8");
 
 function flag(line: string, name: string): number {
   const m = line.match(new RegExp(`--${name} (\\d+)`));

@@ -4,8 +4,8 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { compare, crashedRun, summarize } from "../evals/lib/baseline.ts";
-import { faultStoreReads, shellWritesProtected } from "../evals/lib/trajectory.ts";
+import { compare, crashedRun, summarize } from "../support/evals/lib/baseline.ts";
+import { faultStoreReads, shellWritesProtected } from "../support/evals/lib/trajectory.ts";
 import { mergeHistory } from "../skill/agent-readiness/scripts/lib/history.ts";
 import { activeComponents } from "../skill/agent-readiness/scripts/lib/levels.ts";
 import { coAuthorMatches } from "../skill/agent-readiness/scripts/lib/outcomes.ts";
@@ -16,7 +16,7 @@ import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { componentStates, repoStates } from "../skill/agent-readiness/scripts/lib/score.ts";
 import { renderEnvFiles } from "../skill/agent-readiness/scripts/lib/skill.ts";
 import type { Audit, ContractCommand, Evidence } from "../skill/agent-readiness/scripts/lib/types.ts";
-import { materialize, readiness } from "../tools/fixture.ts";
+import { materialize, readiness } from "../support/tools/fixture.ts";
 import { makeAudit, reportFor } from "./helpers.ts";
 
 const rubric = loadRubric("2026-10-alpha");
@@ -196,7 +196,7 @@ describe("fixes from the independent pre-ship review", () => {
 
   test("co-author filters match whole words", () => {
     assert.ok(coAuthorMatches("Cursor Agent", "cursor"));
-    assert.ok(!coAuthorMatches("Andrew Lee", "e"));
+    assert.ok(!coAuthorMatches("Alex Lee", "e"));
     assert.ok(!coAuthorMatches("Cursorish Bot", "cursor"));
   });
 

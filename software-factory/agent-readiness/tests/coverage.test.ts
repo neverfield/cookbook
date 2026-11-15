@@ -4,18 +4,18 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { describe, test } from "node:test";
-import { joinsAtOnce, leavesAfterTwo, recheckIs, recheckNeverRaises, sampledScopeStated, scenarioLevelsMatch } from "../evals/lib/coverage.ts";
-import { MAX_GATES, gradeCase } from "../evals/lib/grade.ts";
-import type { EvalCase, Trajectory, Workspace } from "../evals/lib/types.ts";
-import { prepare } from "../evals/lib/workspace.ts";
+import { joinsAtOnce, leavesAfterTwo, recheckIs, recheckNeverRaises, sampledScopeStated, scenarioLevelsMatch } from "../support/evals/lib/coverage.ts";
+import { MAX_GATES, gradeCase } from "../support/evals/lib/grade.ts";
+import type { EvalCase, Trajectory, Workspace } from "../support/evals/lib/types.ts";
+import { prepare } from "../support/evals/lib/workspace.ts";
 import { detectRuntime } from "../skill/agent-readiness/scripts/lib/container.ts";
 import { diagnose } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { composeServices } from "../skill/agent-readiness/scripts/lib/skill.ts";
 import type { HistoryLine } from "../skill/agent-readiness/scripts/lib/types.ts";
-import { ACCELERATOR, FIXTURES, SKILL, materialize, readiness } from "../tools/fixture.ts";
+import { ACCELERATOR, FIXTURES, SKILL, materialize, readiness } from "../support/tools/fixture.ts";
 import { makeAudit, reportFor } from "./helpers.ts";
 
-const CASES = join(ACCELERATOR, "evals", "cases");
+const CASES = join(ACCELERATOR, "support", "evals", "cases");
 
 async function allCases(): Promise<EvalCase[]> {
   const out: EvalCase[] = [];
@@ -90,7 +90,7 @@ describe("coverage cases", () => {
   });
 
   test("the case list includes the new cases", () => {
-    const out = execFileSync(process.execPath, ["--experimental-strip-types", "--no-warnings", join(ACCELERATOR, "evals", "run.ts"), "--list"], { encoding: "utf8" });
+    const out = execFileSync(process.execPath, ["--experimental-strip-types", "--no-warnings", join(ACCELERATOR, "support", "evals", "run.ts"), "--list"], { encoding: "utf8" });
     for (const id of ["outcomes/level-4-streak", "multi-audit/drops-below-share", "scenarios/scenario-components", "remediation/compose-env", "scope/sampled-scope"]) assert.match(out, new RegExp(`^${id} `, "m"));
   });
 });

@@ -25,7 +25,7 @@ function tree(files: Record<string, string>): string {
   return dir;
 }
 
-// Output from the release gates' real-repo runs (Cleo and the FastAPI template).
+// Output from real-repo runs (Cleo and the FastAPI template).
 const POETRY_VERBOSE = `  | All attempts to connect to pypi.org failed.
   |
   | Probable Causes:

@@ -1,6 +1,6 @@
 # What the audit supports
 
-A running list of the stacks and machines the audit has been checked on, and of what the scripts do with tools and files they recognize. The checks themselves are described in [checks.md](checks.md). Every entry sits in one tier and names the fixture (under `fixtures/` in the accelerator) or the pinned public repo that shows how the audit behaves on it. `scripts/lib/support.ts` holds the same list, and a test fails when the two drift apart.
+A running list of the stacks and machines the audit has been checked on, and of what the scripts do with tools and files they recognize. The checks themselves are described in [checks.md](checks.md). Every entry sits in one tier and names the fixture (under `support/fixtures/` in the accelerator) or the pinned public repo that shows how the audit behaves on it. `scripts/lib/support.ts` holds the same list, and a test fails when the two drift apart.
 
 - **Supported:** the audit installs, builds and tests it, and gives a level.
 - **Not yet supported:** the scan recognises it and gives no level for it, because a specific piece is missing. The report says "isn't supported yet" with the reason, and links here.
@@ -102,6 +102,6 @@ The drafted install uses apt, so the audit proves it only where Debian's package
 
 ## Adding an entry
 
-1. Add a fixture under `fixtures/` that shows the behaviour, or pin a public repo at a SHA.
+1. Add a fixture under `support/fixtures/` that shows the behaviour, or pin a public repo at a SHA.
 2. Add the entry to `scripts/lib/support.ts` and to the matching table here, in the same tier, with the same reason and proof.
 3. Moving an entry to **Supported** needs a fixture or repo whose audit gives the expected level.

@@ -6,7 +6,7 @@ import { describe, test } from "node:test";
 import { detectRuntime } from "../skill/agent-readiness/scripts/lib/container.ts";
 import { saveDraft } from "../skill/agent-readiness/scripts/lib/workspace.ts";
 import { paths } from "../skill/agent-readiness/scripts/lib/workspace.ts";
-import { commitAll, materialize, readiness } from "../tools/fixture.ts";
+import { commitAll, materialize, readiness } from "../support/tools/fixture.ts";
 
 function hostAudit(fixture: string, extra: string[] = [], env: Record<string, string> = {}) {
   const repo = materialize(fixture);
@@ -277,6 +277,6 @@ describe("CLI", { concurrency: 4 }, () => {
     assert.match(readiness(repo, ["validate", ".agent-readiness/roadmap.json"]).out, /valid roadmap/);
     writeFileSync(join(repo, "bad.json"), JSON.stringify({ schema: "agent-readiness/report@1" }));
     assert.match(readiness(repo, ["validate", "bad.json"]).out, /not a valid report/);
-    assert.match(readiness(repo, ["version"]).out, /agent-readiness skill 0\.1\.0 \(agent-readiness-v0\.1\.0\), rubric 2026-11-alpha/);
+    assert.match(readiness(repo, ["version"]).out, /agent-readiness skill 0\.2\.0 \(agent-readiness-v0\.2\.0\), rubric 2026-11-alpha/);
   });
 });

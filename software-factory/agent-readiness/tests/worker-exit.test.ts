@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { resultComplete, supervise, writeResult } from "../evals/lib/worker-exit.ts";
+import { resultComplete, supervise, writeResult } from "../support/evals/lib/worker-exit.ts";
 
-const LIB = fileURLToPath(new URL("../evals/lib/worker-exit.ts", import.meta.url));
+const LIB = fileURLToPath(new URL("../support/evals/lib/worker-exit.ts", import.meta.url));
 const RESULT = { run: { id: "x", grade: { gates: [{ name: "g", pass: true, detail: "" }] } } };
 
 // A stand-in worker: writes its result, then holds the event loop the way a keep-alive HTTPS

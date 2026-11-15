@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { detectRuntime } from "../skill/agent-readiness/scripts/lib/container.ts";
-import { auditFixture, expected, fixtureNames } from "../tools/fixture.ts";
+import { auditFixture, expected, fixtureNames } from "../support/tools/fixture.ts";
 
 const runtime = detectRuntime("auto");
 

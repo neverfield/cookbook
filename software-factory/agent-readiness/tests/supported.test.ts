@@ -7,7 +7,7 @@ import { DETECTED_STACKS } from "../skill/agent-readiness/scripts/lib/profile.ts
 import { REPLAY_STACKS, assertHostFallbackSupported } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { STACKS, SUPPORTED_DOC, notSupportedReason } from "../skill/agent-readiness/scripts/lib/support.ts";
 import type { SupportTier } from "../skill/agent-readiness/scripts/lib/support.ts";
-import { ACCELERATOR, SKILL } from "../tools/fixture.ts";
+import { ACCELERATOR, SKILL } from "../support/tools/fixture.ts";
 
 const TIERS: Record<string, SupportTier> = { "## Supported": "supported", "## Not yet supported": "not_yet", "## Not assessed": "not_assessed" };
 
@@ -57,7 +57,8 @@ describe("supported.md", () => {
     for (const s of STACKS) {
       if (s.tier !== "not_assessed") assert.ok(s.proof.length > 0, `${s.id} needs a fixture or repo that proves it`);
       for (const p of s.proof) {
-        if (/^(fixtures|tests)\//.test(p)) assert.ok(existsSync(join(ACCELERATOR, p)), `${s.id}: ${p} doesn't exist`);
+        if (/^fixtures\//.test(p)) assert.ok(existsSync(join(ACCELERATOR, "support", p)), `${s.id}: ${p} doesn't exist`);
+        else if (/^tests\//.test(p)) assert.ok(existsSync(join(ACCELERATOR, p)), `${s.id}: ${p} doesn't exist`);
         else assert.match(p, /^[\w.-]+\/[\w.-]+@[0-9a-f]{7,40}$/, `${s.id}: ${p} isn't owner/repo@sha`);
       }
     }

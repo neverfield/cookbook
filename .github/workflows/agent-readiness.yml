@@ -1,0 +1,66 @@
+name: agent-readiness
+
+on:
+  push:
+    branches: [main, "cursor/agent-readiness-0.2"]
+    paths: ["software-factory/agent-readiness/**", ".github/workflows/agent-readiness.yml"]
+  pull_request:
+    paths: ["software-factory/agent-readiness/**", ".github/workflows/agent-readiness.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: software-factory/agent-readiness
+
+jobs:
+  check:
+    name: npm run check (Docker, no skips)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: software-factory/agent-readiness/.nvmrc
+          cache: npm
+          cache-dependency-path: software-factory/agent-readiness/package-lock.json
+      - name: Docker is available
+        run: docker info --format 'Docker {{.ServerVersion}}'
+      - run: npm ci
+      - name: npm run check
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee "$RUNNER_TEMP/check.log"
+      - name: No suite skipped
+        if: always()
+        run: support/tools/no-skips.sh "$RUNNER_TEMP/check.log"
+
+  trials:
+    name: Pinned trial repos (Docker)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: software-factory/agent-readiness/.nvmrc
+          cache: npm
+          cache-dependency-path: software-factory/agent-readiness/package-lock.json
+      - name: Docker is available
+        run: docker info --format 'Docker {{.ServerVersion}}'
+      - run: npm ci
+      - name: npm run trials
+        run: |
+          set -o pipefail
+          npm run trials 2>&1 | tee "$RUNNER_TEMP/trials.log"
+      - name: No trial skipped
+        if: always()
+        run: support/tools/no-skips.sh "$RUNNER_TEMP/trials.log"

@@ -10,7 +10,7 @@ import { mutantsFile } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
 import type { HistoryLine } from "../skill/agent-readiness/scripts/lib/types.ts";
-import { SKILL, commitAll, materialize, readiness } from "../tools/fixture.ts";
+import { SKILL, commitAll, materialize, readiness } from "../support/tools/fixture.ts";
 import { makeAudit, outcomes, reportFor, stats } from "./helpers.ts";
 
 const rubric = loadRubric("2026-10-alpha");

@@ -1,0 +1,449 @@
+{
+  "now": "2026-11-14T12:00:00Z",
+  "seed": "trial-seed",
+  "trials": [
+    {
+      "id": "ms",
+      "repo": "vercel/ms",
+      "commit": "4ff48cec099f0514c3e9bbca18706c9c21122bfb",
+      "runtime": "docker",
+      "review": "customer-trial-opus.md",
+      "truth": "Tiny pnpm TypeScript library. Builds, type-checks and passes all 167 tests. The README's npm install, yarn add, npm link and npm test lines are for the package's users, not wrong agent instructions. One real untested boundary: the tests use one year plus 1 ms.",
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 5,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "outcome": "proven",
+        "minLevel": 1,
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 1,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "ms": {
+              "level": 1,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [
+            "README.md:72",
+            "README.md:73",
+            "README.md:202",
+            "README.md:203",
+            "README.md:205"
+          ],
+          "blockingSafety": []
+        }
+      }
+    },
+    {
+      "id": "zustand",
+      "repo": "pmndrs/zustand",
+      "commit": "9fed2eb2f3af672da9f7bf694b996df3831fc207",
+      "runtime": "docker",
+      "review": "customer-trial-opus.md",
+      "truth": "Medium pnpm TypeScript library with \"type\": \"commonjs\" and engines.node >=12.20.0. Installs, builds, type-checks and passes its tests, on the host too. The review hit a crash on the commonjs type, a silent host fallback because node:12-bookworm doesn't exist, and with --image a false Level 0 because the audit's pnpm store sat in the work tree and prettier parsed it. Run from the copied skill, the audit currently exits before sealing with \"Cannot use import statement outside a module\".",
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 0,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "outcome": "proven",
+        "minLevel": 1,
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "any": {
+          "exit": 1,
+          "sealed": false,
+          "runtime": null,
+          "level": null,
+          "outcome": null,
+          "unproven": null,
+          "couldBe": null,
+          "components": {},
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": []
+        }
+      }
+    },
+    {
+      "id": "changesets",
+      "repo": "changesets/changesets",
+      "commit": "9a035ec36045aeb6141dd0bbac9ab9e3c69ac0bc",
+      "runtime": "docker",
+      "review": "customer-trial-opus.md",
+      "truth": "pnpm monorepo of 21 packages. The root vitest runs 818 tests, and cli alone has 17 test files, so no package lacks tests. 8 git-tag tests fail in a container only because git has no user identity there, which CI sets.",
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 0,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "docs": {
+              "level": 0,
+              "unproven": false
+            },
+            "apply-release-plan": {
+              "level": 0,
+              "unproven": false
+            },
+            "cli": {
+              "level": 0,
+              "unproven": false
+            },
+            "get-github-info": {
+              "level": 0,
+              "unproven": false
+            },
+            "git": {
+              "level": 0,
+              "unproven": false
+            },
+            "write": {
+              "level": 0,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "assemble-release-plan",
+            "changelog-git",
+            "changelog-github",
+            "color",
+            "config",
+            "e2e",
+            "errors",
+            "get-dependents-graph",
+            "get-release-plan",
+            "get-version-range-type",
+            "logger",
+            "parse",
+            "pre",
+            "read",
+            "release-utils",
+            "should-skip-package",
+            "test-utils",
+            "types"
+          ],
+          "instructionFailures": [],
+          "blockingSafety": []
+        }
+      }
+    },
+    {
+      "id": "dotenv",
+      "repo": "motdotla/dotenv",
+      "commit": "4c5450405612e4368e0d46d44da01942cf22a707",
+      "runtime": "docker",
+      "review": "customer-trial-grok.md",
+      "truth": "Small npm JavaScript library. Install, lint, build, npm test and npm run test:perf pass. The README's yarn add, pnpm add, prose path and npx dotenv examples are consumer documentation, not wrong agent instructions. scripts/parse-perf.js:25 holds the AWS documentation key AKIAIOSFODNN7EXAMPLE, not a committed secret. engines.node >=12 maps to node:12-bookworm, which doesn't exist, so even with Docker the audit falls back to the host without saying why (the same defect as zustand).",
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 6,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "outcome": "proven",
+        "minLevel": 1,
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": true,
+          "couldBe": 1,
+          "components": {
+            "dotenv": {
+              "level": 0,
+              "unproven": true
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [
+            "README.md:93",
+            "README.md:100",
+            "README.md:113",
+            "README.md:792",
+            "README.md:804",
+            "README.md:805"
+          ],
+          "blockingSafety": [
+            "secret scripts/parse-perf.js:25"
+          ]
+        }
+      }
+    },
+    {
+      "id": "commander",
+      "repo": "tj/commander.js",
+      "commit": "a5a7dc084d4d2b7932e85ca049c5204e50a2c721",
+      "runtime": "docker",
+      "review": "customer-trial-carbon.md",
+      "truth": "Single npm JavaScript package. npm ci and all 1,430 node --test and tsd tests pass, and 5 of 5 planted faults were caught. All 7 README instruction findings were false: consumer CLI examples and commands quoted in prose such as node --eval. In a container 2 of 1,430 tests fail because tests/fixtures/pmlink, a committed symlink, is missing from the audit's clean copy: an audit defect, not the repo's. Host runs passed.",
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 7,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "outcome": "proven",
+        "minLevel": 1,
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "commander": {
+              "level": 0,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [
+            "Readme.md:92",
+            "Readme.md:95",
+            "Readme.md:126",
+            "Readme.md:139",
+            "Readme.md:400",
+            "Readme.md:965",
+            "Readme.md:1031"
+          ],
+          "blockingSafety": []
+        }
+      }
+    },
+    {
+      "id": "mcp-servers",
+      "repo": "modelcontextprotocol/servers",
+      "commit": "e1dc4b18dbb948921da37f3d4224a628730b43b0",
+      "runtime": "docker",
+      "review": "customer-trial-carbon.md",
+      "truth": "Monorepo of 4 TypeScript npm workspaces and 2 uv Python servers. The TypeScript workspaces install, build and pass 1,747 vitest tests. All 17 instruction findings were false: trailing semicolons kept on script names, a deleted file named in a never-re-add rule, package-relative paths checked from the root, and an example worktree path. 3 of the 6 missed planted faults were genuine gaps; the rest were equivalent mutants or a stale dist/. The audit runs the whole repo in one node:22-bookworm image with no uv, so the 2 Python servers are blocked on any network until each component gets its own image (wave 2).",
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 17,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": true,
+          "couldBe": 1,
+          "components": {
+            "everything": {
+              "level": 1,
+              "unproven": false
+            },
+            "filesystem": {
+              "level": 1,
+              "unproven": false
+            },
+            "memory": {
+              "level": 1,
+              "unproven": false
+            },
+            "sequentialthinking": {
+              "level": 1,
+              "unproven": false
+            },
+            "fetch": {
+              "level": 0,
+              "unproven": true
+            },
+            "git": {
+              "level": 0,
+              "unproven": true
+            }
+          },
+          "notAssessed": [
+            "time"
+          ],
+          "instructionFailures": [
+            ".claude/skills/issue-triage/SKILL.md:310",
+            ".claude/skills/pr-flow/SKILL.md:50",
+            ".claude/skills/pr-flow/SKILL.md:146",
+            ".claude/skills/pre-push-gate/SKILL.md:23",
+            ".claude/skills/project-structure/SKILL.md:31",
+            ".claude/skills/project-structure/SKILL.md:46",
+            ".claude/skills/project-structure/SKILL.md:94",
+            ".claude/skills/project-structure/SKILL.md:94",
+            ".claude/skills/project-structure/SKILL.md:94",
+            ".claude/skills/project-structure/SKILL.md:119",
+            ".claude/skills/release/SKILL.md:437",
+            ".claude/skills/release/SKILL.md:442",
+            ".claude/skills/testing/SKILL.md:36",
+            ".claude/skills/testing/SKILL.md:37",
+            ".claude/skills/testing/SKILL.md:43",
+            ".claude/skills/testing/SKILL.md:75",
+            "AGENTS.md:216"
+          ],
+          "blockingSafety": []
+        }
+      }
+    },
+    {
+      "id": "pocketbase",
+      "repo": "pocketbase/pocketbase",
+      "commit": "7f2773ec234b62d0b80ca47c508397cb3d0da3ea",
+      "runtime": "docker",
+      "review": "customer-trial-carbon.md",
+      "truth": "Go backend with 90% of changes, not assessed, plus a Svelte and Vite ui/ that builds and has no test script, so ui at Level 0 is correct. Both blocking private-key findings were false: a Go doc comment and a textarea placeholder. The README's Go tutorial and release-binary commands are not instructions for ui.",
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 3,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "ui": {
+              "level": 0,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "examples",
+            "pocketbase"
+          ],
+          "instructionFailures": [
+            "README.md:45",
+            "README.md:91",
+            "README.md:104"
+          ],
+          "blockingSafety": [
+            "secret forms/apple_client_secret_create.go:33",
+            "secret ui/src/collections/oauth2/appleOptions.js:201"
+          ]
+        }
+      }
+    },
+    {
+      "id": "cookbook",
+      "repo": "neverfield/cookbook",
+      "commit": "0695c7896dca31d95adfca8aeecaebcf98b59265",
+      "runtime": "none",
+      "review": "broad-readiness-opus.md",
+      "truth": "Run with no container runtime. agent-readiness installs, type-checks and passes its tests (435 of 436, 1 skipped without Docker), yet the review's audit sealed Level 0, not bootable. With no container the honest result is unproven on this machine. The test fixtures' tokens and the tool's own tests needing credentials are not blocking safety findings. README.md:15 links to cloud-agent, which doesn't exist (the folder is self-hosted-cloud-agent); that one instruction finding is real, and upstream main has the same broken link.",
+      "realInstructionFindings": [
+        "README.md:15"
+      ],
+      "falseInstructionFindings": 5,
+      "target": {
+        "sealed": true,
+        "runtime": null,
+        "unproven": true,
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "agent-kanban": {
+              "level": 0,
+              "unproven": false
+            },
+            "app-builder": {
+              "level": 0,
+              "unproven": false
+            },
+            "coding-agent-cli": {
+              "level": 0,
+              "unproven": false
+            },
+            "grok-coding-agent-cli": {
+              "level": 0,
+              "unproven": false
+            },
+            "agent-readiness": {
+              "level": 0,
+              "unproven": false
+            },
+            "grok-patient-intake": {
+              "level": 0,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "dag-task-runner",
+            "quickstart",
+            "self-hosted-cloud-agent-ecs-terraform",
+            "terraform"
+          ],
+          "instructionFailures": [
+            ".cursor/skills/dag-task-runner/SKILL.md:131",
+            "README.md:15",
+            "software-factory/agent-readiness/AGENTS.md:15",
+            "software-factory/agent-readiness/AGENTS.md:16",
+            "software-factory/agent-readiness/AGENTS.md:16",
+            "software-factory/agent-readiness/AGENTS.md:39"
+          ],
+          "blockingSafety": [
+            "secret software-factory/agent-readiness/evals/cases/resilience.ts:9",
+            "credential_needed software-factory/agent-readiness/fixtures/needs-prod-secret/repo/test/payments.test.js:5",
+            "credential_needed software-factory/agent-readiness/tests/honest-level-0.test.ts:239",
+            "credential_needed software-factory/agent-readiness/tests/units.test.ts:313"
+          ]
+        }
+      }
+    }
+  ]
+}
