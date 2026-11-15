@@ -1,28 +1,26 @@
 {
-  "ranAt": "2026-11-15T09:52:34.181Z",
+  "ranAt": "2026-11-15T10:49:39.466Z",
   "results": [
     {
       "id": "slugify",
       "sha": "3b17b2e84b97624a683aafaa38184bf2746fab22",
       "scoring": "bdd96582aec18dbfce421cfcfb1143d8f135f233e09d06aab8f8a5418db43dc4",
-      "commit": "2f2bb5d635437d185a236215406393bc723f90a4",
-      "minutes": 0.9,
-      "repoLevel": 1,
+      "commit": "b750c57ae933dcc05857603646641e3f4ca4042a",
+      "minutes": 1,
+      "repoLevel": 2,
       "outcome": "proven",
       "levels": {
-        "slugify": 1
+        "slugify": 2
       },
       "excluded": [],
-      "failures": [
-        "slugify:slugify is Level 1, expected Level 2"
-      ]
+      "failures": []
     },
     {
       "id": "express",
       "sha": "1c6f1b0fe4000977b9a7b4f34097e4d527dd9824",
       "scoring": "bdd96582aec18dbfce421cfcfb1143d8f135f233e09d06aab8f8a5418db43dc4",
-      "commit": "2f2bb5d635437d185a236215406393bc723f90a4",
-      "minutes": 15.5,
+      "commit": "b750c57ae933dcc05857603646641e3f4ca4042a",
+      "minutes": 15.4,
       "repoLevel": 1,
       "outcome": "proven",
       "levels": {
@@ -49,7 +47,7 @@
       "id": "create-t3-turbo",
       "sha": "8f945b7bb3bfb3ca8358d48b1ff0214079bc11ee",
       "scoring": "bdd96582aec18dbfce421cfcfb1143d8f135f233e09d06aab8f8a5418db43dc4",
-      "commit": "2f2bb5d635437d185a236215406393bc723f90a4",
+      "commit": "b750c57ae933dcc05857603646641e3f4ca4042a",
       "minutes": 2.5,
       "repoLevel": 0,
       "outcome": "proven",
@@ -137,8 +135,6 @@
       "failures": []
     }
   ],
-  "violations": [
-    "slugify:slugify is Level 1, which should be above express:express at Level 1"
-  ],
+  "violations": [],
   "pending": []
 }
