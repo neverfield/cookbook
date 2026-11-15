@@ -125,6 +125,8 @@ Faults are chosen from the code ([../../skill/agent-readiness/scripts/lib/mutate
 
 `faultsVerdict()` passes a component when the tests catch at least `mutation.killRate` of the faults that gave a clear result, and needs every one while the rubric sets no rate. `support/tools/kill-rate.ts` calibrates the rate on audited repos, such as the pinned trial checkouts: it tabulates caught and counted per component and audit, optionally audits each repo again per `--seeds` value, and shows, per candidate rate, how many component audits pass and which components' verdicts change between audits.
 
+[calibration/kill-rate.json](calibration/kill-rate.json) holds the first calibration (November 15, cloud, Docker): ms and the four mcp-servers components with fault evidence, each audited with the trial seed and four more (`--seeds s1,s2,s3,s4`), 25 component audits. Their pooled kill rates run from 0.71 (sequentialthinking) to 0.92 (filesystem). At 5 faults per component, rate 1 passes 10 of 25 and rate 0.8 passes 19 of 25, and at both the verdict changes between seeds in 4 of the 5 components; rate 0.6 passes all 25 with no change, and still fails tautological-tests (0 of 5). A draw of 5 is too small for a rate above 0.6 to be stable, so a higher rate needs more faults per component.
+
 ### Baseline and compare()
 
 `evals/baseline.json` is schema `@2`:
