@@ -15,10 +15,11 @@ import { php } from "../skill/agent-readiness/scripts/lib/languages/php.ts";
 import { ruby } from "../skill/agent-readiness/scripts/lib/languages/ruby.ts";
 import { chooseSites, targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
-import { budgetFloors, environmentLimit, instructionExecutor, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { RAN_OUT_BEFORE, banRepeats, budgetFloors, environmentLimit, instructionExecutor, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
-import { diagnose, failingTests } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
+import { IDLE_MARK, IDLE_OFFLINE, compilerError, diagnose, failingTests } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { extractFromMarkdown, instructionItems } from "../skill/agent-readiness/scripts/lib/static.ts";
+import { instructionKey } from "../skill/agent-readiness/scripts/lib/instructions.ts";
 import { existsExact } from "../skill/agent-readiness/scripts/lib/util.ts";
 import { scanText } from "../skill/agent-readiness/scripts/lib/redact.ts";
 import { jvm } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
@@ -551,9 +552,10 @@ describe("a supported language an older rubric doesn't list", () => {
   });
 });
 
-// pocketbase/pocketbase@7f2773e CONTRIBUTING.md, lines 28-70: "Navigate to `examples/base`" is a step
-// for running the example, and the test and lint blocks under the next bullet run from the root.
-const POCKETBASE_CONTRIBUTING = "\n## Making changes in the Go code\n\nPocketBase is distributed as a Go package, which means that in order to run the project you'll have to create a Go `main` program that imports the package.\n\nThe repository already includes such program, located in `examples/base`, that is also used for the prebuilt executables.\n\nSo, let's assume that you already done some changes in the PocketBase Go code and you want now to run them:\n\n1. Navigate to `examples/base`\n2. Run `go run main.go serve`\n\nThis will start a web server on `http://localhost:8090` with the embedded prebuilt Superuser UI from `ui/dist`. And that's it!\n\n**Before making a PR to the main repository, it is a good idea to:**\n\n- Add unit/integration tests for your changes (we are using the standard `testing` go package).\n  To run the tests, you could execute (while in the root project directory):\n\n  ```sh\n  go test ./...\n\n  # or using the Makefile\n  make test\n  ```\n\n- Run the linter - **golangci** ([see how to install](https://golangci-lint.run/usage/install/#local-installation)):\n\n  ```sh\n  golangci-lint run -c ./golangci.yml ./...\n\n  # or using the Makefile\n  make lint\n  ```\n\n## Making changes in the Superuser UI\n\nPocketBase Superuser UI is a single-page application (SPA) built with Svelte and Vite.\n\nTo start the Superuser UI:\n\n1. Navigate to the `ui` project directory\n2. Run `npm install` to install the node dependencies\n";
+// pocketbase/pocketbase@7f2773e CONTRIBUTING.md, lines 28-90: "Navigate to `examples/base`" is a step
+// for running the example, and the test and lint blocks say they run from the root; the UI section's
+// "Navigate to the `ui` project directory" holds to the end of that section, `npm run build` included.
+const POCKETBASE_CONTRIBUTING = "\n## Making changes in the Go code\n\nPocketBase is distributed as a Go package, which means that in order to run the project you'll have to create a Go `main` program that imports the package.\n\nThe repository already includes such program, located in `examples/base`, that is also used for the prebuilt executables.\n\nSo, let's assume that you already done some changes in the PocketBase Go code and you want now to run them:\n\n1. Navigate to `examples/base`\n2. Run `go run main.go serve`\n\nThis will start a web server on `http://localhost:8090` with the embedded prebuilt Superuser UI from `ui/dist`. And that's it!\n\n**Before making a PR to the main repository, it is a good idea to:**\n\n- Add unit/integration tests for your changes (we are using the standard `testing` go package).\n  To run the tests, you could execute (while in the root project directory):\n\n  ```sh\n  go test ./...\n\n  # or using the Makefile\n  make test\n  ```\n\n- Run the linter - **golangci** ([see how to install](https://golangci-lint.run/usage/install/#local-installation)):\n\n  ```sh\n  golangci-lint run -c ./golangci.yml ./...\n\n  # or using the Makefile\n  make lint\n  ```\n\n## Making changes in the Superuser UI\n\nPocketBase Superuser UI is a single-page application (SPA) built with Svelte and Vite.\n\nTo start the Superuser UI:\n\n1. Navigate to the `ui` project directory\n2. Run `npm install` to install the node dependencies\n3. Start vite's dev server\n   ```sh\n   npm run dev\n   ```\n\nYou could open the browser and access the running Superuser UI at `http://localhost:5173`.\n\nSince the Superuser UI is just a client-side application, you need to have the PocketBase backend server also running in the background (either manually running the `examples/base/main.go` or download a prebuilt executable).\n\n> [!NOTE]\n> By default, the Superuser UI is expecting the backend server to be started at `http://localhost:8090`, but you could change that by creating a new `ui/.env.development.local` file with `PB_BACKEND_URL = YOUR_ADDRESS` variable inside it.\n\nEvery change you make in the Superuser UI should be automatically reflected in the browser at `http://localhost:5173` without reloading the page.\n\nOnce you are done with your changes, you have to build the Superuser UI with `npm run build`, so that it can be embedded in the go package. And that's it - you can make your PR to the main PocketBase repository.\n";
 
 describe("a step's working folder stays in its block", () => {
   test("Navigate to `examples/base` doesn't carry into the later test and lint blocks", () => {
@@ -564,12 +566,15 @@ describe("a step's working folder stays in its block", () => {
     assert.equal(within["go test ./..."], ".");
     assert.equal(within["make test"], ".");
     assert.equal(within["make lint"], ".");
-    assert.equal(within["npm install"], "ui", "the UI section's own step still holds for its list");
+    assert.equal(within["npm install"], "ui", "the UI section's own step holds for its list");
+    assert.equal(within["npm run dev"], "ui");
+    assert.equal(within["npm run build"], "ui", "and for the later paragraphs of its section (CONTRIBUTING.md:85)");
   });
 
-  test("a code block right after the step still runs in its folder", () => {
-    const found = extractFromMarkdown("## Web\n\nNavigate to the `web` folder:\n\n```sh\nnpm test\n```\n\nThen go back.\n\n```sh\nnpm run lint\n```\n", { exists: (p) => p === "web" });
-    assert.deepEqual(found.filter((e) => e.kind === "command").map((e) => [e.text, e.within ?? "."]), [["npm test", "web"], ["npm run lint", "."]]);
+  test("a step's folder holds through subsections, and ends at the next section or a line back to the root", () => {
+    const md = "## Web\n\nNavigate to the `web` folder:\n\n```sh\nnpm test\n```\n\n### Checks\n\nRun `npm run lint` too.\n\n## Docs\n\n```sh\nnpm run docs\n```\n\n## API\n\nNavigate to `web`.\n\nThen, from the repository root:\n\n```sh\nnpm run api\n```\n";
+    const found = extractFromMarkdown(md, { exists: (p) => p === "web" });
+    assert.deepEqual(found.filter((e) => e.kind === "command").map((e) => [e.text, e.within ?? "."]), [["npm test", "web"], ["npm run lint", "web"], ["npm run docs", "."], ["npm run api", "."]]);
   });
 });
 
@@ -628,5 +633,121 @@ describe("an instruction path must match the repo's spelling, on every filesyste
     const dir = repo({ "Algorithms/Shufflers/LINQShuffler.cs": "class LINQShuffler {}\n", "README.md": "# Algorithms\n\n- [LINQ shuffler](./Algorithms/Shufflers/LinqShuffler.cs)\n- [Same, spelled right](./Algorithms/Shufflers/LINQShuffler.cs)\n" });
     const items = instructionItems(dir, buildProfile(dir, dir, rubric)).filter((i) => i.kind === "path");
     assert.deepEqual(items.map((i) => [i.text, i.result]), [["./Algorithms/Shufflers/LinqShuffler.cs", "fail"], ["./Algorithms/Shufflers/LINQShuffler.cs", "pass"]]);
+  });
+});
+
+describe("an instruction that runs a check's own command takes that check's result", () => {
+  const tree = repo({ Makefile: "test:\n\tgo test ./...\n\nlint:\n\tgolangci-lint run ./...\n\nci:\n\tgo vet ./...\n\tgo test ./...\n" });
+  const same = (a: string, b: string) => instructionKey(a, tree, ".") === instructionKey(b, tree, ".");
+
+  test("the same test run with other flags, or through a one-line Make target, is the same run", () => {
+    assert.ok(same("go test ./...", "go test -count=1 -v ./..."));
+    assert.ok(same("make test", "go test -count=1 -v ./..."), "CONTRIBUTING.md:51 make test runs the contract's go test");
+    assert.ok(same("GOFLAGS=-mod=readonly go test -run TestX ./...", "go test ./..."));
+    assert.ok(same("cargo test", "cargo test --locked"));
+    assert.ok(same("uv run pytest -q tests", ".venv/bin/python -m pytest tests"));
+    assert.ok(same("./gradlew test", "gradle --no-daemon test"));
+    assert.ok(same("./mvnw -B test", "mvn -q test"));
+    assert.ok(same("dotnet test", "dotnet test --nologo"));
+    assert.ok(same("bundle exec rspec", "rspec --format progress"));
+    assert.ok(same("vendor/bin/phpunit", "./vendor/bin/phpunit --colors=never"));
+  });
+
+  test("a run that selects other packages, or a multi-line Make target, isn't", () => {
+    assert.ok(!same("go test ./api/...", "go test ./..."));
+    assert.ok(!same("cargo test -p core", "cargo test"));
+    assert.ok(!same("make ci", "go test ./..."));
+    assert.ok(!same("./gradlew build", "./gradlew test"));
+    assert.ok(!same("pytest tests/unit", "pytest"));
+  });
+});
+
+describe("a tool a Make recipe or script can't find is this machine's limit", () => {
+  const out = (name: string) => readFileSync(join(dirname(new URL(import.meta.url).pathname), "tool-outputs", `${name}.txt`), "utf8");
+
+  for (const form of ["direct", "shell", "script"]) {
+    test(`make lint with golangci-lint missing (${form}): blocked, naming the tool`, () => {
+      assert.deepEqual(diagnose(out(`make-missing-tool-${form}`), false, "instruction"), { cause: "missing_tool", detail: "golangci-lint is not installed" });
+    });
+  }
+
+  test("a missing script of the repo's own stays the repo's failure", () => {
+    assert.notEqual(diagnose("make: ./scripts/lint.sh: No such file or directory\nmake: *** [Makefile:2: lint] Error 127\n", false, "instruction").cause, "missing_tool");
+  });
+});
+
+describe("a build's summary names the first compiler error", () => {
+  const out = (name: string) => readFileSync(join(dirname(new URL(import.meta.url).pathname), "tool-outputs", `${name}.txt`), "utf8");
+
+  test("dotnet build: the first error CS line, not MSBuild's tally (nested-apps-dotnet's commerce-core with an error planted)", () => {
+    assert.deepEqual(diagnose(out("dotnet-build-failed"), false, "build"), { cause: "compile", detail: "CSC : error CS5001: Program does not contain a static 'Main' method suitable for an entry point" });
+    assert.equal(compilerError("/work/Program.cs(3,11): error CS0103: The name 'WebApplication' does not exist in the current context [/work/IdentityDev.csproj]"), "/work/Program.cs(3,11): error CS0103: The name 'WebApplication' does not exist in the current context");
+  });
+
+  test("Maven: the first [ERROR] file line after COMPILATION ERROR", () => {
+    assert.deepEqual(diagnose(out("maven-compile-failed"), false, "build"), { cause: "compile", detail: "/w/src/main/java/shop/Cart.java:[5,12] cannot find symbol" });
+  });
+
+  test("Gradle with kotlinc: the e: file line", () => {
+    assert.deepEqual(diagnose(out("gradle-kotlin-compile-failed"), false, "build"), { cause: "compile", detail: "file:///w/src/main/kotlin/Points.kt:4:30 Unresolved reference 'gold'." });
+  });
+
+  test("anything else keeps the summary it had", () => {
+    assert.equal(compilerError("npm error Lifecycle script `build` failed with error:\nnpm error code 1"), null);
+    assert.deepEqual(diagnose("Error: something broke\n", false, "build"), { cause: "unknown", detail: "Error: something broke" });
+  });
+});
+
+describe("servers and stalls don't spend the audit's time", () => {
+  test("start, serve, dev and watch scripts, and a Make target that only serves, aren't replayed as if they finish", () => {
+    const dir = repo({ "package.json": '{"name":"everything","scripts":{"start:sse":"node dist/sse.js","start:streamableHttp":"node dist/http.js","dev":"vite","build:watch":"tsc -w","startup-check":"node check.js"}}', Makefile: "serve:\n\tnpm run dev\n\ncheck:\n\tnpm run startup-check\n", "README.md": "# Everything\n\n- `npm run start:sse`\n- `npm run start:streamableHttp`\n- `npm run dev`\n- `npm run build:watch`\n- `npm run startup-check`\n- `make serve`\n- `make check`\n" });
+    const items = instructionItems(dir, buildProfile(dir, dir, rubric)).filter((i) => i.kind === "command");
+    assert.deepEqual(Object.fromEntries(items.map((i) => [i.text, i.category])), {
+      "npm run start:sse": "long_running",
+      "npm run start:streamableHttp": "long_running",
+      "npm run dev": "long_running",
+      "npm run build:watch": "long_running",
+      "npm run startup-check": "replay",
+      "make serve": "long_running",
+      "make check": "replay",
+    });
+    assert.ok(items.filter((i) => i.category === "long_running").every((i) => i.result === "not_run" && /long-running/.test(i.reason ?? "")), "each says why it wasn't replayed");
+  });
+
+  test("a command line that timed out once isn't run again in the audit; a run with a planted fault still runs", async () => {
+    const calls: string[] = [];
+    const ex = { where: "container", strength: "clean_replay", image: "x", imageSource: "audit", root: "/w", networkOff: true, offline: () => true, close: () => {}, exec: async (command: string) => (calls.push(command), { exitCode: null, timedOut: true, durationMs: 300000, output: "" }) } as unknown as Executor;
+    const timedOut = new Set<string>();
+    banRepeats(ex, timedOut);
+    assert.equal((await ex.exec("npm test", ".", 300)).durationMs, 300000);
+    const again = await ex.exec("npm test", ".", 300);
+    assert.deepEqual([again.timedOut, again.durationMs, again.output], [true, 0, `readiness: ${RAN_OUT_BEFORE}`]);
+    assert.equal((await ex.exec("npm test", "packages/a", 300)).durationMs, 300000, "another folder is another command line");
+    await ex.execFresh!("npm test", ".", 300);
+    assert.deepEqual(calls, ["npm test", "npm test", "npm test"]);
+  });
+
+  test("a stall with no CPU while the network is off reads as a likely network wait", () => {
+    const stalled = `> npm run pack:verify\nadded 0 packages\n${IDLE_MARK}: no CPU in its last 2 seconds, ${IDLE_OFFLINE}\n`;
+    assert.deepEqual(diagnose(stalled, true, "test"), { cause: "network", detail: `the test step stopped using CPU ${IDLE_OFFLINE}, likely waiting on the network` });
+    assert.equal(diagnose(`${IDLE_MARK}: no CPU in its last 2 seconds\n`, true, "test").cause, "timeout", "with the network on, a stall stays a timeout");
+    assert.equal(diagnose("still crunching\n", true, "test").cause, "timeout");
+  });
+
+  test("a container command stuck with no CPU after the network is cut is marked idle at its timeout", { skip: detectRuntime("auto") ? false : "no container runtime: this needs docker or podman", timeout: 5 * 60 * 1000 }, async () => {
+    const s = session(NODE_IMAGE, hostUser() ?? NO_ENTRY_UID);
+    const started = s.start();
+    assert.ok(started.ok, started.output);
+    try {
+      assert.ok(s.disconnectNetwork());
+      const idle = await s.exec("sleep 60", ".", 3);
+      assert.ok(idle.timedOut);
+      assert.match(idle.output, new RegExp(`${IDLE_MARK}: no CPU in its last 2 seconds, ${IDLE_OFFLINE}`));
+      const busy = await s.exec("while :; do :; done", ".", 3);
+      assert.ok(busy.timedOut);
+      assert.doesNotMatch(busy.output, new RegExp(IDLE_MARK), "a command spinning the CPU isn't idle");
+    } finally {
+      s.remove();
+    }
   });
 });
