@@ -248,6 +248,12 @@ function rewritten(root: string, before: Map<string, string>): string[] {
 
 export const REWROTE = "so it rewrites code instead of checking it";
 
+// The work copy keeps the repo's links as they are committed. Node's default rewrites a relative
+// link into an absolute path on this machine, which doesn't exist inside the container.
+export function copyWorkTree(from: string, to: string): void {
+  cpSync(from, to, { recursive: true, verbatimSymlinks: true });
+}
+
 export async function runContract(
   ex: Executor,
   contract: ContractCommand[],
@@ -314,7 +320,7 @@ export async function runContract(
     if (out.timedOut && limit.byBudget) return cutOff();
     // A check that changes the code it checks has to fail, and the code goes back for the steps after it.
     const changed = watched ? rewritten(ex.root, watched) : [];
-    if (changed.length && opts.tree) for (const rel of changed) if (exists(join(opts.tree, rel))) cpSync(join(opts.tree, rel), join(ex.root, rel));
+    if (changed.length && opts.tree) for (const rel of changed) if (exists(join(opts.tree, rel))) cpSync(join(opts.tree, rel), join(ex.root, rel), { verbatimSymlinks: true });
     // A runner that prints failures and still exits 0 hasn't passed.
     const reportedFailures = cmd.kind === "test" && out.exitCode === 0 ? (testCounts(out.output)?.failed ?? 0) : 0;
     const ok = out.exitCode === 0 && !out.timedOut && reportedFailures === 0 && changed.length === 0;
@@ -697,7 +703,7 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
   const profile = audit.profile;
   refreshTree(repo, audit.repo.commit, tree);
   const copyDir = join(mkdtempSync(join(tmpdir(), "readiness-replay-")), "work");
-  cpSync(tree, copyDir, { recursive: true });
+  copyWorkTree(tree, copyDir);
   const before = new Map<string, string>();
   for (const f of profile.lockfiles) before.set(f, sha256(readText(join(copyDir, f))));
   if (opts.image) audit.environment.imageOverride = opts.image;

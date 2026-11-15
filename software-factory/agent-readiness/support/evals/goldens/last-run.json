@@ -1,12 +1,12 @@
 {
-  "ranAt": "2026-11-15T10:06:06.827Z",
+  "ranAt": "2026-11-15T08:25:00.755Z",
   "results": [
     {
       "id": "slugify",
       "sha": "3b17b2e84b97624a683aafaa38184bf2746fab22",
-      "scoring": "49f487f90db58eec829ba410bd6725cba5150591e8d541fffbe801b101e715d3",
-      "commit": "cf6d12e7146ccdc4399794a8b16231d4fdefb8a0",
-      "minutes": 1.2,
+      "scoring": "bdd96582aec18dbfce421cfcfb1143d8f135f233e09d06aab8f8a5418db43dc4",
+      "commit": "1720e3744f1b967f5c3b087898d07dcbabe7c2ef",
+      "minutes": 1,
       "repoLevel": 2,
       "outcome": "proven",
       "levels": {
@@ -18,11 +18,11 @@
     {
       "id": "express",
       "sha": "1c6f1b0fe4000977b9a7b4f34097e4d527dd9824",
-      "scoring": "49f487f90db58eec829ba410bd6725cba5150591e8d541fffbe801b101e715d3",
-      "commit": "cf6d12e7146ccdc4399794a8b16231d4fdefb8a0",
-      "minutes": 10.6,
+      "scoring": "bdd96582aec18dbfce421cfcfb1143d8f135f233e09d06aab8f8a5418db43dc4",
+      "commit": "1720e3744f1b967f5c3b087898d07dcbabe7c2ef",
+      "minutes": 20.2,
       "repoLevel": 1,
-      "outcome": "proven",
+      "outcome": "blocked",
       "levels": {
         "express": 1
       },
@@ -46,9 +46,9 @@
     {
       "id": "create-t3-turbo",
       "sha": "8f945b7bb3bfb3ca8358d48b1ff0214079bc11ee",
-      "scoring": "49f487f90db58eec829ba410bd6725cba5150591e8d541fffbe801b101e715d3",
-      "commit": "cf6d12e7146ccdc4399794a8b16231d4fdefb8a0",
-      "minutes": 2.4,
+      "scoring": "bdd96582aec18dbfce421cfcfb1143d8f135f233e09d06aab8f8a5418db43dc4",
+      "commit": "1720e3744f1b967f5c3b087898d07dcbabe7c2ef",
+      "minutes": 2.5,
       "repoLevel": 0,
       "outcome": "proven",
       "levels": {
@@ -101,8 +101,8 @@
     {
       "id": "uuid",
       "sha": "2d3c2a9cc518326daf99a383f07c4d3c44317e4d",
-      "scoring": "49f487f90db58eec829ba410bd6725cba5150591e8d541fffbe801b101e715d3",
-      "commit": "cf6d12e7146ccdc4399794a8b16231d4fdefb8a0",
+      "scoring": "bdd96582aec18dbfce421cfcfb1143d8f135f233e09d06aab8f8a5418db43dc4",
+      "commit": "1720e3744f1b967f5c3b087898d07dcbabe7c2ef",
       "minutes": 0,
       "repoLevel": null,
       "outcome": "not_assessed",
@@ -119,8 +119,8 @@
     {
       "id": "serilog",
       "sha": "43105b35095337d77f022561a8f2d3db2f9a7937",
-      "scoring": "49f487f90db58eec829ba410bd6725cba5150591e8d541fffbe801b101e715d3",
-      "commit": "cf6d12e7146ccdc4399794a8b16231d4fdefb8a0",
+      "scoring": "bdd96582aec18dbfce421cfcfb1143d8f135f233e09d06aab8f8a5418db43dc4",
+      "commit": "1720e3744f1b967f5c3b087898d07dcbabe7c2ef",
       "minutes": 0,
       "repoLevel": null,
       "outcome": "not_assessed",
@@ -136,5 +136,10 @@
     }
   ],
   "violations": [],
-  "pending": []
+  "pending": [
+    {
+      "id": "starlette",
+      "reason": "recorded under scoring 49f487f90db5, current is bdd96582aec1; not rerun in this pass: pypi.org is blocked on this cloud machine, so the install can't run here"
+    }
+  ]
 }

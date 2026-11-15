@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
@@ -10,14 +10,14 @@ import { IMAGE_DIGESTS, pinnedRef } from "../skill/agent-readiness/scripts/lib/i
 import { componentLevel, repoLevel } from "../skill/agent-readiness/scripts/lib/levels.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { EXAMPLE_KEYS, proxyPasswords, redact, scanText } from "../skill/agent-readiness/scripts/lib/redact.ts";
-import { ALLOW_HOST_ENV, HOST_NOT_ALLOWED, assertPlatformSupported, failingComponents, hostExecutor, killRate, newBudget, runContract, unavailableExecutor } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { ALLOW_HOST_ENV, HOST_NOT_ALLOWED, assertPlatformSupported, copyWorkTree, failingComponents, hostExecutor, killRate, newBudget, runContract, unavailableExecutor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import type { Rubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { ACCOUNT_CREDENTIAL, scrubbedEnv } from "../skill/agent-readiness/scripts/lib/run.ts";
 import { componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
 import type { ContractCommand } from "../skill/agent-readiness/scripts/lib/types.ts";
-import { materialize, readiness } from "../support/tools/fixture.ts";
+import { commitAll, materialize, readiness } from "../support/tools/fixture.ts";
 import { makeAudit } from "./helpers.ts";
 
 const rubric = loadRubric();
@@ -348,5 +348,32 @@ describe("levels: unproven is a result of its own", () => {
     assert.equal(killRate(rubric), 1);
     assert.equal(killRate({ ...rubric, mutation: { ...rubric.mutation, killRate: 0.8 } } as Rubric), 0.8);
     assert.equal(killRate({ ...rubric, mutation: { ...rubric.mutation, killRate: 7 } } as Rubric), 1, "an impossible rate falls back");
+  });
+});
+
+describe("committed symlinks", () => {
+  test("the work copy keeps a relative link relative, so it resolves inside the container", () => {
+    const from = tmp();
+    mkdirSync(join(from, "src"));
+    writeFileSync(join(from, "src", "a.js"), "export const a = 1;\n");
+    symlinkSync("src", join(from, "lib"));
+    symlinkSync("../src/a.js", join(from, "src-a.js"));
+    const to = join(tmp(), "work");
+    copyWorkTree(from, to);
+    assert.equal(readlinkSync(join(to, "lib")), "src");
+    assert.equal(readlinkSync(join(to, "src-a.js")), "../src/a.js");
+  });
+
+  test("tests that import through a committed relative symlink pass in a clean container", { skip: runtime ? false : "no container runtime", timeout: 600000 }, () => {
+    const repo = materialize("healthy-node");
+    symlinkSync("src", join(repo, "lib"));
+    writeFileSync(join(repo, "test", "link.test.js"), 'import assert from "node:assert/strict";\nimport { test } from "node:test";\nimport { isAdult } from "../lib/pricing.js";\n\ntest("the linked module loads", () => {\n  assert.equal(isAdult(18), true);\n});\n');
+    commitAll(repo, "Import through a relative symlink");
+    const { code, out, audit, report } = audited(repo, ["--no-mutants"]);
+    assert.equal(code, 0, out);
+    assert.equal(audit.environment.containerRuntime, runtime!.bin);
+    const t = audit.evidence.find((e: { kind?: string }) => e.kind === "test");
+    assert.equal(t.result, "pass", t.summary);
+    assert.equal(report.components.included[0].level, 1, "Level 1; Level 2 needs the planted faults this run skips");
   });
 });
