@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-11-15T11:45:19.079Z",
+  "ranAt": "2026-11-15T12:37:55.330Z",
   "results": [
     {
       "id": "slugify",
@@ -33,8 +33,8 @@
       "id": "starlette",
       "sha": "2745bbc5afa2f8ce900d290bedca2bc5d3f3cfe8",
       "scoring": "bdd96582aec18dbfce421cfcfb1143d8f135f233e09d06aab8f8a5418db43dc4",
-      "commit": "f0bedf527290c21d8510ec663a6e59ba30cec9a9",
-      "minutes": 1.8,
+      "commit": "e7f39670ba3855fe198eec9c12b1de40edf90bee",
+      "minutes": 2,
       "repoLevel": 2,
       "outcome": "proven",
       "levels": {
