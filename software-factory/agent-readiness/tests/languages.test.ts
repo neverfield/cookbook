@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
-import { detectRuntime } from "../skill/agent-readiness/scripts/lib/container.ts";
+import { ContainerSession, IMAGE_PATH_VAR, detectRuntime, hostUser, loginShell } from "../skill/agent-readiness/scripts/lib/container.ts";
 import { commandTimeout, discoverContract, imagePlan } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { IMAGE_DIGESTS } from "../skill/agent-readiness/scripts/lib/images.ts";
 import { inComponent, namedAfter, sameFolder, withInlineTests } from "../skill/agent-readiness/scripts/lib/languages/coverage.ts";
@@ -336,4 +336,39 @@ describe("a language file's replay hooks", () => {
       assert.match(faults.summary, /^caught \d of \d planted faults/);
       assert.equal(byKind("lockfile").result, "fail", "no ecosystem, so no frozen install: the lockfile condition says so");
     }));
+});
+
+// Go lives in /usr/local/go/bin, which only the image's ENV PATH names. Debian's /etc/profile resets
+// PATH for a login shell, so a plain `bash -lc` reported go as not installed in the golang image.
+const GO_IMAGE = "golang:1.23-bookworm@sha256:167053a2bb901972bf2c1611f8f52c44d5fe7e762e5cab213708d82c421614db";
+
+describe("commands see the image's PATH", () => {
+  test("the login shell puts the image's PATH back in front and keeps pipefail", () => {
+    const [bash, flag, script] = loginShell("go version | head -1", true);
+    assert.deepEqual([bash, flag], ["bash", "-c"]);
+    assert.ok(script.startsWith(`${IMAGE_PATH_VAR}="$PATH" exec bash -o pipefail -lc `), script);
+    assert.ok(script.includes(`export PATH="$${IMAGE_PATH_VAR}:$PATH"`), script);
+    assert.ok(!loginShell("true", false)[2].includes("pipefail"));
+  });
+
+  test("a tool outside /usr/local/bin is found, both by the repo's commands and the audit's setup", { skip: detectRuntime("auto") ? false : "no container runtime: this needs docker or podman", timeout: 5 * 60 * 1000 }, async () => {
+    const runtime = detectRuntime("auto")!;
+    const session = new ContainerSession(runtime, `readiness-path-${Date.now()}`, GO_IMAGE, mkdtempSync(join(tmpdir(), "lang-path-")), [], hostUser());
+    const started = session.start();
+    assert.ok(started.ok, started.output);
+    try {
+      const out = await session.exec("command -v go && go version", ".", 120);
+      assert.equal(out.exitCode, 0, out.output);
+      assert.match(out.output, /^\/usr\/local\/go\/bin\/go$/m);
+      assert.match(out.output, /go version go1\.23/);
+      const setup = session.asImageUser("command -v go", 60000);
+      assert.ok(setup.ok, setup.output);
+      const failing = await session.exec("false | true", ".", 60);
+      assert.notEqual(failing.exitCode, 0, "pipefail still applies to the repo's commands");
+      const leaked = await session.exec(`test -z "\${${IMAGE_PATH_VAR}:-}"`, ".", 60);
+      assert.equal(leaked.exitCode, 0, "the saved PATH doesn't reach the command's environment");
+    } finally {
+      session.remove();
+    }
+  });
 });

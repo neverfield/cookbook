@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { pinnedRef } from "./images.ts";
 import { runCommand } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
-import { fail, randomHex } from "./util.ts";
+import { fail, randomHex, shellQuote } from "./util.ts";
 
 export interface Runtime {
   bin: string;
@@ -90,10 +90,21 @@ export function startArgs(name: string, image: string, hostDir: string, limits: 
 // times out is killed inside the container and not just its docker exec client on the host.
 export const EXEC_ID = "SA_READINESS_EXEC";
 
+// The image's PATH, saved before the login profile runs: Debian's /etc/profile resets PATH for a
+// login shell, which drops what the image's ENV PATH added, such as /usr/local/go/bin,
+// /usr/local/cargo/bin or the JDK's bin. The login shell still runs, for what profile.d sets up;
+// the image's PATH just goes back in front.
+export const IMAGE_PATH_VAR = "SA_READINESS_IMAGE_PATH";
+
+export function loginShell(command: string, pipefail: boolean): string[] {
+  const inner = `export PATH="$${IMAGE_PATH_VAR}:$PATH"; unset ${IMAGE_PATH_VAR}; ${command}`;
+  return ["bash", "-c", `${IMAGE_PATH_VAR}="$PATH" exec bash${pipefail ? " -o pipefail" : ""} -lc ${shellQuote(inner)}`];
+}
+
 export function execArgs(name: string, command: string, cwd: string, user: string | null = null, env: string[] = [], execId: string | null = null): string[] {
   const dir = cwd === "." || cwd === "" ? "/work" : `/work/${cwd}`;
   const vars = [...env.flatMap((k) => ["-e", k]), ...(execId ? ["-e", `${EXEC_ID}=${execId}`] : [])];
-  return ["exec", ...(user ? ["-u", user] : []), "-w", dir, ...vars, name, "bash", "-o", "pipefail", "-lc", command];
+  return ["exec", ...(user ? ["-u", user] : []), "-w", dir, ...vars, name, ...loginShell(command, true)];
 }
 
 // Run as the same user as the command, which may read its processes' environment.
@@ -115,7 +126,7 @@ export const HOME_DIR = "/tmp/home";
 export const SETUP_HOME = "/tmp/readiness-setup-home";
 
 export function imageUserArgs(name: string, command: string, env: string[] = []): string[] {
-  return ["exec", "-e", `HOME=${SETUP_HOME}`, ...env.flatMap((k) => ["-e", k]), name, "bash", "-lc", `mkdir -p ${SETUP_HOME} && ${command}`];
+  return ["exec", "-e", `HOME=${SETUP_HOME}`, ...env.flatMap((k) => ["-e", k]), name, ...loginShell(`mkdir -p ${SETUP_HOME} && ${command}`, false)];
 }
 
 // Hands what root left under these folders to the ordinary user: only root's files, one at a time,
