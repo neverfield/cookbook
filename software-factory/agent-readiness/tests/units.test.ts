@@ -93,9 +93,10 @@ describe("scrubbed environment", () => {
     assert.equal(r.exitCode, null);
   });
 
-  test("container runs pass registry variable names, never values", () => {
+  test("container runs pass registry variable names, never values, and only to the setup steps", () => {
     process.env.NPM_TOKEN = "registry-value";
-    const args = startArgs("c1", "node:22", "/tmp/x", ["NPM_TOKEN"]);
+    assert.ok(!startArgs("c1", "node:22", "/tmp/x").includes("NPM_TOKEN"), "the container itself doesn't get them");
+    const args = execArgs("c1", "npm ci", ".", null, ["NPM_TOKEN"]);
     assert.ok(args.includes("NPM_TOKEN"));
     assert.ok(!args.join(" ").includes("registry-value"));
     assert.deepEqual(execArgs("c1", "npm test", "packages/api").slice(0, 3), ["exec", "-w", "/work/packages/api"]);
@@ -159,7 +160,7 @@ describe("diagnosis", () => {
     const dir = tmp();
     mkdirSync(join(dir, ".cursor"), { recursive: true });
     writeFileSync(join(dir, ".cursor", "Dockerfile"), "FROM node:22\nRUN apt-get install -y readiness-test-missing-toolchain\n");
-    const ex = hostExecutor(dir, [], false, "fresh_copy");
+    const ex = hostExecutor(dir, [], false, "fresh_copy", true);
     const cmd = (id: string, kind: "install" | "build" | "test", command: string) => ({ id, kind, component: "app", cwd: ".", command, source: "readiness", reason: "", timeoutSec: 30 });
     const results = await runContract(ex, [cmd("i", "install", "readiness-test-missing-toolchain restore"), cmd("b", "build", "true"), cmd("t", "test", "true")], { components: new Set(["app"]), budget: newBudget(10, 10), registryValues: [] });
     assert.deepEqual(results.map((r) => r.status), ["fail", "not_run", "not_run"]);
@@ -187,7 +188,7 @@ describe("sudo", () => {
   test("a host fallback never runs a sudo command", async () => {
     const dir = tmp();
     const marker = join(dir, "ran-with-sudo");
-    const ex = hostExecutor(dir, [], false);
+    const ex = hostExecutor(dir, [], false, "fresh_copy", true);
     const direct = await ex.exec(`sudo touch ${marker}`, ".", 10);
     assert.notEqual(direct.exitCode, 0);
     assert.match(direct.output, /uses sudo/);

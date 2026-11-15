@@ -1,8 +1,9 @@
 import { isAbsolute, join, normalize } from "node:path";
+import { DEFAULT_NODE, NODE_MAJORS } from "./images.ts";
 import type { Rubric } from "./rubric.ts";
 import { pyproject, readPackageJson, uvWorkspaceMembers, yarnBerry } from "./profile.ts";
 import type { CommandKind, ContractCommand, Profile, SafetyFinding } from "./types.ts";
-import { exists, fail, readText, shellQuote } from "./util.ts";
+import { exists, fail, listFiles, readText, shellQuote } from "./util.ts";
 
 export const VENV = ".readiness-venv";
 
@@ -96,8 +97,10 @@ function pythonTest(tree: string, path: string, pm: Profile["packageManager"], w
   const dir = join(tree, path);
   const up = workspaceMember ? path.split("/").map(() => "..").join("/") + "/" : "";
   const python = pm === "uv" || pm === "poetry" ? `${up}.venv/bin/python` : `${VENV}/bin/python`;
-  const reqs = ["requirements.txt", "requirements-dev.txt", "pyproject.toml"].map((f) => (exists(join(dir, f)) ? readText(join(dir, f)) : "")).join("\n");
-  if (/pytest/.test(reqs) || exists(join(dir, "pytest.ini")) || exists(join(dir, "conftest.py"))) return `${python} -m pytest -q`;
+  // A workspace member runs the root's pytest when the root declares it.
+  const dirs = workspaceMember ? [dir, tree] : [dir];
+  const reqs = dirs.flatMap((d) => ["requirements.txt", "requirements-dev.txt", "pyproject.toml"].map((f) => (exists(join(d, f)) ? readText(join(d, f)) : ""))).join("\n");
+  if (/pytest/.test(reqs) || dirs.some((d) => exists(join(d, "pytest.ini")) || exists(join(d, "conftest.py")))) return `${python} -m pytest -q`;
   if (exists(join(dir, "tests"))) return `${python} -m unittest discover -s tests -t .`;
   return null;
 }
@@ -284,7 +287,37 @@ export function discoverContract(profile: Profile, tree: string, rubric: Rubric,
       cmds.push(checkOnlyCommand(cmd, c.scripts, c.packageManager ?? pm));
     }
   }
+  // A workspace whose tests run from the root (`"test": "vitest"`) has packages with no test script
+  // of their own. Each package that has test files gets the root run scoped to its folder, so it is
+  // credited with its own tests and one failing package doesn't fail the others.
+  const root = rootTestRunner(tree);
+  if (root) {
+    for (const c of assessed.filter((x) => x.language !== "py" && x.path !== "." && !cmds.some((k) => k.component === x.id && k.kind === "test"))) {
+      if (!hasTestFiles(join(tree, c.path))) continue;
+      cmds.push({ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: ".", command: scopedRun(pm, root.script, c.path), source: `package.json scripts.${root.script}`, reason: `the root ${root.runner} run, scoped to ${c.path}`, timeoutSec: timeout });
+    }
+  }
   return cmds;
+}
+
+// The root test script when it is a bare vitest or jest run that a path argument narrows.
+const ROOT_RUNNER = /^(?:npx\s+|(?:corepack\s+)?(?:pnpm|yarn)\s+(?:exec\s+)?)?(vitest|jest)((?:\s+(?:run|--?[\w-]+(?:=\S+)?))*)\s*$/;
+
+export function rootTestRunner(tree: string): { script: string; runner: string } | null {
+  const scripts = readPackageJson(tree)?.scripts ?? {};
+  const m = scripts.test?.trim().match(ROOT_RUNNER);
+  return m ? { script: "test", runner: m[1] } : null;
+}
+
+const TEST_FILE = /(^|\/)(__tests__\/.+|[^/]+\.(test|spec)\.[cm]?[jt]sx?)$/;
+
+function hasTestFiles(dir: string): boolean {
+  return exists(dir) && listFiles(dir).some((f) => !f.includes("node_modules/") && TEST_FILE.test(f));
+}
+
+function scopedRun(pm: string | null, script: string, path: string): string {
+  const arg = /^[\w./@-]+$/.test(path) ? path : shellQuote(path);
+  return pm === "npm" || !pm ? `npm run ${script} -- ${arg}` : `${runScript(pm, script)} ${arg}`;
 }
 
 // Replay runs only commands for "*" and assessed components, so anything else would be dropped silently.
@@ -357,7 +390,20 @@ function checkSource(read: CommitReader, profile: Profile, input: { component: s
   fail(`\`${command}\` doesn't run a script or Make target the repo defines. Add only commands the repo defines, and cite where with --source file:line.`);
 }
 
-export function addContractCommand(cmds: ContractCommand[], input: { kind: CommandKind; component: string; cwd: string; command: string; source: string; reason: string; timeoutSec?: number }, profile: Profile | null, read?: CommitReader): ContractCommand {
+export const COMMAND_KINDS: CommandKind[] = ["doctor", "install", "build", "lint", "typecheck", "test", "start"];
+const KIND_ALIASES: Record<string, CommandKind> = { "type-check": "typecheck", type_check: "typecheck", types: "typecheck", tsc: "typecheck", tests: "test" };
+
+// The kind as the contract stores it. Spellings people use for a type-check are accepted; anything
+// else is refused, since an unknown kind would never map to a check and be dropped from the replay.
+export function commandKind(kind: string): CommandKind {
+  const k = kind.trim().toLowerCase();
+  if ((COMMAND_KINDS as string[]).includes(k)) return k as CommandKind;
+  if (KIND_ALIASES[k]) return KIND_ALIASES[k];
+  return fail(`--kind ${kind} isn't a kind the audit runs. Use one of: ${COMMAND_KINDS.join(", ")}.`);
+}
+
+export function addContractCommand(cmds: ContractCommand[], rawInput: { kind: CommandKind | string; component: string; cwd: string; command: string; source: string; reason: string; timeoutSec?: number }, profile: Profile | null, read?: CommitReader): ContractCommand {
+  const input = { ...rawInput, kind: commandKind(rawInput.kind) };
   checkComponent(profile, input.component);
   if (!input.reason.trim()) fail("contract add needs --reason");
   // From the CLI a command is the agent's (`agent`) or the repo's (`file:line`); the scan's own
@@ -451,16 +497,16 @@ export function containerImage(profile: Profile, tree: string): string {
   }
   const standalone = profile.components.filter((c) => c.packageManager && c.path !== ".");
   if (!profile.packageManager && standalone.length > 0 && standalone.every((c) => c.language === "py")) return `python:${pythonFor(standalone.map((c) => join(tree, c.path)))}-slim`;
-  let major: string | null = null;
+  let major: number | null = null;
   for (const dir of [".", ...standalone.filter((c) => c.language !== "py").map((c) => c.path)]) {
     for (const f of [".nvmrc", ".node-version"]) {
-      if (exists(join(tree, dir, f))) major = readText(join(tree, dir, f)).trim().replace(/^v/, "").match(/^(\d+)/)?.[1] ?? null;
+      if (exists(join(tree, dir, f))) major = nodeMajor(readText(join(tree, dir, f)), true);
       if (major) break;
     }
     if (!major && exists(join(tree, dir, "package.json"))) {
       try {
         const engines = (JSON.parse(readText(join(tree, dir, "package.json"))) as { engines?: { node?: string } }).engines?.node ?? "";
-        major = engines.match(/(\d+)/)?.[1] ?? null;
+        major = engines.trim() ? nodeMajor(engines, false) : null;
       } catch {
         major = null;
       }
@@ -468,5 +514,32 @@ export function containerImage(profile: Profile, tree: string): string {
     if (major) break;
   }
   // The full image, like a CI runner, has python3, make and g++ for native npm builds.
-  return `node:${major ?? "22"}-bookworm`;
+  return `node:${major ?? DEFAULT_NODE}-bookworm`;
+}
+
+const LTS_NAMES: Record<string, number> = { argon: 4, boron: 6, carbon: 8, dubnium: 10, erbium: 12, fermium: 14, gallium: 16, hydrogen: 18, iron: 20, jod: 22, krypton: 24 };
+
+// The Node major to run, always one the audit has an image for. A version file names one line, and
+// keeps it when there is an image, else the nearest newer LTS: node:12-bookworm doesn't exist. An
+// engines range runs on the default LTS when it allows it, as a CI runner would, so ">=12.20.0"
+// gets Node 22 rather than a Node 12 that has no image and couldn't run current tooling.
+export function nodeMajor(spec: string, versionFile: boolean): number | null {
+  const s = spec.trim().toLowerCase();
+  if (!s) return null;
+  if (s === "node" || s === "latest" || s === "lts/*" || s === "*" || s === "x") return DEFAULT_NODE;
+  const lts = s.match(/^lts\/([a-z]+)/)?.[1];
+  const range = s.split("||").map((p) => p.trim()).filter(Boolean).pop() ?? s;
+  const lower = lts && LTS_NAMES[lts] ? LTS_NAMES[lts] : Number(range.match(/(\d+)/)?.[1] ?? NaN);
+  if (!Number.isFinite(lower)) return null;
+  // "<21" and "<21.0" stop at 20; "<=21" and "<21.4" allow 21.
+  const um = range.match(/<(=?)\s*v?(\d+)(?:\.(\d+))?/);
+  const upper = !um ? Infinity : um[1] === "=" || Number(um[3] ?? 0) > 0 ? Number(um[2]) : Number(um[2]) - 1;
+  const open = !versionFile && !lts && /^>/.test(range) && upper === Infinity;
+  const within = NODE_MAJORS.filter((m) => m >= lower && m <= upper);
+  const atOrAbove = NODE_MAJORS.filter((m) => m >= lower);
+  if (open) return lower <= DEFAULT_NODE ? DEFAULT_NODE : (atOrAbove[0] ?? NODE_MAJORS[NODE_MAJORS.length - 1]);
+  const bounded = !versionFile && upper !== Infinity && upper > lower;
+  if (bounded && within.length) return within.filter((m) => m <= DEFAULT_NODE).pop() ?? within[0];
+  if (NODE_MAJORS.includes(lower)) return lower;
+  return atOrAbove[0] ?? NODE_MAJORS[NODE_MAJORS.length - 1];
 }

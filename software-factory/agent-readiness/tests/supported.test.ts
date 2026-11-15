@@ -77,7 +77,7 @@ describe("supported.md", () => {
 
 describe("Windows without a container runtime", () => {
   test("the host fallback stops with a plain message instead of failing in bash", () => {
-    assert.throws(() => assertHostFallbackSupported("win32"), (e: Error) => /no Docker or Podman/.test(e.message) && /WSL 2/.test(e.message) && e.message.includes("supported.md"));
+    assert.throws(() => assertHostFallbackSupported("win32"), (e: Error) => /native Windows/.test(e.message) && /WSL 2/.test(e.message) && e.message.includes("supported.md"));
     assert.doesNotThrow(() => assertHostFallbackSupported("linux"));
     assert.doesNotThrow(() => assertHostFallbackSupported("darwin"));
   });

@@ -110,23 +110,23 @@
             },
             "apply-release-plan": {
               "level": 0,
-              "unproven": false
+              "unproven": true
             },
             "cli": {
               "level": 0,
-              "unproven": false
+              "unproven": true
             },
             "get-github-info": {
-              "level": 0,
+              "level": 1,
               "unproven": false
             },
             "git": {
               "level": 0,
-              "unproven": false
+              "unproven": true
             },
             "write": {
               "level": 0,
-              "unproven": false
+              "unproven": true
             }
           },
           "notAssessed": [
@@ -175,15 +175,15 @@
         "any": {
           "exit": 0,
           "sealed": true,
-          "runtime": null,
-          "level": 0,
-          "outcome": "blocked",
-          "unproven": true,
-          "couldBe": 1,
+          "runtime": "docker",
+          "level": 1,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
           "components": {
             "dotenv": {
-              "level": 0,
-              "unproven": true
+              "level": 1,
+              "unproven": false
             }
           },
           "notAssessed": [],
@@ -223,13 +223,13 @@
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
-          "level": 0,
+          "level": 1,
           "outcome": "proven",
           "unproven": false,
           "couldBe": null,
           "components": {
             "commander": {
-              "level": 0,
+              "level": 1,
               "unproven": false
             }
           },
@@ -394,8 +394,8 @@
           "runtime": null,
           "level": 0,
           "outcome": "blocked",
-          "unproven": false,
-          "couldBe": null,
+          "unproven": true,
+          "couldBe": 1,
           "components": {
             "agent-kanban": {
               "level": 0,
@@ -411,15 +411,15 @@
             },
             "grok-coding-agent-cli": {
               "level": 0,
-              "unproven": false
+              "unproven": true
             },
             "agent-readiness": {
               "level": 0,
-              "unproven": false
+              "unproven": true
             },
             "grok-patient-intake": {
               "level": 0,
-              "unproven": false
+              "unproven": true
             }
           },
           "notAssessed": [

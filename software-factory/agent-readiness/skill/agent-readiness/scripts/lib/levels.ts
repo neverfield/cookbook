@@ -7,6 +7,9 @@ export interface LevelResult {
   couldBe: Level | null;
   missing: CondId[];
   unknown: CondId[];
+  // Unproven on this machine: no Level 1 condition failed, and every one left was blocked here. A
+  // result of its own, not Level 0: `level` stays 0 only so a rollup can take the minimum.
+  unproven?: boolean;
 }
 
 type StateMap = Partial<Record<CondId, CondState>>;
@@ -17,17 +20,20 @@ export function statesOf(detail: CompStates): StateMap {
   return out;
 }
 
-function evaluate(conds: CondId[], states: StateMap): { met: boolean; missing: CondId[]; unknown: CondId[] } {
+function evaluate(conds: CondId[], states: StateMap): { met: boolean; missing: CondId[]; unknown: CondId[]; blocked: boolean } {
   const missing = conds.filter((c) => states[c] === "not_met");
   const unknown = conds.filter((c) => (states[c] ?? "unknown") === "unknown" || states[c] === "blocked");
-  return { met: missing.length === 0 && unknown.length === 0, missing, unknown };
+  return { met: missing.length === 0 && unknown.length === 0, missing, unknown, blocked: unknown.length > 0 && unknown.every((c) => states[c] === "blocked") };
 }
 
 // The standard level by default; a scenario swaps in its own Level 2 bar.
 export function componentLevel(rubric: Rubric, states: StateMap, scenarioId?: ScenarioId): LevelResult {
   const level2 = scenarioId ? rubric.scenarios.find((a) => a.id === scenarioId)!.level2 : rubric.level2;
   const l1 = evaluate(rubric.level1, states);
-  if (!l1.met) return { level: 0, couldBe: l1.missing.length === 0 ? 1 : null, missing: l1.missing, unknown: l1.unknown };
+  if (!l1.met) {
+    const unproven = l1.missing.length === 0 && l1.blocked;
+    return { level: 0, couldBe: l1.missing.length === 0 ? 1 : null, missing: l1.missing, unknown: l1.unknown, ...(unproven ? { unproven } : {}) };
+  }
   const l2 = evaluate(level2, states);
   if (!l2.met) return { level: 1, couldBe: l2.missing.length === 0 ? 2 : null, missing: l2.missing, unknown: l2.unknown };
   return { level: 2, couldBe: null, missing: [], unknown: [] };
@@ -65,13 +71,15 @@ export function activeComponents(rubric: Rubric, components: Component[], previo
   return active;
 }
 
-export function repoLevel(levels: Map<string, LevelResult>, active: Set<string>): { level: Level; couldBe: Level | null; setBy: string[] } {
+// Unproven when every component that sets the minimum is itself unproven.
+export function repoLevel(levels: Map<string, LevelResult>, active: Set<string>): { level: Level; couldBe: Level | null; setBy: string[]; unproven?: boolean } {
   const rows = [...levels.entries()].filter(([id]) => active.has(id));
   if (rows.length === 0) return { level: 0, couldBe: null, setBy: [] };
   const min = Math.min(...rows.map(([, l]) => l.level)) as Level;
   const setBy = rows.filter(([, l]) => l.level === min).map(([id]) => id);
   const couldBe = rows.filter(([, l]) => l.level === min).every(([, l]) => l.couldBe !== null) ? ((min + 1) as Level) : null;
-  return { level: min, couldBe, setBy };
+  const unproven = rows.filter(([, l]) => l.level === min).every(([, l]) => l.unproven);
+  return { level: min, couldBe, setBy, ...(unproven ? { unproven } : {}) };
 }
 
 export function partialCoverage(rubric: Rubric, components: Component[]): { partial: boolean; unassessedShare: number } {

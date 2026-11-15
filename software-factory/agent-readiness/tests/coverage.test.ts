@@ -15,6 +15,9 @@ import type { HistoryLine } from "../skill/agent-readiness/scripts/lib/types.ts"
 import { ACCELERATOR, FIXTURES, SKILL, materialize, readiness } from "../support/tools/fixture.ts";
 import { makeAudit, reportFor } from "./helpers.ts";
 
+// These replays exercise host mode, which runs only on the user's yes.
+const HOST = { SA_READINESS_ALLOW_HOST: "1" };
+
 const CASES = join(ACCELERATOR, "support", "evals", "cases");
 
 async function allCases(): Promise<EvalCase[]> {
@@ -158,7 +161,7 @@ describe("skill changes behind the coverage cases", () => {
   test("draft-env starts the services a compose file runs and copies .env.example; --service replaces both", () => {
     const repo = materialize("compose-services");
     assert.deepEqual(composeServices(repo), { file: "compose.yml", services: ["postgres", "redis"] });
-    assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"]).code, 0);
+    assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], HOST).code, 0);
     const r = readiness(repo, ["draft-env", "--remediate"]);
     assert.equal(r.code, 0, r.out);
     assert.match(r.out, /for postgres, redis/);

@@ -19,6 +19,9 @@ import type { Audit, ContractCommand, Evidence } from "../skill/agent-readiness/
 import { materialize, readiness } from "../support/tools/fixture.ts";
 import { makeAudit, reportFor } from "./helpers.ts";
 
+// These replays exercise host mode, which runs only on the user's yes.
+const HOST = { SA_READINESS_ALLOW_HOST: "1" };
+
 const rubric = loadRubric("2026-10-alpha");
 
 function addCommand(audit: Audit, cmd: Omit<ContractCommand, "timeoutSec" | "source" | "reason" | "cwd">, result: "pass" | "fail", where: Evidence["where"] = "container"): void {
@@ -104,7 +107,7 @@ describe("fixes from the independent pre-ship review", () => {
     const dir = mkdtempSync(join(tmpdir(), "sudo-"));
     writeFileSync(join(dir, "start.sh"), "sudo service docker start\n");
     const cmd: ContractCommand = { id: "cmd-repo-install", kind: "install", component: "*", cwd: ".", command: "bash start.sh", source: "readiness", reason: "install", timeoutSec: 30 };
-    const [r] = await runContract(hostExecutor(dir, [], false), [cmd], { components: new Set(["app"]), budget: newBudget(10, 10), registryValues: [] });
+    const [r] = await runContract(hostExecutor(dir, [], false, "fresh_copy", true), [cmd], { components: new Set(["app"]), budget: newBudget(10, 10), registryValues: [] });
     assert.equal(r.status, "fail");
     assert.equal(r.blocked, "the install command uses sudo, which the audit never runs on the host");
   });
@@ -153,7 +156,7 @@ describe("fixes from the independent pre-ship review", () => {
   test("a seal with SA_READINESS_SEAL_KEY verifies only with that key; an unkeyed seal says so", () => {
     const keyed = { SA_READINESS_SEAL_KEY: "ci-secret-key-1" };
     const repo = materialize("healthy-node");
-    assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], keyed).code, 0);
+    assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], { ...HOST, ...keyed }).code, 0);
     assert.match(readFileSync(join(repo, ".agent-readiness/latest/report.md"), "utf8"), /the seal is keyed/);
     assert.equal(readiness(repo, ["verify-seal"], keyed).code, 0);
     const wrong = readiness(repo, ["verify-seal"], { SA_READINESS_SEAL_KEY: "another-key" });
@@ -161,7 +164,7 @@ describe("fixes from the independent pre-ship review", () => {
     assert.match(wrong.out, /digest mismatch, or the wrong key/);
     assert.match(readiness(repo, ["verify-seal"], { SA_READINESS_SEAL_KEY: "" }).out, /has a keyed seal; set SA_READINESS_SEAL_KEY/);
     const plain = materialize("healthy-node");
-    assert.equal(readiness(plain, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], { SA_READINESS_SEAL_KEY: "" }).code, 0);
+    assert.equal(readiness(plain, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], { ...HOST, SA_READINESS_SEAL_KEY: "" }).code, 0);
     const v = readiness(plain, ["verify-seal"], { SA_READINESS_SEAL_KEY: "" });
     assert.equal(v.code, 0);
     assert.match(v.out, /NOTE: the seal is an unkeyed digest/);
@@ -169,7 +172,7 @@ describe("fixes from the independent pre-ship review", () => {
 
   test("verify-seal fails when a sealed report is missing or the audit's history line was edited", () => {
     const repo = materialize("healthy-node");
-    assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"]).code, 0);
+    assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], HOST).code, 0);
     const hist = join(repo, ".agent-readiness/history/history.jsonl");
     const original = readFileSync(hist, "utf8");
     writeFileSync(hist, original.replace(/"repoLevel":\d/, '"repoLevel":4'));
@@ -186,7 +189,7 @@ describe("fixes from the independent pre-ship review", () => {
     const repo = materialize("healthy-node");
     const prs = join(mkdtempSync(join(tmpdir(), "prs-")), "prs.json");
     writeFileSync(prs, "[]");
-    assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants", "--outcomes-input", prs]).code, 0);
+    assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants", "--outcomes-input", prs], HOST).code, 0);
     assert.match(readFileSync(join(repo, ".agent-readiness/latest/report.md"), "utf8"), /Outcomes come from a recorded PR file, not GitHub; not a production result/);
     const v = readiness(repo, ["verify-seal"]);
     assert.equal(v.code, 3);
@@ -202,8 +205,8 @@ describe("fixes from the independent pre-ship review", () => {
 
   test("a recheck on a machine that can't prove the levels records no level, not a regression", () => {
     const repo = materialize("healthy-node");
-    assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"]).code, 0);
-    const r = readiness(repo, ["recheck", "--runtime", "none"]);
+    assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], HOST).code, 0);
+    const r = readiness(repo, ["recheck", "--runtime", "none"], HOST);
     assert.equal(r.code, 0, r.out);
     assert.match(r.out, /: blocked \(no level: the last audit's levels couldn't be proved here \(no container runtime on this machine\)\)/);
     const line = JSON.parse(readFileSync(join(repo, ".agent-readiness/history/history.jsonl"), "utf8").trim().split("\n").pop()!);
@@ -238,12 +241,12 @@ describe("fixes from the independent pre-ship review", () => {
 
   test("history from a fresh clone reads the remote branch, and a push keeps every earlier line", () => {
     const repo = materialize("healthy-node");
-    assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"]).code, 0);
+    assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], HOST).code, 0);
     assert.equal(readiness(repo, ["history", "push"]).code, 0);
     const clone = join(mkdtempSync(join(tmpdir(), "clone-")), "c");
     execFileSync("git", ["clone", "-q", repo, clone]);
     assert.equal(readiness(clone, ["history"]).out.trim().split("\n").length, 1, "the clone sees the first audit");
-    assert.equal(readiness(clone, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"]).code, 0);
+    assert.equal(readiness(clone, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"], HOST).code, 0);
     assert.equal(readiness(clone, ["history", "push"]).code, 0);
     const lines = execFileSync("git", ["show", "agent-readiness/history:history.jsonl"], { cwd: clone, encoding: "utf8" }).trim().split("\n");
     assert.equal(lines.length, 2);
@@ -305,7 +308,7 @@ describe("fixes from the independent pre-ship review", () => {
     const tree = init.out.match(/Audit tree: (\S+)/)![1];
     assert.equal(readiness(repo, ["scan"]).code, 0);
     writeFileSync(join(tree, "test", "pricing.test.js"), "process.exit(1);\n");
-    assert.equal(readiness(repo, ["replay", "--runtime", "none", "--no-mutants"]).code, 0);
+    assert.equal(readiness(repo, ["replay", "--runtime", "none", "--no-mutants"], HOST).code, 0);
     const audit = JSON.parse(readFileSync(join(repo, ".agent-readiness/work", init.out.match(/Opened (\S+)/)![1], "audit.json"), "utf8")) as Audit;
     assert.equal(audit.evidence.find((e) => e.kind === "test")!.result, "pass");
   });
