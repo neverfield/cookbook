@@ -806,6 +806,12 @@ describe("mcp-servers' instruction findings are explained on their merits", () =
   test("a CLI a repo script can't find on PATH is a missing tool, named", () => {
     assert.deepEqual(diagnose(out("skills-eval-no-claude"), false, "instruction"), { cause: "missing_tool", detail: "claude is not installed" });
     assert.deepEqual(diagnose(out("coverage-py-no-uv"), false, "instruction"), { cause: "missing_tool", detail: "uv is not installed" });
+    assert.deepEqual(diagnose("npm was not found on PATH, so Readability.js's dependencies cannot be installed\n", false, "instruction"), { cause: "missing_tool", detail: "npm is not installed" });
+  });
+
+  test("a test run that logs a fallback (\"Node.js was not found on PATH\") still fails on its own failures", () => {
+    const pytest = "[fetch] Node.js was not found on PATH; using the pure-Python extractor\nFAILED tests/test_hidden_ssr.py::test_hydration - AssertionError: assert 'a' == 'b'\n1 failed, 490 passed in 14.2s\n";
+    assert.notEqual(diagnose(pytest, false, "test").cause, "missing_tool");
   });
 
   test("a network lookup during the offline replay needs the network", () => {

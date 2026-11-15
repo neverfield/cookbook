@@ -324,9 +324,10 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   if (ref) return { cause: "missing_ref", detail: ref };
   if (PROMPT.test(output)) return { cause: "interactive", detail: "it stopped at a prompt that waits for a person's answer" };
   if (/\bENEEDAUTH\b|This command requires you to be logged in/.test(output)) return { cause: "credential", detail: "needs a logged-in npm account" };
-  // A repo script's own words for a tool it can't find: "no usable `claude` CLI on PATH",
-  // "uv not found on PATH".
-  const onPath = output.match(/\bno usable [`'"]?([\w.+-]+)[`'"]? CLI\b|\b[`'"]?([\w.+-]+)[`'"]? (?:CLI )?(?:not found|is not installed|is not available) on (?:your |the )?PATH\b/i);
+  // A repo script's own words for a tool it can't find: "no usable `claude` CLI on PATH", "uv not
+  // found on PATH". Not for a test run, whose output can log such a line on a path it falls back
+  // from ("Node.js was not found on PATH; using the pure-Python extractor").
+  const onPath = phase === "test" ? null : output.match(/\bno usable [`'"]?([\w.+-]+)[`'"]? CLI\b|(?:^|[\s(`'"])[`'"]?([A-Za-z][\w.+-]*)[`'"]? (?:CLI )?(?:was |is )?(?:not found|not installed|not available) on (?:your |the )?PATH\b/im);
   if (onPath) return { cause: "missing_tool", detail: `${onPath[1] ?? onPath[2]} is not installed` };
   const tool = output.match(/(?:^|\n)(?:[^\n:]*: line \d+: |[^\n:]*: \d+: |(?:ba)?sh: )?([\w.+-]+): (?:command )?not found/);
   if (tool) return { cause: "missing_tool", detail: `${tool[1]} is not installed` };
