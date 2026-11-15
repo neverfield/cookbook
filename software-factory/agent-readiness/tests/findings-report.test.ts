@@ -110,6 +110,15 @@ describe("the instruction checker skips what isn't a step for this repo", () => 
     assert.deepEqual([audit.instructions[0].result, audit.instructions[0].rule], ["not_run", "same-as-check"]);
   });
 
+  test("an instruction that fails on the host is unproven on this machine, not wrong", async () => {
+    const audit = makeAudit({ components: [{ id: "app", share: 1 }] });
+    audit.instructions = [{ id: "ins-001", source: "AGENTS.md", line: 48, kind: "command", text: "npm run check", category: "replay", staticResult: "pass", result: "not_run", reason: "waiting for replay", cwd: "." }];
+    const ex: Executor = { where: "fresh_copy", strength: "executed", image: null, imageSource: null, root: mkdtempSync(join(tmpdir(), "ex-")), exec: async () => ({ exitCode: 1, output: "not ok 1 - a\n", timedOut: false, durationMs: 1 }), offline: () => false, networkOff: null, close: () => {} };
+    await replayInstructions(audit, ex, ex.root, newBudget(15, 1), [], null);
+    assert.equal(audit.instructions[0].result, "not_run");
+    assert.match(audit.instructions[0].blocked!, /not in a clean container/);
+  });
+
   test("a README command an agent file already gives is checked once, there", () => {
     const by = items({ ...pnpmLib, "AGENTS.md": "Run `pnpm test`.\n", "README.md": "## Development\n\nRun `pnpm test`.\n" });
     assert.equal(by.get("AGENTS.md:1 pnpm test")!.category, "replay");

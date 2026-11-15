@@ -106,6 +106,14 @@ export async function replayInstructions(audit: Audit, ex: Executor, copyDir: st
       item.rule = "replay-budget";
       continue;
     }
+    // On the host the copy isn't a clean environment: a failure there can come from this machine,
+    // so it leaves the instruction unproven rather than wrong.
+    if (!ok && ex.where !== "container") {
+      item.result = "not_run";
+      item.reason = `not proven: it failed in a fresh copy on this machine (${why!.detail}), and only a clean container can show an instruction is wrong`;
+      item.blocked = "it ran on this machine, not in a clean container";
+      continue;
+    }
     // A command that is still running at the limit, such as a full pre-push gate, isn't shown wrong.
     if (out.timedOut) {
       item.category = "long_running";

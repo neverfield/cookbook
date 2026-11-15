@@ -328,6 +328,10 @@
       "runtime": "none",
       "review": "broad-readiness-opus.md",
       "truth": "Run with no container runtime. agent-readiness installs, type-checks and passes its tests (435 of 436, 1 skipped without Docker), yet the review's audit sealed Level 0, not bootable. With no container the honest result is unproven on this machine. The test fixtures' tokens and the tool's own tests needing credentials are not blocking safety findings. README.md:15 links to cloud-agent, which doesn't exist (the folder is self-hosted-cloud-agent); that one instruction finding is real, and upstream main has the same broken link.",
+      "egress": [
+        "pypi.org",
+        "files.pythonhosted.org"
+      ],
       "realInstructionFindings": [
         "README.md:15"
       ],
@@ -340,7 +344,52 @@
         "blockingSafety": 0
       },
       "recorded": {
-        "any": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "agent-kanban": {
+              "level": 0,
+              "unproven": false
+            },
+            "app-builder": {
+              "level": 0,
+              "unproven": false
+            },
+            "coding-agent-cli": {
+              "level": 0,
+              "unproven": false
+            },
+            "grok-coding-agent-cli": {
+              "level": 0,
+              "unproven": false
+            },
+            "agent-readiness": {
+              "level": 0,
+              "unproven": false
+            },
+            "grok-patient-intake": {
+              "level": 0,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "dag-task-runner",
+            "quickstart",
+            "self-hosted-cloud-agent-ecs-terraform",
+            "terraform"
+          ],
+          "instructionFailures": [
+            "README.md:15"
+          ],
+          "blockingSafety": []
+        },
+        "restricted": {
           "exit": 0,
           "sealed": true,
           "runtime": null,
