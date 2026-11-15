@@ -1,0 +1,22 @@
+{
+  "purpose": "A Composer library that requires only PHP ^8.3, with a committed composer.lock of no packages and a composer.json test script. It runs in the newest Composer image whose PHP the constraint allows (composer:2.11, PHP 8.5), installs from the lock without Packagist, passes 9 of 9 tests, and the planted faults go in src/Cart.php and src/Discount.php, named after tests/CartTest.php and tests/DiscountTest.php. Nothing reaches the network, so the result is the same on every machine.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "cart-pricing": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:cart-pricing",
+      "noBlocker": true,
+      "safety": "pass",
+      "contract": {
+        "cmd-cart-pricing-install": "composer install --no-interaction --no-progress",
+        "cmd-cart-pricing-test": "composer run-script --timeout=0 test"
+      }
+    }
+  ]
+}
