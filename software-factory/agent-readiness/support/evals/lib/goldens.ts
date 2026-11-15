@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { latestRubricVersion } from "../../../skill/agent-readiness/scripts/lib/rubric.ts";
 import { ACCELERATOR, SKILL } from "../../tools/fixture.ts";
 
 export const PERMISSIVE = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "CC0-1.0"];
@@ -54,13 +55,16 @@ export interface LastRun {
   pending: { id: string; reason: string }[];
 }
 
-export const SCORING_FILES = ["scripts/lib/score.ts", "scripts/lib/levels.ts"];
+// Fault planting decides the fault check, and the newest rubric is the one an audit scores with.
+export function scoringFiles(): string[] {
+  return ["scripts/lib/score.ts", "scripts/lib/levels.ts", "scripts/lib/mutate.ts", `rubric/${latestRubricVersion()}.json`];
+}
 
 // One digest over the files that turn evidence into levels. A golden result recorded under another
 // digest is stale: it no longer shows what the current scoring gives.
 export function scoringDigest(): string {
   const h = createHash("sha256");
-  for (const f of SCORING_FILES) h.update(f).update("\0").update(readFileSync(join(SKILL, f))).update("\n");
+  for (const f of scoringFiles()) h.update(f).update("\0").update(readFileSync(join(SKILL, f))).update("\n");
   return h.digest("hex");
 }
 

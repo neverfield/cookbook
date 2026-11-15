@@ -1,0 +1,20 @@
+{
+  "purpose": "npm workspaces with a ** glob and a ! exclusion: the nested packages/group/paging is a component, and the excluded packages/legacy/old, whose test fails, is neither assessed nor listed.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "paging": 2,
+        "pricing": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:paging",
+      "noBlocker": true,
+      "safety": "pass",
+      "notAssessed": []
+    }
+  ]
+}

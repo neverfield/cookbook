@@ -495,6 +495,9 @@ function coverageLine(input: RenderInput): string {
   if (input.partial.partial) line += ` Partial coverage: ${pct(input.partial.unassessedShare, 1)}% of changes aren't assessed.`;
   const sampled = sampledScope(audit);
   if (sampled) line += ` Sampled scope: ${sampled}.`;
+  if (audit.repo.shallow) line += " The clone is shallow, so change shares come only from the commits it has.";
+  if (audit.repo.submodulesMissing?.length) line += ` Submodules not checked out on this machine aren't in the audit: ${list(audit.repo.submodulesMissing)}.`;
+  if (audit.repo.lfsPointers) line += ` ${audit.repo.lfsPointers} Git LFS ${audit.repo.lfsPointers === 1 ? "file stayed a pointer" : "files stayed pointers"} in the audit tree.`;
   if (audit.tier !== "read-only" && !audit.environment.containerRuntime && audit.evidence.some((e) => e.where === "fresh_copy")) {
     const declared = audit.profile?.environmentJson?.build?.dockerfile;
     const blockedEv = audit.evidence.filter((e) => blockedBy(e) && e.diagnosis?.cause === "missing_tool");
@@ -796,7 +799,7 @@ export function buildReport(input: RenderInput): ReportJson {
         { label: "Permission tier", value: audit.tier },
         { label: "Seal", value: input.sealStatus },
         { label: "Skill digest", value: audit.skill.scriptsDigest.slice(0, 12) },
-        { label: "Planted faults", value: plantedFaultsRecord(audit) },
+        { label: "Planted faults", value: plantedFaultsRecord(audit, rubric) },
         {
           label: "Replay environment",
           value: audit.environment.containerRuntime
@@ -858,10 +861,11 @@ export function changesOf(prev: ReportJson, now: ReportJson, rubric: Rubric): Re
   return { since: { audit: prev.audit.id, date: prev.audit.date }, repo: { from: repoLevel(prev), to: repoLevel(now) }, components, nowMet, nowFailing, checks };
 }
 
-function plantedFaultsRecord(audit: Audit): string {
+function plantedFaultsRecord(audit: Audit, rubric: Rubric): string {
   const faults = audit.evidence.filter((e) => e.condition === "faults");
   if (faults.length > 0 && faults.every((e) => e.skipped)) return `not planted: ${faults[0].skipped} skipped them, so no fault check ran`;
-  return audit.seed.pinned ? "seed pinned (eval run; not a production result)" : "fresh seed for this audit";
+  if (audit.seed.pinned) return "seed pinned (eval run; not a production result)";
+  return rubric.mutation.seedFrom === "code" ? "chosen from the code, so they stay the same until the component's code or tests change" : "fresh seed for this audit";
 }
 
 // Held at Level 0 only because this machine couldn't check Level 1: nothing that ran failed.

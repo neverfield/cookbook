@@ -8,7 +8,9 @@ import { PNPM_STORE, startArgs } from "../skill/agent-readiness/scripts/lib/cont
 import { scrubbedEnv } from "../skill/agent-readiness/scripts/lib/run.ts";
 import { computeOutcomes, fetchPrs } from "../skill/agent-readiness/scripts/lib/outcomes.ts";
 import { isShallow, lastChanged, workspaceDirs } from "../skill/agent-readiness/scripts/lib/util.ts";
-import { codeSeed, componentSeed, exportTree } from "../skill/agent-readiness/scripts/lib/workspace.ts";
+import { codeSeed, exportTree, faultKey } from "../skill/agent-readiness/scripts/lib/workspace.ts";
+import { chooseSites } from "../skill/agent-readiness/scripts/lib/mutate.ts";
+import type { Component } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { makeAudit } from "./helpers.ts";
 import { SKILL, commitAll, materialize, readiness } from "../support/tools/fixture.ts";
@@ -177,8 +179,9 @@ describe("git helpers", () => {
     assert.ok(dates.get("a.js")! >= dates.get("b.js")!);
   });
 
-  test("the code seed holds while the code does, and a component's seed moves only with its own files", () => {
-    const repo = repoWith({ "api/a.js": "1\n", "web/b.js": "1\n" });
+  test("the code seed holds while the code does, and a component's faults move only with its own files", () => {
+    const body = (k: number) => `export function f(a, b) {\n${Array.from({ length: 12 }, (_, i) => `  if (a > ${i + k}) return b + 1;`).join("\n")}\n  return a < b;\n}\n`;
+    const repo = repoWith({ "api/a.js": body(0), "api/a.test.js": 'import { f } from "./a.js";\n', "web/b.js": body(0), "web/b.test.js": 'import { f } from "./b.js";\n' });
     const c1 = head(repo);
     const key = process.env.SA_READINESS_SEAL_KEY;
     delete process.env.SA_READINESS_SEAL_KEY;
@@ -195,13 +198,23 @@ describe("git helpers", () => {
     writeFileSync(join(repo, "web/b.js"), "2\n");
     commitAll(repo, "web");
     const c2 = head(repo);
-    const base = "seed";
-    assert.equal(componentSeed(base, repo, c1, "api"), componentSeed(base, repo, c2, "api"));
-    assert.notEqual(componentSeed(base, repo, c1, "web"), componentSeed(base, repo, c2, "web"));
+    assert.notEqual(codeSeed(repo, c2, "pin-a"), codeSeed(repo, c1, "pin-a"), "the recorded seed is the commit's");
+    assert.equal(faultKey("pin-a"), faultKey("pin-a"));
+    assert.notEqual(faultKey("pin-a"), faultKey("pin-b"));
+    const comp = (path: string): Component => ({ id: path, path, language: "js", manifest: `${path}/package.json`, scripts: {}, changes: 0, changeShare: 0, assessed: true });
+    const pick = (path: string, commit: string) => {
+      sh(repo, "checkout", "-q", commit);
+      return chooseSites(repo, repo, comp(path), faultKey("pin-a"), 5, commit).map((x) => `${x.line}:${x.operator}`).join();
+    };
+    assert.equal(pick("api", c1), pick("api", c2), "a commit to web leaves api's faults where they were");
+    writeFileSync(join(repo, "web/b.js"), body(3));
+    commitAll(repo, "web again");
+    assert.notEqual(pick("web", c1), pick("web", head(repo)), "web's own change moves its faults");
   });
 
-  test("the released rubric keeps a fresh seed for every audit", () => {
-    assert.notEqual((loadRubric("2026-11-alpha").mutation as { seedFrom?: string }).seedFrom, "code");
+  test("released rubrics keep a fresh seed for every audit, and 2026-11-beta seeds from the code", () => {
+    for (const v of ["2026-10-alpha", "2026-11-alpha"]) assert.notEqual(loadRubric(v).mutation.seedFrom, "code", v);
+    assert.equal(loadRubric("2026-11-beta").mutation.seedFrom, "code");
   });
 });
 

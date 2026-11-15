@@ -1,7 +1,7 @@
 import { statSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import type { Component, Language } from "./types.ts";
-import { exists, git, listFiles, readText, sha256 } from "./util.ts";
+import { exists, lastChanged, listFiles, readText, sha256 } from "./util.ts";
 
 export interface Site {
   file: string;
@@ -507,12 +507,11 @@ export function allSites(tree: string, files: string[], lang: Language): Site[] 
 // The pick depends on the component's code and on `seed`. An empty seed leaves the code alone to
 // decide, so the same code always gets the same faults; an eval or a grader passes its own seed to
 // get faults the code's own pick didn't plant.
-export function chooseSites(repo: string, tree: string, comp: Component, seed: string, count: number): Site[] {
+export function chooseSites(repo: string, tree: string, comp: Component, seed: string, count: number, commit = "HEAD"): Site[] {
   const files = targetFiles(tree, comp);
   const sites = allSites(tree, files, comp.language);
   if (sites.length === 0) return [];
-  const recency = new Map<string, string>();
-  for (const f of files) recency.set(f, git(["log", "-1", "--format=%cI", "--", f], repo).stdout.trim());
+  const recency = lastChanged(repo, files, { commit });
   const sortedFiles = [...files].sort((a, b) => (recency.get(b) ?? "").localeCompare(recency.get(a) ?? "") || a.localeCompare(b));
   const recentTier = new Set(sortedFiles.slice(0, Math.max(1, Math.ceil(sortedFiles.length / 2))));
   const code = codeDigest(tree, [...files, ...testFiles(tree, comp)]);

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,7 +23,7 @@ function restoreNames(dir: string): void {
     else if (name === "CLAUDE.fixture.md") target = join(dir, "CLAUDE.md");
     else if (name === "SKILL.fixture.md") target = join(dir, "SKILL.md");
     if (target !== full) renameSync(full, target);
-    if (statSync(target).isDirectory()) restoreNames(target);
+    if (lstatSync(target).isDirectory()) restoreNames(target);
   }
 }
 
@@ -46,7 +46,7 @@ export function materialize(fixture: string, opts: { now?: string; into?: string
   const root = opts.into ?? mkdtempSync(join(tmpdir(), `fixture-${fixture}-`));
   const repo = join(root, fixture);
   mkdirSync(repo, { recursive: true });
-  cpSync(join(FIXTURES, fixture, "repo"), repo, { recursive: true });
+  cpSync(join(FIXTURES, fixture, "repo"), repo, { recursive: true, verbatimSymlinks: true });
   restoreNames(repo);
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
   gitc(repo, ["add", "-A"], at(now, 120), "Contributor A", "a@example.com");
@@ -111,7 +111,7 @@ export function materializePrs(fixture: string, now: string, file = "prs.templat
 export interface ExpectedRun {
   name: string;
   registryEnv?: Record<string, string>;
-  // "none" audits with the host fallback, as on a machine with no container runtime.
+  // "none" audits as on a machine with no container runtime: unproven, since host mode needs --allow-host.
   runtime?: "none";
   outcome?: "proven" | "blocked" | "not_assessed";
   shares?: Record<string, number>;

@@ -17,7 +17,7 @@ import { containedPath, exists, fail, listFiles, randomHex, readJson, readText, 
 import { commandsFor } from "./score.ts";
 import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
 import { SUPPORTED_DOC, notSupportedReason } from "./support.ts";
-import { realSeed, refreshTree } from "./workspace.ts";
+import { plantSeed, refreshTree } from "./workspace.ts";
 
 export interface Executor {
   where: Where;
@@ -518,7 +518,7 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
     charge(budget, comp.id, clean.durationMs);
     if (clean.exitCode !== 0 || clean.timedOut) probe = null;
   }
-  const sites = chooseSites(repo, tree, comp, realSeed(audit, { tree, createdAt: audit.createdAt }), rubric.mutation.perComponent);
+  const sites = chooseSites(repo, tree, comp, plantSeed(audit, { tree, createdAt: audit.createdAt }), rubric.mutation.perComponent, audit.repo.commit);
   if (sites.length === 0) {
     addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp.id, strength: ex.strength, where: ex.where, result: "not_run", summary: "no places to plant a fault were found in files the tests import" });
     return;

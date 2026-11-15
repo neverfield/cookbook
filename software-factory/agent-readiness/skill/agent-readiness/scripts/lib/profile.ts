@@ -1,9 +1,9 @@
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { Rubric } from "./rubric.ts";
 import { STACKS, notSupportedReason, stack, supported } from "./support.ts";
 import type { Component, Language, PackageManager, Profile } from "./types.ts";
-import { addDays, containedPath, exists, git, listFiles, readJson, readText, today } from "./util.ts";
+import { addDays, containedPath, exists, git, listFiles, readJson, readText, today, workspaceDirs } from "./util.ts";
 
 interface PackageJson {
   name?: string;
@@ -56,8 +56,7 @@ export function uvWorkspaceMembers(tree: string): string[] {
   const section = pyproject(tree).match(/^\[tool\.uv\.workspace\][^\n]*\n([\s\S]*?)(?=^\[|(?![\s\S]))/m)?.[1];
   if (section === undefined) return [];
   const list = (key: string) => [...(section.match(new RegExp(`^${key}\\s*=\\s*\\[([\\s\\S]*?)\\]`, "m"))?.[1] ?? "").matchAll(/["']([^"']+)["']/g)].map((m) => m[1]);
-  const excluded = new Set(list("exclude").flatMap((p) => expandPattern(tree, p)));
-  return [...new Set(list("members").flatMap((p) => expandPattern(tree, p)))].filter((d) => d !== "." && !excluded.has(d) && exists(join(tree, d, "pyproject.toml"))).sort();
+  return workspaceDirs(tree, [...list("members"), ...list("exclude").map((p) => `!${p}`)], (d) => d !== "." && exists(join(tree, d, "pyproject.toml")));
 }
 
 // The folders whose package.json or .yarnrc.yml decide a component's Yarn: its own, then the root's.
@@ -127,59 +126,6 @@ function workspacePatterns(tree: string): string[] {
     }
   }
   return [...fromPkg, ...fromPnpm];
-}
-
-// The workspace members the patterns name, less the ones a `!` pattern excludes.
-function workspaceDirs(tree: string, patterns: string[]): { members: string[]; excluded: string[] } {
-  const rules = patterns.filter((p) => p.startsWith("!")).map((p) => globRegex(p.slice(1).replace(/^\.\//, "")));
-  const dirs = [...new Set(patterns.filter((p) => !p.startsWith("!")).flatMap((p) => expandPattern(tree, p)))];
-  return { members: dirs.filter((d) => !rules.some((re) => re.test(d))), excluded: dirs.filter((d) => rules.some((re) => re.test(d))) };
-}
-
-function globRegex(pattern: string): RegExp {
-  const clean = pattern.replace(/\/+$/, "");
-  const body = clean
-    .split("/")
-    .map((seg) => (seg === "**" ? "\u0000" : seg.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]")))
-    .join("/")
-    .replace(/\/?\u0000\/?/g, (m) => (m.startsWith("/") ? "(?:/.*)?/?" : "(?:.*/)?"));
-  return new RegExp(`^${body}$`);
-}
-
-const WALK_SKIP = /^(node_modules|\.git|dist|build|coverage)$/;
-
-// Folders the pattern matches, at any depth for `**`. Only folders holding a manifest matter, so the
-// walk below a `**` skips installed and built folders.
-function expandPattern(tree: string, pattern: string): string[] {
-  const clean = pattern.replace(/^\.\//, "").replace(/\/+$/, "");
-  if (!/[*?]/.test(clean)) return exists(join(tree, clean)) ? [clean] : [];
-  const segments = clean.split("/");
-  const out: string[] = [];
-  const walk = (base: string, i: number) => {
-    if (i === segments.length) {
-      out.push(base);
-      return;
-    }
-    const seg = segments[i];
-    const dir = join(tree, base);
-    if (!exists(dir)) return;
-    let names: string[];
-    try {
-      names = readdirSync(dir).filter((n) => !WALK_SKIP.test(n) && statSync(join(dir, n)).isDirectory());
-    } catch {
-      return;
-    }
-    const at = (n: string) => (base === "." ? n : `${base}/${n}`);
-    if (seg === "**") {
-      walk(base, i + 1);
-      for (const n of names) if (!n.startsWith(".")) walk(at(n), i);
-      return;
-    }
-    const re = globRegex(seg);
-    for (const n of names.filter((x) => re.test(x))) walk(at(n), i + 1);
-  };
-  walk(".", 0);
-  return out.filter((d) => d !== ".");
 }
 
 function languageOf(tree: string, path: string, files: string[]): Language {
@@ -371,9 +317,11 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
   const members = new Set<string>();
   const patterns = workspacePatterns(tree);
   // Folders the workspace leaves out on purpose aren't components of their own either.
-  const excludedDirs = patterns.some((p) => p.startsWith("!")) ? workspaceDirs(tree, patterns).excluded : [];
-  if (patterns.some((p) => !p.startsWith("!"))) {
-    const all = workspaceDirs(tree, patterns).members.filter((d) => exists(join(tree, d, "package.json"))).sort();
+  const included = patterns.filter((p) => !p.trim().startsWith("!"));
+  const listed = included.length ? workspaceDirs(tree, patterns) : [];
+  const excludedDirs = included.length < patterns.length ? workspaceDirs(tree, included).filter((d) => !listed.includes(d)) : [];
+  if (included.length) {
+    const all = listed.filter((d) => exists(join(tree, d, "package.json")));
     // Workspace members under tooling/ or examples/ are satellites too, unless nothing else exists.
     const reasons = new Map(all.map((d) => [d, d === "." ? null : satelliteReason(tree, { dir: d, kind: "js", manifest: `${d}/package.json` })]));
     const product = all.filter((d) => !reasons.get(d));

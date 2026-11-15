@@ -1,0 +1,18 @@
+{
+  "purpose": "The tests import through a committed relative symlink (lib -> src). The clean container copy must keep the link relative, so the component reaches Level 2 instead of failing its tests.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "committed-symlink": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:committed-symlink",
+      "noBlocker": true,
+      "safety": "pass"
+    }
+  ]
+}

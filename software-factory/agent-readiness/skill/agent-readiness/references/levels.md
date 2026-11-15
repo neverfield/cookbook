@@ -23,7 +23,7 @@ An audit never claims Level 3 or 4 by itself. A condition the audit couldn't run
 ## A component's standard level
 
 - **Level 1:** the frozen install, the build and every test pass in a clean container.
-- **Level 2:** Level 1, plus build, lint, type-check and test commands pass at `HEAD`; every planted fault in the component is caught (at least 3); agent instructions are accurate; and normal work needs no production access.
+- **Level 2:** Level 1, plus build, lint, type-check and test commands pass at `HEAD`; the tests catch at least the rubric's kill rate of the planted faults that give a clear result (60% under 2026-11-beta, every one under earlier rubrics; at least 3 must give a clear result); agent instructions are accurate; and normal work needs no production access.
 - **Levels 3 and 4:** measured on the agent PRs that touch the component, against the same control group of other PRs. Level 3 needs Level 2 and targets met over at least 20 agent PRs in a 30-day window. A team can lower the 20 with `--min-prs`, never below 10. Level 4 (rubric 2026-11-alpha) needs two back-to-back audit windows at Level 3 or above, each meeting the targets, with this window's agent PRs at least double the first window's and the change-request rate no higher. A window below Level 3 starts the count again; a Level 4 window stays in the run, so Level 4 holds while the volume does. Audits sealed under 2026-10-alpha compared with the last audit at Level 3 or above.
 
 ## The rollup rule

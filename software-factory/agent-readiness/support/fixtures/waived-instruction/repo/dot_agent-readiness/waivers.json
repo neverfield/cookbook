@@ -1,0 +1,12 @@
+{
+  "schema": "agent-readiness/waivers@1",
+  "waivers": [
+    {
+      "id": "coverage-script",
+      "check": "context.instructions_verified",
+      "match": "AGENTS.md:7",
+      "reason": "The release pipeline adds the coverage script before it runs; it is not meant to run from a checkout.",
+      "by": "Contributor A"
+    }
+  ]
+}

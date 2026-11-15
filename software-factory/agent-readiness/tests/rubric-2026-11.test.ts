@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { activeComponents, level3Run, outcomeLevel, previousAtLevel3 } from "../skill/agent-readiness/scripts/lib/levels.ts";
 import { renderMarkdown } from "../skill/agent-readiness/scripts/lib/render.ts";
-import { latestRubricVersion, loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
+import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { compute } from "../skill/agent-readiness/scripts/lib/seal.ts";
 import type { HistoryLine, Level } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { makeAudit, outcomes, reportFor, stats } from "./helpers.ts";
@@ -21,8 +21,7 @@ function level(rubric: typeof next, history: HistoryLine[], now: ReturnType<type
 }
 
 describe("rubric 2026-11-alpha", () => {
-  test("is the rubric new audits use, and lists what changed", () => {
-    assert.equal(latestRubricVersion(), "2026-11-alpha");
+  test("lists what changed", () => {
     assert.ok((next.changes ?? []).length >= 3);
   });
 
