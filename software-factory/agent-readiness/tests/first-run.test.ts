@@ -209,7 +209,8 @@ describe("git helpers", () => {
     assert.equal(pick("api", c1), pick("api", c2), "a commit to web leaves api's faults where they were");
     writeFileSync(join(repo, "web/b.js"), body(3));
     commitAll(repo, "web again");
-    assert.notEqual(pick("web", c1), pick("web", head(repo)), "web's own change moves its faults");
+    const c3 = head(repo);
+    assert.notEqual(pick("web", c1), pick("web", c3), "web's own change moves its faults");
   });
 
   test("released rubrics keep a fresh seed for every audit, and 2026-11-beta seeds from the code", () => {

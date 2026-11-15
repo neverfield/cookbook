@@ -94,7 +94,7 @@ describe("regressions from the four-model review of the mock report", () => {
     assert.match(renderMarkdown(r, rubric), /\| Measure \| Agent PRs \| Other PRs \|/);
   });
 
-  test("mutant locations never reach remediate mode, the flake guard holds, and the seed changes each audit", () => {
+  test("mutant locations never reach remediate mode, the flake guard holds, and the seed comes from the code", () => {
     const repo = materialize("healthy-node");
     assert.equal(readiness(repo, ["init"]).code, 0);
     const firstSeed = JSON.parse(readFileSync(join(repo, ".agent-readiness/work", readFileSync(join(repo, ".agent-readiness/work/CURRENT"), "utf8").trim(), "audit.json"), "utf8")).seed;
@@ -102,7 +102,7 @@ describe("regressions from the four-model review of the mock report", () => {
     const id = readFileSync(join(repo, ".agent-readiness/work/CURRENT"), "utf8").trim();
     const secondSeed = JSON.parse(readFileSync(join(repo, ".agent-readiness/work", id, "audit.json"), "utf8")).seed;
     assert.equal(firstSeed.pinned, false);
-    assert.notEqual(firstSeed.value, secondSeed.value, "a fresh seed for each audit");
+    assert.equal(firstSeed.value, secondSeed.value, "under 2026-11-beta the faults come from the code, so two audits of one commit share a seed");
     assert.equal(readiness(repo, ["scan"]).code, 0);
     assert.equal(readiness(repo, ["replay", "--runtime", "none"], HOST).code, 0);
     const draftText = readFileSync(join(repo, ".agent-readiness/work", id, "audit.json"), "utf8");

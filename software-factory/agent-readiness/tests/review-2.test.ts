@@ -154,14 +154,17 @@ describe("fixes from the second independent review", () => {
 
   test("the draft holds only a digest of the seed; the sealed audit records the seed itself", () => {
     const repo = materialize("healthy-node");
-    assert.equal(readiness(repo, ["init", "--tier", "local-exec"]).code, 0);
+    // Keyed, since an unkeyed code seed is "" and there would be nothing to hide.
+    const env = { ...HOST, SA_READINESS_SEAL_KEY: "review-key" };
+    assert.equal(readiness(repo, ["init", "--tier", "local-exec"], env).code, 0);
     const dir = draftDir(repo);
     const draft = JSON.parse(readFileSync(join(dir, "audit.json"), "utf8")) as Audit;
     const tree = JSON.parse(readFileSync(join(dir, "local.json"), "utf8")).tree as string;
     const seed = readFileSync(join(tree, "..", "seed.txt"), "utf8").trim();
+    assert.notEqual(seed, "");
     assert.notEqual(draft.seed.value, seed);
     assert.ok(!readFileSync(join(dir, "audit.json"), "utf8").includes(seed));
-    for (const args of [["scan"], ["replay", "--runtime", "none", "--no-mutants"], ["seal"]]) assert.equal(readiness(repo, args, HOST).code, 0, args.join(" "));
+    for (const args of [["scan"], ["replay", "--runtime", "none", "--no-mutants"], ["seal"]]) assert.equal(readiness(repo, args, env).code, 0, args.join(" "));
     const sealed = JSON.parse(readFileSync(join(repo, ".agent-readiness/history/audits", draft.id, "audit.json"), "utf8")) as Audit;
     assert.equal(sealed.seed.value, seed);
   });

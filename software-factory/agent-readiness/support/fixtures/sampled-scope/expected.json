@@ -1,5 +1,5 @@
 {
-  "purpose": "Eight small workspace packages, more than the six the audit assesses. The six most active are assessed and reach Level 2; the other two are listed as left out with their share, confidence drops to medium, and part 1 says what isn't assessed.",
+  "purpose": "Twelve small workspace packages, more than the ten the audit assesses under 2026-11-beta (six under earlier rubrics). The ten most active are assessed and reach Level 2; the other two are listed as left out with their share, confidence drops to medium, and part 1 says what isn't assessed.",
   "runs": [
     {
       "name": "default",
@@ -10,7 +10,11 @@
         "charlie": 2,
         "delta": 2,
         "echo": 2,
-        "foxtrot": 2
+        "foxtrot": 2,
+        "india": 2,
+        "juliet": 2,
+        "kilo": 2,
+        "lima": 2
       },
       "top": [
         "targets"
@@ -23,12 +27,12 @@
         "hotel"
       ],
       "shares": {
-        "golf": 0.048,
-        "hotel": 0.024
+        "golf": 0.036,
+        "hotel": 0.018
       },
-      "coverage": "ignores golf \\(5% of changes, outside the 6 most active components\\) and hotel",
+      "coverage": "ignores golf \\(4% of changes, outside the 10 most active components\\) and hotel",
       "unassessed": {
-        "share": 0.072,
+        "share": 0.054,
         "supportLink": false
       }
     }
