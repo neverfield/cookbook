@@ -357,9 +357,9 @@
       "commit": "7f2773ec234b62d0b80ca47c508397cb3d0da3ea",
       "runtime": "docker",
       "review": "customer-trial-carbon.md",
-      "truth": "Go backend with 90% of changes, now scored in golang:1.27 (its go line), plus a Svelte and Vite ui/ that builds and has no test script, so ui at Level 0 is correct. The backend builds, and 930 of its 931 top-level tests pass offline; TestRecordAuthWithOAuth2 downloads an avatar from pocketbase.io, and the audit runs tests without the network on every machine, so pocketbase at Level 0 is the honest result. Its CI runs go test only, so go vet isn't run (vet would flag a test fixture's deliberately unexported field). Both earlier blocking private-key findings were false: a Go doc comment and a textarea placeholder. The README's Go tutorial and release-binary commands are not instructions for ui. All four instruction findings are false and come from the instruction checker, not the repo. CONTRIBUTING.md:48 `go test ./...` and :51 `make test` (whose recipe is go test) are accurate: they fail only on the same offline TestRecordAuthWithOAuth2 failure the test check already reports. :60 `make lint` exits 127 because golangci-lint, which the guide links to install, isn't in the image: a missing tool, not a wrong step. :85 `npm run build` is checked at the root, which has no package.json, though it sits in the section that starts with \"Navigate to the `ui` project directory\", and ui/package.json has a build script.",
+      "truth": "Go backend with 90% of changes, now scored in golang:1.27 (its go line), plus a Svelte and Vite ui/ that builds and has no test script, so ui at Level 0 is correct. The backend builds, and 930 of its 931 top-level tests pass offline; TestRecordAuthWithOAuth2 downloads an avatar from pocketbase.io, and the audit runs tests without the network on every machine, so pocketbase at Level 0 is the honest result. Its CI runs go test only, so go vet isn't run (vet would flag a test fixture's deliberately unexported field). Both earlier blocking private-key findings were false: a Go doc comment and a textarea placeholder. The README's Go tutorial and release-binary commands are not instructions for ui. No instruction is wrong, and none is a finding. CONTRIBUTING.md:48 `go test ./...` and :51 `make test` run the test check's command, so they take its result instead of failing twice. :60 `make lint` is blocked, because golangci-lint, which the guide links to install, isn't in the image. :85 `npm run build` runs in ui, the folder its section starts in, and takes the build check's pass.",
       "realInstructionFindings": [],
-      "falseInstructionFindings": 4,
+      "falseInstructionFindings": 0,
       "target": {
         "sealed": true,
         "runtime": "docker",
@@ -388,12 +388,7 @@
           "notAssessed": [
             "examples"
           ],
-          "instructionFailures": [
-            "CONTRIBUTING.md:48",
-            "CONTRIBUTING.md:51",
-            "CONTRIBUTING.md:60",
-            "CONTRIBUTING.md:85"
-          ],
+          "instructionFailures": [],
           "blockingSafety": []
         }
       }
