@@ -259,6 +259,50 @@
         "blockingSafety": 0
       },
       "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "everything": {
+              "level": 1,
+              "unproven": false
+            },
+            "filesystem": {
+              "level": 1,
+              "unproven": false
+            },
+            "memory": {
+              "level": 1,
+              "unproven": false
+            },
+            "sequentialthinking": {
+              "level": 1,
+              "unproven": false
+            },
+            "fetch": {
+              "level": 0,
+              "unproven": false
+            },
+            "git": {
+              "level": 0,
+              "unproven": false
+            },
+            "time": {
+              "level": 1,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [
+            ".claude/skills/release/SKILL.md:566"
+          ],
+          "blockingSafety": []
+        },
         "restricted": {
           "exit": 0,
           "sealed": true,
