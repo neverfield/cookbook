@@ -617,7 +617,7 @@ async function cmdAudit(a: Args): Promise<void> {
     try {
       await cmdOutcomes({ positional: a.positional, flags: { ...a.flags, ...(opt(a, "outcomes-input") ? { input: str(a, "outcomes-input") } : {}) } });
     } catch (e) {
-      log(`Agent PR outcomes weren't measured: ${(e as Error).message.split("\n")[0]}. Sealing without them, so the report gives no Level 3 or 4. Rerun with \`readiness audit\` once it's fixed.`);
+      log(`Agent PR outcomes weren't measured: ${(e as Error).message.split("\n")[0]}. Sealing without them, so the report gives no Level 3 or 4. Run the audit again once GitHub answers.`);
     }
   }
   if (opt(a, "narration")) cmdNarrate({ positional: a.positional, flags: { ...a.flags, file: str(a, "narration") } });

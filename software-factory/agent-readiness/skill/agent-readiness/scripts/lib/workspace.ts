@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { showFromBranch } from "./history.ts";
 import { latestRubricVersion, loadRubric, rubricDigest } from "./rubric.ts";
 import type { Audit, ScenarioSpec, Tier } from "./types.ts";
@@ -92,13 +92,17 @@ function repoName(repo: string): string {
   return basename(repo);
 }
 
-// The audit's own records and an uncommitted copy of this skill don't make the tree dirty.
+// The audit's own records and an uncommitted copy of this skill, wherever in the repo it was
+// copied, don't make the tree dirty.
 export function isDirty(repo: string): boolean {
   const r = git(["status", "--porcelain", "--untracked-files=all"], repo);
+  const own = relative(realpathSync(repo), realpathSync(SKILL_ROOT)).split(sep).join("/");
+  const installed = own && !own.startsWith("..") && !isAbsolute(own) ? `${own}/` : null;
   return r.stdout
     .split("\n")
     .filter((l) => l.trim())
-    .some((l) => !/^(\.agent-readiness\/|\.cursor\/skills\/agent-readiness\/)/.test(l.slice(3).replace(/^"/, "")));
+    .map((l) => l.slice(3).replace(/^"/, ""))
+    .some((f) => !/^(\.agent-readiness\/|\.cursor\/skills\/agent-readiness\/)/.test(f) && !(installed && (f.startsWith(installed) || installed.startsWith(f))));
 }
 
 export interface TreeInfo {

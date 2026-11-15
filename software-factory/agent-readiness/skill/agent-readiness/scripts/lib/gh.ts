@@ -21,7 +21,9 @@ export function ghJson<T>(args: string[], cwd?: string): T {
 export function ghGraphql<T>(query: string, vars: Record<string, string | number | null>): T {
   const args = ["api", "graphql", "-f", `query=${query}`];
   for (const [k, v] of Object.entries(vars)) if (v !== null) args.push(typeof v === "number" ? "-F" : "-f", `${k}=${v}`);
-  const out = ghJson<{ data?: T; errors?: { message: string }[] }>(args);
+  const r = gh(args);
+  if (!r.ok) throw new Error(`gh api graphql failed: ${r.stderr.trim().replace(/\s+/g, " ") || "no output"}`);
+  const out = JSON.parse(r.stdout) as { data?: T; errors?: { message: string }[] };
   if (out.errors?.length || !out.data) throw new Error(`gh api graphql failed: ${(out.errors ?? []).map((e) => e.message).join("; ") || "no data"}`);
   return out.data;
 }
