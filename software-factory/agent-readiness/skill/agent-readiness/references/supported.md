@@ -24,6 +24,8 @@ A component outside the supported tier never sets the repo level. When it holds 
 | `yarn-berry` | Yarn 2 or later | a `yarn@2` or later pin, `.yarnrc.yml`, or a Berry `yarn.lock` | Corepack runs the pinned Yarn, or Yarn hands over to the yarnPath release; the install is immutable | `fixtures/yarn-berry` |
 | `php` | PHP | `composer.json`, or `.php` files in a top-level folder | runs in the official Composer image whose PHP (8.5, 8.4 or 8.3) composer.json's require.php allows; extensions beyond that image's must be added by the repo's .cursor/environment.json | `fixtures/php-composer`, `symfony/demo@f42980c` |
 | `ruby` | Ruby | `Gemfile`, or `.rb` files in a top-level folder | runs in the official Ruby image (3.2 to 4.0) the repo's .ruby-version, .tool-versions or Gemfile names; Bundler switches to the version Gemfile.lock was bundled with | `fixtures/ruby-bundler`, `Shopify/packwerk@31e5342` |
+| `go` | Go | `go.mod`, or `.go` files in a top-level folder | a go.mod folder is a component, run in the first pinned golang image at or above its go line (the newest without one): `go build`, `go test`, and `go vet` where the repo runs it, with faults planted only in the module's packages that have tests | `fixtures/go-inventory`, `google/uuid@2d3c2a9` |
+| `rust` | Rust | `Cargo.toml`, or `.rs` files in a top-level folder | a Cargo.toml folder is a component, and a workspace root covers every member (`--workspace`); it runs in the pinned rust image of the release its toolchain file names (the newest otherwise, with rustup adding any other channel): `cargo build`, `cargo test`, and `cargo clippy` where the repo runs it, with faults planted only in member source files that hold their own tests | `fixtures/rust-pricing`, `BurntSushi/ripgrep@91f5d22` |
 | `docker` | Docker | `docker info` | | `tests/fixtures.test.ts` |
 | `no-container` | No container runtime on Linux or macOS | no Docker or Podman answers, or the audit's container doesn't start | nothing runs outside a container without the user's yes: Level 1 is unproven on this machine, and the report says why | `fixtures/declared-image-missing-toolchain`, `fixtures/sudo-start`, `tests/safety.test.ts` |
 | `host-mode` | Host mode on Linux or macOS, with --allow-host | the user said yes to running the repo's commands outside a container | only on the user's yes; the repo's commands run in a copy with a throwaway home and no account credentials, but can read this user's local files, so Level 1 can't be proved there | `tests/safety.test.ts` |
@@ -49,8 +51,6 @@ A Python, PHP or Ruby app next to a root `package.json` is listed with its own s
 
 | Id | Stack or machine | What the scan looks for | Notes | Proven by |
 |---|---|---|---|---|
-| `go` | Go | `go.mod`, or `.go` files in a top-level folder | | `fixtures/unsupported-go-service`, `google/uuid@2d3c2a9` |
-| `rust` | Rust | `Cargo.toml`, or `.rs` files in a top-level folder | | `BurntSushi/ripgrep@91f5d22` |
 | `jvm` | JVM | `pom.xml`, `build.gradle` or `build.gradle.kts`, or `.java`, `.kt` or `.scala` files | | `spring-projects/spring-petclinic@500158f` |
 | `dotnet` | .NET | `.sln`, `.csproj`, `.fsproj` or `.vbproj`, or `.cs` or `.fs` files | | `fixtures/nested-apps-dotnet`, `fixtures/standalone-nested-mixed`, `ShareX/ShareX@12d6342` |
 | `swift` | Swift | `Package.swift`, or `.swift` files in a top-level folder | | `fixtures/swift-package`, `apple/swift-argument-parser@38ca4ec` |

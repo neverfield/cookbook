@@ -1,0 +1,30 @@
+{
+  "purpose": "A Go service with CircleCI and a go.mod that needs no modules. It runs in the golang image its go line names (1.22), where go build, go vet and go test -v pass and the report counts its 3 tests. Faults go only in the package that has tests, and the table-driven tests catch every one, so it reaches Level 2. The CI config is still noted.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "inventory-api": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:inventory-api",
+      "noBlocker": true,
+      "safety": "pass",
+      "shares": {
+        "inventory-api": 1
+      },
+      "signals": {
+        "ci": true
+      },
+      "contract": {
+        "cmd-inventory-api-install": "GOFLAGS=-mod=readonly go mod download",
+        "cmd-inventory-api-build": "go build ./...",
+        "cmd-inventory-api-lint": "go vet ./...",
+        "cmd-inventory-api-test": "go test -count=1 -v ./..."
+      }
+    }
+  ]
+}

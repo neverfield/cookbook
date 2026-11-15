@@ -1,0 +1,24 @@
+{
+  "purpose": "A Cargo workspace (a virtual manifest with crates/*) whose rust-toolchain.toml names Rust 1.95.0, the release the pinned rust:1.95 image ships, so no toolchain is downloaded. Its CI runs clippy, so clippy is added to that toolchain and runs as the lint. Every member is built, linted and tested with --workspace from the root Cargo.lock, and the report counts the members' 5 tests. Faults go only in member source files that hold their own tests, never in crates/legacy, which the workspace excludes and the commands never test. The tests catch every fault, so it reaches Level 2.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "rust-pricing": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:rust-pricing",
+      "noBlocker": true,
+      "safety": "pass",
+      "contract": {
+        "cmd-rust-pricing-install": "cargo fetch --locked",
+        "cmd-rust-pricing-build": "cargo build --locked --workspace",
+        "cmd-rust-pricing-lint": "cargo clippy --locked --offline --workspace",
+        "cmd-rust-pricing-test": "cargo test --locked --offline -q --workspace"
+      }
+    }
+  ]
+}

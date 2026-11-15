@@ -420,8 +420,8 @@ describe("profile", () => {
     const repo = materialize("standalone-nested-mixed");
     const profile = buildProfile(repo, repo, rubric);
     assert.equal(discoverContract(profile, repo, rubric, []).find((c) => c.kind === "doctor")!.command, "node --version && corepack pnpm --version");
-    const go = materialize("unsupported-go-service");
-    assert.deepEqual(discoverContract(buildProfile(go, go, rubric), go, rubric, []), []);
+    const swift = materialize("swift-package");
+    assert.deepEqual(discoverContract(buildProfile(swift, swift, rubric), swift, rubric, []), []);
   });
 
   test("workspace members under tooling/ are satellites, and the doctor checks the workspace's package manager", () => {

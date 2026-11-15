@@ -1,5 +1,5 @@
 {
-  "purpose": "A healthy Node package next to a Go service that takes half of recent changes. The package reaches Level 2, and part 1 says outright that half the changes aren't assessed and why, with medium confidence.",
+  "purpose": "A healthy Node package next to a Swift service that takes half of recent changes. The package reaches Level 2, and part 1 says outright that half the changes aren't assessed and why, with medium confidence.",
   "runs": [
     {
       "name": "default",

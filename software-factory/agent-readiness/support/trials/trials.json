@@ -357,9 +357,9 @@
       "commit": "7f2773ec234b62d0b80ca47c508397cb3d0da3ea",
       "runtime": "docker",
       "review": "customer-trial-carbon.md",
-      "truth": "Go backend with 90% of changes, not assessed, plus a Svelte and Vite ui/ that builds and has no test script, so ui at Level 0 is correct. Both blocking private-key findings were false: a Go doc comment and a textarea placeholder. The README's Go tutorial and release-binary commands are not instructions for ui.",
+      "truth": "Go backend with 90% of changes, now scored in golang:1.27 (its go line), plus a Svelte and Vite ui/ that builds and has no test script, so ui at Level 0 is correct. The backend builds, and 930 of its 931 top-level tests pass offline; TestRecordAuthWithOAuth2 downloads an avatar from pocketbase.io, and the audit runs tests without the network on every machine, so pocketbase at Level 0 is the honest result. Its CI runs go test only, so go vet isn't run (vet would flag a test fixture's deliberately unexported field). Both earlier blocking private-key findings were false: a Go doc comment and a textarea placeholder. The README's Go tutorial and release-binary commands are not instructions for ui. Two instruction findings are false and come from the instruction checker, not the repo: CONTRIBUTING.md:51 `make test` and :60 `make lint` ran in examples/base, because the earlier prose step \"Navigate to `examples/base`\" stays the working folder although line 46 says to run from the root, where the Makefile has both targets. CONTRIBUTING.md:48 `go test ./...` isn't replayed, because instructions run in the repo's Node image, which has no Go.",
       "realInstructionFindings": [],
-      "falseInstructionFindings": 0,
+      "falseInstructionFindings": 2,
       "target": {
         "sealed": true,
         "runtime": "docker",
@@ -376,16 +376,22 @@
           "unproven": false,
           "couldBe": null,
           "components": {
+            "pocketbase": {
+              "level": 0,
+              "unproven": false
+            },
             "ui": {
               "level": 0,
               "unproven": false
             }
           },
           "notAssessed": [
-            "examples",
-            "pocketbase"
+            "examples"
           ],
-          "instructionFailures": [],
+          "instructionFailures": [
+            "CONTRIBUTING.md:51",
+            "CONTRIBUTING.md:60"
+          ],
           "blockingSafety": []
         }
       }
@@ -639,6 +645,85 @@
         "rubygems.org",
         "index.rubygems.org"
       ]
+    },
+    {
+      "id": "uuid",
+      "repo": "google/uuid",
+      "commit": "2d3c2a9cc518326daf99a383f07c4d3c44317e4d",
+      "runtime": "docker",
+      "review": "agent-readiness-hardening-plan.md",
+      "truth": "Go module with no dependencies and no go line, so it runs in the newest pinned Go (golang:1.27) and the toolchain condition reports the missing go line. Its CI runs go test only, so there is no lint. It builds and passes its 45 top-level tests offline, and its tests catch at least 3 of 5 planted faults, so Level 2 is correct.",
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 0,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "outcome": "proven",
+        "minLevel": 2,
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 2,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "uuid": {
+              "level": 2,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": []
+        }
+      }
+    },
+    {
+      "id": "ripgrep",
+      "repo": "BurntSushi/ripgrep",
+      "commit": "91f5d22ef48bde459d90a8c7dbeab416e97d0f2b",
+      "runtime": "docker",
+      "review": "agent-readiness-hardening-plan.md",
+      "truth": "A Cargo workspace whose root is also the ripgrep package, with nine member crates under crates/ and a committed Cargo.lock. One component covers the workspace and runs cargo build, cargo test with --workspace in rust:1.97, the newest pinned Rust (no toolchain file). Its CI doesn't run clippy, so there is no lint. All 1242 tests pass offline and the tests catch at least 3 of 5 faults planted in member crates, so Level 2 is correct.",
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 0,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "outcome": "proven",
+        "minLevel": 2,
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 2,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "ripgrep": {
+              "level": 2,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "HomebrewFormula",
+            "pkg"
+          ],
+          "instructionFailures": [],
+          "blockingSafety": []
+        }
+      }
     }
   ]
 }
