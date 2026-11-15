@@ -7,12 +7,12 @@ const sampled: EvalCase = {
   id: "sampled-scope",
   fixture: "sampled-scope",
   tags: ["full"],
-  description: "Eight packages, of which the audit assesses the six most active. The level holds for those six only: part 1 names the two left out, confidence drops, and the headline or the reply says the result is sampled.",
+  description: "Twelve packages, of which the audit assesses the ten most active. The level holds for those ten only: part 1 names the two left out, confidence drops, and the headline or the reply says the result is sampled.",
   turns: [{ prompt: "Run an agent readiness audit, permission tier local-exec." }],
   gates: [sealedGate, expectedJsonGate, sampledScopeStated, reportGate, narrationGate, trajectory],
 };
 
-const HEADLINE = "The 6 most active packages reach Level 2, verifiable; golf and hotel were left out of this sampled audit, so the level doesn't cover them.";
+const HEADLINE = "The 10 most active packages reach Level 2, verifiable; golf and hotel were left out of this sampled audit, so the level doesn't cover them.";
 
 export const cases: EvalCase[] = [
   sampled,
