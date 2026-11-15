@@ -4,6 +4,7 @@ import type { ReportJson } from "../../../skill/agent-readiness/scripts/lib/type
 import { auditFixture, expected } from "../../tools/fixture.ts";
 import { PANEL_SAMPLES, availableModels, chooseJudges, family, judge, judgePromptDigest, panelScore } from "../lib/judge.ts";
 import type { JudgeResult } from "../lib/judge.ts";
+import { modelCatalog } from "../lib/api.ts";
 import type { Calibration } from "../lib/release.ts";
 import { EVAL_SEED } from "../lib/workspace.ts";
 import { FAIL_AT, HERE, LABELS, PASS_AT, agrees, labelPrompt, labelReport, trimReport } from "./labels.ts";
@@ -157,19 +158,36 @@ async function main(): Promise<void> {
   const baseline = join(HERE, "..", "baseline.json");
   const driver = typeof flag("driver") === "string" ? (flag("driver") as string) : existsSync(baseline) ? ((JSON.parse(readFileSync(baseline, "utf8")) as { instrument?: { driverModel: string }; model?: string }).instrument?.driverModel ?? (JSON.parse(readFileSync(baseline, "utf8")) as { model?: string }).model ?? "claude-opus-5-5") : "claude-opus-5-5";
   const explicit = typeof flag("judge-model") === "string" ? (flag("judge-model") as string).split(",").filter(Boolean) : [];
+  await modelCatalog(key);
   const choices = chooseJudges(driver, explicit.length ? [] : await availableModels(key), explicit);
   for (const c of choices) process.stdout.write(`Judge: ${c.model} (${c.why}); driver family ${family(driver)}.\n`);
-  const scored: PanelScored[] = [];
-  for (const label of LABELS) {
-    const calls: Record<string, number[]> = {};
-    await Promise.all(choices.map(async ({ model }) => {
-      const results = await Promise.all(Array.from({ length: 2 * samples }, () => judge(label.judge, labelReport(label), model, key)));
-      calls[model] = results.filter((j) => j.score !== null).map((j) => j.score as number);
-      for (const j of results.filter((x) => x.score === null)) process.stdout.write(`${label.id} (${model}): no score (${j.reasons.join("; ")})\n`);
-    }));
-    scored.push({ label, calls });
+  const { scored, missing, calls } = await judgeLabels(LABELS, choices.map((c) => c.model), samples, key);
+  if (missing.length) {
+    for (const m of missing) process.stdout.write(`NO SCORE ${m}\n`);
+    throw new Error(`${missing.length} of ${calls} judge calls gave no score, so the calibration would be missing draws; last-check.json was not written. Rerun once the cause above is fixed.`);
   }
   writePanel(scored, samples, out);
+}
+
+// Every label judged 2 x samples times by each model. The calls go through the shared API limiter
+// and its retries (lib/api.ts); one still refused after them rejects the whole check. A call that
+// returns no score is listed in `missing`, so the caller can refuse to record a calibration with a
+// draw left out.
+export async function judgeLabels(labels: Label[], models: string[], samples: number, key: string): Promise<{ scored: PanelScored[]; missing: string[]; calls: number }> {
+  const scored: PanelScored[] = [];
+  const missing: string[] = [];
+  let calls = 0;
+  for (const label of labels) {
+    const byModel: Record<string, number[]> = {};
+    await Promise.all(models.map(async (model) => {
+      const results = await Promise.all(Array.from({ length: 2 * samples }, () => judge(label.judge, labelReport(label), model, key)));
+      calls += results.length;
+      byModel[model] = results.filter((j) => j.score !== null).map((j) => j.score as number);
+      for (const j of results.filter((x) => x.score === null)) missing.push(`${label.id} (${model}): ${j.reasons.join("; ")}`);
+    }));
+    scored.push({ label, calls: byModel });
+  }
+  return { scored, missing, calls };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(HERE, "check.ts")) {

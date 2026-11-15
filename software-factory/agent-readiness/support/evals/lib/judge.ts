@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { scaleLine } from "../../../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric } from "../../../skill/agent-readiness/scripts/lib/rubric.ts";
 import type { ReportJson } from "../../../skill/agent-readiness/scripts/lib/types.ts";
+import { ApiExhaustedError, modelCatalog } from "./api.ts";
 import { askModel } from "./sdk.ts";
 
 export type JudgeKind = "headline" | "page";
@@ -151,11 +152,14 @@ export function parseJudge(text: string): JudgeResult {
   }
 }
 
+// A call the API still refused after every retry throws ApiExhaustedError: the caller fails the run
+// rather than record a missing score as if the judge had given none.
 export async function judge(kind: JudgeKind, r: ReportJson | null, model: string, apiKey: string | undefined): Promise<JudgeResult> {
   if (!r || !apiKey) return { score: null, reasons: [apiKey ? "no report" : "no CURSOR_API_KEY, judge skipped"] };
   try {
     return parseJudge(await askModel(PROMPTS[kind](r), model, apiKey, mkdtempSync(join(tmpdir(), "judge-"))));
   } catch (e) {
+    if (e instanceof ApiExhaustedError) throw e;
     return { score: null, reasons: [`judge call failed: ${(e as Error).message}`] };
   }
 }
@@ -261,10 +265,10 @@ export async function judgePanel(kind: JudgeKind, r: ReportJson | null, models: 
 
 export async function availableModels(apiKey: string): Promise<string[] | null> {
   try {
-    const { Cursor } = await import("@cursor/sdk");
-    const list = await Cursor.models.list({ apiKey });
+    const list = await modelCatalog(apiKey);
     return list.flatMap((m) => [m.id, ...(m.aliases ?? [])]);
-  } catch {
+  } catch (e) {
+    if (e instanceof ApiExhaustedError) throw e;
     return null;
   }
 }
