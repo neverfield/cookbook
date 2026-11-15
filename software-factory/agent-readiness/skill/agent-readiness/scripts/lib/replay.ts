@@ -13,10 +13,11 @@ import { proxyPasswords, redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { SUDO_SHIM_MARK, runCommand, scrubbedEnv } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
-import type { Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Mutant, Profile, Strength, Where } from "./types.ts";
+import type { Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Language, Mutant, Profile, Strength, Where } from "./types.ts";
 import { containedPath, exists, fail, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
 import { commandsFor } from "./score.ts";
 import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
+import { makeRecipe } from "./static.ts";
 import { SUPPORTED_DOC, notSupportedReason } from "./support.ts";
 import { plantSeed, refreshTree } from "./workspace.ts";
 
@@ -718,6 +719,45 @@ function executorSet(groups: ExecutorGroup[], profile: Profile): Executors {
   return { groups, forComponent, repo, close: () => groups.forEach((g) => g.ex.close()) };
 }
 
+// The tool a command starts with, and the component languages it belongs to. A command that runs
+// one of these goes to an assessed component of that language, in that component's image.
+const TOOL_LANGUAGES: { tool: RegExp; codes: Language[] }[] = [
+  { tool: /^(go|gofmt|golangci-lint)$/, codes: ["go"] },
+  { tool: /^(cargo|rustc|rustup)$/, codes: ["rust"] },
+  { tool: /^(mvn|\.\/mvnw|mvnw|gradle|\.\/gradlew|gradlew|java|javac|kotlinc)$/, codes: ["java", "kotlin"] },
+  { tool: /^dotnet$/, codes: ["csharp"] },
+  { tool: /^(composer|php|phpunit|vendor\/bin\/\S+)$/, codes: ["php"] },
+  { tool: /^(bundle|bundler|ruby|rake|rspec|rails|bin\/rails|bin\/rake)$/, codes: ["ruby"] },
+  { tool: /^(python3?|pip3?|pytest|uv|uvx|poetry|tox|nox)$/, codes: ["py"] },
+  { tool: /^(npm|npx|pnpm|pnpx|yarn|node|bun|bunx|corepack|tsc|vitest|jest)$/, codes: ["ts", "js"] },
+];
+
+// The program a command line runs first, past `cd dir &&` and variable assignments.
+function leadingTool(command: string): string {
+  const first = command.split(/\s*(?:&&|;|\|\|)\s*/).map((p) => p.trim()).find((p) => p && !/^cd\s/.test(p)) ?? "";
+  return first.split(/\s+/).find((w) => !/^[A-Za-z_]\w*=/.test(w)) ?? "";
+}
+
+// The executor for one replayed instruction: the component whose folder the command runs in, else
+// the component of the language its tool (or its Make target's recipe) belongs to, preferring one
+// whose folder holds the working directory, else the root component, else the repo's executor.
+export function instructionExecutor(exs: Pick<Executors, "forComponent" | "repo">, profile: Profile, tree: string, cwd: string, command: string): Executor {
+  const assessed = profile.components.filter((c) => c.assessed).sort((a, b) => b.path.length - a.path.length || b.changeShare - a.changeShare);
+  const holds = (c: Component) => c.path === "." || cwd === c.path || cwd.startsWith(`${c.path}/`);
+  const inside = assessed.find((c) => c.path !== "." && holds(c));
+  if (inside) return exs.forComponent(inside.id);
+  let tool = leadingTool(command);
+  if (tool === "make") {
+    const target = command.trim().split(/\s+/).slice(1).find((w) => !w.startsWith("-")) ?? "";
+    tool = target ? leadingTool(makeRecipe(tree, cwd, target).split("\n")[0] ?? "") : "";
+  }
+  const codes = TOOL_LANGUAGES.find((t) => t.tool.test(tool))?.codes ?? [];
+  const byTool = assessed.filter((c) => codes.includes(c.language)).sort((a, b) => Number(holds(b)) - Number(holds(a)) || b.changeShare - a.changeShare)[0];
+  if (byTool) return exs.forComponent(byTool.id);
+  const root = assessed.find((c) => c.path === ".");
+  return root ? exs.forComponent(root.id) : exs.repo;
+}
+
 // Starts one clean container and adds what the audit's own image lacks for these components.
 function startContainer(audit: Audit, runtime: NonNullable<ReturnType<typeof detectRuntime>>, image: string, imageSource: Executor["imageSource"], copyDir: string, limits: ReturnType<typeof probeLimits>, comps: Component[], forWhom: string, log: (s: string) => void): Executor | { error: string } {
   const session = new ContainerSession(runtime, `readiness-${audit.id}-${randomHex(3)}`, image, copyDir, audit.environment.registryEnv, hostUser(), limits);
@@ -969,7 +1009,7 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
     }
     if (opts.instructions) {
       const blocked = installs.find((r) => r.blocked)?.blocked;
-      await replayInstructions(audit, ex, copyDir, budget, registryValues, installed ? null : { blocked });
+      await replayInstructions(audit, (cwd, command) => instructionExecutor(exs, profile, copyDir, cwd, command), copyDir, budget, registryValues, installed ? null : { blocked });
     }
   } finally {
     exs.close();

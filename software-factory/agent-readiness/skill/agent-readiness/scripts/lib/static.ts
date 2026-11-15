@@ -4,7 +4,7 @@ import { checkOnly } from "./contract.ts";
 import { pyproject, readPackageJson } from "./profile.ts";
 import { scanText } from "./redact.ts";
 import type { InstructionItem, Profile, SafetyFinding, ScanBound } from "./types.ts";
-import { MAX_FILES, exists, inTreePath, listFiles, readText, sha256 } from "./util.ts";
+import { MAX_FILES, existsExact, inTreePath, listFiles, readText, sha256 } from "./util.ts";
 
 const COMMAND_START = /^(npm|pnpm|yarn|npx|pnpx|bunx|uvx|corepack|make|python3?|pip3?|pytest|uv|poetry|node|bun|cargo|go|tsc|eslint|ruff|cd\s+\S+\s*&&|\.\/[\w./-]+)(\s|$)/;
 const SHELL_LANGS = new Set(["", "sh", "bash", "shell", "console", "zsh", "terminal"]);
@@ -112,6 +112,13 @@ function inLinkText(raw: string, start: number, end: number): boolean {
   return open >= 0 && raw.indexOf("]", open) >= end && /^[^[]*\]\(/.test(raw.slice(end));
 }
 
+const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+/;
+const BACK_TO_ROOT = /\b(root (project )?(directory|folder)|repo(sitory)? root|top[- ]level (directory|folder))\b/i;
+
+function leadingSpaces(raw: string): number {
+  return raw.match(/^\s*/)![0].length;
+}
+
 function indentOf(raw: string): number {
   return raw.match(/^\s*(?:(?:[-*+]|\d+[.)])\s+)?/)?.[0].length ?? 0;
 }
@@ -125,8 +132,10 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
   let pending: { text: string; line: number } | null = null;
   const headings: { level: number; text: string }[] = [];
   let away: { target: string; indent: number } | null = null;
-  // A folder of this repo the section's steps say to work in, such as "Navigate to the `ui` directory".
-  let within: string | null = null;
+  // A folder of this repo a step says to work in, such as "Navigate to the `ui` directory". It holds
+  // for the step's own block: its sibling steps, what is indented under it and the code blocks after
+  // it, until the next paragraph at its indent, a heading, or a line that says to go back to the root.
+  let within: { dir: string; indent: number } | null = null;
   lines.forEach((raw, i) => {
     const lineNo = i + 1;
     if (inFrontmatter) {
@@ -134,6 +143,8 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
       return;
     }
     const fence = raw.match(/^\s*```(\w*)/);
+    if (!inFence && within && raw.trim() && !fence && !LIST_ITEM.test(raw) && leadingSpaces(raw) <= within.indent) within = null;
+    if (!inFence && within && BACK_TO_ROOT.test(raw)) within = null;
     if (!inFence && away && raw.trim() && indentOf(raw) <= away.indent && !fence) away = null;
     if (fence) {
       if (!inFence) {
@@ -143,7 +154,7 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
       pending = null;
       return;
     }
-    const where = { headings: headings.map((h) => h.text), ...(away ? { elsewhere: away.target } : {}), ...(within ? { within } : {}) };
+    const where = { headings: headings.map((h) => h.text), ...(away ? { elsewhere: away.target } : {}), ...(within ? { within: within.dir } : {}) };
     if (inFence) {
       if (!SHELL_LANGS.has(fenceLang)) return;
       const part = raw.trim().replace(/^\$\s+/, "");
@@ -170,7 +181,7 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
       const target = scope[3].replace(/\/$/, "");
       const named = Boolean(scope[4]) || /^(navigate|go|switch|cd)/i.test(scope[1]);
       if (!opts.exists(target) && (target.includes("/") || scope[4])) away = { target: scope[3], indent: indentOf(raw) };
-      else if (opts.exists(target) && named && !/\.\w+$/.test(target)) within = target;
+      else if (opts.exists(target) && named && !/\.\w+$/.test(target)) within = { dir: target, indent: leadingSpaces(raw) };
     }
     for (const m of raw.matchAll(/`([^`]+)`/g)) {
       const span = m[1].trim();
@@ -208,7 +219,7 @@ function scriptsAt(tree: string, dir: string): { scripts: Record<string, string>
 function makeTargets(tree: string, dir: string): string[] | null {
   for (const d of [dir, "."]) {
     const f = join(tree, d, "Makefile");
-    if (exists(f)) return [...readText(f).matchAll(/^([A-Za-z0-9_.-]+)\s*:/gm)].map((m) => m[1]);
+    if (existsExact(tree, join(d, "Makefile"))) return [...readText(f).matchAll(/^([A-Za-z0-9_.-]+)\s*:/gm)].map((m) => m[1]);
   }
   return null;
 }
@@ -216,10 +227,10 @@ function makeTargets(tree: string, dir: string): string[] | null {
 const OTHER_STACK_RECIPES: Record<string, RegExp> = { go: /^\s*(go|golangci-lint|gofmt)\s/m, rust: /^\s*(cargo|rustc)\s/m };
 
 // The commands a Make target runs, without the @ and - prefixes.
-function makeRecipe(tree: string, dir: string, target: string): string {
+export function makeRecipe(tree: string, dir: string, target: string): string {
   for (const d of [dir, "."]) {
     const f = join(tree, d, "Makefile");
-    if (!exists(f)) continue;
+    if (!existsExact(tree, join(d, "Makefile"))) continue;
     const lines = readText(f).split("\n");
     const at = lines.findIndex((l) => new RegExp(`^${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*:`).test(l));
     if (at < 0) continue;
@@ -239,7 +250,7 @@ function makeRecipe(tree: string, dir: string, target: string): string {
 export function packageDirOf(tree: string, file: string): string {
   let d = dirname(file) === "" ? "." : dirname(file);
   while (d !== "." && d !== "") {
-    if (["package.json", "pyproject.toml", "setup.py"].some((m) => exists(join(tree, d, m)))) return d;
+    if (["package.json", "pyproject.toml", "setup.py"].some((m) => existsExact(tree, join(d, m)))) return d;
     d = dirname(d);
   }
   return ".";
@@ -361,7 +372,7 @@ interface Check {
 const PASS: Check = { result: "pass", rule: "replay" };
 
 function pathIn(ctx: CheckCtx, dir: string, p: string): boolean {
-  return [dir, ctx.fileDir, "."].some((d) => exists(join(ctx.tree, normalize(join(d, p)))));
+  return [dir, ctx.fileDir, "."].some((d) => existsExact(ctx.tree, normalize(join(d, p))));
 }
 
 function pmAt(ctx: CheckCtx, dir: string): string | null {
@@ -419,7 +430,7 @@ function checkPackageManager(ctx: CheckCtx, dir: string, all: string[]): Check {
     if (/^\.{0,2}\//.test(value) || (value.includes("/") && !value.startsWith("@") && !/[*{]/.test(value))) {
       if (!pathIn(ctx, dir, value)) return { result: "fail", rule: "folder-exists", reason: `there is no ${value} folder` };
       scriptDir = normalize(join(dir, value));
-      if (!exists(join(ctx.tree, scriptDir))) scriptDir = normalize(value);
+      if (!existsExact(ctx.tree, scriptDir)) scriptDir = normalize(value);
     } else return otherPm && tool !== "npm" ? { result: "fail", rule: "package-manager", reason: `uses ${tool}, but the repo uses ${pm}` } : PASS;
   }
   let script: string | null = null;
@@ -509,8 +520,8 @@ function checkCommand(cmd: string, ctx: CheckCtx, start: string): Check {
       if (!target || target === "-" || target.startsWith("$") || MACHINE_PATH.test(` ${target}`)) continue;
       const next = normalize(join(dir, target));
       if (next.startsWith("..")) continue;
-      if (exists(join(ctx.tree, next))) dir = next;
-      else if (exists(join(ctx.tree, normalize(target)))) dir = normalize(target);
+      if (existsExact(ctx.tree, next)) dir = next;
+      else if (existsExact(ctx.tree, normalize(target))) dir = normalize(target);
       else return { result: "fail", rule: "folder-exists", reason: `there is no ${target} folder to cd into` };
       continue;
     }
@@ -569,7 +580,7 @@ export function vendoredSkills(tree: string, files: string[]): Map<string, strin
   const out = new Map<string, string>();
   let lock: Record<string, { source?: string }> = {};
   try {
-    lock = exists(join(tree, "skills-lock.json")) ? ((JSON.parse(readText(join(tree, "skills-lock.json"))) as { skills?: typeof lock }).skills ?? {}) : {};
+    lock = existsExact(tree, "skills-lock.json") ? ((JSON.parse(readText(join(tree, "skills-lock.json"))) as { skills?: typeof lock }).skills ?? {}) : {};
   } catch {
     lock = {};
   }
@@ -643,7 +654,7 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
     const thirdParty = vendored.get(file);
     const readme = README.test(file);
     const ctx: CheckCtx = { tree, profile, fileDir, names, via: "fence" };
-    const fromHere = (p: string) => exists(join(tree, normalize(join(fileDir, p)))) || exists(join(tree, p));
+    const fromHere = (p: string) => existsExact(tree, normalize(join(fileDir, p))) || existsExact(tree, p);
     for (const e of extractFromMarkdown(text, { exists: fromHere })) {
       // A vendored skill's paths belong to its own workflow, such as the plans it writes, not this repo.
       if (e.kind === "path" && thirdParty) continue;
@@ -651,7 +662,7 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
         const rel = e.text.replace(/\/$/, "");
         const fromFile = normalize(join(fileDir, rel));
         if (fromFile.startsWith("..") && normalize(rel).startsWith("..")) continue;
-        const found = exists(join(tree, fromFile)) || (!normalize(rel).startsWith("..") && (exists(join(tree, rel)) || exists(join(tree, normalize(join(pkgDir, rel))))));
+        const found = existsExact(tree, fromFile) || (!normalize(rel).startsWith("..") && (existsExact(tree, rel) || existsExact(tree, normalize(join(pkgDir, rel)))));
         if (!found) {
           // A path the docs say comes later, or say is gone, can't mislead an agent into using it now.
           if (FUTURE.test(lines[e.line - 1] ?? "") || e.cue === "deleted") continue;
@@ -670,7 +681,7 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
         continue;
       }
       const id = `ins-${String(n++).padStart(3, "0")}`;
-      const start = e.within ? (exists(join(tree, normalize(join(fileDir, e.within)))) ? normalize(join(fileDir, e.within)) : normalize(e.within)) : pkgDir;
+      const start = e.within ? (existsExact(tree, normalize(join(fileDir, e.within))) ? normalize(join(fileDir, e.within)) : normalize(e.within)) : pkgDir;
       const base = { id, source: file, line: e.line, kind: "command" as const, text: e.text, cwd: start };
       const skipped = (reason: string, rule: string, staticResult: "pass" | "fail" = "pass", staticReason?: string) => items.push({ ...base, category: "skipped", staticResult, ...(staticReason ? { staticReason } : {}), result: "not_run", reason, rule });
       // A template or a third-party skill's command isn't checked against this repo at all; a real

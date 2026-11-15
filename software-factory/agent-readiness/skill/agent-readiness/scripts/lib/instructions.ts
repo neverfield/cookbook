@@ -7,7 +7,7 @@ import type { Budget, Executor } from "./replay.ts";
 import { SUDO_SHIM_MARK } from "./run.ts";
 import { CUT_OFF } from "./scope.ts";
 import type { Audit } from "./types.ts";
-import { exists, sha256 } from "./util.ts";
+import { existsExact, sha256 } from "./util.ts";
 import { applyWaivers } from "./waivers.ts";
 
 export const INSTRUCTION_TIMEOUT_SEC = 300;
@@ -30,7 +30,9 @@ function sameAsCheck(audit: Audit, text: string, cwd: string): { id: string; kin
 
 // Documented commands run one by one in the replay copy, inside the audit's overall time budget:
 // each gets what is left of it, and none starts once it is spent.
-export async function replayInstructions(audit: Audit, ex: Executor, copyDir: string, budget: Budget, registryValues: string[], notInstalled: { blocked?: string } | null): Promise<void> {
+// `executors`: one executor for every command, or a choice per command, so a command runs in the image
+// of the component it targets.
+export async function replayInstructions(audit: Audit, executors: Executor | ((cwd: string, command: string) => Executor), copyDir: string, budget: Budget, registryValues: string[], notInstalled: { blocked?: string } | null): Promise<void> {
   for (const item of audit.instructions.filter((i) => i.category === "replay" && i.staticResult === "pass")) {
     if (notInstalled) {
       item.result = "not_run";
@@ -47,7 +49,7 @@ export async function replayInstructions(audit: Audit, ex: Executor, copyDir: st
       continue;
     }
     const wanted = item.cwd ?? (dirname(item.source) === "" ? "." : dirname(item.source));
-    const cwd = exists(join(copyDir, wanted)) ? wanted : ".";
+    const cwd = existsExact(copyDir, wanted) ? wanted : ".";
     // The same command a check already ran, such as `npm run test` next to the test check's
     // `npm test`: its result is that check's, counted once, there.
     const same = sameAsCheck(audit, item.text, cwd);
@@ -67,6 +69,7 @@ export async function replayInstructions(audit: Audit, ex: Executor, copyDir: st
       continue;
     }
     const limit = Math.min(INSTRUCTION_TIMEOUT_SEC, leftSec);
+    const ex = typeof executors === "function" ? executors(cwd, item.text) : executors;
     const out = await ex.exec(item.text, cwd, limit);
     charge(budget, "*", out.durationMs);
     const ok = out.exitCode === 0 && !out.timedOut;

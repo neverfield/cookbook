@@ -233,6 +233,16 @@ function toolchainGap(text: string): string | null {
   return null;
 }
 
+// The tests a Go or Rust run names as failing: go test's "--- FAIL: TestX" (a subtest only when its
+// parent isn't listed) and cargo test's "test name ... FAILED". Their last line is just "FAIL" or
+// "error: test failed", which says nothing about which test.
+export function failingTests(output: string): string[] {
+  const go = [...output.matchAll(/^\s*--- FAIL: (\S+)/gm)].map((m) => m[1]);
+  const top = go.filter((t) => !go.some((p) => t.startsWith(`${p}/`)));
+  const rust = [...output.matchAll(/^test (\S+) \.\.\. FAILED\s*$/gm)].map((m) => m[1]);
+  return [...new Set([...top, ...rust])];
+}
+
 export function diagnose(rawOutput: string, timedOut: boolean, phase: string): Diagnosis {
   const clean = rawOutput.replace(/\x1b\[[0-9;]*m/g, "");
   if (timedOut) return { cause: "timeout", detail: `the ${phase} step ran out of time` };
@@ -271,6 +281,8 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   const network = networkFailure(output);
   if (network) return { cause: "network", detail: network };
   if (/SyntaxError|error TS\d{4}|IndentationError/.test(output)) return { cause: "compile", detail: "the code doesn't compile" };
+  const named = failingTests(clean);
+  if (named.length) return { cause: "unknown", detail: named.length === 1 ? `${named[0]} failed` : `${named[0]} and ${named.length - 1} more failed` };
   const lines = (focus.trim() ? focus : clean).split("\n").map((l) => l.trim()).filter(Boolean);
   // node --test's TAP block lists code, failureType and the like after the error itself.
   const noise = /^(npm (error|ERR!|warn)|ELIFECYCLE|error Command failed|>\s|\$ |command failed|at |# |(code|failureType|type|location|duration_ms|stack): )/i;
