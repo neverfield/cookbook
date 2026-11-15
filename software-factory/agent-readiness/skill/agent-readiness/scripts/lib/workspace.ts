@@ -1,12 +1,12 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { showFromBranch } from "./history.ts";
-import { latestRubricVersion, rubricDigest } from "./rubric.ts";
+import { latestRubricVersion, loadRubric, rubricDigest } from "./rubric.ts";
 import type { Audit, ScenarioSpec, Tier } from "./types.ts";
-import { SKILL_ROOT, ensureDir, exists, fail, git, gitOrThrow, nowIso, randomHex, readJson, readText, sha256, stableStringify, today, writeJson, writeText } from "./util.ts";
+import { SKILL_ROOT, ensureDir, exists, fail, git, gitOrThrow, isShallow, nowIso, randomHex, readJson, readText, sha256, stableStringify, today, writeJson, writeText } from "./util.ts";
 
 export interface Paths {
   repo: string;
@@ -48,6 +48,8 @@ function skillFiles(): string[] {
     }
   };
   for (const sub of ["scripts", "rubric", "schema", "templates"]) walk(join(SKILL_ROOT, sub));
+  // It sets the scripts' module type, so it decides whether they run at all.
+  out.push(join(SKILL_ROOT, "package.json"));
   return out;
 }
 
@@ -90,21 +92,118 @@ function repoName(repo: string): string {
   return basename(repo);
 }
 
-// The audit's own records and an uncommitted copy of this skill don't make the tree dirty.
+// The audit's own records and an uncommitted copy of this skill, wherever in the repo it was
+// copied, don't make the tree dirty.
 export function isDirty(repo: string): boolean {
   const r = git(["status", "--porcelain", "--untracked-files=all"], repo);
+  const own = relative(realpathSync(repo), realpathSync(SKILL_ROOT)).split(sep).join("/");
+  const installed = own && !own.startsWith("..") && !isAbsolute(own) ? `${own}/` : null;
   return r.stdout
     .split("\n")
     .filter((l) => l.trim())
-    .some((l) => !/^(\.agent-readiness\/|\.cursor\/skills\/agent-readiness\/)/.test(l.slice(3).replace(/^"/, "")));
+    .map((l) => l.slice(3).replace(/^"/, ""))
+    .some((f) => !/^(\.agent-readiness\/|\.cursor\/skills\/agent-readiness\/)/.test(f) && !(installed && (f.startsWith(installed) || installed.startsWith(f))));
+}
+
+export interface TreeInfo {
+  // The tree is a one-commit clone with its own .git, as a CI checkout is; false when it fell back to git archive.
+  git: boolean;
+  // Submodules the host checkout didn't have at the recorded commit, so the tree lacks them.
+  submodulesMissing: string[];
+  // Git LFS files still holding pointers, because git-lfs or the objects weren't on this machine.
+  lfsPointers: string[];
+}
+
+const LFS_POINTER = "version https://git-lfs.github.com/spec/v1";
+
+// The repo's and the user's git settings never run code here: no hooks, no fsmonitor, no LFS
+// download, and nothing inherited from a calling git process.
+function treeGit(args: string[], cwd: string, hooks: string): { ok: boolean; stdout: string; stderr: string } {
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_LFS_SKIP_SMUDGE: "1", GIT_TERMINAL_PROMPT: "0" };
+  for (const k of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR"]) delete env[k];
+  const r = spawnSync("git", ["-c", `core.hooksPath=${hooks}`, "-c", "core.fsmonitor=false", "-c", "core.autocrlf=false", "-c", "advice.detachedHead=false", ...args], { cwd, env, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  return { ok: r.status === 0, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+}
+
+function cloneCommit(repo: string, commit: string, dest: string, hooks: string): boolean {
+  if (!treeGit(["init", "-q", dest], repo, hooks).ok) return false;
+  if (treeGit(["fetch", "-q", "--depth", "1", "--no-tags", repo, commit], dest, hooks).ok && treeGit(["checkout", "-q", "-f", "--detach", commit], dest, hooks).ok) return true;
+  rmSync(dest, { recursive: true, force: true });
+  ensureDir(dest);
+  return false;
+}
+
+// Streamed through a file on disk, so a large repo never sits in memory.
+function archiveCommit(repo: string, commit: string, dest: string): void {
+  const dir = mkdtempSync(join(tmpdir(), "readiness-archive-"));
+  try {
+    const tar = join(dir, "tree.tar");
+    execFileSync("git", ["archive", "--format=tar", "-o", tar, commit], { cwd: repo, stdio: ["ignore", "ignore", "pipe"] });
+    execFileSync("tar", ["-x", "-f", tar, "-C", dest], { stdio: ["ignore", "ignore", "pipe"] });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function gitlinks(repo: string, commit: string): { path: string; sha: string }[] {
+  const r = git(["ls-tree", "-r", "-z", "--full-tree", commit], repo);
+  return r.stdout
+    .split("\0")
+    .map((e) => e.match(/^160000 commit ([0-9a-f]{40})\t(.+)$/s))
+    .filter((m): m is RegExpMatchArray => Boolean(m))
+    .map((m) => ({ sha: m[1], path: m[2] }));
+}
+
+// A submodule comes from the host's own checkout of it, never from its remote.
+function copySubmodules(repo: string, commit: string, dest: string, info: TreeInfo, prefix: string): void {
+  for (const { path, sha } of gitlinks(repo, commit)) {
+    const src = join(repo, path);
+    const top = exists(src) ? git(["rev-parse", "--show-toplevel"], src).stdout.trim() : "";
+    const own = top && exists(top) && realpathSync(top) === realpathSync(src);
+    if (!own || !git(["cat-file", "-e", `${sha}^{commit}`], src).ok) {
+      info.submodulesMissing.push(prefix + path);
+      continue;
+    }
+    const target = join(dest, path);
+    rmSync(target, { recursive: true, force: true });
+    const sub = exportTree(src, sha, target);
+    info.submodulesMissing.push(...sub.submodulesMissing.map((s) => `${prefix}${path}/${s}`));
+    info.lfsPointers.push(...sub.lfsPointers.map((s) => `${prefix}${path}/${s}`));
+  }
+}
+
+// LFS content from the host's own LFS store; files whose objects aren't there stay pointers.
+function fillLfs(repo: string, dest: string, hooks: string, info: TreeInfo): void {
+  const tracked = treeGit(["ls-files", "-z", ":(attr:filter=lfs)"], dest, hooks).stdout.split("\0").filter(Boolean);
+  const pointers = () => tracked.filter((f) => {
+    try {
+      return readText(join(dest, f)).startsWith(LFS_POINTER);
+    } catch {
+      return false;
+    }
+  });
+  if (!pointers().length) return;
+  const common = git(["rev-parse", "--path-format=absolute", "--git-common-dir"], repo).stdout.trim();
+  if (common && treeGit(["lfs", "version"], dest, hooks).ok) treeGit(["-c", `lfs.storage=${join(common, "lfs")}`, "lfs", "checkout"], dest, hooks);
+  info.lfsPointers.push(...pointers());
 }
 
 // The commit comes from the draft, so it must be a full object id and never reaches a shell.
-export function exportTree(repo: string, commit: string, dest: string): void {
+// The tree is a clean checkout of that one commit with its .git, submodules and LFS files, as CI
+// would check it out, so tools and tests that read git see a repository.
+export function exportTree(repo: string, commit: string, dest: string): TreeInfo {
   if (!/^[0-9a-f]{40}$/.test(commit)) fail(`Not a commit id: ${commit}`);
   ensureDir(dest);
-  const archive = execFileSync("git", ["archive", "--format=tar", commit], { cwd: repo, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 2 * 1024 * 1024 * 1024 });
-  execFileSync("tar", ["-x", "-C", dest], { input: archive, stdio: ["pipe", "ignore", "pipe"] });
+  const hooks = mkdtempSync(join(tmpdir(), "readiness-nohooks-"));
+  try {
+    const info: TreeInfo = { git: cloneCommit(repo, commit, dest, hooks), submodulesMissing: [], lfsPointers: [] };
+    if (!info.git) archiveCommit(repo, commit, dest);
+    copySubmodules(repo, commit, dest, info, "");
+    if (info.git) fillLfs(repo, dest, hooks, info);
+    return info;
+  } finally {
+    rmSync(hooks, { recursive: true, force: true });
+  }
 }
 
 // The audit tree's path is printed and anything can write to it, so every step that reads or
@@ -149,10 +248,10 @@ export function initAudit(opts: InitOptions): { audit: Audit; local: LocalInfo; 
   const seedEnv = process.env.SA_READINESS_EVAL_SEED;
   const id = `aud-${today()}-${commit.slice(0, 7)}-${seedEnv ? sha256(`${seedEnv}:${commit}:${nowIso()}`).slice(0, 4) : randomHex(2)}`;
   const tree = join(mkdtempSync(join(tmpdir(), `readiness-${id}-`)), "tree");
-  exportTree(opts.repo, commit, tree);
-  const seed = seedEnv ? sha256(`${seedEnv}:${priorAudits(p)}`).slice(0, 32) : randomHex(16);
-  writeText(join(dirname(tree), "seed.txt"), seed + "\n");
+  const info = exportTree(opts.repo, commit, tree);
   const rubric = latestRubricVersion();
+  const seed = seedFromCode(rubric) ? codeSeed(opts.repo, commit, seedEnv) : seedEnv ? sha256(`${seedEnv}:${priorAudits(p)}`).slice(0, 32) : randomHex(16);
+  writeText(join(dirname(tree), "seed.txt"), seed + "\n");
   const manifest = releaseManifest();
   const audit: Audit = {
     schema: "agent-readiness/audit@1",
@@ -160,7 +259,14 @@ export function initAudit(opts: InitOptions): { audit: Audit; local: LocalInfo; 
     kind: "audit",
     createdAt: nowIso(),
     state: "draft",
-    repo: { name: repoName(opts.repo), commit, dirtyTree: isDirty(opts.repo) },
+    repo: {
+      name: repoName(opts.repo),
+      commit,
+      dirtyTree: isDirty(opts.repo),
+      ...(isShallow(opts.repo) ? { shallow: true } : {}),
+      ...(info.submodulesMissing.length ? { submodulesMissing: info.submodulesMissing } : {}),
+      ...(info.lfsPointers.length ? { lfsPointers: info.lfsPointers.length } : {}),
+    },
     scenarios: opts.scenarios,
     tier: opts.tier,
     rubric,
@@ -187,6 +293,28 @@ export function initAudit(opts: InitOptions): { audit: Audit; local: LocalInfo; 
   return { audit, local, paths: p };
 }
 
+// Rubrics up to 2026-11-alpha promise fresh faults each audit; a rubric that sets
+// mutation.seedFrom to "code" keeps the faults, and so the level, fixed until the code changes.
+function seedFromCode(rubricVersion: string): boolean {
+  return (loadRubric(rubricVersion).mutation as { seedFrom?: string }).seedFrom === "code";
+}
+
+// Keyed by the eval pin or the seal key when there is one, so only the commit's code moves it.
+// Without either it is "": mutate.ts mixes in each component's code, so the faults come from the
+// code alone, and anyone with the code can work them out.
+export function codeSeed(repo: string, commit: string, seedEnv?: string): string {
+  const key = seedEnv ?? process.env.SA_READINESS_SEAL_KEY;
+  if (!key) return "";
+  const tree = gitOrThrow(["rev-parse", `${commit}^{tree}`], repo).trim();
+  return createHmac("sha256", `readiness-seed:${key}`).update(tree).digest("hex").slice(0, 32);
+}
+
+// A component's own seed, which changes only when files under its folder change, tests included.
+export function componentSeed(seed: string, repo: string, commit: string, path: string): string {
+  const r = git(["rev-parse", path === "." ? `${commit}^{tree}` : `${commit}:${path}`], repo);
+  return sha256(`${seed}:${r.ok ? r.stdout.trim() : path}`).slice(0, 32);
+}
+
 export function seedDigest(seed: string): string {
   return sha256(`readiness-seed:${seed}`).slice(0, 32);
 }
@@ -194,8 +322,9 @@ export function seedDigest(seed: string): string {
 // The seed planted faults are chosen from, kept next to the audit tree outside the repository.
 export function realSeed(audit: Audit, local: LocalInfo): string {
   const f = join(dirname(local.tree), "seed.txt");
-  const seed = exists(f) ? readText(f).trim() : "";
-  return seed && seedDigest(seed) === audit.seed.value ? seed : audit.seed.value;
+  if (!exists(f)) return audit.seed.value;
+  const seed = readText(f).trim();
+  return seedDigest(seed) === audit.seed.value ? seed : audit.seed.value;
 }
 
 // Every write the scripts make to the draft leaves its digest outside the repository, keyed when

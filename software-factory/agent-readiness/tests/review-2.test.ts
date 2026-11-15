@@ -285,18 +285,18 @@ describe("fixes from the second independent review", () => {
     assert.equal(mergeHistory(`${a}\n`, `${b}\n${a}\n`), `${b}\n${a}\n`);
   });
 
-  test("first-time CI is unknown when check runs sit past the first page", () => {
+  test("first-time CI reads every page of check runs, and is unknown while any is still running", async () => {
     const bin = mkdtempSync(join(tmpdir(), "gh-"));
     writeFileSync(join(bin, "gh"), `#!/usr/bin/env bash
-if [ "$1" = "pr" ]; then echo '[{"number":7,"headRefName":"cursor/fix","author":{"login":"a"},"labels":[],"createdAt":"2026-10-20T00:00:00Z","mergedAt":null,"state":"OPEN","files":[],"reviews":[],"commits":[{"oid":"abc"}]}]'; exit 0; fi
-if [ "$1" = "api" ]; then echo '{"total_count":150,"check_runs":[{"conclusion":"success","status":"completed"}]}'; exit 0; fi
+if [ "$2" = "graphql" ]; then echo '{"data":{"search":{"issueCount":1,"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"number":7,"headRefName":"cursor/fix","createdAt":"2026-10-20T00:00:00Z","mergedAt":null,"state":"OPEN","author":null,"labels":{"nodes":[]},"changesRequested":{"totalCount":0},"files":{"totalCount":0,"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]},"commits":{"totalCount":1,"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"commit":{"oid":"abc","message":"x"}}]}}]}}}'; exit 0; fi
+if [ "$2" = "--paginate" ]; then for i in $(seq 1 120); do echo 'completed success'; done; echo 'in_progress '; exit 0; fi
 exit 1
 `);
     chmodSync(join(bin, "gh"), 0o755);
     const old = process.env.PATH;
     process.env.PATH = `${bin}:${old}`;
     try {
-      assert.equal(fetchPrs("example-org/example", 30).prs[0].firstCheck, null);
+      assert.equal((await fetchPrs("example-org/example", 30)).prs[0].firstCheck, null);
     } finally {
       process.env.PATH = old;
     }

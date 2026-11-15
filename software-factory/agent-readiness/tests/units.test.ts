@@ -651,18 +651,18 @@ describe("outcomes", () => {
     assert.equal(o.multiComponentPrs, 1);
   });
 
-  test("gh results become PR records with first-push CI and change requests", () => {
+  test("gh results become PR records with first-push CI and change requests", async () => {
     const bin = tmp();
     writeFileSync(join(bin, "gh"), `#!/usr/bin/env bash
-if [ "$1" = "pr" ]; then echo '[{"number":7,"headRefName":"cursor/fix","author":{"login":"a"},"labels":[{"name":"bug"}],"createdAt":"2026-10-20T00:00:00Z","mergedAt":null,"state":"OPEN","files":[{"path":"api/x.js"}],"reviews":[{"state":"CHANGES_REQUESTED"}],"commits":[{"oid":"abc","messageBody":"Co-authored-by: Cursor Agent <a@example.com>"}]}]'; exit 0; fi
-if [ "$1" = "api" ]; then echo '{"check_runs":[{"conclusion":"failure","status":"completed"}]}'; exit 0; fi
+if [ "$2" = "graphql" ]; then echo '{"data":{"search":{"issueCount":1,"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"number":7,"headRefName":"cursor/fix","createdAt":"2026-10-20T00:00:00Z","mergedAt":null,"state":"OPEN","author":{"__typename":"User","login":"a"},"labels":{"nodes":[{"name":"bug"}]},"changesRequested":{"totalCount":1},"files":{"totalCount":1,"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"path":"api/x.js"}]},"commits":{"totalCount":1,"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"commit":{"oid":"abc","message":"Fix\\n\\nCo-authored-by: Cursor Agent <a@example.com>"}}]}}]}}}'; exit 0; fi
+if [ "$2" = "--paginate" ]; then echo 'completed failure'; exit 0; fi
 exit 1
 `);
     chmodSync(join(bin, "gh"), 0o755);
     const old = process.env.PATH;
     process.env.PATH = `${bin}:${old}`;
     try {
-      const { prs, truncated } = fetchPrs("example-org/example", 30);
+      const { prs, truncated } = await fetchPrs("example-org/example", 30);
       assert.equal(truncated, false);
       assert.equal(prs.length, 1);
       assert.equal(prs[0].firstCheck, "failure");

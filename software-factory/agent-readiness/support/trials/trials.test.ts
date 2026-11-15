@@ -136,6 +136,21 @@ function observe(repo: string, code: number): Observed {
   };
 }
 
+// Every result short of a pass, with why, and each planted fault's outcome, so a level that differs
+// between machines can be traced to the check that decided it.
+function unsettled(repo: string): string[] {
+  const report = existsSync(join(repo, ".agent-readiness/latest/report.json")) ? JSON.parse(readFileSync(join(repo, ".agent-readiness/latest/report.json"), "utf8")) : null;
+  const file = report ? join(repo, report.audit.storedAt, "audit.json") : "";
+  if (!file || !existsSync(file)) return [];
+  const audit = JSON.parse(readFileSync(file, "utf8")) as { evidence: { id: string; checkId: string; condition?: string; component?: string; result: string; blocked?: string; durationMs?: number; summary: string }[]; mutants: { id: string; result: string; exitCodes: number[] }[]; environment?: { limits?: unknown } };
+  const lines = audit.evidence
+    .filter((e) => e.result !== "pass")
+    .map((e) => `not passed: ${e.id} ${e.checkId} ${e.condition ?? ""} ${e.component ?? "*"} ${e.result}${e.blocked ? ` (blocked: ${e.blocked})` : ""}${e.durationMs ? ` ${Math.round(e.durationMs / 1000)}s` : ""}: ${e.summary}`);
+  if (audit.mutants.length) lines.push(`planted faults: ${audit.mutants.map((m) => `${m.id} ${m.result} [${m.exitCodes.join(",")}]`).join("; ")}`);
+  if (audit.environment?.limits) lines.push(`container limits: ${JSON.stringify(audit.environment.limits)}`);
+  return lines;
+}
+
 function falseFindings(t: Trial, o: Observed): string[] {
   return o.instructionFailures.filter((f) => !t.realInstructionFindings.includes(f));
 }
@@ -190,6 +205,7 @@ describe("pinned trial repos", { concurrency: 2 }, () => {
       ctx.diagnostic(`false instruction findings: ${ff.length} (ceiling ${t.falseInstructionFindings})`);
       ctx.diagnostic(gaps.length ? `short of target: ${gaps.join("; ")}` : "meets target");
       if (!o.sealed) ctx.diagnostic(`not sealed, output ends: ${r.out.trim().split("\n").slice(-5).join(" | ")}`);
+      for (const line of unsettled(repo)) ctx.diagnostic(line);
       if (RECORD) {
         const file = JSON.parse(readFileSync(FILE, "utf8")) as TrialsFile;
         const entry = file.trials.find((x) => x.id === t.id)!;

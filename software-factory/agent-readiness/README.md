@@ -59,24 +59,36 @@ An audit never claims Level 3 or 4 by itself. Those need team-set targets over a
 ## Requirements
 
 - **Node.js 22.14 or later** (type stripping; no packages for the skill itself).
-- **Docker or Podman** to prove Level 1 in a clean container. Without a container runtime, the audit still runs in a scrubbed throwaway copy on the host and says Level 1 is not provable on this machine.
+- **Docker or Podman** to prove Level 1 in a clean container. Without a container runtime the result is unproven on this machine. `--allow-host` runs the repo's commands in a scrubbed throwaway copy on the host instead; that copy can still read local files, so it is not a sandbox and needs the user's approval.
 - Offline and air-gapped hosts can still run an audit when the base image and any private-registry credentials are already available locally. Pass `--image <ref>` for an approved internal image, and `--registry-env` for named install credentials (names are recorded; values never are). Without network after install, tests run with networking off. Sample reports under [examples/](examples/) open offline (HTML is self-contained: inline CSS and SVG, no scripts, nothing fetched).
 
 ## Quickstart
 
-Copy the skill into the repository you want to audit:
+Check the Node version first. The skill needs 22.14 or later and stops with a message on anything older:
 
 ```bash
-cp -R software-factory/agent-readiness/skill/agent-readiness <repo>/.cursor/skills/agent-readiness
+node -e 'const [a, b] = process.versions.node.split(".").map(Number); if (a < 22 || (a === 22 && b < 14)) { console.error(`Node ${process.versions.node}: agent-readiness needs 22.14 or later`); process.exit(1); }'
 ```
+
+Copy the skill into the repository you want to audit, from that repository's root:
+
+```bash
+git clone --depth 1 https://github.com/cursor/cookbook /tmp/cookbook
+mkdir -p .cursor/skills
+cp -R /tmp/cookbook/software-factory/agent-readiness/skill/agent-readiness .cursor/skills/
+```
+
+`.cursor/skills/agent-readiness` is the usual place, and any skills folder your agent reads works. The skill carries its own `package.json`, so it runs whatever module type the repo's `package.json` sets. Pin the cookbook to a commit when you copy it, and copy the whole folder: the seal checks a digest of the scripts, rubric and `package.json`.
 
 Then ask the agent in that repo: "Run an agent readiness audit." To see one kind of work broken out, ask for it, for example "and break out bug fixes for web".
 
-To run it without an agent, from the repo root:
+To run it without an agent, from the repo root, pointing at wherever you copied it:
 
 ```bash
 node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scripts/readiness.ts audit --tier local-exec
 ```
+
+The audit reads the committed tree only: it checks out the recorded commit into a temporary folder as a one-commit clone with its own `.git`, plus any submodules and Git LFS files this checkout already has. On a shallow clone it says so, since change shares then come from the commits the clone has; run `git fetch --unshallow` first for the full window.
 
 ## Reading the report
 
@@ -112,7 +124,7 @@ Tests added to catch planted faults are proved against a fresh set of faults the
 - **Private registries:** `--registry-env NPM_TOKEN,PIP_INDEX_URL` passes named variables to the install. Names are recorded and values never are. Without them, a 401 reads "registry credentials not provided", not a repo blocker.
 - **Network:** tests run with networking off after the install.
 - **Base images:** `--image <ref>` replays on an approved internal image. A repo-declared `.cursor/Dockerfile` in `environment.json` is built and used.
-- **No container runtime:** the replay falls back to a fresh copy on the host, and part 1 says Level 1 can't be proved on that machine. A tool the host lacks, and every step behind it, is reported as blocked on this machine, never as a repo defect, and commands that use `sudo` are listed by the safety check and never run on the host. When nothing produced a real result, the report gives no level and says why.
+- **No container runtime:** nothing runs and the result is unproven on this machine, unless `--allow-host` lets the replay use a fresh copy on the host, and then part 1 says Level 1 can't be proved on that machine. A tool the host lacks, and every step behind it, is reported as blocked on this machine, never as a repo defect, and commands that use `sudo` are listed by the safety check and never run on the host. When nothing produced a real result, the report gives no level and says why.
 - **Budgets:** `--budget-component` and `--budget-total` (15 and 60 minutes). The total covers the instruction replay too. Anything cut off counts as not run.
 - **Write-mode lint:** lint and type-check run check-only, without `--write` or `--fix`, and lint runs before the build, so the audit doesn't rewrite the copy it plants faults in. See [supported.md](skill/agent-readiness/references/supported.md).
 

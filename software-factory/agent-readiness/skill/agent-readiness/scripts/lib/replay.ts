@@ -13,7 +13,7 @@ import type { Rubric } from "./rubric.ts";
 import { SUDO_SHIM_MARK, runCommand, scrubbedEnv } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
 import type { Audit, CommandKind, CondId, ContractCommand, Diagnosis, Evidence, Mutant, Profile, Strength, Where } from "./types.ts";
-import { containedPath, exists, fail, listFiles, randomHex, readJson, readText, sha256, writeJson } from "./util.ts";
+import { containedPath, exists, fail, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
 import { commandsFor } from "./score.ts";
 import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
 import { SUPPORTED_DOC, notSupportedReason } from "./support.ts";
@@ -498,8 +498,26 @@ function lockfileEvidence(audit: Audit, ex: Executor, profile: Profile, copyDir:
 
 export const NO_MUTANTS = "planted faults skipped by --no-mutants";
 
+// How to tell whether a planted fault compiles, on its own: the component's type-check command, or
+// the TypeScript compiler the install put in place. A test script that runs tsc next to the tests
+// can't tell it, because which of them reports first depends on how fast the machine is.
+function compileProbe(audit: Audit, ex: Executor, comp: { id: string; path: string; language: string }): { command: string; cwd: string } | null {
+  const typecheck = audit.contract.find((c) => c.kind === "typecheck" && (c.component === comp.id || c.component === "*"));
+  if (typecheck) return { command: typecheck.command, cwd: typecheck.cwd };
+  if (comp.language !== "ts" || !exists(join(ex.root, comp.path, "tsconfig.json"))) return null;
+  const tsc = [comp.path, "."].map((d) => join(d, "node_modules", ".bin", "tsc")).find((p) => exists(join(ex.root, p)));
+  return tsc ? { command: `${shellQuote(tsc)} --noEmit -p ${shellQuote(join(comp.path, "tsconfig.json"))}`, cwd: "." } : null;
+}
+
 async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executor, rubric: Rubric, testCmd: ContractCommand, budget: Budget, log: (s: string) => void): Promise<void> {
   const comp = audit.profile!.components.find((c) => c.id === testCmd.component)!;
+  // Used only when the clean tree passes it, so a repo's own type errors don't discard every fault.
+  let probe = compileProbe(audit, ex, comp);
+  if (probe) {
+    const clean = await ex.exec(probe.command, probe.cwd, capped(budget, comp.id, rubric.mutation.runTimeoutSec).sec);
+    charge(budget, comp.id, clean.durationMs);
+    if (clean.exitCode !== 0 || clean.timedOut) probe = null;
+  }
   const sites = chooseSites(repo, tree, comp, realSeed(audit, { tree, createdAt: audit.createdAt }), rubric.mutation.perComponent);
   if (sites.length === 0) {
     addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp.id, strength: ex.strength, where: ex.where, result: "not_run", summary: "no places to plant a fault were found in files the tests import" });
@@ -521,7 +539,15 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
     const codes: number[] = [];
     let result: Mutant["result"] = "survived";
     try {
-      for (let run = 0; run < rubric.mutation.flakeRuns; run++) {
+      if (probe) {
+        const compiled = await ex.exec(probe.command, probe.cwd, capped(budget, comp.id, rubric.mutation.runTimeoutSec).sec);
+        charge(budget, comp.id, compiled.durationMs);
+        if (compiled.exitCode !== 0 && !compiled.timedOut && diagnose(compiled.output, false, "typecheck").cause === "compile") {
+          codes.push(compiled.exitCode ?? -1);
+          result = "discarded";
+        }
+      }
+      for (let run = 0; run < rubric.mutation.flakeRuns && result !== "discarded"; run++) {
         const limit = capped(budget, comp.id, rubric.mutation.runTimeoutSec);
         const out = await ex.exec(testCmd.command, testCmd.cwd, limit.sec);
         charge(budget, comp.id, out.durationMs);

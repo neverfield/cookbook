@@ -1,4 +1,4 @@
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { inventory, orgSkillBuilders } from "./lib/assets.ts";
 import { addContractCommand, checkComponent, discoverContract } from "./lib/contract.ts";
@@ -9,7 +9,7 @@ import { auditIds, loadSealedAudit, pushHistory, readHistory, readRoadmap, write
 import { MAX_PRS, computeOutcomes, fetchPrs, loadPrsFile } from "./lib/outcomes.ts";
 import { buildProfile } from "./lib/profile.ts";
 import { redact } from "./lib/redact.ts";
-import { evidenceFromPhase, hostExecutor, newBudget, registryValuesOf, replay, runContract } from "./lib/replay.ts";
+import { ALLOW_HOST_ENV, assertPlatformSupported, evidenceFromPhase, hostExecutor, newBudget, registryValuesOf, replay, runContract } from "./lib/replay.ts";
 import { latestRubricVersion, loadRubric } from "./lib/rubric.ts";
 import { SCAN_BOUND_MINUTES, sampledScope } from "./lib/scope.ts";
 import { validateAgainst } from "./lib/schema.ts";
@@ -19,10 +19,13 @@ import { composeServices, renderEnvFiles, renderVerifySkill, serviceKey, writeFi
 import { staticSignals } from "./lib/signals.ts";
 import { instructionItems, safetyScan } from "./lib/static.ts";
 import type { Audit, CommandKind, Narration, Result, Roadmap, ScanBound, ScenarioId, ScenarioSpec, Strength, Tier } from "./lib/types.ts";
-import { addDays, exists, fail, git, nowIso, randomHex, readJson, readText, sha256, today, writeJson } from "./lib/util.ts";
+import { addDays, exists, fail, git, listFiles, nowIso, randomHex, readJson, readText, sha256, today, writeJson } from "./lib/util.ts";
+import { WAIVER_FILE, applyWaivers, loadWaivers } from "./lib/waivers.ts";
 import { commitReader, currentDraftId, initAudit, loadDraft, paths, refreshTree, releaseManifest, resolveRepo, saveDraft, scratchTree } from "./lib/workspace.ts";
 
-const BOOLEAN = new Set(["force", "remediate", "inherit-env", "no-mutants", "no-instructions", "no-outcomes", "json", "push", "allow-eval", "allow-unkeyed", "dockerfile", "instructions", "strict", "help"]);
+const BOOLEAN = new Set(["force", "remediate", "inherit-env", "allow-host", "no-mutants", "no-instructions", "no-outcomes", "json", "push", "allow-eval", "allow-unkeyed", "dockerfile", "instructions", "strict", "help"]);
+
+const MIN_NODE: [number, number] = [22, 14];
 
 interface Args {
   positional: string[];
@@ -110,6 +113,9 @@ function cmdInit(a: Args): void {
   const { audit, local } = initAudit({ repo: repoOf(a), scenarios, tier, registryEnv, inheritEnv: Boolean(a.flags["inherit-env"]), force: Boolean(a.flags.force) });
   log(`Opened ${audit.id} (${tier}) at ${audit.repo.commit.slice(0, 7)}${scenarios.length ? `, with the ${scenarios.map((s) => s.id).join(" and ")} ${scenarios.length > 1 ? "scenarios" : "scenario"} for every component` : ""}${audit.repo.dirtyTree ? "; uncommitted changes are not audited" : ""}.`);
   log(`Audit tree: ${local.tree}`);
+  if (audit.repo.shallow) log("This clone is shallow, so change shares and the active-component rule come only from the commits it has. Run `git fetch --unshallow` (or `--shallow-since`) before the audit for shares over the full window.");
+  if (audit.repo.submodulesMissing?.length) log(`Submodules not checked out on this machine, so the audit tree lacks them: ${audit.repo.submodulesMissing.join(", ")}. Run \`git submodule update --init --recursive\` first if the build or tests need them.`);
+  if (audit.repo.lfsPointers) log(`${audit.repo.lfsPointers} Git LFS ${audit.repo.lfsPointers === 1 ? "file stays a pointer" : "files stay pointers"} in the audit tree. Run \`git lfs pull\` first if the build or tests read them.`);
   if (audit.seed.pinned) log("Planted-fault seed is pinned by SA_READINESS_EVAL_SEED: this is an eval run, not a production audit.");
 }
 
@@ -130,6 +136,11 @@ function cmdScan(a: Args): void {
     const ev = addEvidence(audit, { checkId: "context.instructions_verified", condition: "instructions", strength: "static", where: "static", result: "fail", summary: `${item.source}:${item.line} \`${item.text}\`: ${item.staticReason}` });
     item.evidenceId = ev.id;
   }
+  const workingWaivers = join(repo, WAIVER_FILE);
+  audit.waivers = loadWaivers(local.tree, rubric, today(), existsSync(workingWaivers) ? readFileSync(workingWaivers, "utf8") : null) ?? undefined;
+  applyWaivers(audit);
+  if (audit.waivers?.ignored) log(`Waivers: ${audit.waivers.ignored}.`);
+  for (const r of audit.waivers?.rejected ?? []) log(`Waiver ${r.id} refused: ${r.reason}.`);
   const blocking = audit.safety.filter((s) => s.blocking);
   const { scanned, total } = bound.scope.secrets;
   // A secret scan the bound cut short can't show the repo is clean, only that it found none so far.
@@ -139,6 +150,10 @@ function cmdScan(a: Args): void {
   audit.assets = inventory(repo, local.tree, audit.instructions, bound);
   const sampled = sampledScope(audit);
   if (sampled) log(`Sampled: ${sampled}.`);
+  if (bound.scope.fileCap) {
+    const unreached = unreachedFolders(repo, audit.repo.commit, listFiles(local.tree, { includeHidden: true }));
+    log(`Warning: the scan stops at ${bound.scope.fileCap.toLocaleString("en-US")} files, and this commit tracks more. ${unreached.length ? `It never listed ${unreached.slice(0, 8).join(", ")}${unreached.length > 8 ? ` and ${unreached.length - 8} more` : ""}, so components there are missing from this audit.` : "Components in the files past the cap are missing from this audit."}`);
+  }
   const assessedIds = new Set(profile.components.filter((c) => c.assessed).map((c) => c.id));
   const agentCmds = audit.contract.filter((c) => c.source !== "readiness" && !c.source.includes("scripts.") && !c.source.startsWith(".cursor/environment.json"));
   for (const c of agentCmds.filter((x) => x.component !== "*" && !assessedIds.has(x.component))) log(`Dropped ${c.id} (${c.command}): ${c.component} isn't an assessed component after this scan.`);
@@ -156,6 +171,13 @@ function cmdScan(a: Args): void {
     for (const s of blocking) log(`  blocking safety finding ${s.file}${s.line ? ":" + s.line : ""}: ${s.detail}`);
     if (wrong.length || blocking.length) fail("Static checks failed.", 1);
   }
+}
+
+// Top-level folders with tracked files the capped scan listed none of.
+function unreachedFolders(repo: string, commit: string, listed: string[]): string[] {
+  const seen = new Set(listed.map((f) => f.split("/")[0]));
+  const tops = git(["ls-tree", "--name-only", "-d", commit], repo).stdout.split("\n").filter(Boolean);
+  return tops.filter((d) => !seen.has(d) && !d.startsWith(".git"));
 }
 
 function cmdContract(a: Args): void {
@@ -289,7 +311,7 @@ function lockPatterns(audit: Audit): string[] {
   return ["package-lock.json", "yarn.lock", "pnpm-lock.yaml"].filter((f) => !audit.profile?.lockfiles.includes(f));
 }
 
-function cmdOutcomes(a: Args): void {
+async function cmdOutcomes(a: Args): Promise<void> {
   const repo = repoOf(a);
   const { audit, paths: p } = loadDraft(repo);
   if (!audit.profile) fail("Run `readiness scan` first.");
@@ -313,7 +335,7 @@ function cmdOutcomes(a: Args): void {
     requireTier(audit, "external-systems", "Reading pull requests from GitHub");
     if (!ghAvailable()) fail("gh isn't authenticated. Run `gh auth login`, or pass --input with a recorded PR file.");
     const slug = opt(a, "repo-slug") ?? ghJson<{ nameWithOwner: string }>(["repo", "view", "--json", "nameWithOwner"], repo).nameWithOwner;
-    ({ prs, truncated } = fetchPrs(slug, days));
+    ({ prs, truncated } = await fetchPrs(slug, days));
     source = "gh";
   }
   audit.outcomes = computeOutcomes(prs, audit.profile.components, rubric, filter, days, source, lockPatterns(audit), truncated);
@@ -321,7 +343,8 @@ function cmdOutcomes(a: Args): void {
   const o = audit.outcomes;
   log(`Outcomes ${o.window.from} to ${o.window.to}: ${o.agent.opened} agent PRs (${o.agent.merged} merged), ${o.control.opened} other PRs. Filter: ${JSON.stringify(filter)}.`);
   if (source === "file") log("Outcomes from a recorded PR file make this an eval audit: verify-seal won't accept it as a production result.");
-  if (truncated) log(`gh returned ${MAX_PRS} PRs, its cap, so the window may hold more. Level 3 isn't measured from a partial window.`);
+  if (truncated) log(`GitHub's search returns at most ${MAX_PRS} PRs and the window holds more, so Level 3 isn't measured from it. Pass a shorter --window-days.`);
+  if (o.filesIncomplete) log(`${o.filesIncomplete} agent ${o.filesIncomplete === 1 ? "PR changes" : "PRs change"} more files than GitHub lists, so ${o.filesIncomplete === 1 ? "it isn't" : "they aren't"} counted toward any component.`);
 }
 
 function cmdNarrate(a: Args): void {
@@ -596,7 +619,12 @@ async function cmdAudit(a: Args): Promise<void> {
   if (loadDraft(repoOf(a)).audit.tier === "read-only") log("Read-only tier: scanned only. No repo code ran, so the report gives no level; a local-exec audit can prove one.");
   else await cmdReplay(a);
   if (opt(a, "outcomes-input") || (opt(a, "tier") === "external-systems" && !a.flags["no-outcomes"])) {
-    cmdOutcomes({ positional: a.positional, flags: { ...a.flags, ...(opt(a, "outcomes-input") ? { input: str(a, "outcomes-input") } : {}) } });
+    // GitHub failing after the replay shouldn't throw away the replay or leave the draft open.
+    try {
+      await cmdOutcomes({ positional: a.positional, flags: { ...a.flags, ...(opt(a, "outcomes-input") ? { input: str(a, "outcomes-input") } : {}) } });
+    } catch (e) {
+      log(`Agent PR outcomes weren't measured: ${(e as Error).message.split("\n")[0]}. Sealing without them, so the report gives no Level 3 or 4. Run the audit again once GitHub answers.`);
+    }
   }
   if (opt(a, "narration")) cmdNarrate({ positional: a.positional, flags: { ...a.flags, file: str(a, "narration") } });
   cmdSeal(a);
@@ -616,7 +644,10 @@ Audit
   narrate [--file narration.json] [--headline "..."] [--ask "..."] [--gap id=text] [--title id=text]
   status [--json]
   seal
-  audit --tier T [--scenario S] [--outcomes-input f] [--narration f] [--budget-scan M] [--budget-total M]   init, scan, replay, outcomes and seal in one go
+  audit --tier T [--scenario S] [--outcomes-input f] [--narration f] [--budget-scan M] [--budget-total M] [--force]   init, scan, replay, outcomes and seal in one go; --force abandons an open draft
+
+--allow-host (replay, recheck, run, audit) lets repo commands run on the host when no container can,
+in a scrubbed copy that can still read local files. It is not a sandbox: use it only with the user's approval.
 
 After an audit
   verify-seal [audit-id|latest] [--release-repo owner/repo --release-ref tag --tier external-systems] [--allow-eval] [--allow-unkeyed]   with SA_READINESS_SEAL_KEY set, only keyed seals pass unless --allow-unkeyed
@@ -643,8 +674,22 @@ function logInvocation(argv: string[], code: number): void {
   }
 }
 
+function assertNodeVersion(version = process.versions.node): void {
+  const [major, minor] = version.split(".").map(Number);
+  if (major < MIN_NODE[0] || (major === MIN_NODE[0] && minor < MIN_NODE[1])) fail(`The audit needs Node.js ${MIN_NODE.join(".")} or later for type stripping; this is ${version}. Install a newer Node (for example \`nvm install 22\`) and run it again.`);
+}
+
+// `readiness status | head` closes the pipe early; that's the reader being done, not an error.
+process.stdout.on("error", (e: NodeJS.ErrnoException) => {
+  if (e.code === "EPIPE") process.exit(process.exitCode ?? 0);
+  throw e;
+});
+
 async function main(): Promise<void> {
+  assertNodeVersion();
+  assertPlatformSupported();
   const a = parse(process.argv.slice(2));
+  if (a.flags["allow-host"]) process.env[ALLOW_HOST_ENV] = "1";
   const cmd = a.positional[0];
   if (!cmd || a.flags.help || cmd === "help") {
     process.stdout.write(HELP);

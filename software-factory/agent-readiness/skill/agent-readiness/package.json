@@ -1,0 +1,5 @@
+{
+  "name": "agent-readiness-skill",
+  "private": true,
+  "type": "module"
+}
