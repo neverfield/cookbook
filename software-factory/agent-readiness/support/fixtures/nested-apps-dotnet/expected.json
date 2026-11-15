@@ -1,23 +1,24 @@
 {
-  "purpose": "Shaped like a brownfield repo: standalone apps under apps/ with no root package or workspace, two .NET services the rubric can't assess, and an environment start command that runs sudo. Both apps must be found and assessed with their own installs, each service listed by its own project as not assessed, and sudo flagged.",
+  "purpose": "Shaped like a brownfield repo: standalone apps under apps/ with no root package or workspace, two .NET services, and an environment start command that runs sudo. Both apps are found and assessed with their own installs, and sudo is flagged. Each service is now assessed in the .NET 10 SDK image under its own project and is at Level 0 for real: commerce-core is a web project with no entry point and identity-dev uses WebApplication without implicit usings, so neither builds, and neither has a test project. commerce-core's 32% share of changes makes it set the repo level.",
   "runs": [
     {
       "name": "default",
-      "level": 1,
+      "level": 0,
       "levels": {
         "admin-web": 1,
-        "buyer-web": 2
+        "buyer-web": 2,
+        "commerce-core": 0,
+        "identity-dev": 0
       },
       "top": [
-        "faults:admin-web"
+        "faults:admin-web",
+        "clean.build:commerce-core",
+        "clean.test:commerce-core"
       ],
       "startNow": "delegate:buyer-web",
       "noBlocker": false,
       "safety": "pass",
-      "notAssessed": [
-        "commerce-core",
-        "identity-dev"
-      ]
+      "notAssessed": []
     }
   ]
 }
