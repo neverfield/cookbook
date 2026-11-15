@@ -30,6 +30,7 @@ export const INSTRUCTION_RULES: Record<string, string> = {
   "replay-environment": "A replayed command that fails only because of the machine, such as a missing tool, the network or a credential, isn't counted against the repo.",
   "replay-budget": "No instruction starts once the audit's time budget is spent.",
   "replay-install": "Instructions replay only after the clean install succeeds.",
+  "same-as-check": "An instruction that runs the same command as a check the audit already ran takes that check's result, and a failure counts once, under the check, not again as a wrong instruction.",
   consumer: "Usage for the package's users in a README, outside a section about developing the repo, isn't a step for working on this repo, unless it runs one of the repo's own scripts or Make targets.",
   "own-package": "A command that installs or runs this repo's own package, as its users would, isn't a step for working on this repo.",
   mention: "A command named in prose, as an example or inside a link, isn't given as a step to run.",
@@ -210,6 +211,26 @@ function makeTargets(tree: string, dir: string): string[] | null {
     if (exists(f)) return [...readText(f).matchAll(/^([A-Za-z0-9_.-]+)\s*:/gm)].map((m) => m[1]);
   }
   return null;
+}
+
+const OTHER_STACK_RECIPES: Record<string, RegExp> = { go: /^\s*(go|golangci-lint|gofmt)\s/m, rust: /^\s*(cargo|rustc)\s/m };
+
+// The commands a Make target runs, without the @ and - prefixes.
+function makeRecipe(tree: string, dir: string, target: string): string {
+  for (const d of [dir, "."]) {
+    const f = join(tree, d, "Makefile");
+    if (!exists(f)) continue;
+    const lines = readText(f).split("\n");
+    const at = lines.findIndex((l) => new RegExp(`^${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*:`).test(l));
+    if (at < 0) continue;
+    const body: string[] = [];
+    for (const l of lines.slice(at + 1)) {
+      if (!/^\t/.test(l)) break;
+      body.push(l.replace(/^\t[@-]*/, ""));
+    }
+    return body.join("\n");
+  }
+  return "";
 }
 
 // The folder a command from an instruction file runs in: the nearest folder at or above the file
@@ -441,6 +462,11 @@ function checkOne(ctx: CheckCtx, dir: string, words: string[]): Check {
     const target = words.slice(1).find((w, i) => !w.startsWith("-") && !w.includes("=") && words[i] !== "-C");
     if (!targets) return { result: "fail", rule: "make-target", reason: "there is no Makefile" };
     if (target && !targets.includes(target)) return { result: "fail", rule: "make-target", reason: `the Makefile has no "${target}" target` };
+    const recipe = target ? makeRecipe(ctx.tree, mdir, target) : "";
+    const stack = Object.entries(OTHER_STACK_RECIPES).find(([, re]) => re.test(recipe))?.[0];
+    if (stack && !ctx.profile.components.some((c) => c.assessed && c.stack === stack)) {
+      return { ...PASS, rule: "unassessed-stack", skip: `not replayed: the "${target}" target runs ${stack === "go" ? "Go" : "Rust"}, and this audit doesn't assess that part of the repo` };
+    }
     return { ...PASS, rule: "make-target", repo: true };
   }
   if (OTHER_STACKS[tool] && !ctx.profile.components.some((c) => c.assessed && c.stack === OTHER_STACKS[tool])) {

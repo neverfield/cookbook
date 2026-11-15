@@ -5,6 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { diagnose } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
+import { replayInstructions } from "../skill/agent-readiness/scripts/lib/instructions.ts";
+import { newBudget } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { explanationGaps } from "../skill/agent-readiness/scripts/lib/explain.ts";
 import { buildProfile, discoverComponents } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { renderMarkdown } from "../skill/agent-readiness/scripts/lib/render.ts";
@@ -88,6 +91,23 @@ describe("the instruction checker skips what isn't a step for this repo", () => 
     assert.equal(by.get("CONTRIBUTING.md:3 go test ./...")!.rule, "unassessed-stack");
     assert.equal(by.get("CONTRIBUTING.md:3 ./app serve")!.rule, "built-program");
     assert.equal(by.get("CONTRIBUTING.md:3 ./scripts/missing.sh")!.result, "fail");
+  });
+
+  test("a Make target whose recipe runs Go isn't replayed while Go isn't assessed", () => {
+    const by = items({ ...pnpmLib, Makefile: "test:\n\tgo test ./... -v\n\nbuild:\n\tnpm run build\n", "CONTRIBUTING.md": "Run `make test` and `make build`.\n" });
+    assert.equal(by.get("CONTRIBUTING.md:1 make test")!.rule, "unassessed-stack");
+    assert.equal(by.get("CONTRIBUTING.md:1 make build")!.category, "replay");
+  });
+
+  test("an instruction that runs a check's own command takes that check's result instead of failing twice", async () => {
+    const audit = makeAudit({ components: [{ id: "app", share: 1, test: "fail" }] });
+    audit.contract.find((k) => k.kind === "test")!.cwd = ".";
+    audit.instructions = [{ id: "ins-001", source: "CONTRIBUTING.md", line: 27, kind: "command", text: "npm run test", category: "replay", staticResult: "pass", result: "not_run", reason: "waiting for replay", cwd: "." }];
+    const ran: string[] = [];
+    const ex: Executor = { where: "container", strength: "clean_replay", image: "node:22", imageSource: "audit", root: mkdtempSync(join(tmpdir(), "ex-")), exec: async (c) => (ran.push(c), { exitCode: 1, output: "", timedOut: false, durationMs: 1 }), offline: () => true, networkOff: true, close: () => {} };
+    await replayInstructions(audit, ex, ex.root, newBudget(15, 1), [], null);
+    assert.deepEqual(ran, []);
+    assert.deepEqual([audit.instructions[0].result, audit.instructions[0].rule], ["not_run", "same-as-check"]);
   });
 
   test("a README command an agent file already gives is checked once, there", () => {

@@ -10,7 +10,7 @@
       "review": "customer-trial-opus.md",
       "truth": "Tiny pnpm TypeScript library. Builds, type-checks and passes all 167 tests. The README's npm install, yarn add, npm link and npm test lines are for the package's users, not wrong agent instructions. One real untested boundary: the tests use one year plus 1 ms.",
       "realInstructionFindings": [],
-      "falseInstructionFindings": 5,
+      "falseInstructionFindings": 0,
       "target": {
         "sealed": true,
         "runtime": "docker",
@@ -24,24 +24,18 @@
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
-          "level": 1,
+          "level": 2,
           "outcome": "proven",
           "unproven": false,
           "couldBe": null,
           "components": {
             "ms": {
-              "level": 1,
+              "level": 2,
               "unproven": false
             }
           },
           "notAssessed": [],
-          "instructionFailures": [
-            "README.md:72",
-            "README.md:73",
-            "README.md:202",
-            "README.md:203",
-            "README.md:205"
-          ],
+          "instructionFailures": [],
           "blockingSafety": []
         }
       }
@@ -162,7 +156,7 @@
       "review": "customer-trial-grok.md",
       "truth": "Small npm JavaScript library. Install, lint, build, npm test and npm run test:perf pass. The README's yarn add, pnpm add, prose path and npx dotenv examples are consumer documentation, not wrong agent instructions. scripts/parse-perf.js:25 holds the AWS documentation key AKIAIOSFODNN7EXAMPLE, not a committed secret. engines.node >=12 maps to node:12-bookworm, which doesn't exist, so even with Docker the audit falls back to the host without saying why (the same defect as zustand).",
       "realInstructionFindings": [],
-      "falseInstructionFindings": 6,
+      "falseInstructionFindings": 0,
       "target": {
         "sealed": true,
         "runtime": "docker",
@@ -187,17 +181,8 @@
             }
           },
           "notAssessed": [],
-          "instructionFailures": [
-            "README.md:93",
-            "README.md:100",
-            "README.md:113",
-            "README.md:792",
-            "README.md:804",
-            "README.md:805"
-          ],
-          "blockingSafety": [
-            "secret scripts/parse-perf.js:25"
-          ]
+          "instructionFailures": [],
+          "blockingSafety": []
         }
       }
     },
@@ -209,7 +194,7 @@
       "review": "customer-trial-carbon.md",
       "truth": "Single npm JavaScript package. npm ci and all 1,430 node --test and tsd tests pass, and 5 of 5 planted faults were caught. All 7 README instruction findings were false: consumer CLI examples and commands quoted in prose such as node --eval. In a container 2 of 1,430 tests fail because tests/fixtures/pmlink, a committed symlink, is missing from the audit's clean copy: an audit defect, not the repo's. Host runs passed.",
       "realInstructionFindings": [],
-      "falseInstructionFindings": 7,
+      "falseInstructionFindings": 1,
       "target": {
         "sealed": true,
         "runtime": "docker",
@@ -235,13 +220,7 @@
           },
           "notAssessed": [],
           "instructionFailures": [
-            "Readme.md:92",
-            "Readme.md:95",
-            "Readme.md:126",
-            "Readme.md:139",
-            "Readme.md:400",
-            "Readme.md:965",
-            "Readme.md:1031"
+            "CONTRIBUTING.md:27"
           ],
           "blockingSafety": []
         }
@@ -255,7 +234,7 @@
       "review": "customer-trial-carbon.md",
       "truth": "Monorepo of 4 TypeScript npm workspaces and 2 uv Python servers. The TypeScript workspaces install, build and pass 1,747 vitest tests. All 17 instruction findings were false: trailing semicolons kept on script names, a deleted file named in a never-re-add rule, package-relative paths checked from the root, and an example worktree path. 3 of the 6 missed planted faults were genuine gaps; the rest were equivalent mutants or a stale dist/. The audit runs the whole repo in one node:22-bookworm image with no uv, so the 2 Python servers are blocked on any network until each component gets its own image (wave 2).",
       "realInstructionFindings": [],
-      "falseInstructionFindings": 17,
+      "falseInstructionFindings": 0,
       "target": {
         "sealed": true,
         "runtime": "docker",
@@ -300,25 +279,7 @@
           "notAssessed": [
             "time"
           ],
-          "instructionFailures": [
-            ".claude/skills/issue-triage/SKILL.md:310",
-            ".claude/skills/pr-flow/SKILL.md:50",
-            ".claude/skills/pr-flow/SKILL.md:146",
-            ".claude/skills/pre-push-gate/SKILL.md:23",
-            ".claude/skills/project-structure/SKILL.md:31",
-            ".claude/skills/project-structure/SKILL.md:46",
-            ".claude/skills/project-structure/SKILL.md:94",
-            ".claude/skills/project-structure/SKILL.md:94",
-            ".claude/skills/project-structure/SKILL.md:94",
-            ".claude/skills/project-structure/SKILL.md:119",
-            ".claude/skills/release/SKILL.md:437",
-            ".claude/skills/release/SKILL.md:442",
-            ".claude/skills/testing/SKILL.md:36",
-            ".claude/skills/testing/SKILL.md:37",
-            ".claude/skills/testing/SKILL.md:43",
-            ".claude/skills/testing/SKILL.md:75",
-            "AGENTS.md:216"
-          ],
+          "instructionFailures": [],
           "blockingSafety": []
         }
       }
@@ -331,7 +292,7 @@
       "review": "customer-trial-carbon.md",
       "truth": "Go backend with 90% of changes, not assessed, plus a Svelte and Vite ui/ that builds and has no test script, so ui at Level 0 is correct. Both blocking private-key findings were false: a Go doc comment and a textarea placeholder. The README's Go tutorial and release-binary commands are not instructions for ui.",
       "realInstructionFindings": [],
-      "falseInstructionFindings": 3,
+      "falseInstructionFindings": 2,
       "target": {
         "sealed": true,
         "runtime": "docker",
@@ -358,14 +319,10 @@
             "pocketbase"
           ],
           "instructionFailures": [
-            "README.md:45",
-            "README.md:91",
-            "README.md:104"
+            "CONTRIBUTING.md:51",
+            "CONTRIBUTING.md:60"
           ],
-          "blockingSafety": [
-            "secret forms/apple_client_secret_create.go:33",
-            "secret ui/src/collections/oauth2/appleOptions.js:201"
-          ]
+          "blockingSafety": []
         }
       }
     },
@@ -379,7 +336,7 @@
       "realInstructionFindings": [
         "README.md:15"
       ],
-      "falseInstructionFindings": 5,
+      "falseInstructionFindings": 0,
       "target": {
         "sealed": true,
         "runtime": null,
@@ -429,19 +386,9 @@
             "terraform"
           ],
           "instructionFailures": [
-            ".cursor/skills/dag-task-runner/SKILL.md:131",
-            "README.md:15",
-            "software-factory/agent-readiness/AGENTS.md:15",
-            "software-factory/agent-readiness/AGENTS.md:16",
-            "software-factory/agent-readiness/AGENTS.md:16",
-            "software-factory/agent-readiness/AGENTS.md:39"
+            "README.md:15"
           ],
-          "blockingSafety": [
-            "secret software-factory/agent-readiness/evals/cases/resilience.ts:9",
-            "credential_needed software-factory/agent-readiness/fixtures/needs-prod-secret/repo/test/payments.test.js:5",
-            "credential_needed software-factory/agent-readiness/tests/honest-level-0.test.ts:239",
-            "credential_needed software-factory/agent-readiness/tests/units.test.ts:313"
-          ]
+          "blockingSafety": []
         }
       }
     }

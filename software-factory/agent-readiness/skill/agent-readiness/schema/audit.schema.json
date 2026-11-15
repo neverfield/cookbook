@@ -63,6 +63,11 @@
         "properties": { "result": { "enum": ["caught", "survived", "discarded", "not_run"] } }
       }
     },
+    "waivers": {
+      "type": "object",
+      "required": ["file", "digest", "entries", "rejected", "ignored"],
+      "properties": { "entries": { "type": "array", "maxItems": 50 }, "rejected": { "type": "array" } }
+    },
     "sealed": {
       "type": "object",
       "required": ["at", "digest", "reportJsonDigest", "reportMdDigest"],
