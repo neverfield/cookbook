@@ -77,6 +77,7 @@ function homeEnv(home: string): Record<string, string> {
     XDG_CACHE_HOME: join(home, "cache"),
     npm_config_cache: join(home, "cache", "npm"),
     npm_config_store_dir: join(home, "cache", "pnpm-store"),
+    pnpm_config_store_dir: join(home, "cache", "pnpm-store"),
     npm_config_update_notifier: "false",
     PIP_CACHE_DIR: join(home, "cache", "pip"),
     COREPACK_HOME: join(home, "cache", "corepack"),

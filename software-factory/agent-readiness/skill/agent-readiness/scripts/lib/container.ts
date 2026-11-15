@@ -65,11 +65,12 @@ export const CA_ENV = ["NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR", "
 export const CAPS_ADDED = ["CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL", "SETGID", "SETUID"];
 
 // The pnpm store lives in the container's home: on its own pnpm would put it at the root of the
-// bind-mounted work tree, where lint and the snapshot of the tree would see it.
+// bind-mounted work tree, where lint and the snapshot of the tree would see it. pnpm 11 reads only
+// pnpm_config_*, older pnpm only npm_config_*, so both are set.
 export const PNPM_STORE = "/tmp/home/.pnpm-store";
 
 export function startArgs(name: string, image: string, hostDir: string, limits: Limits | null = null, env: Record<string, string | undefined> = process.env, pathExists: (p: string) => boolean = existsSync): string[] {
-  const args = ["run", "-d", "--name", name, "-v", `${hostDir}:/work`, "-w", "/work", "-e", "CI=1", "-e", `HOME=${HOME_DIR}`, "-e", `npm_config_store_dir=${PNPM_STORE}`];
+  const args = ["run", "-d", "--name", name, "-v", `${hostDir}:/work`, "-w", "/work", "-e", "CI=1", "-e", `HOME=${HOME_DIR}`, "-e", `npm_config_store_dir=${PNPM_STORE}`, "-e", `pnpm_config_store_dir=${PNPM_STORE}`];
   args.push("--cap-drop=ALL", ...CAPS_ADDED.map((c) => `--cap-add=${c}`), "--security-opt", "no-new-privileges");
   if (limits) {
     if (limits.cpus) args.push("--cpus", String(limits.cpus));

@@ -4,6 +4,8 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, re
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
+import { PNPM_STORE, startArgs } from "../skill/agent-readiness/scripts/lib/container.ts";
+import { scrubbedEnv } from "../skill/agent-readiness/scripts/lib/run.ts";
 import { computeOutcomes, fetchPrs } from "../skill/agent-readiness/scripts/lib/outcomes.ts";
 import { isShallow, lastChanged, workspaceDirs } from "../skill/agent-readiness/scripts/lib/util.ts";
 import { codeSeed, componentSeed, exportTree } from "../skill/agent-readiness/scripts/lib/workspace.ts";
@@ -94,6 +96,14 @@ describe("first run", { concurrency: 4 }, () => {
     const after = readiness(repo, ["scan", "--strict"]);
     assert.equal(after.code, 0, after.out);
     assert.match(after.out, /0 wrong/);
+  });
+
+  test("pnpm's store stays out of the work tree for pnpm 11, which reads only pnpm_config_*, as well as older pnpm", () => {
+    const args = startArgs("c", "node:22", "/h", null, {});
+    for (const name of ["npm_config_store_dir", "pnpm_config_store_dir"]) assert.ok(args.includes(`${name}=${PNPM_STORE}`), name);
+    const env = scrubbedEnv({});
+    assert.equal(env.pnpm_config_store_dir, env.npm_config_store_dir);
+    assert.ok(env.pnpm_config_store_dir.startsWith(env.HOME));
   });
 
   test("--help documents --force on audit and --allow-host", () => {
