@@ -1,0 +1,33 @@
+Unable to find image 'ghcr.io/astral-sh/uv:python3.12-bookworm-slim' locally
+python3.12-bookworm-slim: Pulling from astral-sh/uv
+590f2846d3a7: Pulling fs layer
+f59651dbc0ea: Pulling fs layer
+4831516dd0cb: Pulling fs layer
+322e9e97e47b: Pulling fs layer
+15155ecba1d2: Pulling fs layer
+322e9e97e47b: Download complete
+590f2846d3a7: Download complete
+4831516dd0cb: Download complete
+15155ecba1d2: Download complete
+f59651dbc0ea: Download complete
+5e542e2857a4: Download complete
+4831516dd0cb: Pull complete
+f59651dbc0ea: Pull complete
+322e9e97e47b: Pull complete
+15155ecba1d2: Pull complete
+590f2846d3a7: Pull complete
+Digest: sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58
+Status: Downloaded newer image for ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+Using CPython 3.12.12 interpreter at: /usr/local/bin/python3
+Creating virtual environment at: .venv
+   Building click @ file:///work
+  × Failed to download `pytest==9.0.2`
+  ├─▶ Request failed after 3 retries
+  ├─▶ Failed to fetch:
+  │   `https://files.pythonhosted.org/packages/3b/ab/b3226f0bd7cdcf710fbede2b3548584366da3b19b5021e74f5bde2a8fa3f/pytest-9.0.2-py3-none-any.whl`
+  ├─▶ error sending request for url
+  │   (https://files.pythonhosted.org/packages/3b/ab/b3226f0bd7cdcf710fbede2b3548584366da3b19b5021e74f5bde2a8fa3f/pytest-9.0.2-py3-none-any.whl)
+  ├─▶ client error (Connect)
+  ╰─▶ tls handshake eof
+  help: `pytest` (v9.0.2) was included because `click:typing` (v8.6.0.dev0)
+        depends on `pytest`

@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import { commandTimeout, discoverContract, imagePlan } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { ecosystemOf } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
-import { JDKS, cLikeQuoted, cLikeSites, jdkFor, jvm, jvmTestCounts } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
+import { JDKS, cLikeQuoted, cLikeSites, enforcedJava, jdkFor, jvm, jvmTestCounts } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
 import { targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { loadRubric, latestRubricVersion } from "../skill/agent-readiness/scripts/lib/rubric.ts";
@@ -45,6 +45,24 @@ describe("JVM: which JDK and image a component runs in", () => {
     assert.equal(jdkFor(repo({ "build.gradle": "sourceCompatibility = JavaVersion.VERSION_1_8\n" }), "."), 8);
     assert.equal(jdkFor(repo({ "build.gradle": "", gradlew: "", "gradle/wrapper/gradle-wrapper.properties": WRAPPER("7.6") }), "."), 17, "Gradle 7.6 can't run on 21");
     assert.equal(jdkFor(repo({ "build.gradle": "kotlin { jvmToolchain(11) }\n", gradlew: "", "gradle/wrapper/gradle-wrapper.properties": WRAPPER("9.4.1") }), "."), 17, "Gradle 9 needs Java 17 to run");
+  });
+
+  test("a Maven Enforcer requireJavaVersion range bounds the JDK: google/gson@6c06cbc compiles for 8 and tests on 11 and 17, and enforces [17,26)", () => {
+    const gson = repo({
+      "pom.xml": `<project><artifactId>gson-parent</artifactId><properties><maven.compiler.release>8</maven.compiler.release><maven.compiler.testRelease>11</maven.compiler.testRelease></properties>
+        <build><plugins><plugin><artifactId>maven-enforcer-plugin</artifactId><executions><execution><configuration><rules>
+        <requireMavenVersion><version>[3.3.1,)</version></requireMavenVersion>
+        <requireJavaVersion><version>[17,26)</version></requireJavaVersion></rules></configuration></execution></executions></plugin></plugins></build></project>`,
+      "gson/pom.xml": "<project><artifactId>gson</artifactId><properties><maven.compiler.testRelease>17</maven.compiler.testRelease></properties></project>",
+    });
+    assert.deepEqual(enforcedJava(gson, "."), { min: 17, max: 25 }, "requireMavenVersion's range isn't the Java rule");
+    assert.equal(jdkFor(gson, "."), 17);
+    assert.equal(hooks.image(gson, "."), "maven:3.9-eclipse-temurin-17", "the review's run got temurin-11, which the enforcer refuses");
+    const withEnforcer = (range: string, props = "") => repo({ "pom.xml": `<project><properties>${props}</properties><build><plugins><plugin><artifactId>maven-enforcer-plugin</artifactId><configuration><rules><requireJavaVersion><version>${range}</version></requireJavaVersion></rules></configuration></plugin></plugins></build></project>` });
+    assert.equal(jdkFor(withEnforcer("11"), "."), 21, "a bare version is a minimum, so the default still applies");
+    assert.equal(jdkFor(withEnforcer("[1.8,12)"), "."), 11, "the default 21 is above the range, so the highest LTS inside it");
+    assert.equal(jdkFor(withEnforcer("(11,)", "<maven.compiler.release>8</maven.compiler.release>"), "."), 17, "an exclusive lower bound");
+    assert.equal(jdkFor(withEnforcer("[21,)", "<maven.compiler.release>17</maven.compiler.release>"), "."), 21);
   });
 
   test("a wrapper runs on the plain JDK image; without one the build tool's own image supplies it", () => {
