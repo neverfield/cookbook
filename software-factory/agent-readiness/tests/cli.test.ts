@@ -43,7 +43,7 @@ describe("CLI", { concurrency: 4 }, () => {
   });
 
   test("contract add and run refuse components the scan didn't find or can't assess", () => {
-    const repo = materialize("nested-apps-dotnet");
+    const repo = materialize("nested-apps-swift");
     assert.equal(readiness(repo, ["init", "--tier", "local-exec"]).code, 0);
     assert.equal(readiness(repo, ["scan"]).code, 0);
     const add = (component: string) => readiness(repo, ["contract", "add", "--kind", "typecheck", "--component", component, "--cmd", "npm run lint", "--source", "agent", "--reason", "the documented check"]);
@@ -52,7 +52,7 @@ describe("CLI", { concurrency: 4 }, () => {
     assert.match(unknown.out, /No component named storefront\. Use \* for a repo-wide command or one of: admin-web, buyer-web\./);
     const skipped = add("commerce-core");
     assert.notEqual(skipped.code, 0);
-    assert.match(skipped.out, /commerce-core isn't assessed \(\.NET isn't supported yet\), so replay wouldn't run its commands/);
+    assert.match(skipped.out, /commerce-core isn't assessed \(Swift isn't supported yet\), so replay wouldn't run its commands/);
     assert.equal(add("buyer-web").code, 0);
     const run = readiness(repo, ["run", "--component", "storefront"], HOST);
     assert.notEqual(run.code, 0);
@@ -69,7 +69,7 @@ describe("CLI", { concurrency: 4 }, () => {
     assert.doesNotMatch(json, /blocked: blocked:/);
     const scenario = readiness(repo, ["scenario", "add", "bug_fixes", "--components", "commerce-core"]);
     assert.notEqual(scenario.code, 0);
-    assert.match(scenario.out, /commerce-core isn't assessed \(\.NET isn't supported yet\), so it has no level for a scenario to break down\. Use one of: admin-web, buyer-web\./);
+    assert.match(scenario.out, /commerce-core isn't assessed \(Swift isn't supported yet\), so it has no level for a scenario to break down\. Use one of: admin-web, buyer-web\./);
     assert.doesNotMatch(scenario.out, /replay/);
   });
 
@@ -157,8 +157,17 @@ describe("CLI", { concurrency: 4 }, () => {
     assert.equal(report.actions[0].startNow, true);
     assert.match(report.executive.gaps[0].blocks, /^Can start now; blocks Level 2 for admin-web/);
     assert.equal(report.maturity.outcome, "blocked", "real results exist, and Level 1 still needs a clean container");
-    assert.equal(report.executive.heading, "Level 1 unproven on this machine: no Level 1 check failed, and 3 were blocked here", "install, build and test, each blocked without a container");
-    assert.ok(report.components.included.every((c: { level: number; capReasons: { state: string }[] }) => c.level === 0 && c.capReasons.every((x) => x.state === "blocked")), JSON.stringify(report.components.included));
+    // The .NET services have no test project, a gap no machine can unblock, so the repo is not bootable rather than unproven.
+    assert.equal(report.executive.heading, "Level 0 of 4, not bootable; Level 1 is blocked on this machine");
+    const included = report.components.included as { id: string; level: number; capReasons: { state: string; condition?: string }[] }[];
+    assert.deepEqual(Object.fromEntries(included.map((c) => [c.id, c.level])), { "admin-web": 0, "buyer-web": 0, "commerce-core": 0, "identity-dev": 0 });
+    for (const app of ["buyer-web", "admin-web"]) assert.ok(included.find((c) => c.id === app)!.capReasons.every((x) => x.state === "blocked"), `${app} is held back only by what this machine blocks`);
+    // Whether this machine has a .NET SDK only changes why the services' own installs are blocked here
+    // (a missing tool, or host mode), not that they are.
+    for (const service of ["commerce-core", "identity-dev"]) {
+      assert.ok(included.find((c) => c.id === service)!.capReasons.some((x) => x.state === "blocked" && x.condition === "clean.install"), `${service}'s clean install is blocked on this machine`);
+      assert.ok(ev(service, "no test command found").length > 0, `${service} has no test project`);
+    }
   });
 
   test("a sealed audit refuses further writes", () => {

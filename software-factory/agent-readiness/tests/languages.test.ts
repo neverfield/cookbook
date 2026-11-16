@@ -135,7 +135,7 @@ describe("Level 1 per ecosystem: what counts as a reproducible install", () => {
   test("Maven: no version ranges, LATEST or RELEASE in any pom.xml, through the wrapper when there is one", () => {
     const pom = (v: string) => `<project><dependencies><dependency><groupId>g</groupId><artifactId>a</artifactId><version>${v}</version></dependency></dependencies></project>`;
     const fixed = install("maven", { "pom.xml": pom("1.2.3"), mvnw: "#!/bin/sh\n" });
-    assert.deepEqual([fixed.command, fixed.frozen, fixed.unpinned], ["./mvnw -B -q dependency:go-offline", true, null]);
+    assert.deepEqual([fixed.command, fixed.frozen, fixed.unpinned], ['JAVA_TOOL_OPTIONS="-Duser.home=$HOME" ./mvnw -B -q dependency:go-offline', true, null]);
     assert.equal(install("maven", { "pom.xml": pom("1.2.3"), "core/pom.xml": pom("[1.0,2.0)") }).unpinned, "pom.xml leaves 1 version open (a range, LATEST or RELEASE)");
     assert.equal(install("maven", { "pom.xml": pom("LATEST") }).frozen, false);
   });

@@ -286,6 +286,15 @@ export function failingTests(output: string): string[] {
 export const IDLE_MARK = "readiness: idle at the timeout";
 export const IDLE_OFFLINE = "with the network off";
 
+// A .NET NativeAOT build links with the platform's C toolchain, which an SDK image may not ship:
+// "Platform linker ('clang' or 'gcc') not found in PATH", the symbol-stripping tool, or zlib for -lz.
+export function nativeAotGap(output: string): string | null {
+  if (/Platform linker \('clang' or 'gcc'\) not found in PATH/.test(output)) return "clang or gcc, the native linker NativeAOT needs, is not installed";
+  if (/Symbol stripping tool \('[\w-]+'(?: or '[\w-]+')?\) not found in PATH/.test(output)) return "objcopy, which NativeAOT strips symbols with, is not installed";
+  if (/Microsoft\.NETCore\.Native\.Unix\.targets[^\n]*/.test(output) && /cannot find -lz\b/.test(output)) return "zlib1g-dev, which NativeAOT links against, is not installed";
+  return null;
+}
+
 export function diagnose(rawOutput: string, timedOut: boolean, phase: string): Diagnosis {
   const clean = rawOutput.replace(/\x1b\[[0-9;]*m/g, "");
   // Stuck with no CPU while the network was off: most likely waiting on a download, such as an
@@ -335,6 +344,8 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   // file or directory" and then "Error 127". A path such as ./scripts/x.sh is the repo's own file.
   const makeTool = output.match(/(?:^|\n)make(?:\[\d+\])?: ([\w.+-]+): (?:No such file or directory|Command not found)\n(?:[^\n]*\n)*?[^\n]*\bError 127\b/);
   if (makeTool) return { cause: "missing_tool", detail: `${makeTool[1]} is not installed` };
+  const aot = nativeAotGap(output);
+  if (aot) return { cause: "missing_tool", detail: aot };
   const mod = MISSING_MODULE.map((re) => output.match(re)).filter((m): m is RegExpMatchArray => m !== null).sort((a, b) => (a.index ?? 0) - (b.index ?? 0))[0];
   if (mod) return { cause: "missing_module", detail: `module ${mod[1]} is missing` };
   const network = networkFailure(output);

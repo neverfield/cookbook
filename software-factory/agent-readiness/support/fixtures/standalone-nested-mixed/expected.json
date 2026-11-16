@@ -1,23 +1,24 @@
 {
-  "purpose": "No root package: a pnpm TypeScript app under apps/, a .NET solution whose test project belongs to it, a second .NET service, and a load-test package under bench/. The app must be found with its own pnpm install and its nested lint, type-check, build and test scripts; each .NET part listed as not assessed with its share of changes; and the bench package listed as a satellite, not a component.",
+  "purpose": "No root package: a pnpm TypeScript app under apps/, a .NET solution whose test project belongs to it, a second .NET service, and a load-test package under bench/. The app is found with its own pnpm install and its nested lint, type-check, build and test scripts, and the bench package is listed as a satellite, not a component. Both .NET parts are now assessed: global.json pins SDK 10.0.100 under the default patch policy, which the image's 10.0.404 doesn't satisfy, so the audit adds 10.0.100 before the restore. commerce-core builds, but its test project references no test SDK or framework, so there is no test to run; identity-dev uses WebApplication without implicit usings and doesn't build. Both are at Level 0, and commerce-core's 33% share sets the repo level. With no test command for either service, the targeted-tests signal is now false.",
   "runs": [
     {
       "name": "default",
-      "level": 2,
+      "level": 0,
       "levels": {
-        "checkout-web": 2
+        "checkout-web": 2,
+        "commerce-core": 0,
+        "identity-dev": 0
       },
       "top": [
-        "targets"
+        "clean.test:commerce-core",
+        "clean.build:identity-dev",
+        "clean.test:identity-dev"
       ],
       "startNow": "delegate:checkout-web",
-      "noBlocker": true,
+      "noBlocker": false,
       "safety": "pass",
       "outcome": "proven",
-      "notAssessed": [
-        "commerce-core",
-        "identity-dev"
-      ],
+      "notAssessed": [],
       "shares": {
         "checkout-web": 0.556,
         "commerce-core": 0.333,
@@ -28,7 +29,7 @@
       ],
       "signals": {
         "ci": false,
-        "targeted_tests": true,
+        "targeted_tests": false,
         "env_sample": null,
         "isolation": true,
         "agents_md_length": null

@@ -1,0 +1,4 @@
+/tmp/home/.nuget/packages/microsoft.dotnet.ilcompiler/10.0.15/build/Microsoft.NETCore.Native.Unix.targets(316,5): error : Platform linker ('clang' or 'gcc') not found in PATH. Ensure you have all the required prerequisites documented at https://aka.ms/nativeaot-prerequisites. [/work/test/AotTestApp/AotTestApp.csproj]
+/tmp/home/.nuget/packages/microsoft.dotnet.ilcompiler/10.0.15/build/Microsoft.NETCore.Native.Unix.targets(316,5): error : Platform linker ('clang' or 'gcc') not found in PATH. Ensure you have all the required prerequisites documented at https://aka.ms/nativeaot-prerequisites. [/work/test/AotTestApp/AotTestApp.csproj]
+    0 Warning(s)
+    1 Error(s)

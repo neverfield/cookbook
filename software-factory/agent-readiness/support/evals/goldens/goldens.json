@@ -133,15 +133,15 @@
         "dotnet"
       ],
       "shape": "single",
-      "reason": "A .NET solution with source and test projects: not assessed, listed under its solution, with no level.",
+      "reason": "A .NET solution with source, test, approval, performance and NativeAOT projects, on the .NET 10 SDK with tests that also target net8.0 and net9.0. The audit adds the 8.0 and 9.0 runtimes and clang and zlib1g-dev (for the NativeAOT test app) to the SDK image; it builds, passes every test on every target offline, and its tests catch the planted faults: Level 2. No project commits a packages.lock.json, which only the repo-wide scenario needs.",
       "expect": {
-        "included": [],
-        "excluded": [
-          {
-            "id": "Serilog",
-            "toolchain": ".NET"
-          }
-        ]
+        "included": [
+          "Serilog"
+        ],
+        "excluded": [],
+        "levels": {
+          "Serilog": 2
+        }
       }
     }
   ]

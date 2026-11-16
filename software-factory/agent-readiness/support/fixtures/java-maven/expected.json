@@ -1,0 +1,24 @@
+{
+  "purpose": "A Java library built with Maven through its committed Maven Wrapper, Java 17 set by maven.compiler.release, every version fixed in pom.xml, and JUnit 5 tests. It runs in the Java 17 image as the host's user with user.home set to the audit's home, so ~/.m2 is the same on every machine. The build loads Surefire's test provider without running a test, so the offline test run passes 4 of 4, the planted faults compile and are caught, and the library reaches Level 2.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "orders": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:orders",
+      "noBlocker": true,
+      "safety": "pass",
+      "outcome": "proven",
+      "contract": {
+        "cmd-orders-install": "JAVA_TOOL_OPTIONS=\"-Duser.home=$HOME\" ./mvnw -B -q dependency:go-offline",
+        "cmd-orders-build": "JAVA_TOOL_OPTIONS=\"-Duser.home=$HOME\" ./mvnw -B -ntp package '-Dtest=*#readinessNoTest' -Dsurefire.failIfNoSpecifiedTests=false -DfailIfNoTests=false",
+        "cmd-orders-test": "JAVA_TOOL_OPTIONS=\"-Duser.home=$HOME\" ./mvnw -B -ntp -o test"
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "purpose": "A C# solution with a library and an xUnit test project, the .NET 8 SDK pinned in global.json, and a committed packages.lock.json next to the one project that references packages. It runs in the .NET 8 SDK image: a locked restore, a build, an offline test run that passes 3 of 3, and planted faults that compile and are caught. Level 2.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "Billing": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:Billing",
+      "noBlocker": true,
+      "safety": "pass",
+      "outcome": "proven",
+      "contract": {
+        "cmd-Billing-install": "dotnet restore --locked-mode",
+        "cmd-Billing-build": "dotnet build --no-restore",
+        "cmd-Billing-test": "dotnet test --no-restore"
+      }
+    }
+  ]
+}

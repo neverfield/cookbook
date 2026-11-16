@@ -721,6 +721,199 @@
           "blockingSafety": []
         }
       }
+    },
+    {
+      "id": "spring-petclinic",
+      "repo": "spring-projects/spring-petclinic",
+      "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+      "runtime": "docker",
+      "review": "lang-jvm-dotnet",
+      "truth": "Spring Boot 4 sample on Java 17 with a committed Maven Wrapper. With Maven Central reachable it installs, builds and passes its tests offline in eclipse-temurin:17-jdk (the MySQL and Postgres Testcontainers tests skip without Docker), and all 5 planted faults are caught: Level 2. Where Maven Central is blocked the wrapper can't fetch Maven, so it is unproven on that machine.",
+      "egress": [
+        "repo.maven.apache.org"
+      ],
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 0,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 2,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "spring-petclinic": {
+              "level": 2,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": []
+        },
+        "restricted": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": true,
+          "couldBe": 1,
+          "components": {
+            "spring-petclinic": {
+              "level": 0,
+              "unproven": true
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": []
+        }
+      }
+    },
+    {
+      "id": "mockito-kotlin",
+      "repo": "mockito/mockito-kotlin",
+      "commit": "5969d27280ea670520003c75776057b20f7f3dfb",
+      "runtime": "docker",
+      "review": "lang-jvm-dotnet",
+      "truth": "JVM-only Kotlin library, a Gradle 9.4 composite build (tests live in included builds) with a JDK 11 toolchain. Gradle 9 needs Java 17 to run, so it runs in eclipse-temurin:17-jdk and the foojay resolver provisions JDK 11 during the build. With the Gradle services and Maven Central reachable it installs, builds and tests offline, and 3 of the 4 planted faults that compiled are caught (one survives, one didn't compile): Level 2. Where they are blocked it is unproven on that machine.",
+      "egress": [
+        "services.gradle.org",
+        "plugins.gradle.org",
+        "repo.maven.apache.org"
+      ],
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 0,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 2,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "mockito-kotlin-root": {
+              "level": 2,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "benchmarks"
+          ],
+          "instructionFailures": [],
+          "blockingSafety": []
+        },
+        "restricted": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": true,
+          "couldBe": 1,
+          "components": {
+            "mockito-kotlin-root": {
+              "level": 0,
+              "unproven": true
+            }
+          },
+          "notAssessed": [
+            "benchmarks"
+          ],
+          "instructionFailures": [],
+          "blockingSafety": []
+        }
+      }
+    },
+    {
+      "id": "csharp-algorithms",
+      "repo": "TheAlgorithms/C-Sharp",
+      "commit": "6d3b02a6b026abe253e942fe0d84d1244b8fbeb1",
+      "runtime": "docker",
+      "review": "lang-jvm-dotnet",
+      "truth": "C# algorithms collection on net8.0 with NUnit, no global.json and no packages.lock.json. With NuGet and mcr.microsoft.com reachable it restores, builds and passes its tests offline in the .NET 8 SDK image: Level 1. Level 2 is held back by four README links that are genuinely broken at this commit (AutokeyEncoder.cs is missing, Floor.cs and CollaborativeFiltering moved, LinqShuffler.cs is LINQShuffler.cs); the lockfile and toolchain conditions also fail. Where mcr.microsoft.com is blocked the image can't be pulled, so it is unproven on that machine.",
+      "egress": [
+        "mcr.microsoft.com",
+        "api.nuget.org"
+      ],
+      "realInstructionFindings": [
+        "README.md:44",
+        "README.md:82",
+        "README.md:109",
+        "README.md:156"
+      ],
+      "falseInstructionFindings": 0,
+      "target": {
+        "sealed": true,
+        "runtime": "docker",
+        "falseInstructionFindings": 0,
+        "blockingSafety": 0
+      },
+      "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 1,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "C-Sharp": {
+              "level": 1,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [
+            "README.md:44",
+            "README.md:82",
+            "README.md:109",
+            "README.md:156"
+          ],
+          "blockingSafety": []
+        },
+        "restricted": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": true,
+          "couldBe": 1,
+          "components": {
+            "C-Sharp": {
+              "level": 0,
+              "unproven": true
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [
+            "README.md:44",
+            "README.md:82",
+            "README.md:109",
+            "README.md:156"
+          ],
+          "blockingSafety": []
+        }
+      }
     }
   ]
 }

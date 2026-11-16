@@ -1,0 +1,31 @@
+{
+  "purpose": "A Kotlin library built with Gradle and no Gradle Wrapper, so it runs in the Gradle 9 image on the Java 21 its jvmToolchain names. The install downloads every configuration's dependencies (gradle dependencies alone downloads no jar), the offline test run passes, and the planted faults are caught: Level 2. The repo-wide scenario also needs the Gradle version pinned, which only a committed wrapper does, so it stays at Level 1.",
+  "runs": [
+    {
+      "name": "default",
+      "scenarios": [
+        "repo_wide"
+      ],
+      "level": 2,
+      "levels": {
+        "loyalty": 2
+      },
+      "scenarioLevels": {
+        "loyalty": {
+          "repo_wide": 1
+        }
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:loyalty",
+      "noBlocker": true,
+      "safety": "pass",
+      "outcome": "proven",
+      "contract": {
+        "cmd-loyalty-build": "JAVA_TOOL_OPTIONS=\"-Duser.home=$HOME\" gradle --no-daemon assemble",
+        "cmd-loyalty-test": "JAVA_TOOL_OPTIONS=\"-Duser.home=$HOME\" gradle --no-daemon --offline test"
+      }
+    }
+  ]
+}

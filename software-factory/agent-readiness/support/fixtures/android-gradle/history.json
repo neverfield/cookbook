@@ -1,0 +1,18 @@
+{
+  "commits": [
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 20,
+      "paths": ["app/notes/n1.md", "app/notes/n2.md"],
+      "message": "Add note titles"
+    },
+    {
+      "author": "Contributor B",
+      "email": "b@example.com",
+      "daysAgo": 5,
+      "paths": ["app/notes/n3.md"],
+      "message": "Tune the title rule"
+    }
+  ]
+}
