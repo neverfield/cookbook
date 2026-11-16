@@ -18,18 +18,50 @@ export function sameFolder(tests: string[], files: string[], isSource: (f: strin
 // foo_test, foo_spec, test_foo.
 export const TEST_AFFIXES: RegExp[] = [/Tests?$/, /Spec$/, /IT$/, /_test$/, /_spec$/, /^test_/];
 
+// The folder a test or source file sits in, with the layout's test and source roots taken out, so a
+// test and the code it tests give the same key: src/test/java/a/b and src/main/java/a/b give a/b,
+// tests/Unit/Http and src/Http give Http, tests/Shop.Tests/Orders and src/Shop/Orders give
+// Shop/Orders, spec/models and app/models give models.
+const ROOT_SEGMENTS = new Set(["src", "lib", "app", "test", "tests", "spec", "specs", "unit", "integration", "functional", "feature", "features"]);
+
+export function mirroredFolder(path: string): string {
+  const dir = dirname(path) === "." ? "" : dirname(path);
+  const parts = dir.split("/").filter(Boolean);
+  const out: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    // Maven and Gradle source sets: src/<set>/<language>/...
+    if (parts[i] === "src" && /^(main|test|it|integrationTest|testFixtures)$/.test(parts[i + 1] ?? "") && /^(java|kotlin|scala|groovy)$/.test(parts[i + 2] ?? "")) {
+      i += 2;
+      continue;
+    }
+    if (ROOT_SEGMENTS.has(parts[i].toLowerCase())) continue;
+    const project = parts[i].replace(/\.(Unit|Integration|Functional|Acceptance)?Tests?$/, "");
+    if (project) out.push(project);
+  }
+  return out.join("/");
+}
+
 // Sources named after a test, wherever they are: OrderTest.java covers Order.java, cart_spec.rb
-// covers cart.rb. A stem that names no source covers nothing.
+// covers cart.rb, and jwt_spec.rb covers what is in a jwt/ folder of sources. A test whose name
+// names no source, such as IntegrationTests.cs, covers the sources in its mirrored folder
+// (mirroredFolder), or under it when that folder holds none directly.
 export function namedAfter(tests: string[], files: string[], isSource: (f: string) => boolean, affixes: RegExp[] = TEST_AFFIXES): string[] {
-  const wanted = new Set<string>();
+  const sources = files.filter(isSource);
+  const out = new Set<string>();
   for (const t of tests) {
     const s = stem(t);
-    for (const a of affixes) {
-      const bare = s.replace(a, "");
-      if (bare && bare !== s) wanted.add(bare.toLowerCase());
+    const bare = affixes.map((a) => s.replace(a, "")).filter((b) => b && b !== s).map((b) => b.toLowerCase());
+    const named = sources.filter((f) => bare.includes(stem(f).toLowerCase()) || dirname(f).split("/").some((d) => bare.includes(d.toLowerCase())));
+    if (named.length) {
+      for (const f of named) out.add(f);
+      continue;
     }
+    const key = mirroredFolder(t);
+    const same = sources.filter((f) => mirroredFolder(f) === key);
+    const under = same.length || !key ? same : sources.filter((f) => mirroredFolder(f).startsWith(`${key}/`));
+    for (const f of under) out.add(f);
   }
-  return files.filter((f) => isSource(f) && wanted.has(stem(f).toLowerCase())).sort();
+  return [...out].sort();
 }
 
 // Sources that hold their own tests, such as a Rust file with a #[cfg(test)] module.

@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import { discoverContract, imagePlan, toolSetup } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { go, goImage } from "../skill/agent-readiness/scripts/lib/languages/go.ts";
-import { lockRoot, rust, rustImage, workspaceMembers } from "../skill/agent-readiness/scripts/lib/languages/rust.ts";
+import { cfgActive, defaultFeatures, lockRoot, rust, rustCovered, rustImage, workspaceMembers } from "../skill/agent-readiness/scripts/lib/languages/rust.ts";
+import { mirroredFolder, namedAfter } from "../skill/agent-readiness/scripts/lib/languages/coverage.ts";
 import { allSites, targetFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { loadRubric, latestRubricVersion } from "../skill/agent-readiness/scripts/lib/rubric.ts";
@@ -205,5 +206,62 @@ describe("instructions once Go and Rust are scored", () => {
     assert.deepEqual([goRepo.get("1 go test ./..."), goRepo.get("1 make test")], ["replay", "replay"]);
     const rustRepo = items({ "Cargo.toml": crate("x"), "Cargo.lock": "", "src/lib.rs": "", "CONTRIBUTING.md": "Run `cargo test`.\n" });
     assert.equal(rustRepo.get("1 cargo test"), "replay");
+  });
+});
+
+describe("fault targets for tests that don't sit in or name their source (final review H4)", () => {
+  test("a crate tested only from tests/*.rs, as dtolnay/semver and serde-rs/json are, gets faults in the sources it compiles", () => {
+    const dir = repo({
+      "Cargo.toml": crate("semver"),
+      "Cargo.lock": "",
+      "src/lib.rs": "mod parse;\nmod eval;\n#[cfg(feature = \"serde\")]\nmod serde;\npub fn major(v: u64) -> u64 {\n    if v > 0 {\n        return v;\n    }\n    0\n}\n",
+      "src/parse.rs": "pub fn digits(s: &str) -> usize {\n    s.len() + 1\n}\n",
+      "src/eval.rs": "#![cfg(feature = \"eval\")]\npub fn cmp(a: u64, b: u64) -> bool {\n    a < b\n}\n",
+      "src/serde.rs": "pub fn ser(a: u64) -> u64 {\n    a + 1\n}\n",
+      "tests/test_version.rs": "#[test]\nfn t() { assert_eq!(semver::major(1), 1); }\n",
+      "tests/node/mod.rs": "pub fn helper() {}\n",
+    });
+    const comp = buildProfile(dir, dir, rubric).components.find((c) => c.assessed)!;
+    assert.deepEqual(targetFiles(dir, comp), ["src/lib.rs", "src/parse.rs"], "not the serde module or the eval file, which default features leave out");
+    const featured = repo({ "Cargo.toml": `${crate("x")}\n[features]\ndefault = ["std"]\nstd = ["serde", "dep:other", "other/std"]\nserde = []\neval = []\n`, "src/lib.rs": "#[cfg(feature = \"serde\")]\nmod serde;\n#[cfg(not(feature = \"eval\"))]\nmod plain;\n", "src/serde.rs": "", "src/plain.rs": "", "tests/t.rs": "" });
+    assert.deepEqual([...defaultFeatures(featured, ".")].sort(), ["serde", "std"]);
+    assert.deepEqual(rustCovered(featured, ".", ["tests/t.rs"], ["src/lib.rs", "src/serde.rs", "src/plain.rs"]), ["src/lib.rs", "src/plain.rs", "src/serde.rs"], "default features turn serde on and leave eval off");
+  });
+
+  test("a crate with inline tests keeps them as its targets, and a tests.rs module is test code", () => {
+    const dir = repo({
+      "Cargo.toml": crate("x"),
+      "src/lib.rs": "pub fn f() -> u8 { 1 }\n#[cfg(test)]\nmod tests;\n",
+      "src/tests.rs": "#[test]\nfn t() { assert_eq!(super::f(), 1); }\n",
+      "src/inline.rs": "pub fn g(n: u8) -> bool {\n    n > 3\n}\n#[cfg(test)]\nmod t {}\n",
+      "src/other.rs": "pub fn h() -> u8 { 2 }\n",
+      "tests/it.rs": "",
+    });
+    assert.equal(rust.replay!.mutation.isTest("src/tests.rs"), true);
+    assert.deepEqual(rustCovered(dir, ".", ["src/tests.rs", "tests/it.rs"], ["src/lib.rs", "src/tests.rs", "src/inline.rs", "src/other.rs"]), ["src/inline.rs", "src/lib.rs"]);
+  });
+
+  test("an item under a cfg that isn't on everywhere gets no fault: features, other platforms, architectures", () => {
+    const text = ["pub fn a(n: u64) -> bool {", "    n > 3", "}", "#[cfg(feature = \"float_roundtrip\")]", "fn b(n: u64) -> bool {", "    n > 4", "}", "#[cfg(windows)]", "fn c() -> u8 { 5 }", "#[cfg(unix)]", "fn d() -> u8 { 6 }", "#[cfg(target_arch = \"x86_64\")]", "fn e() -> u8 { 7 }", "#[cfg_attr(test, derive(Debug))]", "struct S(u8);"].join("\n");
+    assert.deepEqual([...rust.replay!.mutation.quoted!(text)].sort((a, b) => a - b), [3, 4, 5, 6, 7, 8, 11, 12]);
+    assert.equal(cfgActive('all(unix, not(target_os = "macos"))', null), true);
+    assert.equal(cfgActive('any(feature = "std", windows)', new Set(["std"])), true);
+    assert.equal(cfgActive('feature = "std"', null), null);
+    assert.equal(cfgActive("target_pointer_width = \"64\"", new Set()), null, "differs between machines, so never a fault site");
+  });
+
+  test("namedAfter: a test named after a folder covers it, and one named by feature covers its mirrored folder", () => {
+    const isSource = (f: string) => /\.(rb|cs|java|php)$/.test(f) && !/(_spec|Tests?)\.\w+$/.test(f);
+    const rb = ["lib/jwt.rb", "lib/jwt/encode.rb", "lib/jwt/decode.rb", "lib/other.rb"];
+    assert.deepEqual(namedAfter(["spec/jwt_spec.rb"], rb, isSource), ["lib/jwt.rb", "lib/jwt/decode.rb", "lib/jwt/encode.rb"], "JwtSpec covers lib/jwt/ (ruby-jwt)");
+    const cs = ["src/Shop/Orders/Order.cs", "src/Shop/Orders/Cart.cs", "src/Shop/Pricing/Tax.cs", "src/Other/Thing.cs"];
+    assert.deepEqual(namedAfter(["tests/Shop.Tests/Orders/IntegrationTests.cs"], cs, isSource), ["src/Shop/Orders/Cart.cs", "src/Shop/Orders/Order.cs"]);
+    assert.deepEqual(namedAfter(["tests/Shop.Tests/IntegrationTests.cs"], cs, isSource), ["src/Shop/Orders/Cart.cs", "src/Shop/Orders/Order.cs", "src/Shop/Pricing/Tax.cs"], "nothing directly in Shop, so what is under it");
+    const java = ["gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java", "gson/src/main/java/com/google/gson/Gson.java"];
+    assert.deepEqual(namedAfter(["gson/src/test/java/com/google/gson/internal/bind/RecursiveTypesResolveTest.java"], java, isSource), ["gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java"]);
+    const php = ["src/Http/Client.php", "src/Http/Request.php", "src/Cache.php"];
+    assert.deepEqual(namedAfter(["tests/Unit/Http/RetryTest.php", "tests/Unit/CacheTest.php"], php, isSource), ["src/Cache.php", "src/Http/Client.php", "src/Http/Request.php"]);
+    assert.deepEqual(namedAfter(["spec/order_spec.rb"], ["app/models/order.rb", "app/models/cart.rb"], isSource), ["app/models/order.rb"], "a name that matches still wins");
+    assert.equal(mirroredFolder("tests/Feature/Api/UserTest.php"), mirroredFolder("app/Api/User.php"));
   });
 });
