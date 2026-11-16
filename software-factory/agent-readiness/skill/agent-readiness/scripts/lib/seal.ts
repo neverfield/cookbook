@@ -360,21 +360,30 @@ export function verifySeal(p: Paths, ref: string, opts: { releaseRepo?: string; 
   lines.push(local === audit.skill.scriptsDigest ? "OK: the local skill scripts match the ones that ran the audit." : "WARN: the local skill scripts differ from the ones that ran the audit.");
   const m = releaseManifest();
   if (opts.releaseRepo && opts.tierExternal) {
-    const refName = opts.releaseRef ?? m?.tag ?? "main";
-    try {
-      const remote = ghJson<{ content: string }>(["api", `repos/${opts.releaseRepo}/contents/software-factory/agent-readiness/skill/agent-readiness/RELEASE.json?ref=${refName}`]);
-      const manifest = JSON.parse(Buffer.from(remote.content, "base64").toString("utf8")) as { scriptsDigest: string; tag: string };
-      if (manifest.scriptsDigest === audit.skill.scriptsDigest) lines.push(`OK: scripts match the published release ${manifest.tag} in ${opts.releaseRepo}.`);
-      else {
-        ok = false;
-        lines.push(`FAIL: scripts don't match the published release ${manifest.tag} in ${opts.releaseRepo}.`);
-      }
-    } catch (e) {
+    // The ref is the one the skill was installed from. Without --release-ref it is the bundled tag,
+    // which may not be published yet, and never a moving branch such as main.
+    const refName = opts.releaseRef ?? m?.tag ?? null;
+    if (!refName) {
       ok = false;
-      lines.push(`FAIL: couldn't read the release manifest from ${opts.releaseRepo}: ${(e as Error).message}`);
+      lines.push(`FAIL: no release ref to check against: this copy ships no release manifest. Pass --release-ref with the tag or commit of ${opts.releaseRepo} you installed the skill from.`);
+    } else {
+      try {
+        const remote = ghJson<{ content: string }>(["api", `repos/${opts.releaseRepo}/contents/software-factory/agent-readiness/skill/agent-readiness/RELEASE.json?ref=${encodeURIComponent(refName)}`]);
+        const manifest = JSON.parse(Buffer.from(remote.content, "base64").toString("utf8")) as { scriptsDigest: string; tag: string };
+        if (manifest.scriptsDigest === audit.skill.scriptsDigest) lines.push(`OK: scripts match the release manifest ${manifest.tag} at ${refName} in ${opts.releaseRepo}.`);
+        else {
+          ok = false;
+          lines.push(`FAIL: scripts don't match the release manifest ${manifest.tag} at ${refName} in ${opts.releaseRepo}.`);
+        }
+      } catch (e) {
+        ok = false;
+        const message = (e as Error).message;
+        if (/\b404\b|Not Found|No commit found/i.test(message)) lines.push(opts.releaseRef ? `FAIL: ${opts.releaseRepo} has no skill release manifest at ${refName}. Check the --release-ref tag or commit.` : `FAIL: ${opts.releaseRepo} has no ${refName} tag yet, so the published release can't be checked. Pass --release-ref with the tag or commit you installed the skill from.`);
+        else lines.push(`FAIL: couldn't read the release manifest at ${refName} from ${opts.releaseRepo}: ${message}`);
+      }
     }
   } else if (m) {
-    if (m.scriptsDigest === audit.skill.scriptsDigest) lines.push(`OK: scripts match the bundled release manifest ${m.tag} (pass --release-repo in the external-systems tier to check the published one).`);
+    if (m.scriptsDigest === audit.skill.scriptsDigest) lines.push(`OK: scripts match the bundled release manifest ${m.tag} (pass --release-repo and --release-ref in the external-systems tier to check the published one).`);
     else {
       ok = false;
       lines.push(`FAIL: the scripts that ran this audit don't match the release manifest ${m.tag}; they were edited.`);

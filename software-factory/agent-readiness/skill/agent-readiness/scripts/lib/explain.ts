@@ -14,6 +14,8 @@ const STATE_RULE: Record<CondState, string> = {
 
 const STATIC_PLACE = "read from the audited commit's files, nothing ran";
 
+const OFFLINE_RULE = "Tests run with the container's network switched off, so a test that needs the internet fails.";
+
 function list(items: string[], max = 4): string {
   const shown = items.slice(0, max);
   const more = items.length > max ? `, and ${items.length - max} more` : "";
@@ -22,8 +24,11 @@ function list(items: string[], max = 4): string {
 }
 
 function placeOf(audit: Audit, e: Evidence): string {
-  if (e.result === "not_run" && !e.command) return "not run";
-  if (e.where === "container") return `in a clean ${audit.environment.containerRuntime ?? "container"} container${e.image ? ` (${e.image})` : ""}`;
+  // A command recorded as not run ran nowhere, whatever executor it was meant for: a container that
+  // didn't start, or no runtime at all, still records where it would have run.
+  if (e.result === "not_run") return "not run";
+  const rt = audit.environment.containerRuntime;
+  if (e.where === "container") return `in a clean ${rt ? `${rt} ` : ""}container${e.image ? ` (${e.image})` : ""}`;
   if (e.where === "fresh_copy") return "in a fresh copy on the host, with no container";
   if (e.where === "host") return "on the host, in the repo itself";
   return STATIC_PLACE;
@@ -68,6 +73,7 @@ export function imagesUsed(env: Audit["environment"]): string | null {
 function environmentLine(input: RenderInput): string {
   const { audit } = input;
   if (audit.tier === "read-only") return "nowhere: the read-only tier runs no repo command";
+  if (audit.environment.notRun) return `nowhere: ${audit.environment.notRun}`;
   const images = imagesUsed(audit.environment);
   if (audit.environment.containerRuntime && images) return `in clean ${audit.environment.containerRuntime} containers, one per toolchain: ${images}`;
   if (audit.environment.containerRuntime) return `in a clean ${audit.environment.containerRuntime} container (${audit.environment.image ?? "the audit's image"})`;
@@ -118,7 +124,8 @@ function conditions(input: RenderInput): Explanation[] {
       if (repo && repoDone.has(c)) continue;
       if (repo) repoDone.add(c);
       const evs = evidenceFor(audit, d.evidence);
-      out.push({ kind: "condition", subject: repo ? `repo: ${rubric.conditions[c].label}` : `${comp.id}: ${rubric.conditions[c].label}`, result: STATE_WORD[d.state], ran: ranOf(evs), where: evs.length ? places(audit, evs) : repo ? STATIC_PLACE : "not run", happened: d.reason, rule: conditionRule(input, c, d.state) });
+      const offline = (c === "clean.test" || c === "faults") && evs.some((e) => e.where === "container" && e.result !== "not_run") ? ` ${OFFLINE_RULE}` : "";
+      out.push({ kind: "condition", subject: repo ? `repo: ${rubric.conditions[c].label}` : `${comp.id}: ${rubric.conditions[c].label}`, result: STATE_WORD[d.state], ran: ranOf(evs), where: evs.length ? places(audit, evs) : repo ? STATIC_PLACE : "not run", happened: d.reason, rule: conditionRule(input, c, d.state) + offline });
     }
   }
   return out;

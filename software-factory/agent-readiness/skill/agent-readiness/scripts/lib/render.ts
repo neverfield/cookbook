@@ -12,6 +12,7 @@ import { EMOJI, fmtDate, fmtShortDate, pct, wordCount } from "./util.ts";
 import { serviceLabel } from "./diagnose.ts";
 import { explanationsOf, imagesUsed, waiversOf } from "./explain.ts";
 import { LANGUAGE_LABELS } from "./languages/index.ts";
+import { WAIVER_FILE } from "./waivers.ts";
 
 export interface RenderInput {
   audit: Audit;
@@ -202,9 +203,26 @@ function confidenceOf(input: RenderInput, outcome: ReportJson["maturity"]["outco
   return { level, reasons: [...low, ...medium].length ? [...low, ...medium] : ["every check that decides the level ran"] };
 }
 
-// Only the steps a level depends on: a refused start command doesn't explain a missing Level 1.
-function blockedCauses(input: RenderInput): string[] {
-  return [...new Set(input.audit.evidence.filter((e) => e.kind !== "start" && e.kind !== "doctor").map(blockedBy).filter((b): b is string => Boolean(b) && b !== "the install was blocked on this machine").map((b) => b.replace(/, though the repo's declared image .*$/, "")))];
+const START_FAILED = /container \(([^)\s]+)\) didn't start: (.*?)(?:, and host mode wasn't allowed.*)?$/;
+
+// A container that didn't start, in one plain cause: the runtime's raw error stays in the evidence log.
+export function startFailureCause(blocked: string): string | null {
+  const m = blocked.match(START_FAILED);
+  if (!m) return null;
+  const [, image, error] = m;
+  const first = image.split("/")[0];
+  const host = image.includes("/") && /[.:]/.test(first) ? first : "Docker Hub";
+  if (/toomanyrequests|rate limit/i.test(error)) return `${host} refused to send the image ${image} because of its rate limit`;
+  if (/manifest unknown|not found|pull access denied|repository does not exist|invalid reference/i.test(error)) return `the image ${image} doesn't exist on ${host} or can't be pulled`;
+  if (/dial tcp|lookup |no such host|timeout|timed out|connection refused|connection reset|EOF|TLS|x509|certificate|network|proxy|Client\.Timeout/i.test(error)) return `the image ${image} couldn't be pulled, because ${host} couldn't be reached from this machine`;
+  return `the audit's container (${image}) didn't start`;
+}
+
+// Only the steps a level depends on: a refused start command doesn't explain a missing Level 1. With
+// components given, only their own steps and the repo's.
+function blockedCauses(input: RenderInput, comps: string[] | null = null): string[] {
+  const mine = (c?: string) => !comps || !c || c === "*" || comps.includes(c);
+  return [...new Set(input.audit.evidence.filter((e) => e.kind !== "start" && e.kind !== "doctor" && mine(e.component)).map(blockedBy).filter((b): b is string => Boolean(b) && b !== "the install was blocked on this machine").map((b) => startFailureCause(b) ?? b.replace(/, though the repo's declared image .*$/, "")))];
 }
 
 // Each is a clause that follows "it" in the headline.
@@ -221,6 +239,7 @@ function rerunAdvice(input: RenderInput, causes: string[], verb: "give one" | "p
   if (input.audit.tier === "read-only") return `A local-exec audit can ${verb}.`;
   if (!input.audit.environment.containerRuntime) return `A rerun where Docker or Podman is available, such as CI, can ${verb}.`;
   if (causes.some((c) => NOT_SUPPORTED.test(c))) return null;
+  if (causes.some((c) => / couldn't be pulled| can't be pulled| rate limit/.test(c))) return `A rerun where that image can be pulled, or with another image passed with --image, can ${verb}.`;
   if (causes.some((c) => / hit .*network/.test(c))) return `A rerun with open network access can ${verb}.`;
   if (causes.some((c) => /in the audit's image/.test(c))) return `A rerun with an image that has the tool, passed with --image, can ${verb}.`;
   return `A rerun where these checks can run can ${verb}.`;
@@ -246,7 +265,7 @@ function headlineFor(input: RenderInput, ready: string[], setByShare: number): s
     const held = capComps(input);
     const where = held.length <= 3 ? list(held) : `all ${held.length} ${held.length === active.length ? "active " : ""}components`;
     const readOnly = input.audit.tier === "read-only";
-    const causes = blockedCauses(input);
+    const causes = blockedCauses(input, held);
     const why = readOnly ? "the read-only tier runs no repo code" : !input.audit.environment.containerRuntime ? list(["this machine has no container runtime", ...causes]) : causes.length ? list(causes) : "a check that decides it couldn't run here";
     const rerun = rerunAdvice(input, causes, "prove it");
     const tail = rerun ? ` ${rerun}` : "";
@@ -254,7 +273,7 @@ function headlineFor(input: RenderInput, ready: string[], setByShare: number): s
     if (other) return fit(`Level ${rollup.level + 1} couldn't be proved for ${where}: ${other}.`, `Level ${rollup.level + 1} couldn't be proved for ${where}.`);
     return fit(`Level ${rollup.level + 1} couldn't be proved for ${where} because ${why}.${tail}`, `Level ${rollup.level + 1} couldn't be proved for ${where} on this machine.${tail}`);
   }
-  if (top.length === 0 || top.every((t) => t.kind !== "fix")) {
+  if (rollup.level >= 2 && (top.length === 0 || top.every((t) => t.kind !== "fix"))) {
     if (rollup.level >= 3) return "Agent PRs meet your Level 3 targets. Keep the weekly recheck running and widen the work agents take.";
     const one = active.length === 1;
     const where = active.length <= 3 ? list(active) : `all ${active.length} active components`;
@@ -269,24 +288,31 @@ function headlineFor(input: RenderInput, ready: string[], setByShare: number): s
   const many = rollup.setBy.length > 1;
   const their = many ? "their" : "its";
   if (rollup.level === 0) {
-    const blockers = new Set(top.filter((t) => t.kind === "fix" && t.fixes.some((f) => rollup.setBy.includes(f.component) || f.component === "*")).map((t) => t.template));
-    // Components held back for different reasons are each named with their own.
-    const phrase: Record<string, string> = { "clean.install": "doesn't install from a clean checkout", "clean.test:missing": "has no tests", "clean.build": "doesn't build from a clean checkout" };
-    const own = rollup.setBy.map((id) => {
-      const t = top.find((x) => x.kind === "fix" && x.fixes.some((f) => f.component === id || f.component === "*"));
-      return { id, says: (t && phrase[t.template]) ?? "fails its tests from a clean checkout" };
-    });
-    if (many && new Set(own.map((o) => o.says)).size > 1) {
-      const each = list(own.map((o) => `${o.id} ${o.says}`));
-      return fit(`${each}, so agents can't check their changes there yet${share}.${readyLine}`, `${each}${share}.`);
+    // Each component is named with the Level 1 condition that failed for it, read from its states,
+    // and one whose checks were only blocked is never said to fail.
+    const own = rollup.setBy.map((id) => ({ id, ...level0Hold(input, id) }));
+    const failed = own.filter((o) => o.cond !== null);
+    const unchecked = own.filter((o) => o.cond === null).map((o) => o.id);
+    const blockers = new Set(failed.map((o) => o.cond));
+    if (new Set(failed.map((o) => o.says)).size > 1 || unchecked.length) {
+      const off = unchecked.length ? [`${unchecked.length <= 3 ? list(unchecked) : `${unchecked.length} other components`} couldn't be checked on this machine`] : [];
+      const each = list([...failed.map((o) => `${o.id} ${o.says}`), ...off]);
+      const eachShort = list(failed.map((o) => `${o.id} ${o.says}`));
+      return fit(`${each}, so agents can't check their changes there yet${share}.${readyLine}`, `${each}${share}.`, `${each}.`, `${eachShort}; other components couldn't be checked on this machine.`);
     }
+    const names = list(failed.map((o) => o.id));
+    const many = failed.length > 1;
+    const their = many ? "their" : "its";
     if (blockers.has("clean.install")) {
       const why = because(input, "clean.install", their);
       return fit(`${names} ${many ? "don't" : "doesn't"} install from a clean checkout${why}, so agents can't build or test ${many ? "them" : "it"} yet.${readyLine}`, `${names} ${many ? "don't" : "doesn't"} install from a clean checkout, so agents can't build or test ${many ? "them" : "it"} yet.${readyLine}`);
     }
     if (blockers.has("clean.test:missing")) return `${names} ${many ? "have" : "has"} no tests, so agents can't check their own changes${share}.${readyLine}`;
     if (blockers.has("clean.build")) return fit(`${names} ${many ? "don't" : "doesn't"} build from a clean checkout${because(input, "clean.build", their)}${share}.${readyLine}`, `${names} ${many ? "don't" : "doesn't"} build from a clean checkout${share}.${readyLine}`);
-    return fit(`Agents can't pass the tests in ${names} from a clean checkout${because(input, "clean.test", their)}${share}.${readyLine}`, `Agents can't pass the tests in ${names} from a clean checkout${share}.${readyLine}`);
+    // With no cause found, where the tests ran is the reader's best lead.
+    const cause = because(input, "clean.test", their);
+    const offline = !cause && ranTestsInContainer(input.audit) ? " with the network off" : "";
+    return fit(`Agents can't pass the tests in ${names} from a clean checkout${offline}${cause}${share}.${readyLine}`, `Agents can't pass the tests in ${names} from a clean checkout${offline}${share}.${readyLine}`, `Agents can't pass the tests in ${names} from a clean checkout${share}.${readyLine}`);
   }
   const resultOf = (id: string) => {
     const evs = [...input.audit.evidence].reverse().filter((e) => e.contractId === id);
@@ -299,17 +325,42 @@ function headlineFor(input: RenderInput, ready: string[], setByShare: number): s
     instructions: `${their} agent instructions don't match the repo`,
     safety: input.audit.safety.filter((s) => s.blocking).every((s) => s.kind === "secret") ? "a secret is committed to the repo" : "normal work needs production access",
   };
-  const failing = rubric.level2.filter((c) => why[c] && rollup.setBy.some((id) => input.states.get(id)?.[c].state !== "met")).map((c) => why[c]!);
-  return fit(`Agents can build and test ${names}, but ${failing.length ? list(failing) : `${their} checks can't yet catch wrong changes`}${share}.${readyLine}`, `Agents can build and test ${names}, but ${failing.length ? list(failing) : `${their} checks can't yet catch wrong changes`}${share}.`);
+  // Only a condition that failed is a "but"; one blocked here is named as unchecked, never as failing.
+  const stateOf = (c: CondId) => rollup.setBy.map((id) => input.states.get(id)?.[c].state ?? "unknown");
+  const failing = rubric.level2.filter((c) => why[c] && stateOf(c).includes("not_met")).map((c) => why[c]!);
+  const unchecked = rubric.level2.filter((c) => UNCHECKED[c] && !stateOf(c).includes("not_met") && stateOf(c).some((s) => s === "blocked" || s === "unknown")).map((c) => UNCHECKED[c]!);
+  const but = failing.length ? list(failing) : `${their} checks can't yet catch wrong changes`;
+  const off = failing.length && unchecked.length ? `; ${list(unchecked)} couldn't run on this machine` : "";
+  return fit(`Agents can build and test ${names}, but ${but}${off}${share}.${readyLine}`, `Agents can build and test ${names}, but ${but}${off}${share}.`, `Agents can build and test ${names}, but ${but}${share}.`);
+}
+
+const UNCHECKED: Partial<Record<CondId, string>> = { commands: "some of the commands", faults: "planted faults", instructions: "some agent instructions" };
+
+// The Level 1 condition that failed for a component, as a phrase that follows its name; cond is null
+// when none failed and its checks were only blocked or not run.
+function level0Hold(input: RenderInput, id: string): { cond: string | null; says: string } {
+  const s = input.states.get(id);
+  if (s?.["clean.install"].state === "not_met") return { cond: "clean.install", says: "doesn't install from a clean checkout" };
+  if (s?.["clean.test"].state === "not_met" && s["clean.test"].evidence.length === 0) return { cond: "clean.test:missing", says: "has no tests" };
+  if (s?.["clean.build"].state === "not_met") return { cond: "clean.build", says: "doesn't build from a clean checkout" };
+  if (s?.["clean.test"].state === "not_met") return { cond: "clean.test", says: "fails its tests from a clean checkout" };
+  return { cond: null, says: "couldn't be checked on this machine" };
 }
 
 // Below Level 2 with no fix to offer, or with every condition of the next level blocked on this
 // machine, means a deciding check couldn't run, not that nothing blocks.
+// A condition that failed always holds the level, whatever else couldn't run.
 function unproven(input: RenderInput): boolean {
   if (input.rollup.level >= 2) return false;
-  if (input.top.every((t) => t.kind !== "fix")) return true;
   const caps = capReasons(input);
+  if (caps.some((c) => c.state === "not_met")) return false;
+  if (input.top.every((t) => t.kind !== "fix")) return true;
   return caps.length > 0 && caps.every((c) => c.state === "blocked");
+}
+
+// Below Level 2 only: from there the caps are outcome targets, which no step of the audit fails.
+function anyFailed(input: RenderInput): boolean {
+  return input.rollup.level < 2 && capReasons(input).some((c) => c.state === "not_met");
 }
 
 // Why the next level couldn't be proved when this machine isn't the reason, or null when it is.
@@ -340,9 +391,17 @@ function gapText(item: RoadmapItem): string {
   return item.title.replace(/`/g, "");
 }
 
-function blocksText(item: RoadmapItem): string {
+// The level named is the one the step's own conditions belong to, so a Level 2 step never claims
+// Level 1 because another component in its unlocks rises to Level 1.
+export function blocksText(rubric: Rubric, item: RoadmapItem): string {
   if (item.kind !== "fix") return item.template === "targets" ? "Needs a decision" : "Can start now";
   const own = item.fixes.map((f) => f.component).find((c) => c !== "*");
+  const level = itemLevel(rubric, item);
+  if (level !== null) {
+    const rises = [...item.unlocks.matchAll(/(?:^|, )(\S+) to Level (\d)/g)].filter((x) => Number(x[2]) === level).map((x) => x[1]);
+    const who = own && rises.includes(own) ? own : (rises[0] ?? own);
+    return who ? `Blocks Level ${level} for ${who}` : `Blocks Level ${level}`;
+  }
   const mine = own ? item.unlocks.match(new RegExp(`(?:^|, )${own.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} to Level (\\d)`)) : null;
   if (mine) return `Blocks Level ${mine[1]} for ${own}`;
   const m = item.unlocks.match(/^(.+?) to Level (\d)/);
@@ -508,6 +567,7 @@ function coverageLine(input: RenderInput): string {
     if (missing.length) line += ` On this machine ${list(missing)}, an environment limit rather than a repo defect${inImage.length ? `; the declared image installs ${list(inImage)}` : ""}.`;
     if (audit.evidence.some((e) => /uses sudo/.test(e.blocked ?? ""))) line += " Setup commands that use sudo weren't run on this machine.";
   }
+  if (ranTestsInContainer(audit)) line += " Tests and planted faults ran in a clean container with the network switched off, so a test that needs the internet fails here.";
   // Findings that don't block are still named, such as host mode being able to read local files.
   const listed = audit.safety.filter((s) => !s.blocking && !s.waived).sort((a, b) => Number(a.kind === "secret") - Number(b.kind === "secret"));
   if (listed.length) {
@@ -606,10 +666,11 @@ export function buildReport(input: RenderInput): ReportJson {
   const none = notAssessed(input);
   const outcome = outcomeOf(input);
   const caps = capReasons(input);
-  const noBlocker = !none && !unproven(input) && top.every((t) => t.kind !== "fix");
+  const noBlocker = !none && !unproven(input) && !anyFailed(input) && top.every((t) => t.kind !== "fix");
+  const failedCap = L < 2 ? caps.find((c) => c.state === "not_met") : undefined;
   const narr = audit.narration ?? {};
   const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
-  const gaps = top.map((t, i) => ({ rank: i + 1, text: (narr.gaps?.[t.id] ?? gapText(t)).trim().replace(/\.+$/, ""), blocks: t.status === "start_now" ? `Can start now; ${lower(blocksText(t))}` : blocksText(t), itemId: t.id }));
+  const gaps = top.map((t, i) => ({ rank: i + 1, text: (narr.gaps?.[t.id] ?? gapText(t)).trim().replace(/\.+$/, ""), blocks: t.status === "start_now" ? `Can start now; ${lower(blocksText(rubric, t))}` : blocksText(rubric, t), itemId: t.id }));
   const first = top[0];
   const skippedIds = input.components.filter((c) => !c.assessed).map((c) => c.id);
   const defaultAsk = noneAssessed(input)
@@ -626,7 +687,9 @@ export function buildReport(input: RenderInput): ReportJson {
       ? `Decision needed: ${lower(first.decision)}.`
         : noBlocker
         ? "Decision needed: which work goes to agents first."
-        : `Decision needed: who takes on "${gapText(first)}", the first step in part 3.`;
+        : first
+          ? `Decision needed: who takes on "${gapText(first)}", the first step in part 3.`
+          : `Decision needed: who fixes what holds ${failedCap && failedCap.component !== "*" ? failedCap.component : "the repo"} at Level ${L}: ${lower(failedCap?.label ?? "the conditions in part 5")}.`;
   let ask = (narr.ask ?? defaultAsk).trim();
   if (!/[.!?]$/.test(ask)) ask += ".";
   if (!roadmap.owner && !/\bowner\b/i.test(ask)) ask += " Also name an owner for agent readiness.";
@@ -719,7 +782,7 @@ export function buildReport(input: RenderInput): ReportJson {
         ? "Not assessed: none of the components found can be assessed yet"
         : none
           ? `Not assessed: ${audit.tier === "read-only" ? "the read-only tier runs no repo code" : "no check could run on this machine"}`
-          : `${!none && unprovenLevel1(L, input.rollup.couldBe, caps) ? unprovenHeading(caps) : `Level ${L} of 4, ${rubric.scale[L].plain}${outcome === "blocked" ? `; Level ${L + 1} is blocked on this machine` : ""}`}${mostlyUnassessed(input) ? `; it covers only ${pct(1 - input.partial.unassessedShare, 1)}% of recent changes, and the rest isn't assessed` : ""}`,
+          : `${!none && unprovenLevel1(L, input.rollup.couldBe, caps) ? unprovenHeading(caps) : `Level ${L} of 4, ${rubric.scale[L].plain}${outcome === "blocked" ? (failedCap ? `; Level ${L + 1} isn't met, and some of its checks were blocked on this machine` : `; Level ${L + 1} is blocked on this machine`) : ""}`}${mostlyUnassessed(input) ? `; it covers only ${pct(1 - input.partial.unassessedShare, 1)}% of recent changes, and the rest isn't assessed` : ""}`,
       headline: narr.headline ?? headlineFor(input, ready, setByShare),
       numbers: stats3(input),
       nextLine: nextLine(input),
@@ -744,7 +807,11 @@ export function buildReport(input: RenderInput): ReportJson {
     },
     progress,
     details: {
-      steps: actions.map((a) => ({ itemId: a.itemId, title: a.title, steps: roadmap.items.find((i) => i.id === a.itemId)!.steps })),
+      steps: actions.map((a) => {
+        const item = roadmap.items.find((i) => i.id === a.itemId)!;
+        const waivable = item.fixes.map((f) => WAIVABLE_CHECK[f.condition]).find(Boolean);
+        return { itemId: a.itemId, title: a.title, steps: waivable ? [...item.steps, waiverStep(waivable)] : item.steps };
+      }),
       checks: rubric.checks.map((c) => {
         const r = checkResult(input, c.id);
         if (c.id === "verify.canonical_interface") {
@@ -803,13 +870,15 @@ export function buildReport(input: RenderInput): ReportJson {
         { label: "Planted faults", value: plantedFaultsRecord(audit, rubric) },
         {
           label: "Replay environment",
-          value: audit.environment.containerRuntime
-            ? (imagesUsed(audit.environment)
-                ? `${audit.environment.containerRuntime} containers, ${imagesUsed(audit.environment)}`
-                : `${audit.environment.containerRuntime} container, ${audit.environment.image}`) + userEntryNote(audit.environment)
-            : audit.evidence.some((e) => e.where === "fresh_copy" || e.where === "container")
-              ? "fresh copy on the host (no container runtime)"
-              : `none: no repo command ran${noneAssessed(input) ? ", because no component could be assessed" : ""}`,
+          value: audit.environment.notRun
+            ? `none: ${audit.environment.notRun}`
+            : audit.environment.containerRuntime
+              ? (imagesUsed(audit.environment)
+                  ? `${audit.environment.containerRuntime} containers, ${imagesUsed(audit.environment)}`
+                  : `${audit.environment.containerRuntime} container, ${audit.environment.image}`) + userEntryNote(audit.environment) + networkNote(audit)
+              : audit.evidence.some((e) => e.where === "fresh_copy")
+                ? "fresh copy on the host (no container runtime)"
+                : `none: no repo command ran${noneAssessed(input) ? ", because no component could be assessed" : ""}`,
         },
         { label: "Stored in", value: input.storedAt },
       ],
@@ -820,6 +889,23 @@ export function buildReport(input: RenderInput): ReportJson {
   report.waivers = waiversOf(audit);
   report.explanations = explanationsOf(input, report);
   return report;
+}
+
+const WAIVABLE_CHECK: Partial<Record<CondId, string>> = { instructions: "context.instructions_verified", safety: "safety.execution_boundary" };
+
+// A finding the team has reviewed as wrong is waived in the repo, not fixed, so the step that fixes
+// findings says how.
+function waiverStep(check: string): { title: string; detail: string } {
+  return {
+    title: "Waive a finding that is a false positive",
+    detail: `If a finding is wrong, don't change the repo to satisfy it: commit an entry to ${WAIVER_FILE} with "check": "${check}", "match" (the file or file:line), "reason" (why it is a false positive) and "by" (who reviewed it). The next audit reads the file from its commit and lists each waiver in part 5. A waiver can't cover a Level 1 check.`,
+  };
+}
+
+// The step's own line on waivers, when it fixes findings a waiver can cover.
+export function waiverHint(r: ReportJson, itemId: string): string | null {
+  const s = r.details.steps.find((x) => x.itemId === itemId)?.steps.find((x) => x.title === "Waive a finding that is a false positive");
+  return s ? `If a finding is a false positive, waive it in ${WAIVER_FILE} instead of changing the repo; part 5 says how.` : null;
 }
 
 // Most of the repo's recent changes sit in components the audit doesn't assess, such as a Go
@@ -845,8 +931,9 @@ function noticesOf(input: RenderInput): { text: string }[] {
 
 // What changed since the previous audit, read from its sealed report and this one only.
 export function changesOf(prev: ReportJson, now: ReportJson, rubric: Rubric): ReportChanges {
-  const repoLevel = (r: ReportJson) => (r.maturity.outcome === "not_assessed" ? null : r.maturity.level);
-  const levels = (r: ReportJson) => new Map(r.components.included.map((c) => [c.id, c.level] as [string, Level | null]));
+  // An unproven result is no level: its 0 is only there for the rollup's minimum, never to compare.
+  const repoLevel = (r: ReportJson) => (r.maturity.outcome === "not_assessed" || r.maturity.unproven ? null : r.maturity.level);
+  const levels = (r: ReportJson) => new Map(r.components.included.map((c) => [c.id, c.unproven ? null : c.level] as [string, Level | null]));
   const before = levels(prev);
   const after = levels(now);
   const ids = [...new Set([...before.keys(), ...after.keys()])];
@@ -920,6 +1007,18 @@ function componentsOf(input: RenderInput): ReportJson["components"] {
   };
 }
 
+// A test that reaches the internet fails in the audit even when it passes on a laptop, so the report
+// says the network was off for it.
+export const NETWORK_OFF_NOTE = "the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here";
+
+function ranTestsInContainer(audit: Audit): boolean {
+  return audit.evidence.some((e) => e.where === "container" && e.kind === "test" && e.result !== "not_run");
+}
+
+function networkNote(audit: Audit): string {
+  return ranTestsInContainer(audit) ? `; ${NETWORK_OFF_NOTE}` : "";
+}
+
 function userEntryNote(env: Audit["environment"]): string {
   const m = env.userEntryMissing;
   return m ? `; uid ${m.uid} has no /etc/passwd entry in ${m.images.join(", ")}, and the image's user couldn't add one` : "";
@@ -970,6 +1069,7 @@ export function validatePart1(report: ReportJson, rubric: Rubric, narratedAllowe
       masked = masked.replace(re, (s) => "#".repeat(s.length));
     }
   }
+  errors.push(...headlineCauseErrors(report));
   if (narratedAllowedNumbers) {
     const narrated = [ex.headline, ex.ask, ...ex.gaps.map((g) => g.text)];
     for (const t of narrated) for (const m of t.matchAll(/\d+(?:\.\d+)?%?/g)) if (!narratedAllowedNumbers.has(m[0])) errors.push(`"${m[0]}" in the narrated text isn't a number the audit computed`);
@@ -982,6 +1082,63 @@ export function validatePart1(report: ReportJson, rubric: Rubric, narratedAllowe
       if (claim.test(ex.headline)) errors.push(`the headline calls ${c.id} ready, but ${c.id} is at Level ${c.level}; only a component at Level 2 or above is ready for agents`);
     }
   }
+  return errors;
+}
+
+// Every cause the headline names for a component must match that component's condition states, so
+// the headline never says a component fails what was only blocked, or couldn't be proved what failed.
+export function headlineCauseErrors(report: ReportJson): string[] {
+  const text = report.executive.headline;
+  const comps = report.components.included;
+  const byId = new Map(comps.map((c) => [c.id, c]));
+  const ids = [...byId.keys()].sort((a, b) => b.length - a.length);
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const named = (segment: string): string[] => {
+    const out: string[] = [];
+    let rest = segment;
+    for (const id of ids) {
+      const re = new RegExp(`(^|[^\\w@/.-])${esc(id)}(?![\\w@/-])`);
+      if (re.test(rest)) {
+        out.push(id);
+        rest = rest.replace(new RegExp(`(^|[^\\w@/.-])${esc(id)}(?![\\w@/-])`, "g"), "$1#");
+      }
+    }
+    return out;
+  };
+  const states = (id: string, cond: string) => byId.get(id)!.capReasons.filter((k) => k.condition === cond).map((k) => k.state);
+  const errors: string[] = [];
+  const failed = (id: string, cond: string, claim: string) => {
+    if (!states(id, cond).includes("not_met")) errors.push(`the headline says ${id} ${claim}, but its ${cond} condition is ${states(id, cond)[0] ?? "met or not what holds it"}`);
+  };
+  // "<names> <phrase>" clauses: the names are those between the previous clause and this phrase.
+  const PHRASES: [RegExp, string, string][] = [
+    [/\b(?:doesn't|don't) install from a clean checkout/g, "clean.install", "doesn't install"],
+    [/\b(?:has|have) no tests/g, "clean.test", "has no tests"],
+    [/\b(?:doesn't|don't) build from a clean checkout/g, "clean.build", "doesn't build"],
+    [/\bfails? (?:its|their) tests from a clean checkout/g, "clean.test", "fails its tests"],
+    [/\bcouldn't be checked on this machine/g, "", "couldn't be checked"],
+  ];
+  const hits = PHRASES.flatMap(([re, cond, claim]) => [...text.matchAll(re)].map((m) => ({ at: m.index!, end: m.index! + m[0].length, cond, claim }))).sort((a, b) => a.at - b.at);
+  let from = 0;
+  for (const h of hits) {
+    for (const id of named(text.slice(from, h.at))) {
+      if (h.cond) failed(id, h.cond, h.claim);
+      else if (byId.get(id)!.capReasons.some((k) => k.state === "not_met")) errors.push(`the headline says ${id} couldn't be checked, but a condition failed for it`);
+    }
+    from = h.end;
+  }
+  const tests = text.match(/Agents can't pass the tests in (.+?) from a clean checkout/);
+  if (tests) for (const id of named(tests[1])) failed(id, "clean.test", "fails its tests");
+  const proved = text.match(/Level \d couldn't be proved for (.+?)(?: because| on this machine|:|\.)/);
+  if (proved) for (const id of named(proved[1])) if (byId.get(id)!.capReasons.some((k) => k.state === "not_met")) errors.push(`the headline says Level couldn't be proved for ${id}, but a condition failed for it`);
+  const build = text.match(/Agents can build and test (.+?), but (.+?)(?:; |, and \d|\.|$)/);
+  if (build) {
+    const BUT: [RegExp, string][] = [[/commands? fails?/, "commands"], [/can't yet catch wrong changes/, "faults"], [/agent instructions don't match/, "instructions"], [/secret is committed|production access/, "safety"]];
+    const subjects = named(build[1]);
+    for (const [re, cond] of BUT) if (re.test(build[2]) && subjects.length && !subjects.some((id) => states(id, cond).includes("not_met"))) errors.push(`the headline says ${list(subjects)} ${cond === "faults" ? "can't catch wrong changes" : `fail${subjects.length > 1 ? "" : "s"} ${cond}`}, but no ${cond} condition failed there`);
+  }
+  const ready = text.match(/Nothing blocks agents in (.+?):/);
+  if (ready) for (const id of named(ready[1])) if ((byId.get(id)!.level ?? 0) < 2) errors.push(`the headline says nothing blocks ${id}, but it is below Level 2`);
   return errors;
 }
 
@@ -1141,6 +1298,11 @@ function levelText(l: Level | null): string {
   return l === null ? "no level" : `Level ${l}`;
 }
 
+// This audit's side of a comparison: an unproven result is named as such, not as a drop to Level 0.
+export function nowLevelText(l: Level | null, unproven: boolean): string {
+  return l === null && unproven ? "Level 1 unproven on this machine (no level, so not a drop)" : levelText(l);
+}
+
 // The provenance and eval-mode lines that need no action from a reader; they close the report.
 function aboutLines(r: ReportJson): string[] {
   const fromFile = r.details.outcomes !== null && r.details.outcomes.source !== "GitHub through gh";
@@ -1158,13 +1320,30 @@ function keyNote(r: ReportJson): string | null {
 
 // One line on what changed since the last audit, or null on a first audit.
 export function changeSummary(r: ReportJson): string | null {
+  const move = changeMove(r);
+  if (!move) return null;
+  const closed = r.progress!.closed.length;
+  return `${move}${closed ? `; ${closed} ${closed === 1 ? "step" : "steps"} closed` : ""}`;
+}
+
+// How the repo level moved since the last audit, or null on a first audit.
+export function changeMove(r: ReportJson): string | null {
   const ch = r.progress?.changes;
   if (!ch) return null;
   const since = fmtShortDate(ch.since.date);
   const { from, to } = ch.repo;
-  const move = from === to ? `Unchanged since ${since}` : from !== null && to !== null && to > from ? `Up from Level ${from} since ${since}` : from !== null && to !== null ? `Down from Level ${from} since ${since}` : `Changed since ${since}`;
-  const closed = r.progress!.closed.length;
-  return `${move}${closed ? `; ${closed} ${closed === 1 ? "step" : "steps"} closed` : ""}`;
+  const unprovenNow = r.maturity.unproven;
+  return from !== null && to === null
+      ? `Level ${from} at the audit on ${since}; this audit ${unprovenNow ? "couldn't prove a level on this machine" : "gives no level"}, so it isn't a change in the repo`
+      : from === null && to === null
+        ? `No level to compare: neither this audit nor the one on ${since} gave one`
+        : from === null
+          ? `The audit on ${since} gave no level, so Level ${to} has nothing to compare with`
+          : from === to
+            ? `Unchanged since ${since}`
+            : to! > from
+              ? `Up from Level ${from} since ${since}`
+              : `Down from Level ${from} since ${since}`;
 }
 
 // Page 1 names the reason; the missed-fault locations stay in the audit details.
@@ -1247,8 +1426,9 @@ export function renderMarkdown(r: ReportJson, rubric: Rubric): string {
     const ch = r.progress.changes;
     if (ch) {
       out.push(`Since the audit on ${fmtDate(ch.since.date)}:`, "");
-      out.push(`- **Repo level:** ${levelText(ch.repo.from)} to ${levelText(ch.repo.to)}${ch.repo.from === ch.repo.to ? ", no change" : ""}.`);
-      for (const c of ch.components) out.push(`- **${c.id}:** ${levelText(c.from)} to ${levelText(c.to)}.`);
+      const unprovenComp = new Set(r.components.included.filter((c) => c.unproven).map((c) => c.id));
+      out.push(`- **Repo level:** ${levelText(ch.repo.from)} to ${nowLevelText(ch.repo.to, r.maturity.unproven)}${ch.repo.from === ch.repo.to ? ", no change" : ""}.`);
+      for (const c of ch.components) out.push(`- **${c.id}:** ${levelText(c.from)} to ${nowLevelText(c.to, unprovenComp.has(c.id))}.`);
       if (ch.nowMet.length) out.push(`- **Now met:** ${ch.nowMet.map((m) => `${m.component}: ${m.label}`).join("; ")}.`);
       if (ch.nowFailing.length) out.push(`- **Now failing:** ${ch.nowFailing.map((m) => `${m.component}: ${m.label} (${m.reason})`).join("; ")}.`);
       const word = (ok: boolean | null) => (ok === true ? "passed" : ok === false ? "failed" : "not proven");
@@ -1270,6 +1450,8 @@ export function renderMarkdown(r: ReportJson, rubric: Rubric): string {
     out.push(`- **How it moves the needle:** ${a.movesTheNeedle}`, `- **Why it matters:** ${a.why}`, `- **Effort and owner:** ${a.effortAndOwner}`);
     if (a.decision) out.push(`- **Decision needed:** ${a.decision}.`);
     if (a.dependsOn.length) out.push(`- **Depends on:** ${list(a.dependsOn)}`);
+    const hint = waiverHint(r, a.itemId);
+    if (hint) out.push(`- **False positives:** ${hint.replace(WAIVER_FILE, `\`${WAIVER_FILE}\``)}`);
     if (a.evidence?.length) out.push(`- **Evidence:** ${a.evidence.map((e) => `\`${e}\``).join(", ")}`);
     out.push("");
   });
