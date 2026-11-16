@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import { discoverContract } from "../skill/agent-readiness/scripts/lib/contract.ts";
-import { allows, php, phpImage, phpQuoted, phpSites, phpTestCounts } from "../skill/agent-readiness/scripts/lib/languages/php.ts";
+import { ecosystemOf } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
+import { allows, composerRootVersion, php, phpImage, phpQuoted, phpSites, phpTestCounts } from "../skill/agent-readiness/scripts/lib/languages/php.ts";
 import { ruby, rubyImage, rubyQuoted, rubySites, rubyTestCounts } from "../skill/agent-readiness/scripts/lib/languages/ruby.ts";
 import { allSites, targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { loadRubric, latestRubricVersion } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import type { Component } from "../skill/agent-readiness/scripts/lib/types.ts";
+import { exportTree } from "../skill/agent-readiness/scripts/lib/workspace.ts";
 
 const rubric = loadRubric(latestRubricVersion());
 
@@ -63,6 +66,53 @@ describe("PHP", () => {
     ]);
     assert.deepEqual(commands(php, { "composer.json": dev(["pestphp/pest", "laravel/pint", "phpstan/phpstan"], { scripts: { test: "pest" } }) }), ["test: composer run-script --timeout=0 test", "lint: vendor/bin/pint --test"]);
     assert.deepEqual(commands(php, { "composer.json": dev(["squizlabs/php_codesniffer", "vimeo/psalm"]), "phpcs.xml.dist": "", "psalm.xml": "" }), ["lint: vendor/bin/phpcs", "typecheck: vendor/bin/psalm --no-progress"]);
+  });
+
+  // The Mac's open-network run of guzzle/guzzle@f8aca40 failed its install with "guzzlehttp/test-server
+  // 1.1.0 requires guzzlehttp/guzzle ^8.1": on the audit's detached checkout Composer named the root
+  // dev-f8aca40..., where guzzle's own CI sets COMPOSER_ROOT_VERSION: 8.5.x-dev.
+  test("the Composer install names the root version, which a detached checkout loses (guzzle/guzzle@f8aca40)", () => {
+    const install = (dir: string, path = ".") => ecosystemOf("composer")!.install(dir, path, { ignoreScripts: false });
+    const guzzle = repo({
+      "composer.json": JSON.stringify({ name: "guzzlehttp/guzzle", require: { php: "^7.4 || ^8.0" }, "require-dev": { "guzzlehttp/test-server": "^1.1", "phpunit/phpunit": "^9.6.34" } }),
+      ".github/workflows/ci.yml": "name: CI\n\non:\n  push:\n\nenv:\n  COMPOSER_ROOT_VERSION: 8.5.x-dev\n\njobs:\n  build:\n    runs-on: ubuntu-24.04\n",
+    });
+    const plan = install(guzzle);
+    assert.equal(plan.command, "COMPOSER_ROOT_VERSION=8.5.x-dev composer install --no-interaction --no-progress");
+    assert.equal(plan.reason, "no composer.lock, so the install can't be frozen, with the root package as 8.5.x-dev (the COMPOSER_ROOT_VERSION .github/workflows/ci.yml sets), since the audit's detached checkout has no branch");
+    assert.equal(plan.frozen, false);
+
+    const aliased = repo({ "composer.json": JSON.stringify({ name: "acme/lib", extra: { "branch-alias": { "dev-main": "3.x-dev", "dev-2.x": "2.x-dev" } } }) });
+    assert.deepEqual(composerRootVersion(aliased, "."), { version: "3.x-dev", from: "composer.json's branch-alias" }, "the highest alias");
+    assert.deepEqual(composerRootVersion(repo({ "packages/a/composer.json": JSON.stringify({ name: "acme/a", extra: { "branch-alias": { "dev-main": "1.2-dev" } } }) }), "packages/a"), { version: "1.2-dev", from: "composer.json's branch-alias" });
+
+    for (const json of [{ name: "acme/app", type: "project" }, { name: "acme/lib", version: "1.0.0" }, {}]) {
+      assert.equal(composerRootVersion(repo({ "composer.json": JSON.stringify(json), ".github/workflows/ci.yml": "env:\n  COMPOSER_ROOT_VERSION: 9.0.x-dev\n" }), "."), null, JSON.stringify(json));
+    }
+    assert.equal(install(repo({ "composer.json": JSON.stringify({ name: "acme/app", type: "project" }), "composer.lock": "{}" })).command, "composer install --no-interaction --no-progress", "an application keeps the plain install (symfony/demo)");
+    assert.equal(composerRootVersion(repo({ "composer.json": '{"name":"acme/lib"}', ".github/workflows/ci.yml": "env:\n  COMPOSER_ROOT_VERSION: ${{ matrix.v }}\n" }), "."), null, "only a literal version reaches the shell");
+  });
+
+  test("with nothing declared, the root version is the latest release tag of the repo the one-commit tree came from", () => {
+    const host = repo({ "composer.json": '{"name":"acme/lib"}' });
+    const g = (...args: string[]) => execFileSync("git", ["-c", "user.name=Contributor A", "-c", "user.email=a@example.com", ...args], { cwd: host, encoding: "utf8" }).trim();
+    g("init", "-q");
+    g("add", ".");
+    g("commit", "-q", "-m", "one");
+    g("tag", "v8.4.0");
+    g("tag", "8.10.1");
+    g("tag", "8.11.0-beta1");
+    g("commit", "-q", "--allow-empty", "-m", "two");
+    g("tag", "9.0.0", "HEAD");
+    g("commit", "-q", "--allow-empty", "-m", "three");
+    const commit = g("rev-parse", "HEAD~1");
+    const tree = mkdtempSync(join(tmpdir(), "lang-php-tree-"));
+    exportTree(host, commit, tree);
+    assert.deepEqual(composerRootVersion(tree, "."), { version: "9.0.0", from: "the latest release tag" });
+    const older = mkdtempSync(join(tmpdir(), "lang-php-tree-"));
+    exportTree(host, g("rev-parse", "HEAD~2"), older);
+    assert.deepEqual(composerRootVersion(older, "."), { version: "8.10.1", from: "the latest release tag" }, "version order, not text order, and no pre-release");
+    assert.equal(composerRootVersion(repo({ "composer.json": '{"name":"acme/lib"}' }), "."), null, "no git, no tag");
   });
 
   test("test counts from PHPUnit and Pest", () => {
