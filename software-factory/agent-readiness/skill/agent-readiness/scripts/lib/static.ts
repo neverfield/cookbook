@@ -610,6 +610,9 @@ const LAUNCHER_ONLY = /^(uv run|uvx|npx|pnpx|bunx|npm (run|exec)|pnpm (run|exec|
 const SHELL_VARIABLE = /\$\{?([a-z_][a-z0-9_]*)\}?/;
 const RUNNER = String.raw`(npx|bunx|pnpx|(corepack\s+)?(pnpm|yarn)\s+dlx)\s+(-\S+\s+)*`;
 const INTERACTIVE = new RegExp(String.raw`^(corepack\s+)?(npm|pnpm|yarn|bun)\s+(init|create|login|adduser)\b|^${RUNNER}(create-[\w-]+|\S+\s+init)\b|(^|\s)(auth\s+)?login(\s|$)|\s(-i|--interactive)(\s|$)|^(node|python3?)\s*$`);
+// Appraisal installs a bundle per gemfile (`appraisal install`) and runs a command under each; neither
+// works from the one bundle a clean checkout's `bundle install` sets up.
+const APPRAISAL = /^(bundle\s+exec\s+)?appraisal(\s+(?!list\b|version\b|help\b)\S|\s*$)/;
 const ADDS_PACKAGES = new RegExp(String.raw`^(corepack\s+)?(pnpm|yarn|bun)\s+(add|remove|rm|uninstall)\b|^npm\s+(i|install|add|uninstall|rm|remove)\b(\s+-\S+)*\s+[^-\s]|^(python3?\s+-m\s+)?pip3?\s+install\s+(?!.*(\s|^)(-r|-e|--requirement|--editable|\.)(\s|$))|^(uv|poetry|pdm)\s+(add|remove)\b|^${RUNNER}\S+\s+add\b`);
 
 // `cwd`: the folder the command runs in, so a path that climbs out of the repository is seen.
@@ -622,6 +625,7 @@ function skippedReason(cmd: string, cwd = "."): { reason: string; rule: string }
   if (variable) return { reason: `not replayed: it uses $${variable[1]}, a shell variable the lines around it set`, rule: "placeholder" };
   if (INTERACTIVE.test(cmd)) return { reason: "not replayed: it asks questions as it runs", rule: "interactive" };
   if (ADDS_PACKAGES.test(cmd)) return { reason: "not replayed: it adds or removes packages", rule: "adds-packages" };
+  if (APPRAISAL.test(cmd)) return { reason: "not replayed: it runs under each gemfile in Appraisals, whose gems `appraisal install` adds first", rule: "adds-packages" };
   return null;
 }
 

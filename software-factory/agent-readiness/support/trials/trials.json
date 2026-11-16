@@ -535,7 +535,7 @@
         "outcome": "proven",
         "minLevel": 1,
         "falseInstructionFindings": 0,
-        "blockingSafety": 1
+        "blockingSafety": 0
       },
       "recorded": {
         "open": {
@@ -554,9 +554,7 @@
           },
           "notAssessed": [],
           "instructionFailures": [],
-          "blockingSafety": [
-            "secret .env.local.demo:3"
-          ]
+          "blockingSafety": []
         },
         "restricted": {
           "exit": 0,
@@ -574,12 +572,10 @@
           },
           "notAssessed": [],
           "instructionFailures": [],
-          "blockingSafety": [
-            "secret .env.local.demo:3"
-          ]
+          "blockingSafety": []
         }
       },
-      "truth": "Symfony 8 demo app on PHP >=8.4 (composer:2.11, PHP 8.5), with a committed composer.lock, PHPUnit, PHP CS Fixer and PHPStan. With Packagist reachable it installs frozen (its post-install scripts also fetch importmap assets and the Sass binary), passes its PHPUnit suite, and PHPStan reports 1 error, which holds the commands check. 3 of 5 planted faults are caught. config/packages/framework.yaml:3 and security.yaml:46 are Symfony parameter references (%env(APP_SECRET)%, %kernel.secret%) and aren't flagged; .env.local.demo:3 commits a demo APP_SECRET literal, which stays flagged (a waiver is the repo's answer). Where Packagist is blocked the install is blocked and the component is unproven on that machine.",
+      "truth": "Symfony 8 demo app on PHP >=8.4 (composer:2.11, PHP 8.5), with a committed composer.lock, PHPUnit, PHP CS Fixer and PHPStan. With Packagist reachable it installs frozen (its post-install scripts also fetch importmap assets and the Sass binary), passes its PHPUnit suite, and PHPStan reports 1 error, which holds the commands check. 3 of 5 planted faults are caught. config/packages/framework.yaml:3 and security.yaml:46 are Symfony parameter references (%env(APP_SECRET)%, %kernel.secret%) and aren't flagged; .env.local.demo:3 commits APP_SECRET=not-a-secret--read-the-doc! under a demo-only comment, a value that says it isn't a secret, so it isn't flagged. Where Packagist is blocked the install is blocked and the component is unproven on that machine.",
       "egress": [
         "repo.packagist.org"
       ]

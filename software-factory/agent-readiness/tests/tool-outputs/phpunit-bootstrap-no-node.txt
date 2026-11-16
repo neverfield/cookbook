@@ -1,0 +1,15 @@
+PHPUnit 9.6.25 by Sebastian Bergmann and contributors.
+
+Error in bootstrap script: RuntimeException:
+Unable to contact node.js server
+#0 /work/vendor/guzzlehttp/test-server/src/Server.php(178): GuzzleHttp\Tests\Server::wait()
+#1 /work/tests/bootstrap.php(13): GuzzleHttp\Tests\Server::start()
+#2 /work/vendor/phpunit/phpunit/src/Util/FileLoader.php(66): include_once('/work/tests/boo...')
+#3 /work/vendor/phpunit/phpunit/src/Util/FileLoader.php(49): PHPUnit\Util\FileLoader::load('/work/tests/boo...')
+#4 /work/vendor/phpunit/phpunit/src/TextUI/Command.php(567): PHPUnit\Util\FileLoader::checkAndLoad('/work/tests/boo...')
+#5 /work/vendor/phpunit/phpunit/src/TextUI/Command.php(347): PHPUnit\TextUI\Command->handleBootstrap('/work/tests/boo...')
+#6 /work/vendor/phpunit/phpunit/src/TextUI/Command.php(114): PHPUnit\TextUI\Command->handleArguments(Array)
+#7 /work/vendor/phpunit/phpunit/src/TextUI/Command.php(99): PHPUnit\TextUI\Command->run(Array, true)
+#8 /work/vendor/phpunit/phpunit/phpunit(107): PHPUnit\TextUI\Command::main()
+#9 /work/vendor/bin/phpunit(122): include('/work/vendor/ph...')
+#10 {main}

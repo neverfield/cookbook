@@ -1,0 +1,14 @@
+[INFO] --- spotless:2.44.5:check (default-cli) @ test-jpms ---
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal com.diffplug.spotless:spotless-maven-plugin:2.44.5:check (default-cli) on project test-jpms: The following files had format violations:
+[ERROR]     src/test/java/com/google/gson/jpms_test/ExportedPackagesTest.java
+[ERROR]         @@ -1,5 +1,5 @@
+[ERROR]         -import·com.google.gson.Gson;
+[ERROR]         +import·static·org.junit.Assert.assertEquals;
+[ERROR] Run 'mvn spotless:apply' to fix these violations.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] After correcting the problems, you can resume the build with the command
+[ERROR]   mvn <args> -rf :test-jpms

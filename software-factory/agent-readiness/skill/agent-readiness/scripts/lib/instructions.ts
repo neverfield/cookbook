@@ -1,5 +1,5 @@
 import { dirname, join, normalize } from "node:path";
-import { diagnose } from "./diagnose.ts";
+import { BUNDLE_GAP, diagnose } from "./diagnose.ts";
 import { addEvidence } from "./evidence.ts";
 import { redact, tail } from "./redact.ts";
 import { charge, overBudget } from "./replay.ts";
@@ -195,7 +195,7 @@ export async function replayInstructions(audit: Audit, executors: Executor | ((c
       continue;
     }
     if (why?.cause === "missing_tool" && (ex.where !== "container" || ex.imageSource !== "repo")) {
-      const where = ex.where === "container" ? `in the audit's image (${ex.image})` : "on this machine";
+      const where = why.detail.endsWith(BUNDLE_GAP) ? "here" : ex.where === "container" ? `in the audit's image (${ex.image})` : "on this machine";
       item.result = "not_run";
       item.reason = `not replayed: ${why.detail} ${where}, an environment limit rather than a repo defect`;
       item.blocked = `${why.detail} ${where}`;

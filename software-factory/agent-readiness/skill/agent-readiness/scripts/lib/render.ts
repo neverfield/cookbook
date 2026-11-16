@@ -309,10 +309,10 @@ function headlineFor(input: RenderInput, ready: string[], setByShare: number): s
     }
     if (blockers.has("clean.test:missing")) return `${names} ${many ? "have" : "has"} no tests, so agents can't check their own changes${share}.${readyLine}`;
     if (blockers.has("clean.build")) return fit(`${names} ${many ? "don't" : "doesn't"} build from a clean checkout${because(input, "clean.build", their)}${share}.${readyLine}`, `${names} ${many ? "don't" : "doesn't"} build from a clean checkout${share}.${readyLine}`);
-    // With no cause found, where the tests ran is the reader's best lead.
-    const cause = because(input, "clean.test", their);
-    const offline = !cause && ranTestsInContainer(input.audit) ? " with the network off" : "";
-    return fit(`Agents can't pass the tests in ${names} from a clean checkout${offline}${cause}${share}.${readyLine}`, `Agents can't pass the tests in ${names} from a clean checkout${offline}${share}.${readyLine}`, `Agents can't pass the tests in ${names} from a clean checkout${share}.${readyLine}`);
+    // With no cause found, the failing tests the output names are the reader's best lead; the network
+    // is named only when the output showed it.
+    const cause = because(input, "clean.test", their) || failedTests(input);
+    return fit(`Agents can't pass the tests in ${names} from a clean checkout${cause}${share}.${readyLine}`, `Agents can't pass the tests in ${names} from a clean checkout${share}.${readyLine}`);
   }
   const resultOf = (id: string) => {
     const evs = [...input.audit.evidence].reverse().filter((e) => e.contractId === id);
@@ -383,8 +383,20 @@ function because(input: RenderInput, cond: CondId, their: string): string {
   if (d.cause === "service") return ` because ${their} tests need ${serviceLabel(d, (p) => `a service on port ${p}`)} running, which the setup doesn't start`;
   if (d.cause === "registry") return " because private registry credentials weren't provided";
   if (d.cause === "credential") return ` because it ${d.detail}`;
-  if (d.cause === "unknown") return "";
+  if (d.cause === "unknown" && !(d.fromTool && quotable(input, d.detail))) return "";
   return ` because ${d.detail}`;
+}
+
+// A tool's own words go into part 1 only when they hold none of the terms part 1 never uses.
+function quotable(input: RenderInput, text: string): boolean {
+  return !input.rubric.part1.bannedTerms.some((t) => text.toLowerCase().includes(t.toLowerCase()));
+}
+
+// The failing tests an unexplained test failure names ("X and 5 more failed"), as a clause.
+function failedTests(input: RenderInput): string {
+  const fails = input.audit.evidence.filter((e) => e.condition === "clean.test" && e.result === "fail" && e.diagnosis?.cause === "unknown");
+  const d = (fails.filter((e) => input.rollup.setBy.includes(e.component ?? "")).at(-1) ?? fails.at(-1))?.diagnosis;
+  return d && / failed$/.test(d.detail) && !/\s/.test(d.detail.replace(/ and \d+ more failed$| failed$/, "")) && quotable(input, d.detail) ? `: ${d.detail}` : "";
 }
 
 function gapText(item: RoadmapItem): string {

@@ -436,7 +436,12 @@ describe("Symfony parameter references aren't secrets", () => {
   test("%env(...)% and %name% name where a value comes from; a committed literal is still flagged", () => {
     assert.deepEqual(scanText("framework:\n    secret: '%env(APP_SECRET)%'\n"), []);
     assert.deepEqual(scanText("parameters:\n    secret: '%kernel.secret%'\n"), []);
-    assert.deepEqual(scanText("APP_SECRET=not-a-secret--read-the-doc!\n").map((h) => h.line), [1]);
+    assert.deepEqual(scanText("APP_SECRET=3f9a1c07be52d84e6a1f0c93d2b7e815\n").map((h) => h.line), [1]);
+  });
+
+  test("symfony/demo@f42980c's .env.local.demo value says it isn't a secret, and isn't flagged", () => {
+    const demo = "# This variable is for the demo app only!\n# See https://symfony.com/doc/current/reference/configuration/framework.html#configuration-framework-secret\nAPP_SECRET=not-a-secret--read-the-doc!\n";
+    assert.deepEqual(scanText(demo), []);
   });
 });
 

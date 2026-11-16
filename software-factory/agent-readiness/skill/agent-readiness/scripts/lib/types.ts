@@ -146,6 +146,10 @@ export interface Diagnosis {
   // only when serviceNamed says the output named it; otherwise it only guides remediation drafts.
   service?: string;
   serviceNamed?: boolean;
+  // The detail is the tool's own root error (Maven's failed goal, Gradle's "What went wrong",
+  // Composer's problem, PHPStan's first error, Ruby's uncaught error), not a guessed last line, so
+  // report text may quote it as the cause.
+  fromTool?: boolean;
 }
 
 export interface InstructionItem {

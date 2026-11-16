@@ -1,0 +1,11 @@
+Note: Using configuration file /work/phpstan.dist.neon.
+ ------ ---------------------------------------------------------------------------------------------- 
+  Line   src/Kernel.php                                                                                
+ ------ ---------------------------------------------------------------------------------------------- 
+         Ignored error pattern #^Method App\\Kernel\:\:getAllowedEnvs\(\) is unused\.$# (method.unused) 
+         in path /work/src/Kernel.php was not matched in reported errors.                               
+ ------ ---------------------------------------------------------------------------------------------- 
+
+                                                                                                                        
+ [ERROR] Found 1 error                                                                                                  
+                                                                                                                        

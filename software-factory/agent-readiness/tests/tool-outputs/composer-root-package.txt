@@ -1,0 +1,10 @@
+Cannot create cache directory /tmp/cache/repo/https---repo.packagist.org/, or directory is not writable. Proceeding without cache. See also cache-read-only config if your filesystem is read-only.
+No composer.lock file present. Updating dependencies to latest instead of installing from lock file. See https://getcomposer.org/install for more information.
+Loading composer repositories with package information
+Updating dependencies
+Your requirements could not be resolved to an installable set of packages.
+
+  Problem 1
+    - Root composer.json requires guzzlehttp/test-server ^1.1 -> satisfiable by guzzlehttp/test-server[1.1.0].
+    - guzzlehttp/test-server 1.1.0 requires guzzlehttp/guzzle ^8.1 -> satisfiable by guzzlehttp/guzzle[8.1.0, ..., 8.5.x-dev] from composer repo (https://repo.packagist.org) but guzzlehttp/guzzle is the root package and cannot be modified. See https://getcomposer.org/dep-on-root for details and assistance.
+
