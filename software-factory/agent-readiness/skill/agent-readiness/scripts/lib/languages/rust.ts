@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Component } from "../types.ts";
 import { exists, readText, shellQuote, workspaceDirs } from "../util.ts";
 import { withInlineTests } from "./coverage.ts";
@@ -143,8 +143,99 @@ const RUST_SYNTAX: BraceSyntax = {
   keepCondition: /^let\b/,
 };
 
+// Whether code under a `#[cfg(...)]` predicate is compiled when the audit builds and tests the crate:
+// true, false, or null when that depends on something the audit doesn't fix. Faults go only where it
+// is true, so none lands in code the tests never compile. `features` are the crate's default
+// features; null means they aren't known, so any feature makes the answer null. Every container is
+// Linux, but its architecture follows the machine (arm64 on a Mac), so target_arch and the like are
+// null, and the same code gets the same faults on every machine.
+export function cfgActive(pred: string, features: Set<string> | null): boolean | null {
+  let i = 0;
+  const ws = () => {
+    while (/\s/.test(pred[i] ?? "")) i++;
+  };
+  const ident = () => {
+    ws();
+    const m = pred.slice(i).match(/^[A-Za-z_][\w]*/);
+    i += m ? m[0].length : 0;
+    return m?.[0] ?? "";
+  };
+  const str = () => {
+    ws();
+    const m = pred.slice(i).match(/^"([^"]*)"/);
+    i += m ? m[0].length : 0;
+    return m?.[1] ?? null;
+  };
+  const list = (): (boolean | null)[] => {
+    const out: (boolean | null)[] = [];
+    ws();
+    if (pred[i] !== "(") return out;
+    i++;
+    for (ws(); i < pred.length && pred[i] !== ")"; ws()) {
+      out.push(expr());
+      ws();
+      if (pred[i] === ",") i++;
+    }
+    i++;
+    return out;
+  };
+  const expr = (): boolean | null => {
+    const name = ident();
+    ws();
+    if (name === "all" || name === "any" || name === "not") {
+      const args = list();
+      if (name === "not") return args[0] === null || args[0] === undefined ? null : !args[0];
+      if (name === "all") return args.includes(false) ? false : args.includes(null) ? null : true;
+      return args.includes(true) ? true : args.includes(null) ? null : false;
+    }
+    if (pred[i] === "=") {
+      i++;
+      const value = str();
+      if (value === null) return null;
+      if (name === "feature") return features ? features.has(value) : null;
+      if (name === "target_os") return value === "linux";
+      if (name === "target_family") return value === "unix";
+      return null;
+    }
+    if (name === "unix" || name === "debug_assertions") return true;
+    if (name === "windows" || name === "test" || name === "miri" || name === "doc" || name === "docsrs") return false;
+    return null;
+  };
+  const result = expr();
+  return result;
+}
+
+// A crate's default features, with the features they turn on, from its Cargo.toml.
+export function defaultFeatures(tree: string, dir: string): Set<string> {
+  const section = manifestOf(tree, dir).match(/^\[features\][^\n]*\n([\s\S]*?)(?=^\[|(?![\s\S]))/m)?.[1] ?? "";
+  const table = new Map<string, string[]>();
+  for (const m of section.matchAll(/^([\w-]+)\s*=\s*\[([\s\S]*?)\]/gm)) table.set(m[1], [...m[2].matchAll(/["']([^"']+)["']/g)].map((x) => x[1]));
+  const on = new Set<string>();
+  const add = (f: string) => {
+    if (f.startsWith("dep:") || f.includes("/") || on.has(f)) return;
+    on.add(f);
+    for (const g of table.get(f) ?? []) add(g);
+  };
+  for (const f of table.get("default") ?? []) add(f);
+  return on;
+}
+
+// The cfg predicate of an attribute that starts at `at` (`#[cfg(` or `#![cfg(`), and where it ends.
+function cfgAt(text: string, at: number): { pred: string; end: number } | null {
+  const open = text.indexOf("(", at);
+  let depth = 0;
+  for (let j = open; j < text.length; j++) {
+    if (text[j] === "(") depth++;
+    else if (text[j] === ")" && --depth === 0) return { pred: text.slice(open + 1, j), end: j };
+  }
+  return null;
+}
+
 // 0-based lines a fault must never land on: block comments, nested or not, and strings that span
-// lines, and every line of a `#[cfg(test)]` item, which is test code even in a source file.
+// lines, and every line of an item under a `#[cfg(...)]` that isn't compiled on every machine the
+// audit runs on. That covers `#[cfg(test)]` items, which are test code even in a source file, and
+// items behind a feature, which the quoting can't tell is on (rustCovered drops whole modules a
+// default feature leaves out).
 export function rustQuoted(text: string): Set<number> {
   const out = new Set<number>();
   const span = (from: number, to: number, always = false) => {
@@ -183,9 +274,10 @@ export function rustQuoted(text: string): Set<number> {
     } else if (ch === "'") {
       const end = text[i + 1] === "\\" ? text.indexOf("'", i + 2) : text[i + 2] === "'" ? i + 2 : -1;
       if (end > 0 && !text.slice(i, end).includes("\n")) i = end;
-    } else if (text.startsWith("#[cfg(test)]", i)) {
-      pendingTest = line;
-      i += "#[cfg(test)]".length - 1;
+    } else if (text.startsWith("#[cfg(", i)) {
+      const attr = cfgAt(text, i);
+      if (attr && cfgActive(attr.pred, null) !== true) pendingTest ??= line;
+      if (attr) i = attr.end;
     } else if (ch === ";" && pendingTest !== null) {
       span(pendingTest, line, true);
       pendingTest = null;
@@ -202,15 +294,73 @@ export function rustQuoted(text: string): Set<number> {
 }
 
 const GENERATED_PATH = /(^|\/)(target|tests|benches|examples)\//;
-const isRustTest = (f: string) => /(^|\/)tests\/.+\.rs$/.test(f) && !/(^|\/)target\//.test(f);
-const isRustSource = (f: string) => f.endsWith(".rs") && !GENERATED_PATH.test(f) && !/(^|\/)build\.rs$/.test(f);
+// Integration tests under tests/, and a test module kept in its own file (`#[cfg(test)] mod tests;`
+// loads src/tests.rs or src/foo/tests.rs).
+const isRustTest = (f: string) => (/(^|\/)tests\/.+\.rs$/.test(f) || /(^|\/)src\/(.+\/)?tests\.rs$/.test(f)) && !/(^|\/)target\//.test(f);
+const isRustSource = (f: string) => f.endsWith(".rs") && !GENERATED_PATH.test(f) && !/(^|\/)build\.rs$/.test(f) && !isRustTest(f);
+
+// The folder of the nearest Cargo.toml above a file: the crate it belongs to.
+function crateOf(tree: string, file: string): string | null {
+  for (let d = dirname(file); ; d = dirname(d)) {
+    if (exists(join(tree, d, "Cargo.toml"))) return d;
+    if (d === "." || d === "") return null;
+  }
+}
+
+// What a crate's tests cover: files that hold their own #[cfg(test)] tests. A crate tested only from
+// test files of its own (tests/*.rs, a tests.rs module) has none, since those tests reach its code
+// through its public API or `use super::*`, not by file, so every source file it compiles counts.
+// Only the component's crate and its workspace members count, as only they are built and tested.
+export function rustCovered(tree: string, path: string, tests: string[], files: string[]): string[] {
+  const members = new Set(workspaceMembers(tree, path));
+  const owned = (d: string) => d === path || members.has(d);
+  const sources = ownedFiles(tree, files, "Cargo.toml", owned).filter(isRustSource);
+  const compiled = compiledModules(tree, sources);
+  const tested = new Set(tests.map((t) => crateOf(tree, t)).filter((d): d is string => d !== null && owned(d)));
+  const inline = withInlineTests(tree, sources, isRustSource, INLINE_TESTS);
+  const inlineCrates = new Set(inline.map((f) => crateOf(tree, f)));
+  const out = new Set(inline);
+  for (const f of sources) {
+    const crate = crateOf(tree, f);
+    if (tested.has(crate!) && !inlineCrates.has(crate)) out.add(f);
+  }
+  return [...out].filter(compiled).sort();
+}
+
+// The folder a file's `mod x;` declarations load from: its own folder for lib.rs, main.rs and
+// mod.rs, else a folder named after it.
+const moduleDir = (f: string) => (/(^|\/)(lib|main|mod)\.rs$/.test(f) ? dirname(f) : f.replace(/\.rs$/, ""));
+
+// Which sources the default build compiles: a file a `#[cfg(...)] mod x;` declares, or one that
+// opens with `#![cfg(...)]`, is left out with everything under it unless the predicate holds with
+// the crate's default features.
+function compiledModules(tree: string, sources: string[]): (f: string) => boolean {
+  const off: string[] = [];
+  for (const f of sources) {
+    const text = readText(join(tree, f));
+    const crate = crateOf(tree, f);
+    const features = crate === null ? null : defaultFeatures(tree, crate);
+    const inner = text.match(/^\s*(?:\/\/[^\n]*\n\s*)*#!\[cfg\(/);
+    if (inner) {
+      const attr = cfgAt(text, inner.index! + inner[0].length - 6);
+      if (attr && cfgActive(attr.pred, features) !== true) off.push(f.replace(/\.rs$/, ""));
+    }
+    for (const m of text.matchAll(/#\[cfg\(/g)) {
+      const attr = cfgAt(text, m.index!);
+      if (!attr) continue;
+      const decl = text.slice(attr.end + 2).match(/^\s*(?:#\[[^\]]*\]\s*)*(?:pub(?:\([\w:]+\))?\s+)?mod\s+(\w+)\s*;/);
+      if (decl && cfgActive(attr.pred, features) !== true) off.push(`${moduleDir(f)}/${decl[1]}`);
+    }
+  }
+  return (f) => !off.some((m) => f === `${m}.rs` || f.startsWith(`${m}/`) || f === m);
+}
 const INLINE_TESTS = /#\[cfg\(test\)\]/;
 
 export const rust: LanguageDef = {
   id: "rust",
   label: "Rust",
   codes: ["rust"],
-  stacks: [{ id: "rust", label: "Rust", kind: "stack", tier: "supported", reason: "a Cargo.toml folder is a component, and a workspace root covers every member (`--workspace`); it runs in the pinned rust image of the release its toolchain file names (the newest otherwise, with rustup adding any other channel): `cargo build`, `cargo test`, and `cargo clippy` where the repo runs it, with faults planted only in member source files that hold their own tests", files: /\.rs$|(^|\/)Cargo\.(toml|lock)$/, proof: ["fixtures/rust-pricing", "BurntSushi/ripgrep@91f5d22"] }],
+  stacks: [{ id: "rust", label: "Rust", kind: "stack", tier: "supported", reason: "a Cargo.toml folder is a component, and a workspace root covers every member (`--workspace`); it runs in the pinned rust image of the release its toolchain file names (the newest otherwise, with rustup adding any other channel): `cargo build`, `cargo test`, and `cargo clippy` where the repo runs it, with faults planted only in member source files that hold their own tests, or in every source file of a member tested only from tests/", files: /\.rs$|(^|\/)Cargo\.(toml|lock)$/, proof: ["fixtures/rust-pricing", "BurntSushi/ripgrep@91f5d22"] }],
   detect: {
     manifests: [{ match: /^Cargo\.toml$/, stack: "rust", rank: 30 }],
     sources: [{ ext: /\.rs$/, stack: "rust", rank: 30 }],
@@ -246,10 +396,7 @@ export const rust: LanguageDef = {
     mutation: {
       isTest: isRustTest,
       isSource: isRustSource,
-      covered: (tree, comp, _tests, files) => {
-        const members = new Set(workspaceMembers(tree, comp.path));
-        return withInlineTests(tree, ownedFiles(tree, files, "Cargo.toml", (d) => d === comp.path || members.has(d)), isRustSource, INLINE_TESTS);
-      },
+      covered: (tree, comp, tests, files) => rustCovered(tree, comp.path, tests, files),
       sites: (line) => braceSites(line, RUST_SYNTAX),
       quoted: rustQuoted,
       // A lone crate is a workspace of one, so this checks it, or every member a fault can be in.
