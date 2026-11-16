@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { describe, test } from "node:test";
 import { buildProfile, discoverLayout } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { latestRubricVersion, loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
-import { capCutReason, sampledScope } from "../skill/agent-readiness/scripts/lib/scope.ts";
+import { capCutFolders, capCutReason, sampledScope } from "../skill/agent-readiness/scripts/lib/scope.ts";
 import { listFiles, listFilesScoped } from "../skill/agent-readiness/scripts/lib/util.ts";
 import { makeAudit } from "./helpers.ts";
 
@@ -129,5 +129,7 @@ describe("a file cap on a large tree", () => {
     const audit = makeAudit({ components: [{ id: "app", share: 1, faults: "pass" }] });
     audit.profile = { ...profile, scope: { boundMinutes: 3, files: 20, fileCap: 20, secrets: { scanned: 20, total: 20 }, assetHistory: { read: 0, total: 0 } } };
     assert.equal(sampledScope(audit), "the scan stopped at 20 files, before it listed everything in arch and drivers, which aren't assessed");
+    assert.deepEqual(capCutFolders(audit), ["arch", "drivers"], "the scan's log names the same folders");
+    assert.deepEqual(capCutFolders({ profile: { ...audit.profile, scope: { ...audit.profile.scope!, fileCap: null } } }), []);
   });
 });

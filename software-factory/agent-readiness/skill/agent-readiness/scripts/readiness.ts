@@ -11,7 +11,7 @@ import { buildProfile } from "./lib/profile.ts";
 import { redact } from "./lib/redact.ts";
 import { ALLOW_HOST_ENV, assertPlatformSupported, evidenceFromPhase, hostExecutor, newBudget, registryValuesOf, replay, runContract } from "./lib/replay.ts";
 import { latestRubricVersion, loadRubric } from "./lib/rubric.ts";
-import { SCAN_BOUND_MINUTES, sampledScope } from "./lib/scope.ts";
+import { SCAN_BOUND_MINUTES, capCutFolders, sampledScope } from "./lib/scope.ts";
 import { validateAgainst } from "./lib/schema.ts";
 import { blockedBy, componentStates } from "./lib/score.ts";
 import { buildSealedReport, recheck, seal, verifySeal } from "./lib/seal.ts";
@@ -19,7 +19,7 @@ import { composeServices, renderEnvFiles, renderVerifySkill, serviceKey, writeFi
 import { staticSignals } from "./lib/signals.ts";
 import { instructionItems, safetyScan } from "./lib/static.ts";
 import type { Audit, CommandKind, Narration, Result, Roadmap, ScanBound, ScenarioId, ScenarioSpec, Strength, Tier } from "./lib/types.ts";
-import { addDays, exists, fail, git, listFiles, nowIso, randomHex, readJson, readText, sha256, today, writeJson } from "./lib/util.ts";
+import { addDays, exists, fail, git, nowIso, randomHex, readJson, readText, sha256, today, writeJson } from "./lib/util.ts";
 import { WAIVER_FILE, applyWaivers, loadWaivers } from "./lib/waivers.ts";
 import { commitReader, currentDraftId, initAudit, loadDraft, paths, refreshTree, releaseManifest, resolveRepo, saveDraft, scratchTree } from "./lib/workspace.ts";
 
@@ -151,8 +151,8 @@ function cmdScan(a: Args): void {
   const sampled = sampledScope(audit);
   if (sampled) log(`Sampled: ${sampled}.`);
   if (bound.scope.fileCap) {
-    const unreached = unreachedFolders(repo, audit.repo.commit, listFiles(local.tree, { includeHidden: true }));
-    log(`Warning: the scan stops at ${bound.scope.fileCap.toLocaleString("en-US")} files, and this commit tracks more. ${unreached.length ? `It never listed ${unreached.slice(0, 8).join(", ")}${unreached.length > 8 ? ` and ${unreached.length - 8} more` : ""}, so components there are missing from this audit.` : "Components in the files past the cap are missing from this audit."}`);
+    const unreached = capCutFolders(audit);
+    log(`Warning: the scan stops at ${bound.scope.fileCap.toLocaleString("en-US")} files, and this commit tracks more. ${unreached.length ? `It didn't list everything in ${unreached.slice(0, 8).join(", ")}${unreached.length > 8 ? ` and ${unreached.length - 8} more` : ""}, so components there may be missing from this audit; each is listed as not assessed.` : "Components in the files past the cap are missing from this audit."}`);
   }
   const assessedIds = new Set(profile.components.filter((c) => c.assessed).map((c) => c.id));
   const agentCmds = audit.contract.filter((c) => c.source !== "readiness" && !c.source.includes("scripts.") && !c.source.startsWith(".cursor/environment.json"));
@@ -171,13 +171,6 @@ function cmdScan(a: Args): void {
     for (const s of blocking) log(`  blocking safety finding ${s.file}${s.line ? ":" + s.line : ""}: ${s.detail}`);
     if (wrong.length || blocking.length) fail("Static checks failed.", 1);
   }
-}
-
-// Top-level folders with tracked files the capped scan listed none of.
-function unreachedFolders(repo: string, commit: string, listed: string[]): string[] {
-  const seen = new Set(listed.map((f) => f.split("/")[0]));
-  const tops = git(["ls-tree", "--name-only", "-d", commit], repo).stdout.split("\n").filter(Boolean);
-  return tops.filter((d) => !seen.has(d) && !d.startsWith(".git"));
 }
 
 function cmdContract(a: Args): void {

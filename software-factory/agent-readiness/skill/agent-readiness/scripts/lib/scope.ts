@@ -19,14 +19,22 @@ export function capCutReason(cap: number): string {
 
 const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
+// The folders the file cap cut short, largest share of changes first. The report and the scan's log
+// both name these.
+export function capCutFolders(audit: Pick<Audit, "profile">): string[] {
+  const cap = audit.profile?.scope?.fileCap;
+  if (!cap) return [];
+  const reason = capCutReason(cap);
+  return (audit.profile?.components ?? []).filter((c) => c.notAssessedReason === reason).sort((a, b) => b.changeShare - a.changeShare).map((c) => c.path);
+}
+
 // What the audit read only part of on a large repo, in one clause per part, or null when it read
 // everything. The coverage line and the scan's log both use it.
 export function sampledScope(audit: Pick<Audit, "profile" | "evidence" | "instructions">): string | null {
   const s = audit.profile?.scope;
   const parts: string[] = [];
   if (s?.fileCap) {
-    const reason = capCutReason(s.fileCap);
-    const cut = (audit.profile?.components ?? []).filter((c) => c.notAssessedReason === reason).sort((a, b) => b.changeShare - a.changeShare).map((c) => c.path);
+    const cut = capCutFolders(audit);
     const named = cut.length > 8 ? [...cut.slice(0, 8), `${cut.length - 8} more`] : cut;
     parts.push(`the scan stopped at ${n(s.fileCap)} files${cut.length ? `, before it listed everything in ${list(named)}, which ${cut.length === 1 ? "isn't" : "aren't"} assessed` : ", so it left out the deepest files of the largest folders"}`);
   }
