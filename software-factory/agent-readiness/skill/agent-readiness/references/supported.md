@@ -57,6 +57,7 @@ A Python, PHP or Ruby app next to a root `package.json` is listed with its own s
 |---|---|---|---|---|
 | `swift` | Swift | `Package.swift`, or `.swift` files in a top-level folder | | `fixtures/swift-package`, `apple/swift-argument-parser@38ca4ec` |
 | `dart` | Dart | `pubspec.yaml`; a workspace's root `pubspec.yaml` lists its packages instead | | `fixtures/dart-packages`, `dart-lang/http@8c0d66a` |
+| `elixir` | Elixir | `mix.exs`, or `.ex` and `.exs` files in a top-level folder | | `tests/discovery.test.ts` |
 | `terraform` | Terraform | a folder of `.tf` files at any depth, the root module included | | `fixtures/terraform-modules`, `fixtures/monorepo-mixed`, `terraform-aws-modules/terraform-aws-vpc@b3abd6d` |
 | `cpp` | C or C++ | a `CMakeLists.txt` or `meson.build`; `.c` and `.cc` files alone don't count, since a Node addon or Python extension holds them | the audit recognizes it and doesn't score it in this release, since builds vary too much between CMake, Meson and Make for one install and test rule | `fixtures/cpp-cmake` |
 | `android` | Android | a `build.gradle` or `build.gradle.kts` that applies the Android plugin (`com.android.application` or `com.android.library`, by id, version catalog alias or buildscript classpath) | the audit recognizes a Gradle build that applies the Android plugin and doesn't score it in this release, since it needs the Android SDK, which none of the audit's images ships | `fixtures/android-gradle` |

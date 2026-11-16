@@ -265,32 +265,59 @@ const SKIP_DIRS = new Set([".git", "node_modules", ".agent-readiness", ".venv", 
 export const MAX_FILES = 50000;
 
 export function listFiles(root: string, opts: { includeHidden?: boolean; maxFiles?: number } = {}): string[] {
+  return listFilesScoped(root, opts).files;
+}
+
+// Folder by folder, shallowest first, so a file cap drops the deepest files of every top-level folder
+// rather than whole folders that sort late, such as fs/, kernel/ and mm/ after drivers/. The files
+// come back in a depth-first walk's order. `cut` names the top-level folders the cap left partly unlisted.
+export function listFilesScoped(root: string, opts: { includeHidden?: boolean; maxFiles?: number } = {}): { files: string[]; cut: string[] } {
   const out: string[] = [];
   const max = opts.maxFiles ?? MAX_FILES;
-  const walk = (dir: string) => {
-    if (out.length >= max) return;
+  const cut = new Set<string>();
+  const top = (rel: string) => rel.split(sep)[0];
+  const queue: string[] = [""];
+  for (let q = 0; q < queue.length; q++) {
+    const rel = queue[q];
     let entries: string[];
     try {
-      entries = readdirSync(dir);
+      entries = readdirSync(rel ? join(root, rel) : root).sort();
     } catch {
-      return;
+      continue;
     }
-    for (const name of entries.sort()) {
+    for (let i = 0; i < entries.length; i++) {
+      const name = entries[i];
       if (SKIP_DIRS.has(name)) continue;
-      const full = join(dir, name);
+      const child = rel ? join(rel, name) : name;
       let st;
-      try {
-        st = statSync(full);
-      } catch {
+      if (out.length >= max) {
+        if (rel) cut.add(top(child));
+        else if ((st = statOrNull(join(root, child)))?.isDirectory()) cut.add(child);
         continue;
       }
-      if (st.isDirectory()) walk(full);
-      else if (st.isFile()) out.push(relative(root, full));
-      if (out.length >= max) return;
+      st = statOrNull(join(root, child));
+      if (!st) continue;
+      if (st.isDirectory()) queue.push(child);
+      else if (st.isFile()) out.push(child);
     }
-  };
-  walk(root);
-  return out;
+  }
+  const files = out.map((f) => f.split(sep).join("/"));
+  const segs = new Map(files.map((f) => [f, f.split("/")]));
+  files.sort((a, b) => {
+    const x = segs.get(a)!;
+    const y = segs.get(b)!;
+    for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
+    return x.length - y.length;
+  });
+  return { files: files.map((f) => f.split("/").join(sep)), cut: [...cut].sort() };
+}
+
+function statOrNull(path: string): ReturnType<typeof statSync> | null {
+  try {
+    return statSync(path);
+  } catch {
+    return null;
+  }
 }
 
 // A repo-wide step names "the repo" in prose, and its commands take no --component.

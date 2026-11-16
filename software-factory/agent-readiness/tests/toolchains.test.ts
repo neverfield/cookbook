@@ -197,7 +197,7 @@ describe("time bounds on large repos", () => {
     audit.evidence.push({ id: "ev-100", at: audit.createdAt, checkId: "verify.behavioral_oracle", condition: "faults", component: "app", strength: "clean_replay", where: "container", result: "pass", summary: "caught 4 of 4 planted faults (tried: boundary_flip); the time budget cut off 1 of 5" });
     audit.instructions = [{ id: "ins-001", source: "AGENTS.md", line: 1, kind: "command", text: "npm test", category: "replay", staticResult: "pass", result: "not_run", reason: CUT_OFF }];
     const all = sampledScope(audit)!;
-    assert.match(all, /^the scan listed only the first 50,000 files; .*planted faults in app stopped at the time budget; 1 documented command wasn't run before the time budget ran out$/);
+    assert.match(all, /^the scan stopped at 50,000 files, so it left out the deepest files of the largest folders; .*planted faults in app stopped at the time budget; 1 documented command wasn't run before the time budget ran out$/);
     for (const term of rubric.part1.bannedTerms) assert.ok(!all.toLowerCase().includes(term.toLowerCase()), `the sampled scope can't say "${term}" in part 1`);
   });
 

@@ -4,7 +4,7 @@ import { go } from "./go.ts";
 import { jvm } from "./jvm.ts";
 import type { Detect, Ecosystem, LanguageDef } from "./language.ts";
 import { node } from "./node.ts";
-import { cpp, dart, swift, terraform } from "./others.ts";
+import { cpp, dart, elixir, swift, terraform } from "./others.ts";
 import { php } from "./php.ts";
 import { python } from "./python.ts";
 import { ruby } from "./ruby.ts";
@@ -12,7 +12,7 @@ import { rust } from "./rust.ts";
 
 // The registry: every language file, listed once. Detection order comes from each rule's rank, not
 // from this list, so a new file never has to move another.
-export const LANGUAGES: LanguageDef[] = [node, python, go, rust, jvm, dotnet, php, ruby, swift, dart, terraform, cpp];
+export const LANGUAGES: LanguageDef[] = [node, python, go, rust, jvm, dotnet, php, ruby, swift, dart, elixir, terraform, cpp];
 
 export const ECOSYSTEMS: Ecosystem[] = LANGUAGES.flatMap((l) => l.ecosystems);
 

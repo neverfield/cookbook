@@ -6,7 +6,8 @@ import { PY_LOCKFILES, UV_WORKSPACE, pyproject, uvWorkspaceMembers } from "./lan
 import type { Rubric } from "./rubric.ts";
 import { STACKS, notSupportedReason, stack, supported } from "./support.ts";
 import type { Component, Language, PackageManager, Profile } from "./types.ts";
-import { addDays, containedPath, exists, git, listFiles, readJson, readText, today, workspaceDirs } from "./util.ts";
+import { capCutReason } from "./scope.ts";
+import { MAX_FILES, addDays, containedPath, exists, git, listFilesScoped, readJson, readText, today, workspaceDirs } from "./util.ts";
 
 export { pyproject, readPackageJson, uvWorkspaceMembers, yarnBerry };
 
@@ -83,7 +84,7 @@ function sanitizeId(name: string): string {
 }
 
 // Lockfiles of the toolchains no language file covers yet, so a component still reports the one it has.
-const OTHER_LOCKFILES = ["mix.lock", "Podfile.lock"];
+const OTHER_LOCKFILES = ["Podfile.lock"];
 const LOCKFILES = [...new Set([...NODE_LOCKFILES, ...PY_LOCKFILES, ...lockfileNames(), ...OTHER_LOCKFILES])];
 const SKIP_SEGMENT = /^(\..+|node_modules|fixtures?|__fixtures__|testdata|vendor|dist|build|bin|obj|target)$/;
 
@@ -110,12 +111,17 @@ const EXAMPLE_SEGMENT = /^(samples?|examples?|demos?|bench|benchmarks?)$/;
 const PACKAGING_SEGMENT = /^(HomebrewFormula|Formula|pkg|packaging|android|ios|debian|rpm|snap)$/;
 const CONFIG_PACKAGE = /^(@[^/]+\/)?((eslint|prettier|stylelint|babel|jest|vitest|tsconfig|typescript)-config(-[\w.-]+)?|eslint-config|tsconfig|config)$/;
 
+// A Python manifest under docs/ is usually the docs build's requirements, such as Sphinx or MkDocs.
+const DOCS_SEGMENT = /^(docs?|documentation|website)$/i;
+
 const SATELLITE_HOLDS = "tests, samples or tooling";
 const PACKAGING_HOLDS = "packaging or a mobile platform shell";
 
 function satelliteReason(tree: string, m: FoundManifest): string | null {
   const segment = m.dir.split("/").find((s) => SATELLITE_SEGMENT.test(s));
   if (segment) return `it sits under ${segment}/, which usually holds ${SATELLITE_HOLDS} rather than the product`;
+  const docs = m.kind === "py" ? m.dir.split("/").find((s) => DOCS_SEGMENT.test(s)) : undefined;
+  if (docs) return `it sits under ${docs}/, which usually holds the documentation build rather than the product`;
   const packaging = m.kind === "other" ? m.dir.split("/").find((s) => PACKAGING_SEGMENT.test(s)) : undefined;
   if (packaging) return `it sits under ${packaging}/, which usually holds ${PACKAGING_HOLDS} rather than the product`;
   const name = m.kind === "js" ? readPackageJson(join(tree, m.dir))?.name : undefined;
@@ -138,8 +144,9 @@ function pickManifest(names: string[], preferred: string): string {
 
 // Every manifest in the tree, at any depth, outside workspace members. A supported package owns
 // the folders under it; one nested in an unsupported project (a web client inside a .NET project)
-// is still its own component. Next to a root package, only nested packages with their own lockfile count.
-function discoverManifests(tree: string, files: string[], claimed: string[], hasRoot: boolean, repoName: string): { found: FoundManifest[]; satellites: (FoundManifest & { reason: string })[] } {
+// is still its own component. Next to a root package of the same language, only nested packages
+// with their own lockfile count; a Python service next to a Node root can't be part of it.
+function discoverManifests(tree: string, files: string[], claimed: string[], hasRoot: boolean, rootPy: boolean, repoName: string): { found: FoundManifest[]; satellites: (FoundManifest & { reason: string })[] } {
   const byDir = new Map<string, string[]>();
   for (const f of files) {
     const dir = dirname(f);
@@ -163,7 +170,7 @@ function discoverManifests(tree: string, files: string[], claimed: string[], has
       continue;
     }
     const py = has("pyproject.toml") ? "pyproject.toml" : has("setup.py") ? "setup.py" : has("requirements.txt") && names.some((n) => n.endsWith(".py")) ? "requirements.txt" : null;
-    if (dir !== "." && !insideSupported && py && (!hasRoot || PY_LOCKFILES.some(has))) {
+    if (dir !== "." && !insideSupported && py && (!hasRoot || !rootPy || PY_LOCKFILES.some(has))) {
       add({ dir, kind: "py", manifest: `${dir}/${py}` });
       continue;
     }
@@ -232,6 +239,24 @@ function rootApps(tree: string, files: string[], repoName: string): Component[] 
   return out;
 }
 
+const JS_SOURCE = /\.(c|m)?[jt]sx?$/;
+const JS_CONFIG = /(^|\/)[^/]*(\.config|rc)\.(c|m)?[jt]s$/;
+
+// A root package.json next to the repo's real projects that holds only repo tooling, such as
+// markdownlint: no dependencies, entry points or tests, and no source of its own. It names the tools,
+// or null when the root is a package.
+function toolingOnlyRoot(tree: string, files: string[], others: Component[], elsewhere: string[]): string[] | null {
+  const pkg = readPackageJson(tree) as (ReturnType<typeof readPackageJson> & Record<string, unknown>) | null;
+  if (!pkg || others.length === 0) return null;
+  const deps = ["dependencies", "peerDependencies", "optionalDependencies"].some((k) => Object.keys((pkg[k] as Record<string, string> | undefined) ?? {}).length > 0);
+  const entry = ["main", "module", "exports", "bin", "types", "browser"].some((k) => pkg[k] !== undefined);
+  const test = pkg.scripts?.test && !/no test specified/.test(pkg.scripts.test);
+  if (deps || entry || test) return null;
+  const ownSource = files.some((f) => JS_SOURCE.test(f) && !f.endsWith(".d.ts") && !JS_CONFIG.test(f) && !f.split("/").slice(0, -1).some((s) => s.startsWith(".") || SKIP_SEGMENT.test(s)) && ![...others.map((c) => c.path), ...elsewhere].some((p) => within(f, p)));
+  const tools = Object.keys((pkg.devDependencies as Record<string, string> | undefined) ?? {});
+  return ownSource || tools.length === 0 ? null : tools;
+}
+
 export function discoverLayout(tree: string, files: string[], repoName = basename(tree)): { components: Component[]; satellites: Profile["satellites"] } {
   const comps: Component[] = [];
   const memberSatellites: Profile["satellites"] = [];
@@ -293,7 +318,8 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
       comps.push(app);
     }
   }
-  const { found, satellites } = discoverManifests(tree, files, [...comps.filter((c) => c.path !== ".").map((c) => c.path), ...memberSatellites.map((s) => s.path), ...excludedDirs], hasRoot, repoName);
+  const rootPy = comps.some((c) => c.path === "." && c.language === "py");
+  const { found, satellites } = discoverManifests(tree, files, [...comps.filter((c) => c.path !== ".").map((c) => c.path), ...memberSatellites.map((s) => s.path), ...excludedDirs], hasRoot, rootPy, repoName);
   const deferred = comps.length === 0 && found.length === 0;
   for (const m of deferred ? satellites : found) {
     const pkg = m.kind === "js" ? readPackageJson(join(tree, m.dir)) : null;
@@ -303,6 +329,15 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
       comps.push(languageComponent(tree, { id, path: m.dir, manifest: m.manifest }, m.stack!));
     } else {
       comps.push({ id, path: m.dir, language: m.kind === "js" ? languageOf(tree, m.dir, files) : "py", manifest: m.manifest, scripts: pkg?.scripts ?? {}, changes: 0, changeShare: 0, assessed: false, packageManager: detectPackageManager(join(tree, m.dir)) });
+    }
+  }
+  // A tooling-only root would take every change outside the projects and set the level with no tests.
+  const roots = comps.filter((c) => c.path === ".");
+  if (!included.length && roots.length === 1 && roots[0].manifest === "package.json") {
+    const tools = toolingOnlyRoot(tree, files, comps.filter((c) => c.path !== "."), [...memberSatellites.map((s) => s.path), ...satellites.map((s) => s.dir)]);
+    if (tools) {
+      comps.splice(comps.indexOf(roots[0]), 1);
+      memberSatellites.push({ path: ".", manifest: "package.json", toolchain: "Node", reason: `it holds only repo tooling (${tools.slice(0, 3).join(", ")}${tools.length > 3 ? ` and ${tools.length - 3} more` : ""}) and no product code, so the projects under it are the components` });
     }
   }
   const rootPm = detectPackageManager(tree);
@@ -541,10 +576,17 @@ export function instructionFiles(files: string[]): string[] {
 // to reproduce them too; the rubric's list still decides which commits count toward shares.
 const LATER_LOCKFILES = ["bun.lock", "bun.lockb"];
 
-export function buildProfile(repo: string, tree: string, rubric: Rubric, commit = "HEAD"): Profile {
-  const files = listFiles(tree, { includeHidden: true });
+export function buildProfile(repo: string, tree: string, rubric: Rubric, commit = "HEAD", maxFiles = MAX_FILES): Profile {
+  const { files, cut } = listFilesScoped(tree, { includeHidden: true, maxFiles });
   const pm = detectPackageManager(tree);
   const { components, satellites } = discoverLayout(tree, files, basename(repo));
+  // A folder the file cap left partly unlisted may hold projects the scan never saw. Unless a
+  // component already covers it, it's listed with its own share of changes, so it can't vanish.
+  for (const dir of cut.filter((d) => !components.some((c) => c.path !== "." && within(c.path, d)))) {
+    let id = sanitizeId(dir);
+    for (let i = 2; components.some((c) => c.id === id); i++) id = `${sanitizeId(dir)}-${i}`;
+    components.push({ id, path: dir, language: "other", manifest: null, scripts: {}, changes: 0, changeShare: 0, assessed: false, lockfile: null, notAssessedReason: capCutReason(maxFiles) });
+  }
   const totalChanges = computeChangeShares(repo, components, rubric, commit);
   const supported = components.filter((c) => !c.notAssessedReason && rubric.mutation.languages.includes(c.language === "other" ? "x" : c.language));
   for (const c of components) {
