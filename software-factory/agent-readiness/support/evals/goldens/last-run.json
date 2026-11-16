@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-11-15T21:52:36.437Z",
+  "ranAt": "2026-11-16T01:28:02.274Z",
   "results": [
     {
       "id": "slugify",
@@ -108,8 +108,8 @@
       "id": "serilog",
       "sha": "43105b35095337d77f022561a8f2d3db2f9a7937",
       "scoring": "60f9eff4ff44fb5dabf333604bad48a52aff6ec70c8cca5b034f02c0294d0062",
-      "commit": "32fd0b379d41d080f45ebccb027728b293c0095b",
-      "minutes": 5.5,
+      "commit": "4ef923c7f138715a799a5047886b4d8c57a281dc",
+      "minutes": 3,
       "repoLevel": 2,
       "outcome": "proven",
       "levels": {
