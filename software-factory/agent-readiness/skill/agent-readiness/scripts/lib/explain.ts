@@ -57,9 +57,19 @@ function evidenceFor(audit: Audit, ids: string[]): Evidence[] {
   return audit.evidence.filter((e) => set.has(e.id));
 }
 
+// The images a mixed-language replay used, each with what ran in it: "node:22-bookworm (the repo,
+// web); golang:1.23-bookworm (api)". Null when one image ran everything.
+export function imagesUsed(env: Audit["environment"]): string | null {
+  const runs = env.images ?? [];
+  if (runs.length < 2) return null;
+  return runs.map((r) => `${r.image} (${r.components.map((c) => (c === "*" ? "the repo" : c)).join(", ")}${r.started ? "" : ", didn't start"})`).join("; ");
+}
+
 function environmentLine(input: RenderInput): string {
   const { audit } = input;
   if (audit.tier === "read-only") return "nowhere: the read-only tier runs no repo command";
+  const images = imagesUsed(audit.environment);
+  if (audit.environment.containerRuntime && images) return `in clean ${audit.environment.containerRuntime} containers, one per toolchain: ${images}`;
   if (audit.environment.containerRuntime) return `in a clean ${audit.environment.containerRuntime} container (${audit.environment.image ?? "the audit's image"})`;
   if (audit.evidence.some((e) => e.where === "fresh_copy")) return "in a fresh copy on the host, because this machine has no container runtime";
   return "nowhere: no repo command ran";

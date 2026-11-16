@@ -75,6 +75,27 @@ export function testCounts(output: string): { passed: number; failed: number; to
 const NETWORK: { re: RegExp; detail: string }[] = [
   { re: /There was an issue establishing a connection while requesting https?:\/\/\S+|Failed to (fetch|download) (font|`[^`\n]+` from Google Fonts)|request to https?:\/\/fonts\.(googleapis|gstatic)\.com\S* failed/i, detail: "a failed font download on the network" },
   { re: /Error when performing the request to https?:\/\/\S+|ERR_PNPM_META_FETCH_FAIL|npm (error|ERR!) network\b|YN0001[^\n]*(RequestError|getaddrinfo|ENOTFOUND|ECONNREFUSED)/, detail: "an unreachable package registry on the network" },
+  // The registries of the other ecosystems, as each tool reports a refused or unreachable host. A
+  // missing version reads differently (Maven's "Could not find artifact", NuGet's NU1102, Go's
+  // "unknown revision", Bundler's "Could not find gem"), so it stays the repo's failure.
+  // Bundler: "Bundler::HTTPError Could not fetch specs from https://rubygems.org/ ... SSL_connect
+  // returned=1", or "Could not reach host index.rubygems.org. Check your network connection".
+  { re: /Bundler::HTTPError|Could not fetch specs from https?:\/\/\S+|Gem::RemoteFetcher::(FetchError|UnknownHostError)|SSL_connect returned=\d|Could not reach host [\w.-]+\.\s+Check your network connection/, detail: "an unreachable package registry on the network" },
+  // Composer boxes its message and wraps it mid-word, so only the curl code and URL are reliable.
+  { re: /curl error (5|6|7|28|35|52|56) while downloading https?:\/\//, detail: "an unreachable package registry on the network" },
+  // NuGet: "error NU1301: Unable to load the service index for source https://api.nuget.org/v3/index.json".
+  { re: /\bNU1301\b|Unable to load the service index for source https?:\/\/\S+/, detail: "an unreachable package registry on the network" },
+  // Maven: a transfer that failed on the connection, not on a missing artifact. With -q only the
+  // last line shows; the dependency plugin is Maven's own, so failing to find it means the
+  // repository wasn't reached. The Maven Wrapper downloads Maven with wget.
+  { re: /Could not transfer (artifact|metadata) [^\n]* from\/to [^\n]*\(https?:\/\/[^)\s]+\): (Remote host terminated the handshake|Connection reset|Connect to [^\n]* failed|[\w.-]+(: (Name or service not known|Temporary failure in name resolution))?$)|No plugin found for prefix 'dependency' in the current project|wget: Failed to fetch https?:\/\//m, detail: "an unreachable package registry on the network" },
+  // Gradle: "Could not GET 'https://repo.maven.apache.org/...'"; a missing version is "Could not find".
+  { re: /Could not GET '[^']+'/, detail: "an unreachable package registry on the network" },
+  // Go: `Get "https://proxy.golang.org/...": EOF`, or a dial, TLS or reset error after the URL.
+  { re: /Get "https?:\/\/[^"]+": (EOF|dial tcp|net\/http: TLS handshake timeout|read tcp [^\n]*connection reset|tls: |x509: )/, detail: "an unreachable package registry on the network" },
+  { re: /java\.net\.(UnknownHostException|ConnectException|NoRouteToHostException)|Remote host terminated the handshake|java\.net\.SocketException: (Connection reset|Network is unreachable)/, detail: "a network connection failed" },
+  // uv and other Rust tools: "Caused by: dns error" / "failed to lookup address information: Try again".
+  { re: /failed to lookup address information|Caused by: dns error/, detail: "it tried to reach the network" },
   { re: /\bcurl: \((5|6|7|28|35|52|56)\)/, detail: "it tried to reach the network" },
   { re: /ProxyError|407 Proxy Authentication|tunneling socket could not be established|proxy[^\n]{0,40}(refused|error|failed)/i, detail: "a proxy error on the network" },
   { re: /CERT_|certificate verify failed|unable to (get|verify) (the )?(local issuer|first) certificate|self[- ]signed certificate|SSLError|SSL: [A-Z_]+|ERR_SSL|SSL routines|tlsv1 alert|TLS handshake|Client network socket disconnected before secure TLS/i, detail: "a TLS or certificate error on the network" },
@@ -214,8 +235,62 @@ function toolchainGap(text: string): string | null {
   return null;
 }
 
+// The first error a compiler reports, rather than the build tool's tally ("2 Error(s)", "BUILD
+// FAILURE"): C#'s "Orders.cs(5,80): error CS0103: ...", without MSBuild's trailing [project]; the
+// first "[ERROR] /path/X.java:[l,c] ..." after Maven's "COMPILATION ERROR"; kotlinc's
+// "e: file:///.../X.kt:l:c ...".
+export function compilerError(output: string): string | null {
+  const cs = output.match(/^\s*(\S[^\n]*?: error CS\d{4}: [^\n]*?)(?:\s+\[[^\]\n]+\])?\s*$/m);
+  if (cs) return cs[1].trim();
+  const maven = output.match(/COMPILATION ERROR[^\n]*\n(?:[^\n]*\n)*?\[ERROR\] (\S+\.(?:java|kt|groovy|scala):\[\d+,\d+\][^\n]*)/);
+  if (maven) return maven[1].trim();
+  const kotlin = output.match(/^e: ((?:file:\/\/)?\S+\.kts?:\d+:\d+ [^\n]+)$/m);
+  if (kotlin) return kotlin[1].trim();
+  return null;
+}
+
+// A remote-tracking ref or remote the audit's clean copy doesn't have: it is one commit with no
+// remote, so "origin/v2/main", "upstream/main" and the like never resolve there.
+const REF = String.raw`["'\`]?((?:origin|upstream)\/[\w.\/-]*[\w-]|[\w.-]+\/main|[\w.-]+\/master)["'\`]?`;
+const MISSING_REF: RegExp[] = [
+  new RegExp(String.raw`(?:cannot resolve|could not resolve|can't resolve|unable to resolve)\s+${REF}`, "i"),
+  new RegExp(String.raw`${REF}\s+is not available`, "i"),
+  new RegExp(String.raw`Failed to find where HEAD diverged from\s+${REF}`, "i"),
+  new RegExp(String.raw`(?:fatal: )?(?:ambiguous argument|bad revision|unknown revision|Not a valid object name)\s+${REF}`, "i"),
+  new RegExp(String.raw`fatal: '(origin|upstream)' does not appear to be a git repository|fatal: No such remote '?(origin|upstream)'?`, "i"),
+];
+
+export function missingRef(output: string): string | null {
+  for (const re of MISSING_REF) {
+    const m = output.match(re);
+    if (m) return `the clean copy has no ${m.slice(1).find(Boolean) ?? "remote"} ref; it is one commit with no remote`;
+  }
+  return null;
+}
+
+// An interactive prompt: arrow-key pickers and y/N questions.
+const PROMPT = /↑\/↓ to navigate|Use arrow keys|\(y\/N\)\s*$|\[y\/N\]\s*$/m;
+
+// The tests a Go or Rust run names as failing: go test's "--- FAIL: TestX" (a subtest only when its
+// parent isn't listed) and cargo test's "test name ... FAILED". Their last line is just "FAIL" or
+// "error: test failed", which says nothing about which test.
+export function failingTests(output: string): string[] {
+  const go = [...output.matchAll(/^\s*--- FAIL: (\S+)/gm)].map((m) => m[1]);
+  const top = go.filter((t) => !go.some((p) => t.startsWith(`${p}/`)));
+  const rust = [...output.matchAll(/^test (\S+) \.\.\. FAILED\s*$/gm)].map((m) => m[1]);
+  return [...new Set([...top, ...rust])];
+}
+
+// What the audit appends to a timed-out command's output when the command's processes used no CPU
+// in the seconds before it was stopped, and whether the network was off then.
+export const IDLE_MARK = "readiness: idle at the timeout";
+export const IDLE_OFFLINE = "with the network off";
+
 export function diagnose(rawOutput: string, timedOut: boolean, phase: string): Diagnosis {
   const clean = rawOutput.replace(/\x1b\[[0-9;]*m/g, "");
+  // Stuck with no CPU while the network was off: most likely waiting on a download, such as an
+  // npm install of a packed tarball inside a test script.
+  if (timedOut && rawOutput.includes(`${IDLE_MARK}`) && rawOutput.includes(IDLE_OFFLINE)) return { cause: "network", detail: `the ${phase} step stopped using CPU ${IDLE_OFFLINE}, likely waiting on the network` };
   if (timedOut) return { cause: "timeout", detail: `the ${phase} step ran out of time` };
   const focus = failingPart(clean);
   const output = `${focus}\n${unwrap(focus)}`;
@@ -245,13 +320,30 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   const mirror = mirrorRefused(output);
   if (mirror) return { cause: "network", detail: mirror };
   if (/ensurepip is not\s+available|No module named venv\b/.test(output)) return { cause: "missing_tool", detail: "python3-venv is not installed" };
+  const ref = missingRef(output);
+  if (ref) return { cause: "missing_ref", detail: ref };
+  if (PROMPT.test(output)) return { cause: "interactive", detail: "it stopped at a prompt that waits for a person's answer" };
+  if (/\bENEEDAUTH\b|This command requires you to be logged in/.test(output)) return { cause: "credential", detail: "needs a logged-in npm account" };
+  // A repo script's own words for a tool it can't find: "no usable `claude` CLI on PATH", "uv not
+  // found on PATH". Not for a test run, whose output can log such a line on a path it falls back
+  // from ("Node.js was not found on PATH; using the pure-Python extractor").
+  const onPath = phase === "test" ? null : output.match(/\bno usable [`'"]?([\w.+-]+)[`'"]? CLI\b|(?:^|[\s(`'"])[`'"]?([A-Za-z][\w.+-]*)[`'"]? (?:CLI )?(?:was |is )?(?:not found|not installed|not available) on (?:your |the )?PATH\b/im);
+  if (onPath) return { cause: "missing_tool", detail: `${onPath[1] ?? onPath[2]} is not installed` };
   const tool = output.match(/(?:^|\n)(?:[^\n:]*: line \d+: |[^\n:]*: \d+: |(?:ba)?sh: )?([\w.+-]+): (?:command )?not found/);
   if (tool) return { cause: "missing_tool", detail: `${tool[1]} is not installed` };
+  // GNU make runs a simple recipe line itself, so a missing tool reads "make: golangci-lint: No such
+  // file or directory" and then "Error 127". A path such as ./scripts/x.sh is the repo's own file.
+  const makeTool = output.match(/(?:^|\n)make(?:\[\d+\])?: ([\w.+-]+): (?:No such file or directory|Command not found)\n(?:[^\n]*\n)*?[^\n]*\bError 127\b/);
+  if (makeTool) return { cause: "missing_tool", detail: `${makeTool[1]} is not installed` };
   const mod = MISSING_MODULE.map((re) => output.match(re)).filter((m): m is RegExpMatchArray => m !== null).sort((a, b) => (a.index ?? 0) - (b.index ?? 0))[0];
   if (mod) return { cause: "missing_module", detail: `module ${mod[1]} is missing` };
   const network = networkFailure(output);
   if (network) return { cause: "network", detail: network };
   if (/SyntaxError|error TS\d{4}|IndentationError/.test(output)) return { cause: "compile", detail: "the code doesn't compile" };
+  const compiler = compilerError(clean);
+  if (compiler) return { cause: "compile", detail: compiler.slice(0, 200) };
+  const named = failingTests(clean);
+  if (named.length) return { cause: "unknown", detail: named.length === 1 ? `${named[0]} failed` : `${named[0]} and ${named.length - 1} more failed` };
   const lines = (focus.trim() ? focus : clean).split("\n").map((l) => l.trim()).filter(Boolean);
   // node --test's TAP block lists code, failureType and the like after the error itself.
   const noise = /^(npm (error|ERR!|warn)|ELIFECYCLE|error Command failed|>\s|\$ |command failed|at |# |(code|failureType|type|location|duration_ms|stack): )/i;

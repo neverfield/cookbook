@@ -1,0 +1,20 @@
+    Updating `mirror` index
+warning: spurious network error (3 tries remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading)
+warning: spurious network error (2 tries remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading)
+warning: spurious network error (1 try remaining): [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading)
+error: failed to get `itoa` as a dependency of package `app v0.1.0 (/w)`
+
+Caused by:
+  failed to load source for dependency `itoa`
+
+Caused by:
+  unable to update registry `crates-io`
+
+Caused by:
+  failed to query replaced source registry `crates-io`
+
+Caused by:
+  download of config.json failed
+
+Caused by:
+  [35] SSL connect error (TLS connect error: error:0A000126:SSL routines::unexpected eof while reading)

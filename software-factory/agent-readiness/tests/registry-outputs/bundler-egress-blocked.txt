@@ -1,0 +1,11 @@
+Fetching source index from https://rubygems.org/
+
+Retrying fetcher due to error (2/4): Bundler::HTTPError Could not fetch specs from https://rubygems.org/ due to underlying error <SSL_connect returned=1 errno=0 peeraddr=151.101.129.227:443 state=error: unexpected eof while reading (https://rubygems.org/specs.4.8.gz)>
+Retrying fetcher due to error (3/4): Bundler::HTTPError Could not fetch specs from https://rubygems.org/ due to underlying error <SSL_connect returned=1 errno=0 peeraddr=151.101.193.227:443 state=error: unexpected eof while reading (https://rubygems.org/specs.4.8.gz)>
+
+
+Retrying fetcher due to error (4/4): Bundler::HTTPError Could not fetch specs from https://rubygems.org/ due to underlying error <SSL_connect returned=1 errno=0 peeraddr=151.101.1.227:443 state=error: unexpected eof while reading (https://rubygems.org/specs.4.8.gz)>
+
+Could not fetch specs from https://rubygems.org/ due to underlying error
+<SSL_connect returned=1 errno=0 peeraddr=151.101.65.227:443 state=error:
+unexpected eof while reading (https://rubygems.org/specs.4.8.gz)>

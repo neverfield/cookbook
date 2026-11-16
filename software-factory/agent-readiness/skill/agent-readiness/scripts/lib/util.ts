@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const SKILL_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -65,6 +65,27 @@ export function ensureDir(path: string): void {
 
 export function exists(path: string): boolean {
   return existsSync(path);
+}
+
+// Whether a path the repo names exists under root, spelled exactly as it is. A Mac's default
+// filesystem ignores case, so a plain exists() would pass `LinqShuffler.cs` for `LINQShuffler.cs`
+// there and fail it on Linux; this checks each segment against its folder's listing, the same on
+// every machine. A path that leaves root is checked as it is.
+export function existsExact(root: string, rel: string): boolean {
+  const n = normalize(rel);
+  if (isAbsolute(n) || n === ".." || n.startsWith(`..${sep}`) || n.startsWith("../")) return existsSync(join(root, n));
+  let dir = root;
+  for (const seg of n.split(/[\\/]/).filter((x) => x && x !== ".")) {
+    let names: string[];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return false;
+    }
+    if (!names.includes(seg)) return false;
+    dir = join(dir, seg);
+  }
+  return existsSync(dir);
 }
 
 export function readText(path: string): string {

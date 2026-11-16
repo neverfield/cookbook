@@ -9,7 +9,7 @@ import { HISTORY_BRANCH, appendHistory, loadSealedAudit, readHistory, readRoadma
 import type { LevelResult } from "./levels.ts";
 import { activeComponents, capAt, componentLevel, level3Run, outcomeLevel, partialCoverage, previousAtLevel3, recheckStates, repoLevel, scenariosFor, statesOf } from "./levels.ts";
 import { emptyStats } from "./outcomes.ts";
-import { makeExecutor, newBudget, registryValuesOf, revealMutants, runContract } from "./replay.ts";
+import { budgetFloors, makeExecutors, newBudget, registryValuesOf, revealMutants, runContracts } from "./replay.ts";
 import { allowedNumbers, buildReport, danglingEvidence, renderMarkdown, validatePart1 } from "./render.ts";
 import { renderHtml } from "./render-html.ts";
 import { updateRoadmap } from "./roadmap.ts";
@@ -402,13 +402,13 @@ export async function recheck(p: Paths, opts: RecheckOptions): Promise<{ line: H
   const copy = join(root, "work");
   exportTree(p.repo, commit, copy);
   const work: Audit = JSON.parse(JSON.stringify(audit)) as Audit;
-  const ex = makeExecutor(work, copy, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride);
+  const exs = makeExecutors(work, copy, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, undefined, audit.contract.some((c) => c.component === "*"));
   const comps = new Set(audit.profile!.components.filter((c) => c.assessed).map((c) => c.id));
   let results;
   try {
-    results = await runContract(ex, audit.contract, { components: comps, budget: newBudget(rubric.budgets.componentMinutes, rubric.budgets.totalMinutes), registryValues: registryValuesOf(audit), onResult: (r) => opts.log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.blocked ? "blocked" : r.status}`) });
+    results = await runContracts(exs, audit.contract, { components: comps, budget: newBudget(rubric.budgets.componentMinutes, rubric.budgets.totalMinutes, budgetFloors(audit.profile!)), registryValues: registryValuesOf(audit), profile: audit.profile, onResult: (r) => opts.log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.blocked ? "blocked" : r.status}`) });
   } finally {
-    ex.close();
+    exs.close();
     rmSync(root, { recursive: true, force: true });
   }
   // A limit of this machine is never a regression, and a rerun outside a clean container can't
@@ -416,7 +416,7 @@ export async function recheck(p: Paths, opts: RecheckOptions): Promise<{ line: H
   // Only a command that ran and failed lowers a level; one cut off or skipped proves nothing. On the
   // host nothing is recorded as a level at all, whatever passed.
   const failed = results.filter((r) => r.status === "fail" && !r.blocked);
-  const onHost = ex.where !== "container";
+  const onHost = exs.groups.some((g) => g.ex.where !== "container");
   const cutOff = results.find((r) => r.status === "not_run" && !r.blocked);
   const blockedBy = onHost ? "no container runtime on this machine" : (results.find((r) => r.blocked)?.blocked ?? (cutOff ? `${cutOff.cmd.command} ${cutOff.note || "didn't run"}` : undefined));
   const unproven = onHost || (failed.length === 0 && Boolean(blockedBy));

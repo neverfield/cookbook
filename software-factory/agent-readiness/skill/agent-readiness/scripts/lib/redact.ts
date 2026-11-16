@@ -42,7 +42,9 @@ function envSecret(name: string, value: string): boolean {
 }
 // The password in a URL, as connection strings and proxy settings carry it: scheme://user:password@host.
 const URL_CREDENTIAL = /\b([a-z][a-z0-9+.-]*:\/\/[^\s:/@"'`]+:)([^\s@/"'`]+)(@[^\s/"'`]+)/gi;
-const PLACEHOLDER = /example|xxx|changeme|placeholder|dummy|fake|test|<|\$\{|your[-_]/i;
+// A Symfony parameter reference (`%env(APP_SECRET)%`, `%kernel.secret%`) names where the value comes
+// from; a committed literal such as `APP_SECRET=not-a-secret--read-the-doc!` is still flagged.
+const PLACEHOLDER = /example|xxx|changeme|placeholder|dummy|fake|test|<|\$\{|your[-_]|^%(env\([\w:.-]+\)|[\w.-]+)%$/i;
 // Values in a URL's password slot that stand for a password rather than being one.
 const URL_PLACEHOLDER = /^(password|pass|passwd|secret|pwd|\*+|\$\w+|\$\{[^}]*\}|<[^>]*>|%[A-Z_]+%|x+)$/i;
 

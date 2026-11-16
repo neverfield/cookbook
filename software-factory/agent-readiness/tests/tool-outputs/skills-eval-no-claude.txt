@@ -1,0 +1,5 @@
+
+> @modelcontextprotocol/servers@0.6.2 skills:eval
+> node scripts/skill-eval.mjs
+
+skills:eval — no usable `claude` CLI on PATH. This eval needs one.

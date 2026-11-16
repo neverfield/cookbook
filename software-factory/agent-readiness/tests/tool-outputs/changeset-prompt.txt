@@ -1,0 +1,15 @@
+> @modelcontextprotocol/servers@0.6.2 changeset
+> changeset
+🦋 changeset v3.0.3
+Failed to identify which packages have changed since the base branch due to an error:
+Error: Failed to find where HEAD diverged from "v2/main". Does "v2/main" exist and it's synced with remote?
+[?25l◆  Which packages were affected by the changes you made?
+◻ unchanged packages
+│ ◻ @modelcontextprotocol/server-everything
+│ ◻ @modelcontextprotocol/server-filesystem
+│ ◻ @modelcontextprotocol/server-memory
+└ ◻ @modelcontextprotocol/server-sequential-thinking
+↑/↓ to navigate • Space: select • Enter: confirm
+Warning: Detected unsettled top-level await at file:///work/node_modules/@changesets/cli/bin.js:9
+await import("@changesets/cli");
+^

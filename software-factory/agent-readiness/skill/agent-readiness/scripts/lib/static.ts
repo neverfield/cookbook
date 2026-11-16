@@ -4,14 +4,15 @@ import { checkOnly } from "./contract.ts";
 import { pyproject, readPackageJson } from "./profile.ts";
 import { scanText } from "./redact.ts";
 import type { InstructionItem, Profile, SafetyFinding, ScanBound } from "./types.ts";
-import { MAX_FILES, exists, inTreePath, listFiles, readText, sha256 } from "./util.ts";
+import { MAX_FILES, existsExact, inTreePath, listFiles, readText, sha256 } from "./util.ts";
 
 const COMMAND_START = /^(npm|pnpm|yarn|npx|pnpx|bunx|uvx|corepack|make|python3?|pip3?|pytest|uv|poetry|node|bun|cargo|go|tsc|eslint|ruff|cd\s+\S+\s*&&|\.\/[\w./-]+)(\s|$)/;
 const SHELL_LANGS = new Set(["", "sh", "bash", "shell", "console", "zsh", "terminal"]);
 const PATH_LIKE = /^(?:\.{1,2}\/)[\w./-]+$|^[\w.-]+(?:\/[\w.-]+)*\/$|^(?:[\w.-]+\/)*[\w.-]+\.(md|mdc|ts|tsx|js|mjs|cjs|json|py|ya?ml|sh|toml|txt|sql)$/;
 
 const INSTALL = /^(npm (ci|install|i)\b|pnpm (install|i)\b|yarn( install)?\s*$|yarn install\b|corepack \w+ install\b|bun (install|i)\b|pip3? install\b|python3? -m pip install\b|uv sync\b|poetry (install|sync)\b)/;
-const LONG_RUNNING = /\b(run )?(dev|start|serve|watch)(\s|$)|--watch\b|compose up\b|docker run\b/;
+// A server or watcher that never exits: `npm run dev`, `npm run start:sse`, `make serve`, `--watch`.
+const LONG_RUNNING = /\b(run )?(dev|start|serve|watch)([:_-][\w:.-]*)?(\s|$)|--watch\b|compose up\b|docker run\b/;
 const NETWORK_PIPED = /\b(curl|wget)\b[^|;&]*\|\s*(sudo\s+)?(ba|z)?sh\b/;
 const DESTRUCTIVE = /rm -rf\s+(\/|~|\*|\$HOME)|\bdrop (database|table)\b|db:(reset|drop)|migrate(:| )reset|\btruncate\b|prisma migrate reset/i;
 const DEPLOY = /\b(npm|pnpm|yarn) publish\b|\bdeploy\b|vercel --prod|firebase deploy|terraform (apply|destroy)|kubectl (apply|delete)|helm (upgrade|install)|gh release create|fly deploy|seed-prod/i;
@@ -65,7 +66,7 @@ export function isRisky(cmd: string): boolean {
   return NETWORK_PIPED.test(cmd) || DESTRUCTIVE.test(cmd) || DEPLOY.test(cmd);
 }
 
-export type Cue = "example" | "negated" | "link_text" | "deleted";
+export type Cue = "example" | "negated" | "link_text" | "deleted" | "table_name";
 
 interface Extracted {
   kind: "command" | "path";
@@ -112,6 +113,15 @@ function inLinkText(raw: string, start: number, end: number): boolean {
   return open >= 0 && raw.indexOf("]", open) >= end && /^[^[]*\]\(/.test(raw.slice(end));
 }
 
+const BACK_TO_ROOT = /\b(root (project )?(directory|folder)|repo(sitory)? root|top[- ]level (directory|folder))\b/i;
+
+// A table column that names tools rather than giving commands: Runner, Tool, Framework.
+const TOOL_COLUMN = /^(test )?(runner|tool|framework)s?$/i;
+
+function tableCells(raw: string): string[] {
+  return raw.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim().replace(/`/g, ""));
+}
+
 function indentOf(raw: string): number {
   return raw.match(/^\s*(?:(?:[-*+]|\d+[.)])\s+)?/)?.[0].length ?? 0;
 }
@@ -125,8 +135,15 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
   let pending: { text: string; line: number } | null = null;
   const headings: { level: number; text: string }[] = [];
   let away: { target: string; indent: number } | null = null;
-  // A folder of this repo the section's steps say to work in, such as "Navigate to the `ui` directory".
-  let within: string | null = null;
+  // A folder of this repo a step says to work in, such as "Navigate to the `ui` directory". It holds
+  // to the end of the step's section (the next heading of the same or a higher level), or until a
+  // line says to work from the root again, such as "(while in the root project directory)".
+  let within: { dir: string; level: number } | null = null;
+  // A `cd dir` line inside a code block sets the folder for the rest of that block: a folder of this
+  // repo, or one the block leaves to the reader, such as `cd src/<server>`.
+  let fenceDir: { within: string } | { elsewhere: string } | null = null;
+  // The header cells of the markdown table the line is in.
+  let tableHeader: string[] | null = null;
   lines.forEach((raw, i) => {
     const lineNo = i + 1;
     if (inFrontmatter) {
@@ -134,6 +151,7 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
       return;
     }
     const fence = raw.match(/^\s*```(\w*)/);
+    if (!inFence && within && BACK_TO_ROOT.test(raw)) within = null;
     if (!inFence && away && raw.trim() && indentOf(raw) <= away.indent && !fence) away = null;
     if (fence) {
       if (!inFence) {
@@ -141,9 +159,10 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
         fenceLang = fence[1].toLowerCase();
       } else inFence = false;
       pending = null;
+      fenceDir = null;
       return;
     }
-    const where = { headings: headings.map((h) => h.text), ...(away ? { elsewhere: away.target } : {}), ...(within ? { within } : {}) };
+    const where = { headings: headings.map((h) => h.text), ...(away ? { elsewhere: away.target } : {}), ...(within ? { within: within.dir } : {}) };
     if (inFence) {
       if (!SHELL_LANGS.has(fenceLang)) return;
       const part = raw.trim().replace(/^\$\s+/, "");
@@ -154,36 +173,61 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
       }
       pending = null;
       const cmd = joined.text.replace(/\s+#(\s.*)?$/, "").trim();
-      if (cmd && !cmd.startsWith("#") && COMMAND_START.test(cmd)) out.push({ kind: "command", text: cmd, line: joined.line, via: "fence", ...where });
+      const cd = cmd.match(/^cd\s+(\S+)$/)?.[1];
+      if (cd) {
+        const target = cd.replace(/\/$/, "");
+        fenceDir = !PLACEHOLDER.test(target) && opts.exists?.(target) ? { within: target } : { elsewhere: target };
+        return;
+      }
+      const inBlock = fenceDir ? ("within" in fenceDir ? { ...where, within: fenceDir.within } : { ...where, elsewhere: fenceDir.elsewhere }) : where;
+      if (cmd && !cmd.startsWith("#") && COMMAND_START.test(cmd)) out.push({ kind: "command", text: cmd, line: joined.line, via: "fence", ...inBlock });
       return;
     }
+    if (/^\s*\|/.test(raw)) {
+      if (/^\s*\|?\s*:?-{3,}/.test(lines[i + 1] ?? "")) tableHeader = tableCells(raw);
+    } else tableHeader = null;
     const heading = raw.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
     if (heading) {
       const level = heading[1].length;
       while (headings.length && headings[headings.length - 1].level >= level) headings.pop();
       headings.push({ level, text: heading[2].replace(/`/g, "") });
       away = null;
-      within = null;
+      if (within && level <= within.level) within = null;
     }
+    const awayStart = away;
+    const withinStart = within;
     const scope = raw.match(ELSEWHERE_CUE);
     if (scope && opts.exists) {
       const target = scope[3].replace(/\/$/, "");
       const named = Boolean(scope[4]) || /^(navigate|go|switch|cd)/i.test(scope[1]);
       if (!opts.exists(target) && (target.includes("/") || scope[4])) away = { target: scope[3], indent: indentOf(raw) };
-      else if (opts.exists(target) && named && !/\.\w+$/.test(target)) within = target;
+      else if (opts.exists(target) && named && !/\.\w+$/.test(target)) within = { dir: target, level: headings.length ? headings[headings.length - 1].level : 0 };
     }
+    // A folder cue on this line holds for the spans before it ("`uv run pytest` in `src/<server>`")
+    // when it points elsewhere, and for the spans after it when it names a folder to work in; never
+    // for the folder it names.
+    const cueStart = scope?.index ?? Infinity;
+    const cueEnd = scope ? scope.index! + scope[0].length : Infinity;
+    const headingTexts = headings.map((h) => h.text);
+    const placeAt = (at: number) => {
+      const a = away !== awayStart && at < cueStart ? away : awayStart;
+      const w = within !== withinStart && at >= cueEnd ? within : withinStart;
+      return { headings: headingTexts, ...(a ? { elsewhere: a.target } : {}), ...(w ? { within: w.dir } : {}) };
+    };
+    const here = placeAt(Infinity);
     for (const m of raw.matchAll(/`([^`]+)`/g)) {
       const span = m[1].trim();
       const before = clauseBefore(raw.slice(0, m.index));
-      const cue: Cue | undefined = inLinkText(raw, m.index!, m.index! + m[0].length) ? "link_text" : EXAMPLE_CUE.test(before) ? "example" : NEGATED_CUE.test(before) ? "negated" : DELETED_CUE.test(sentenceAt(raw, m.index!)) ? "deleted" : undefined;
-      const base = { line: lineNo, via: "code" as const, ...where, ...(cue ? { cue } : {}) };
+      const column = tableHeader ? tableHeader[raw.slice(0, m.index).split("|").length - 2] : undefined;
+      const cue: Cue | undefined = inLinkText(raw, m.index!, m.index! + m[0].length) ? "link_text" : column && TOOL_COLUMN.test(column) ? "table_name" : EXAMPLE_CUE.test(before) ? "example" : NEGATED_CUE.test(before) ? "negated" : DELETED_CUE.test(sentenceAt(raw, m.index!)) ? "deleted" : undefined;
+      const base = { line: lineNo, via: "code" as const, ...placeAt(m.index!), ...(cue ? { cue } : {}) };
       if (COMMAND_START.test(span) && span.includes(" ")) out.push({ kind: "command", text: span, ...base });
       else if (PATH_LIKE.test(span) && !span.startsWith("http") && !span.includes("<")) out.push({ kind: "path", text: span, ...base });
     }
     for (const m of raw.matchAll(/\[[^\]]*\]\(([^)\s#]+)(?:#[^)]*)?\)/g)) {
       const target = m[1];
       if (/^([a-z][\w+.-]*:|#)/i.test(target) || target.includes("<")) continue;
-      out.push({ kind: "path", text: target, line: lineNo, via: "link", ...where });
+      out.push({ kind: "path", text: target, line: lineNo, via: "link", ...here });
     }
   });
   const seen = new Set<string>();
@@ -208,7 +252,7 @@ function scriptsAt(tree: string, dir: string): { scripts: Record<string, string>
 function makeTargets(tree: string, dir: string): string[] | null {
   for (const d of [dir, "."]) {
     const f = join(tree, d, "Makefile");
-    if (exists(f)) return [...readText(f).matchAll(/^([A-Za-z0-9_.-]+)\s*:/gm)].map((m) => m[1]);
+    if (existsExact(tree, join(d, "Makefile"))) return [...readText(f).matchAll(/^([A-Za-z0-9_.-]+)\s*:/gm)].map((m) => m[1]);
   }
   return null;
 }
@@ -216,10 +260,10 @@ function makeTargets(tree: string, dir: string): string[] | null {
 const OTHER_STACK_RECIPES: Record<string, RegExp> = { go: /^\s*(go|golangci-lint|gofmt)\s/m, rust: /^\s*(cargo|rustc)\s/m };
 
 // The commands a Make target runs, without the @ and - prefixes.
-function makeRecipe(tree: string, dir: string, target: string): string {
+export function makeRecipe(tree: string, dir: string, target: string): string {
   for (const d of [dir, "."]) {
     const f = join(tree, d, "Makefile");
-    if (!exists(f)) continue;
+    if (!existsExact(tree, join(d, "Makefile"))) continue;
     const lines = readText(f).split("\n");
     const at = lines.findIndex((l) => new RegExp(`^${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*:`).test(l));
     if (at < 0) continue;
@@ -239,7 +283,7 @@ function makeRecipe(tree: string, dir: string, target: string): string {
 export function packageDirOf(tree: string, file: string): string {
   let d = dirname(file) === "" ? "." : dirname(file);
   while (d !== "." && d !== "") {
-    if (["package.json", "pyproject.toml", "setup.py"].some((m) => exists(join(tree, d, m)))) return d;
+    if (["package.json", "pyproject.toml", "setup.py"].some((m) => existsExact(tree, join(d, m)))) return d;
     d = dirname(d);
   }
   return ".";
@@ -361,7 +405,7 @@ interface Check {
 const PASS: Check = { result: "pass", rule: "replay" };
 
 function pathIn(ctx: CheckCtx, dir: string, p: string): boolean {
-  return [dir, ctx.fileDir, "."].some((d) => exists(join(ctx.tree, normalize(join(d, p)))));
+  return [dir, ctx.fileDir, "."].some((d) => existsExact(ctx.tree, normalize(join(d, p))));
 }
 
 function pmAt(ctx: CheckCtx, dir: string): string | null {
@@ -419,7 +463,7 @@ function checkPackageManager(ctx: CheckCtx, dir: string, all: string[]): Check {
     if (/^\.{0,2}\//.test(value) || (value.includes("/") && !value.startsWith("@") && !/[*{]/.test(value))) {
       if (!pathIn(ctx, dir, value)) return { result: "fail", rule: "folder-exists", reason: `there is no ${value} folder` };
       scriptDir = normalize(join(dir, value));
-      if (!exists(join(ctx.tree, scriptDir))) scriptDir = normalize(value);
+      if (!existsExact(ctx.tree, scriptDir)) scriptDir = normalize(value);
     } else return otherPm && tool !== "npm" ? { result: "fail", rule: "package-manager", reason: `uses ${tool}, but the repo uses ${pm}` } : PASS;
   }
   let script: string | null = null;
@@ -509,8 +553,8 @@ function checkCommand(cmd: string, ctx: CheckCtx, start: string): Check {
       if (!target || target === "-" || target.startsWith("$") || MACHINE_PATH.test(` ${target}`)) continue;
       const next = normalize(join(dir, target));
       if (next.startsWith("..")) continue;
-      if (exists(join(ctx.tree, next))) dir = next;
-      else if (exists(join(ctx.tree, normalize(target)))) dir = normalize(target);
+      if (existsExact(ctx.tree, next)) dir = next;
+      else if (existsExact(ctx.tree, normalize(target))) dir = normalize(target);
       else return { result: "fail", rule: "folder-exists", reason: `there is no ${target} folder to cd into` };
       continue;
     }
@@ -527,11 +571,17 @@ const MACHINE_PATH = /(^|\s|=)(~\/|\$HOME\b|\/Users\/|\/home\/[a-z])/;
 
 export const ELEVATED = /(^|[\s;&|(`]|\$\()sudo(\s|$)/;
 
-function categorize(cmd: string): InstructionItem["category"] {
+// `tree` and `dir` let a Make target whose recipe only launches a server count as long-running too.
+function categorize(cmd: string, tree?: string, dir?: string): InstructionItem["category"] {
   if (isRisky(cmd)) return "risky";
   if (ELEVATED.test(cmd)) return "needs_access";
   if (INSTALL.test(cmd)) return "install";
   if (LONG_RUNNING.test(cmd)) return "long_running";
+  const target = tree !== undefined ? cmd.trim().match(/^make\s+([\w.-]+)\s*$/)?.[1] : undefined;
+  if (target) {
+    const recipe = makeRecipe(tree!, dir ?? ".", target).split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+    if (recipe.length > 0 && recipe.every((l) => LONG_RUNNING.test(l))) return "long_running";
+  }
   if (MACHINE_PATH.test(cmd)) return "needs_access";
   return "replay";
 }
@@ -540,13 +590,23 @@ const FUTURE = /\b(will (be )?(add|creat|live|hold|contain)\w*|(to be|not yet) (
 
 // Commands an instruction shows as a template, asks questions, or changes the dependencies with.
 // None of them can be replayed as written, so they are listed as skipped instead.
-const PLACEHOLDER = /<[A-Za-z][\w.:/-]*>|\{\{[^}]+\}\}|…|(^|\s)\.\.\.(\s|$)/;
+const PLACEHOLDER = /<[A-Za-z][\w.:/ -]*[\w.]>|<[A-Za-z]>|\{\{[^}]+\}\}|…|(^|\s)\.\.\.(\s|$)/;
+// A launcher with nothing after it, as prose names it: "`uv run` creates the venv".
+const LAUNCHER_ONLY = /^(uv run|uvx|npx|pnpx|bunx|npm (run|exec)|pnpm (run|exec|dlx)|yarn (run|exec|dlx)|poetry run|pipenv run|bundle exec|go run|cargo run)$/;
+// A lowercase shell variable, which only the lines around it (a loop, an earlier assignment) set.
+const SHELL_VARIABLE = /\$\{?([a-z_][a-z0-9_]*)\}?/;
 const RUNNER = String.raw`(npx|bunx|pnpx|(corepack\s+)?(pnpm|yarn)\s+dlx)\s+(-\S+\s+)*`;
 const INTERACTIVE = new RegExp(String.raw`^(corepack\s+)?(npm|pnpm|yarn|bun)\s+(init|create|login|adduser)\b|^${RUNNER}(create-[\w-]+|\S+\s+init)\b|(^|\s)(auth\s+)?login(\s|$)|\s(-i|--interactive)(\s|$)|^(node|python3?)\s*$`);
 const ADDS_PACKAGES = new RegExp(String.raw`^(corepack\s+)?(pnpm|yarn|bun)\s+(add|remove|rm|uninstall)\b|^npm\s+(i|install|add|uninstall|rm|remove)\b(\s+-\S+)*\s+[^-\s]|^(python3?\s+-m\s+)?pip3?\s+install\s+(?!.*(\s|^)(-r|-e|--requirement|--editable|\.)(\s|$))|^(uv|poetry|pdm)\s+(add|remove)\b|^${RUNNER}\S+\s+add\b`);
 
-function skippedReason(cmd: string): { reason: string; rule: string } | null {
+// `cwd`: the folder the command runs in, so a path that climbs out of the repository is seen.
+function skippedReason(cmd: string, cwd = "."): { reason: string; rule: string } | null {
   if (PLACEHOLDER.test(cmd)) return { reason: "not replayed: it has a placeholder to fill in", rule: "placeholder" };
+  if (LAUNCHER_ONLY.test(cmd.trim())) return { reason: "not replayed: it names the launcher, not a command for it to run", rule: "mention" };
+  const outside = [...cmd.matchAll(/(?:^|[\s=])(\.\.(?:\/[^\s"'`;&|]*)?)/g)].map((m) => m[1]).find((p) => normalize(join(cwd, p)).startsWith(".."));
+  if (outside) return { reason: `not replayed: it works in ${outside}, outside this repository`, rule: "outside-repo" };
+  const variable = cmd.match(SHELL_VARIABLE);
+  if (variable) return { reason: `not replayed: it uses $${variable[1]}, a shell variable the lines around it set`, rule: "placeholder" };
   if (INTERACTIVE.test(cmd)) return { reason: "not replayed: it asks questions as it runs", rule: "interactive" };
   if (ADDS_PACKAGES.test(cmd)) return { reason: "not replayed: it adds or removes packages", rule: "adds-packages" };
   return null;
@@ -569,7 +629,7 @@ export function vendoredSkills(tree: string, files: string[]): Map<string, strin
   const out = new Map<string, string>();
   let lock: Record<string, { source?: string }> = {};
   try {
-    lock = exists(join(tree, "skills-lock.json")) ? ((JSON.parse(readText(join(tree, "skills-lock.json"))) as { skills?: typeof lock }).skills ?? {}) : {};
+    lock = existsExact(tree, "skills-lock.json") ? ((JSON.parse(readText(join(tree, "skills-lock.json"))) as { skills?: typeof lock }).skills ?? {}) : {};
   } catch {
     lock = {};
   }
@@ -618,6 +678,7 @@ const CUE_SKIP: Record<Cue, { reason: string; rule: string }> = {
   link_text: { reason: "not replayed: it's the text of a link, not a step", rule: "mention" },
   negated: { reason: "not replayed: the instructions say not to run it", rule: "negated" },
   deleted: { reason: "", rule: "path-exists" },
+  table_name: { reason: "not replayed: it names a tool in a table's runner or tool column, not a command to run", rule: "mention" },
 };
 
 export function instructionItems(tree: string, profile: Profile): InstructionItem[] {
@@ -637,13 +698,15 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
     if (real && real !== file && listed.has(real)) continue;
     if (duplicateOf(tree, file, seen)) continue;
     const fileDir = dirname(file) === "" ? "." : dirname(file);
+    // A skill's commands are written for the repository root, where the agent runs them.
+    const cmdDir = SKILL_FILE.test(file) ? "." : fileDir;
     const pkgDir = packageDirOf(tree, file);
     const text = readText(join(tree, file));
     const lines = text.split("\n");
     const thirdParty = vendored.get(file);
     const readme = README.test(file);
     const ctx: CheckCtx = { tree, profile, fileDir, names, via: "fence" };
-    const fromHere = (p: string) => exists(join(tree, normalize(join(fileDir, p)))) || exists(join(tree, p));
+    const fromHere = (p: string) => existsExact(tree, normalize(join(fileDir, p))) || existsExact(tree, p);
     for (const e of extractFromMarkdown(text, { exists: fromHere })) {
       // A vendored skill's paths belong to its own workflow, such as the plans it writes, not this repo.
       if (e.kind === "path" && thirdParty) continue;
@@ -651,7 +714,7 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
         const rel = e.text.replace(/\/$/, "");
         const fromFile = normalize(join(fileDir, rel));
         if (fromFile.startsWith("..") && normalize(rel).startsWith("..")) continue;
-        const found = exists(join(tree, fromFile)) || (!normalize(rel).startsWith("..") && (exists(join(tree, rel)) || exists(join(tree, normalize(join(pkgDir, rel))))));
+        const found = existsExact(tree, fromFile) || (!normalize(rel).startsWith("..") && (existsExact(tree, rel) || existsExact(tree, normalize(join(pkgDir, rel)))));
         if (!found) {
           // A path the docs say comes later, or say is gone, can't mislead an agent into using it now.
           if (FUTURE.test(lines[e.line - 1] ?? "") || e.cue === "deleted") continue;
@@ -670,7 +733,7 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
         continue;
       }
       const id = `ins-${String(n++).padStart(3, "0")}`;
-      const start = e.within ? (exists(join(tree, normalize(join(fileDir, e.within)))) ? normalize(join(fileDir, e.within)) : normalize(e.within)) : pkgDir;
+      const start = e.within ? (existsExact(tree, normalize(join(fileDir, e.within))) ? normalize(join(fileDir, e.within)) : normalize(e.within)) : pkgDir;
       const base = { id, source: file, line: e.line, kind: "command" as const, text: e.text, cwd: start };
       const skipped = (reason: string, rule: string, staticResult: "pass" | "fail" = "pass", staticReason?: string) => items.push({ ...base, category: "skipped", staticResult, ...(staticReason ? { staticReason } : {}), result: "not_run", reason, rule });
       // A template or a third-party skill's command isn't checked against this repo at all; a real
@@ -680,7 +743,8 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
         continue;
       }
       if (e.elsewhere) {
-        skipped(`not checked: it's a step for ${e.elsewhere}, not this repo`, "elsewhere");
+        if (PLACEHOLDER.test(e.elsewhere)) skipped(`not replayed: it runs in ${e.elsewhere}, a folder the docs leave to the reader`, "placeholder");
+        else skipped(`not checked: it's a step for ${e.elsewhere}, not this repo`, "elsewhere");
         continue;
       }
       if (e.cue && e.cue !== "deleted") {
@@ -688,7 +752,7 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
         continue;
       }
       if (PLACEHOLDER.test(e.text)) {
-        const s = skippedReason(e.text)!;
+        const s = skippedReason(e.text, e.within ?? cmdDir)!;
         skipped(s.reason, s.rule);
         continue;
       }
@@ -712,11 +776,11 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
         items.push({ ...base, category: "needs_access", staticResult: "pass", result: "not_run", reason: s.access, rule: s.rule });
         continue;
       }
-      const skip = isRisky(e.text) ? null : (skippedReason(e.text) ?? (() => {
+      const skip = isRisky(e.text) ? null : (skippedReason(e.text, e.within ?? cmdDir) ?? (() => {
         const w = writesFiles(e.text, tree, fileDir, profile);
         return w ? { reason: w, rule: "rewrites" } : null;
       })());
-      const category = skip ? "skipped" : categorize(e.text);
+      const category = skip ? "skipped" : categorize(e.text, tree, e.within ?? fileDir);
       let result: InstructionItem["result"];
       let reason: string | undefined;
       let rule = s.rule;

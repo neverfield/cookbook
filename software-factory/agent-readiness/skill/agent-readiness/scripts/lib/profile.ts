@@ -1,30 +1,14 @@
-import { readdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { LANGUAGES, languageOf as languageFile, languageOfStack, lockfileNames, manifestRules, rootAppRules, sourceRules } from "./languages/index.ts";
+import type { LanguageDef } from "./languages/language.ts";
+import { NODE_LOCKFILES, readPackageJson, yarnBerry, yarnPath, yarnPinned } from "./languages/node.ts";
+import { PY_LOCKFILES, UV_WORKSPACE, pyproject, uvWorkspaceMembers } from "./languages/python.ts";
 import type { Rubric } from "./rubric.ts";
 import { STACKS, notSupportedReason, stack, supported } from "./support.ts";
 import type { Component, Language, PackageManager, Profile } from "./types.ts";
 import { addDays, containedPath, exists, git, listFiles, readJson, readText, today, workspaceDirs } from "./util.ts";
 
-interface PackageJson {
-  name?: string;
-  scripts?: Record<string, string>;
-  workspaces?: string[] | { packages?: string[] };
-  engines?: Record<string, string>;
-  packageManager?: string;
-  devDependencies?: Record<string, string>;
-  dependencies?: Record<string, string>;
-  volta?: Record<string, string>;
-}
-
-export function readPackageJson(dir: string): PackageJson | null {
-  const p = join(dir, "package.json");
-  if (!exists(p)) return null;
-  try {
-    return readJson<PackageJson>(p);
-  } catch {
-    return null;
-  }
-}
+export { pyproject, readPackageJson, uvWorkspaceMembers, yarnBerry };
 
 export function detectPackageManager(tree: string): PackageManager | null {
   if (exists(join(tree, "bun.lock")) || exists(join(tree, "bun.lockb"))) return "bun";
@@ -42,51 +26,6 @@ export function detectPackageManager(tree: string): PackageManager | null {
   if (exists(join(tree, "poetry.lock")) || /^\[tool\.poetry\]/m.test(pyproject(tree))) return "poetry";
   if (exists(join(tree, "pyproject.toml")) || exists(join(tree, "requirements.txt")) || exists(join(tree, "setup.py"))) return "pip";
   return null;
-}
-
-export function pyproject(dir: string): string {
-  return exists(join(dir, "pyproject.toml")) ? readText(join(dir, "pyproject.toml")) : "";
-}
-
-const UV_WORKSPACE = /^\[tool\.uv\.workspace\]/m;
-
-// The folders a root pyproject.toml's [tool.uv.workspace] lists, less its excludes, each with its
-// own pyproject.toml. They share the root's uv.lock and .venv.
-export function uvWorkspaceMembers(tree: string): string[] {
-  const section = pyproject(tree).match(/^\[tool\.uv\.workspace\][^\n]*\n([\s\S]*?)(?=^\[|(?![\s\S]))/m)?.[1];
-  if (section === undefined) return [];
-  const list = (key: string) => [...(section.match(new RegExp(`^${key}\\s*=\\s*\\[([\\s\\S]*?)\\]`, "m"))?.[1] ?? "").matchAll(/["']([^"']+)["']/g)].map((m) => m[1]);
-  return workspaceDirs(tree, [...list("members"), ...list("exclude").map((p) => `!${p}`)], (d) => d !== "." && exists(join(tree, d, "pyproject.toml")));
-}
-
-// The folders whose package.json or .yarnrc.yml decide a component's Yarn: its own, then the root's.
-function yarnDirs(dir: string): string[] {
-  return dir === "." ? ["."] : [dir, "."];
-}
-
-function yarnPath(tree: string, dir: string): string | null {
-  for (const d of yarnDirs(dir)) {
-    const f = join(tree, d, ".yarnrc.yml");
-    const path = exists(f) ? readText(f).match(/^yarnPath:\s*["']?([^"'\s#]+)/m)?.[1] : undefined;
-    if (path) return d === "." ? ".yarnrc.yml" : `${d}/.yarnrc.yml`;
-  }
-  return null;
-}
-
-// Yarn 2 and later: a packageManager pin of yarn@2 or above, a .yarnrc.yml, or a Berry lockfile.
-export function yarnBerry(tree: string, dir: string): boolean {
-  for (const d of yarnDirs(dir)) {
-    const major = Number(readPackageJson(join(tree, d))?.packageManager?.match(/^yarn@(\d+)/)?.[1] ?? 0);
-    if (major >= 2 || exists(join(tree, d, ".yarnrc.yml"))) return true;
-    if (exists(join(tree, d, "yarn.lock")) && /^__metadata:/m.test(readText(join(tree, d, "yarn.lock")))) return true;
-  }
-  return false;
-}
-
-// Corepack runs the Yarn a packageManager pin names, and Yarn 1 hands over to a yarnPath release.
-// With neither, Corepack would run Yarn 1 against a Berry project.
-function yarnPinned(tree: string, dir: string): boolean {
-  return yarnDirs(dir).some((d) => /^yarn@/.test(readPackageJson(join(tree, d))?.packageManager ?? "")) || yarnPath(tree, dir) !== null;
 }
 
 const PACKAGE_STACKS = ["npm", "npm-workspaces", "pnpm", "yarn", "yarn-berry", "yarn-berry-unpinned", "bun", "pip", "uv", "uv-workspace", "poetry"] as const;
@@ -137,47 +76,27 @@ function languageOf(tree: string, path: string, files: string[]): Language {
 }
 
 // Source with no manifest, listed by the top-level folder that holds it.
-const UNSUPPORTED: { ext: RegExp; stack: string }[] = [
-  { ext: /\.tf$/, stack: "terraform" },
-  { ext: /\.go$/, stack: "go" },
-  { ext: /\.rs$/, stack: "rust" },
-  { ext: /\.(java|kt|scala)$/, stack: "jvm" },
-  { ext: /\.(cs|fs)$/, stack: "dotnet" },
-  { ext: /\.rb$/, stack: "ruby" },
-  { ext: /\.php$/, stack: "php" },
-  { ext: /\.swift$/, stack: "swift" },
-  { ext: /\.dart$/, stack: "dart" },
-];
+const UNSUPPORTED = sourceRules();
 
 function sanitizeId(name: string): string {
   return name.replace(/^@[^/]+\//, "").replace(/[^A-Za-z0-9._-]/g, "-") || "root";
 }
 
-const NODE_LOCKFILES = ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"];
-const PY_LOCKFILES = ["uv.lock", "poetry.lock", "Pipfile.lock", "pdm.lock"];
-const LOCKFILES = [...NODE_LOCKFILES, ...PY_LOCKFILES, "packages.lock.json", "Cargo.lock", "go.sum", "Gemfile.lock", "composer.lock", "gradle.lockfile", "mix.lock", "pubspec.lock", "Podfile.lock", ".terraform.lock.hcl", "Package.resolved"];
+// Lockfiles of the toolchains no language file covers yet, so a component still reports the one it has.
+const OTHER_LOCKFILES = ["mix.lock", "Podfile.lock"];
+const LOCKFILES = [...new Set([...NODE_LOCKFILES, ...PY_LOCKFILES, ...lockfileNames(), ...OTHER_LOCKFILES])];
 const SKIP_SEGMENT = /^(\..+|node_modules|fixtures?|__fixtures__|testdata|vendor|dist|build|bin|obj|target)$/;
 
-// A solution file comes first so it groups the projects under it into one component. A folder of
-// .tf files is a Terraform module, so a root module and nested root modules are found at any depth.
-const UNSUPPORTED_MANIFESTS: { match: RegExp; stack: string }[] = [
-  { match: /\.sln$/, stack: "dotnet" },
-  { match: /\.(csproj|fsproj|vbproj)$/, stack: "dotnet" },
-  { match: /^go\.mod$/, stack: "go" },
-  { match: /^Cargo\.toml$/, stack: "rust" },
-  { match: /^(pom\.xml|build\.gradle(\.kts)?)$/, stack: "jvm" },
-  { match: /^Gemfile$/, stack: "ruby" },
-  { match: /^composer\.json$/, stack: "php" },
-  { match: /^Package\.swift$/, stack: "swift" },
-  { match: /^pubspec\.yaml$/, stack: "dart" },
-  { match: /\.tf$/, stack: "terraform" },
-];
+// Manifests of every language file, by rank: a solution file claims its folder before a project
+// file does, and a folder of .tf files is a Terraform module at any depth.
+const UNSUPPORTED_MANIFESTS = manifestRules();
 
 interface FoundManifest {
   dir: string;
   kind: "js" | "py" | "other";
   manifest: string;
   stack?: string;
+  language?: LanguageDef;
 }
 
 const within = (dir: string, parent: string) => parent === "." || dir === parent || dir.startsWith(parent + "/");
@@ -204,9 +123,9 @@ function satelliteReason(tree: string, m: FoundManifest): string | null {
   return null;
 }
 
-// A Dart workspace's root pubspec only lists its packages; each package is the project.
-function workspaceOnly(tree: string, dir: string, stackId: string): boolean {
-  return stackId === "dart" && /^workspace:/m.test(readText(join(tree, dir, "pubspec.yaml")));
+// A manifest that only lists other projects, such as a Dart workspace's root pubspec.yaml.
+function workspaceOnly(tree: string, manifestPath: string, language: LanguageDef): boolean {
+  return Boolean(language.detect.workspaceOnly?.(manifestPath, readText(join(tree, manifestPath))));
 }
 
 // Several solution or project files in one folder: the one named after the folder or repo, else the
@@ -249,9 +168,11 @@ function discoverManifests(tree: string, files: string[], claimed: string[], has
       continue;
     }
     const rule = UNSUPPORTED_MANIFESTS.find((u) => names.some((n) => u.match.test(n)));
-    if (rule && !(dir === "." && hasRoot) && !workspaceOnly(tree, dir, rule.stack) && ![...found, ...satellites].some((f) => within(dir, f.dir))) {
+    if (rule && !(dir === "." && hasRoot) && ![...found, ...satellites].some((f) => within(dir, f.dir))) {
       const project = pickManifest(names.filter((n) => rule.match.test(n)), dir === "." ? repoName : basename(dir));
-      add({ dir, kind: "other", manifest: dir === "." ? project : `${dir}/${project}`, stack: rule.stack });
+      const manifest = dir === "." ? project : `${dir}/${project}`;
+      if (workspaceOnly(tree, manifest, rule.language)) continue;
+      add({ dir, kind: "other", manifest, stack: rule.language.detect.refine?.(manifest, readText(join(tree, manifest))) ?? rule.stack, language: rule.language });
     }
   }
   return { found, satellites };
@@ -261,22 +182,12 @@ function discoverManifests(tree: string, files: string[], claimed: string[], has
 // name of its own, such as a Terraform module, takes the repo's.
 function projectName(tree: string, manifest: string, repoName: string): string {
   const text = exists(join(tree, manifest)) ? readText(join(tree, manifest)) : "";
-  const stem = basename(manifest).replace(/\.\w+$/, "");
-  const named =
-    manifest === "go.mod" ? text.match(/^module\s+(\S+)/m)?.[1]?.split("/").pop()
-    : manifest === "Cargo.toml" || manifest === "pyproject.toml" ? text.match(/^name\s*=\s*["']([^"']+)["']/m)?.[1]
-    : manifest === "pom.xml" ? text.match(/<artifactId>([^<]+)<\/artifactId>/)?.[1]
-    : manifest === "composer.json" ? text.match(/"name"\s*:\s*"(?:[^"/]+\/)?([^"]+)"/)?.[1]
-    : manifest === "Package.swift" ? text.match(/\bname:\s*"([^"]+)"/)?.[1]
-    : manifest === "pubspec.yaml" ? text.match(/^name:\s*['"]?([\w-]+)/m)?.[1]
-    : /\.(sln|csproj|fsproj|vbproj)$/.test(manifest) ? (soleProject(tree, manifest) || stem.toLowerCase() === repoName.toLowerCase() ? stem : undefined)
-    : undefined;
-  return named ?? repoName;
-}
-
-function soleProject(tree: string, manifest: string): boolean {
-  const ext = manifest.match(/\.\w+$/)![0];
-  return readdirSync(join(tree, dirname(manifest))).filter((n) => n.endsWith(ext)).length === 1;
+  if (manifest === "pyproject.toml") return text.match(/^name\s*=\s*["']([^"']+)["']/m)?.[1] ?? repoName;
+  for (const l of LANGUAGES) {
+    const named = l.detect.projectName?.(tree, manifest, text, repoName);
+    if (named) return named;
+  }
+  return repoName;
 }
 
 function lockfileIn(tree: string, dir: string): string | null {
@@ -290,12 +201,21 @@ export function discoverComponents(tree: string, files: string[], repoName?: str
 
 const ROOT_APP_MANIFESTS: { names: string[]; stack: string; toolchain: string; suffix: string }[] = [
   { names: ["pyproject.toml", "setup.py", "requirements.txt"], stack: "python-behind-root-package", toolchain: "Python", suffix: "python" },
-  { names: ["composer.json"], stack: "php", toolchain: "PHP", suffix: "php" },
-  { names: ["Gemfile"], stack: "ruby", toolchain: "Ruby", suffix: "ruby" },
-  { names: ["go.mod"], stack: "go", toolchain: "Go", suffix: "go" },
-  { names: ["Cargo.toml"], stack: "rust", toolchain: "Rust", suffix: "rust" },
-  { names: ["pom.xml", "build.gradle", "build.gradle.kts"], stack: "jvm", toolchain: "JVM", suffix: "jvm" },
+  ...rootAppRules(),
 ];
+
+// A project in a language file's stack: scored when the stack is in the supported tier and the file
+// has replay hooks, otherwise listed by name and share with the reason it isn't.
+function languageComponent(tree: string, base: { id: string; path: string; manifest: string | null }, stackId: string, toolchain?: string): Component {
+  const comp = { ...base, scripts: {}, changes: 0, changeShare: 0, assessed: false, toolchain: toolchain ?? stack(stackId).label, stack: stackId };
+  const lang = languageOfStack(stackId);
+  if (lang?.replay && supported(stackId)) {
+    if (!base.manifest) return { ...comp, language: "other", notAssessedReason: `${stack(stackId).label} source with no manifest of its own, so the audit has nothing to install or test it from` };
+    const c = lang.replay.classify(tree, base.path, base.manifest);
+    return { ...comp, language: c.language, packageManager: c.packageManager };
+  }
+  return { ...comp, language: "other", notAssessedReason: notSupportedReason(stackId) };
+}
 
 // A root package.json often holds only release tooling or a frontend bundle for the real app at the
 // root, such as Django, Laravel or Rails. That app is listed with its own share of changes.
@@ -305,8 +225,9 @@ function rootApps(tree: string, files: string[], repoName: string): Component[] 
   for (const r of ROOT_APP_MANIFESTS) {
     const manifest = r.names.find((n) => exists(join(tree, n)));
     if (!manifest || (r.suffix === "python" && !hasPy)) continue;
-    const s = stack(r.stack);
-    out.push({ id: sanitizeId(projectName(tree, manifest, repoName)), path: ".", language: r.suffix === "python" ? "py" : "other", manifest, scripts: {}, changes: 0, changeShare: 0, assessed: false, toolchain: r.toolchain, stack: s.id, notAssessedReason: notSupportedReason(s.id) });
+    const id = sanitizeId(projectName(tree, manifest, repoName));
+    if (r.suffix === "python") out.push({ id, path: ".", language: "py", manifest, scripts: {}, changes: 0, changeShare: 0, assessed: false, toolchain: r.toolchain, stack: r.stack, notAssessedReason: notSupportedReason(r.stack) });
+    else out.push(languageComponent(tree, { id, path: ".", manifest }, r.stack, r.toolchain));
   }
   return out;
 }
@@ -363,8 +284,9 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
     const jsRoot = comps.find((c) => c.path === "." && c.manifest === "package.json");
     // A root package without a test script of its own goes with the app at the root, such as Django or
     // Laravel: it isn't assessed apart from that app, so its missing tests never read as the repo's.
-    if (jsRoot && apps.length && !(jsRoot.scripts.test && !/no test specified/.test(jsRoot.scripts.test))) {
-      jsRoot.notAssessedReason = `it goes with the ${apps[0].toolchain} app at the root, which isn't supported yet, so it isn't assessed on its own`;
+    const unscored = apps.filter((a) => a.notAssessedReason);
+    if (jsRoot && unscored.length && !(jsRoot.scripts.test && !/no test specified/.test(jsRoot.scripts.test))) {
+      jsRoot.notAssessedReason = `it goes with the ${unscored[0].toolchain} app at the root, which isn't supported yet, so it isn't assessed on its own`;
     }
     for (const app of apps) {
       if (comps.some((c) => c.id === app.id)) app.id = sanitizeId(`${app.id}-${ROOT_APP_MANIFESTS.find((r) => r.stack === app.stack)!.suffix}`);
@@ -378,7 +300,7 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
     let id = sanitizeId(m.dir === "." ? projectName(tree, m.manifest, repoName) : basename(m.dir));
     if (comps.some((c) => c.id === id)) id = sanitizeId(m.dir.replace(/\//g, "-"));
     if (m.kind === "other") {
-      comps.push({ id, path: m.dir, language: "other", manifest: m.manifest, scripts: {}, changes: 0, changeShare: 0, assessed: false, toolchain: stack(m.stack!).label, stack: m.stack, notAssessedReason: notSupportedReason(m.stack!) });
+      comps.push(languageComponent(tree, { id, path: m.dir, manifest: m.manifest }, m.stack!));
     } else {
       comps.push({ id, path: m.dir, language: m.kind === "js" ? languageOf(tree, m.dir, files) : "py", manifest: m.manifest, scripts: pkg?.scripts ?? {}, changes: 0, changeShare: 0, assessed: false, packageManager: detectPackageManager(join(tree, m.dir)) });
     }
@@ -403,20 +325,28 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
     if (!hit) continue;
     // A root project's own folders, such as a Go root's packages or a PHP app's tests/, are part of
     // it; only its examples are listed apart.
-    if (rootStacks.has(hit.stack) && !EXAMPLE_SEGMENT.test(dir)) continue;
+    // By language, so a root build a language file refined (a Gradle build applying the Android
+    // plugin) still owns its source folders.
+    if ([...rootStacks].some((s) => sameLanguage(s, hit.stack)) && !EXAMPLE_SEGMENT.test(dir)) continue;
     const holds = SATELLITE_SEGMENT.test(dir) ? SATELLITE_HOLDS : PACKAGING_SEGMENT.test(dir) ? PACKAGING_HOLDS : null;
     if (holds && comps.length > 0) {
       satelliteList.push({ path: dir, manifest: inside.find((f) => hit.ext.test(f))!, toolchain: stack(hit.stack).label, reason: `it sits under ${dir}/, which usually holds ${holds} rather than the product` });
       continue;
     }
     if (rootOnly && NOT_A_PROJECT.test(dir)) continue;
-    comps.push({ id: sanitizeId(dir), path: dir, language: "other", manifest: null, scripts: {}, changes: 0, changeShare: 0, assessed: false, toolchain: stack(hit.stack).label, stack: hit.stack, lockfile: null, notAssessedReason: notSupportedReason(hit.stack) });
+    comps.push({ ...languageComponent(tree, { id: sanitizeId(dir), path: dir, manifest: null }, hit.stack), lockfile: null });
   }
   return { components: uniqueIds(comps), satellites: satelliteList };
 }
 
+function sameLanguage(a: string | undefined, b: string): boolean {
+  const la = languageOfStack(a);
+  return a === b || (la !== undefined && la === languageOfStack(b));
+}
+
 // Every support entry the scan can put a component in; tests/supported.test.ts checks each is listed.
-export const DETECTED_STACKS: string[] = [...new Set([...PACKAGE_STACKS, ...UNSUPPORTED.map((u) => u.stack), ...UNSUPPORTED_MANIFESTS.map((u) => u.stack), ...ROOT_APP_MANIFESTS.map((r) => r.stack)])];
+// A language file that refines a manifest's stack can assign any of its stacks.
+export const DETECTED_STACKS: string[] = [...new Set([...PACKAGE_STACKS, ...UNSUPPORTED.map((u) => u.stack), ...UNSUPPORTED_MANIFESTS.map((u) => u.stack), ...ROOT_APP_MANIFESTS.map((r) => r.stack), ...LANGUAGES.filter((l) => l.detect.refine).flatMap((l) => l.stacks.map((s) => s.id))])];
 
 // Folders that hold a root package's own tests, docs and samples rather than another project.
 const NOT_A_PROJECT = /^(tests?|spec|__tests__|examples?|samples?|docs?|fixtures?|vendor|third_party|node_modules|scripts|tools|tooling|bin)$/;
@@ -551,14 +481,23 @@ function toolchain(tree: string, files: string[], pm: PackageManager | null, com
   let missing: string[] = [];
   const isNode = exists(join(tree, "package.json"));
   const isPy = files.some((f) => f.endsWith(".py"));
+  const nodeLang = (c: Component) => c.language === "ts" || c.language === "js";
   if (isNode) nodePins(tree, ".", pm, "", found, missing);
   for (const c of components.filter((x) => x.packageManager && x.path !== ".")) {
-    if (c.language !== "py") nodePins(tree, c.path, c.packageManager ?? null, ` for ${c.id}`, found, missing);
+    if (nodeLang(c)) nodePins(tree, c.path, c.packageManager ?? null, ` for ${c.id}`, found, missing);
   }
-  const nodeAnywhere = isNode || components.some((c) => c.packageManager && c.language !== "py");
+  const nodeAnywhere = isNode || components.some((c) => c.packageManager && nodeLang(c));
   if (isPy && !nodeAnywhere) {
     if (exists(join(tree, ".python-version"))) found.push(".python-version");
     else missing.push("the Python version (.python-version)");
+  }
+  // A language file pins its own toolchain, such as the go line in go.mod.
+  for (const c of components) {
+    const lang = languageFile(c.language);
+    if (!lang?.replay) continue;
+    const p = lang.replay.pins(tree, c.path);
+    found.push(...p.found);
+    missing.push(...p.missing.map((m) => (components.length > 1 ? `${m} for ${c.id}` : m)));
   }
   const pins = dockerfilePins(tree, dockerfile);
   const image = `.cursor/${dockerfile}`;
@@ -610,6 +549,8 @@ export function buildProfile(repo: string, tree: string, rubric: Rubric, commit 
   const supported = components.filter((c) => !c.notAssessedReason && rubric.mutation.languages.includes(c.language === "other" ? "x" : c.language));
   for (const c of components) {
     if (!c.notAssessedReason && c.language === "other") c.notAssessedReason = "no supported toolchain found";
+    // A supported stack whose language an older rubric doesn't list: say so, rather than no reason.
+    else if (!c.notAssessedReason && !rubric.mutation.languages.includes(c.language)) c.notAssessedReason = `${c.stack ? stack(c.stack).label : c.language} isn't scored under rubric ${rubric.version}`;
   }
   supported.sort((a, b) => b.changeShare - a.changeShare);
   supported.slice(0, rubric.components.maxAssessed).forEach((c) => (c.assessed = true));

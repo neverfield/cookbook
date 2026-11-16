@@ -1,0 +1,21 @@
+{
+  "purpose": "A C++ project built with CMake, which this release recognizes and doesn't score. It is listed as not assessed under its own name with its whole share of changes, and the report gives no level and says why.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 0,
+      "levels": {},
+      "top": [],
+      "startNow": null,
+      "noBlocker": false,
+      "safety": "pass",
+      "outcome": "not_assessed",
+      "notAssessed": [
+        "engine"
+      ],
+      "shares": {
+        "engine": 1
+      }
+    }
+  ]
+}

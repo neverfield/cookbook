@@ -1,0 +1,56 @@
+[INFO] Scanning for projects...
+[INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-dependency-plugin/3.7.0/maven-dependency-plugin-3.7.0.pom
+[WARNING] Failed to retrieve plugin descriptor for org.apache.maven.plugins:maven-dependency-plugin:3.7.0: Plugin org.apache.maven.plugins:maven-dependency-plugin:3.7.0 or one of its dependencies could not be resolved:
+	The following artifacts could not be resolved: org.apache.maven.plugins:maven-dependency-plugin:pom:3.7.0 (absent): Could not transfer artifact org.apache.maven.plugins:maven-dependency-plugin:pom:3.7.0 from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org: Temporary failure in name resolution
+
+[INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-clean-plugin/3.2.0/maven-clean-plugin-3.2.0.pom
+[WARNING] Failed to retrieve plugin descriptor for org.apache.maven.plugins:maven-clean-plugin:3.2.0: Plugin org.apache.maven.plugins:maven-clean-plugin:3.2.0 or one of its dependencies could not be resolved:
+	The following artifacts could not be resolved: org.apache.maven.plugins:maven-clean-plugin:pom:3.2.0 (absent): Could not transfer artifact org.apache.maven.plugins:maven-clean-plugin:pom:3.2.0 from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+
+[INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-resources-plugin/3.4.0/maven-resources-plugin-3.4.0.pom
+[WARNING] Failed to retrieve plugin descriptor for org.apache.maven.plugins:maven-resources-plugin:3.4.0: Plugin org.apache.maven.plugins:maven-resources-plugin:3.4.0 or one of its dependencies could not be resolved:
+	The following artifacts could not be resolved: org.apache.maven.plugins:maven-resources-plugin:pom:3.4.0 (absent): Could not transfer artifact org.apache.maven.plugins:maven-resources-plugin:pom:3.4.0 from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+
+[INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-jar-plugin/3.5.0/maven-jar-plugin-3.5.0.pom
+[WARNING] Failed to retrieve plugin descriptor for org.apache.maven.plugins:maven-jar-plugin:3.5.0: Plugin org.apache.maven.plugins:maven-jar-plugin:3.5.0 or one of its dependencies could not be resolved:
+	The following artifacts could not be resolved: org.apache.maven.plugins:maven-jar-plugin:pom:3.5.0 (absent): Could not transfer artifact org.apache.maven.plugins:maven-jar-plugin:pom:3.5.0 from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+
+[INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-compiler-plugin/3.15.0/maven-compiler-plugin-3.15.0.pom
+[WARNING] Failed to retrieve plugin descriptor for org.apache.maven.plugins:maven-compiler-plugin:3.15.0: Plugin org.apache.maven.plugins:maven-compiler-plugin:3.15.0 or one of its dependencies could not be resolved:
+	The following artifacts could not be resolved: org.apache.maven.plugins:maven-compiler-plugin:pom:3.15.0 (absent): Could not transfer artifact org.apache.maven.plugins:maven-compiler-plugin:pom:3.15.0 from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+
+[INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-surefire-plugin/3.5.4/maven-surefire-plugin-3.5.4.pom
+[WARNING] Failed to retrieve plugin descriptor for org.apache.maven.plugins:maven-surefire-plugin:3.5.4: Plugin org.apache.maven.plugins:maven-surefire-plugin:3.5.4 or one of its dependencies could not be resolved:
+	The following artifacts could not be resolved: org.apache.maven.plugins:maven-surefire-plugin:pom:3.5.4 (absent): Could not transfer artifact org.apache.maven.plugins:maven-surefire-plugin:pom:3.5.4 from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+
+[INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-install-plugin/3.1.4/maven-install-plugin-3.1.4.pom
+[WARNING] Failed to retrieve plugin descriptor for org.apache.maven.plugins:maven-install-plugin:3.1.4: Plugin org.apache.maven.plugins:maven-install-plugin:3.1.4 or one of its dependencies could not be resolved:
+	The following artifacts could not be resolved: org.apache.maven.plugins:maven-install-plugin:pom:3.1.4 (absent): Could not transfer artifact org.apache.maven.plugins:maven-install-plugin:pom:3.1.4 from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+
+[INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-deploy-plugin/3.1.4/maven-deploy-plugin-3.1.4.pom
+[WARNING] Failed to retrieve plugin descriptor for org.apache.maven.plugins:maven-deploy-plugin:3.1.4: Plugin org.apache.maven.plugins:maven-deploy-plugin:3.1.4 or one of its dependencies could not be resolved:
+	The following artifacts could not be resolved: org.apache.maven.plugins:maven-deploy-plugin:pom:3.1.4 (absent): Could not transfer artifact org.apache.maven.plugins:maven-deploy-plugin:pom:3.1.4 from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+
+[INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-site-plugin/3.12.1/maven-site-plugin-3.12.1.pom
+[WARNING] Failed to retrieve plugin descriptor for org.apache.maven.plugins:maven-site-plugin:3.12.1: Plugin org.apache.maven.plugins:maven-site-plugin:3.12.1 or one of its dependencies could not be resolved:
+	The following artifacts could not be resolved: org.apache.maven.plugins:maven-site-plugin:pom:3.12.1 (absent): Could not transfer artifact org.apache.maven.plugins:maven-site-plugin:pom:3.12.1 from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+
+[INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/mojo/maven-metadata.xml
+[INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-metadata.xml
+[WARNING] Could not transfer metadata org.apache.maven.plugins/maven-metadata.xml from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+[WARNING] Could not transfer metadata org.codehaus.mojo/maven-metadata.xml from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+[WARNING] org.apache.maven.plugins/maven-metadata.xml failed to transfer from https://repo.maven.apache.org/maven2 during a previous attempt. This failure was cached in the local repository and resolution will not be reattempted until the update interval of central has elapsed or updates are forced. Original error: Could not transfer metadata org.apache.maven.plugins/maven-metadata.xml from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+[WARNING] org.codehaus.mojo/maven-metadata.xml failed to transfer from https://repo.maven.apache.org/maven2 during a previous attempt. This failure was cached in the local repository and resolution will not be reattempted until the update interval of central has elapsed or updates are forced. Original error: Could not transfer metadata org.codehaus.mojo/maven-metadata.xml from/to central (https://repo.maven.apache.org/maven2): repo.maven.apache.org
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  0.193 s
+[INFO] Finished at: 2026-11-15T21:07:12Z
+[INFO] ------------------------------------------------------------------------
+[ERROR] No plugin found for prefix 'dependency' in the current project and in the plugin groups [org.apache.maven.plugins, org.codehaus.mojo] available from the repositories [local (/home/ubuntu/.m2/repository), central (https://repo.maven.apache.org/maven2)] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/NoPluginFoundForPrefixException

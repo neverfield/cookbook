@@ -5,21 +5,77 @@ import { redact, tail } from "./redact.ts";
 import { charge, overBudget } from "./replay.ts";
 import type { Budget, Executor } from "./replay.ts";
 import { SUDO_SHIM_MARK } from "./run.ts";
+import { makeRecipe } from "./static.ts";
 import { CUT_OFF } from "./scope.ts";
 import type { Audit } from "./types.ts";
-import { exists, sha256 } from "./util.ts";
+import { existsExact, sha256 } from "./util.ts";
 import { applyWaivers } from "./waivers.ts";
 
 export const INSTRUCTION_TIMEOUT_SEC = 300;
 
-// `npm test`, `npm run test` and `pnpm test` all run the test script; anything else compares as written.
-function commandKey(cmd: string): string {
-  const m = cmd.trim().match(/^(npm|pnpm|yarn|bun)\s+(?:run(?:-script)?\s+)?([\w:.-]+)\s*$/);
-  return m && !["install", "i", "ci", "add"].includes(m[2]) ? `script:${m[2]}` : cmd.trim().replace(/\s+/g, " ");
+// Flags of the test runners below that take the next word as their value.
+const VALUE_FLAGS = new Set(["-run", "-skip", "-timeout", "-tags", "-p", "-parallel", "-count", "-coverprofile", "-covermode", "-coverpkg", "-bench", "-benchtime", "-exec", "--package", "-p", "--features", "--target", "--manifest-path", "-k", "-m", "--project", "--configuration", "-c", "--filter", "--framework", "--format", "-f", "--require", "-r", "--tag", "-t", "--seed"]);
+
+// What a test run selects, without its flags: the tool and the packages or paths it names.
+// `go test ./...` and `go test -count=1 -v ./...` are one run; so are `pytest` and
+// `uv run pytest -q`, `./gradlew test` and `gradle test --no-daemon`.
+function testRunKey(cmd: string): string | null {
+  const words = cmd.trim().split(/\s+/).filter((w) => !/^[A-Za-z_]\w*=/.test(w));
+  while (words.length > 1 && /^(uv|poetry|pipenv|hatch|pdm) run$|^bundle exec$/.test(`${words[0]} ${words[1]}`)) words.splice(0, 2);
+  const tool = words[0]?.replace(/^\.\//, "").replace(/^.*\/(python3?|pytest|phpunit|rspec)$/, "$1");
+  const positional = (from: number) => {
+    const out: string[] = [];
+    for (let i = from; i < words.length; i++) {
+      const w = words[i];
+      if (w === "--") break;
+      if (w.startsWith("-")) {
+        if (VALUE_FLAGS.has(w)) i++;
+        continue;
+      }
+      out.push(w);
+    }
+    return out.sort().join(" ");
+  };
+  if (tool === "go" && words[1] === "test") return `go-test:${positional(2) || "."}`;
+  if (tool === "cargo" && words[1] === "test") {
+    // Which packages run is part of what the run selects.
+    const picked = words.flatMap((w, i) => (w === "-p" || w === "--package" ? [`p=${words[i + 1]}`] : w.startsWith("--package=") ? [`p=${w.slice(10)}`] : w === "--workspace" || w === "--all" ? ["workspace"] : [])).sort().join(" ");
+    return `cargo-test:${picked}|${positional(2)}`;
+  }
+  if (tool === "pytest") return `pytest:${positional(1)}`;
+  if (/^python3?$/.test(tool ?? "") && words[1] === "-m" && words[2] === "pytest") return `pytest:${positional(3)}`;
+  if (/^(mvn|mvnw)$/.test(tool ?? "")) return `maven:${positional(1)}`;
+  if (/^(gradle|gradlew)$/.test(tool ?? "")) return `gradle:${positional(1)}`;
+  if (tool === "dotnet" && words[1] === "test") return `dotnet-test:${positional(2)}`;
+  if (tool === "phpunit") return `phpunit:${positional(1)}`;
+  if (tool === "rspec") return `rspec:${positional(1)}`;
+  if (tool === "rake" && words[1] === "test") return "rake:test";
+  return null;
 }
 
-function sameAsCheck(audit: Audit, text: string, cwd: string): { id: string; kind: string; result: string } | null {
-  const key = commandKey(text);
+// `npm test`, `npm run test` and `pnpm test` all run the test script; a test runner's command is
+// keyed by what it selects; anything else compares as written.
+function commandKey(cmd: string): string {
+  const m = cmd.trim().match(/^(npm|pnpm|yarn|bun)\s+(?:run(?:-script)?\s+)?([\w:.-]+)\s*$/);
+  if (m && !["install", "i", "ci", "add"].includes(m[2])) return `script:${m[2]}`;
+  return testRunKey(cmd) ?? cmd.trim().replace(/\s+/g, " ");
+}
+
+// The key a documented command is compared with the contract's by, following a one-line Make target.
+export function instructionKey(text: string, tree: string, cwd: string): string {
+  return commandKey(throughMake(text, tree, cwd));
+}
+
+// `make test` whose recipe is one command is that command, so its result is the check's too.
+function throughMake(text: string, tree: string, cwd: string): string {
+  const target = text.trim().match(/^make\s+([\w.-]+)\s*$/)?.[1];
+  if (!target) return text;
+  const lines = makeRecipe(tree, cwd, target).split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  return lines.length === 1 ? lines[0] : text;
+}
+
+function sameAsCheck(audit: Audit, text: string, cwd: string, tree: string): { id: string; kind: string; result: string } | null {
+  const key = instructionKey(text, tree, cwd);
   for (const k of audit.contract) {
     if (k.kind === "start" || k.kind === "doctor" || commandKey(k.declared ?? k.command) !== key || normalize(k.cwd) !== normalize(cwd)) continue;
     const ev = [...audit.evidence].reverse().find((e) => e.contractId === k.id && e.where !== "static");
@@ -30,7 +86,28 @@ function sameAsCheck(audit: Audit, text: string, cwd: string): { id: string; kin
 
 // Documented commands run one by one in the replay copy, inside the audit's overall time budget:
 // each gets what is left of it, and none starts once it is spent.
-export async function replayInstructions(audit: Audit, ex: Executor, copyDir: string, budget: Budget, registryValues: string[], notInstalled: { blocked?: string } | null): Promise<void> {
+// What a tool prints when the folder it runs in has no manifest, and which manifest that is.
+const NO_MANIFEST: [RegExp, string][] = [
+  [/No `pyproject\.toml` found in current directory or any parent directory/, "pyproject.toml"],
+  [/could not find `Cargo\.toml` in/, "Cargo.toml"],
+  [/go\.mod file not found in current directory or any parent directory/, "go.mod"],
+  [/Composer could not find a composer\.json file/, "composer.json"],
+  [/Could not locate Gemfile/, "Gemfile"],
+  [/there is no POM in this directory/, "pom.xml"],
+  [/npm (?:error|ERR!) (?:code ENOENT|enoent)[\s\S]{0,400}?package\.json/, "package.json"],
+];
+
+// The packages a command that needs a manifest the working folder lacks could have meant.
+export function packageCommand(output: string, audit: Audit, tree: string, cwd: string): { manifest: string; paths: string[] } | null {
+  const manifest = NO_MANIFEST.find(([re]) => re.test(output))?.[1];
+  if (!manifest || existsExact(tree, join(cwd, manifest))) return null;
+  const paths = (audit.profile?.components ?? []).filter((c) => c.path !== cwd && c.manifest !== null && c.manifest.split("/").pop() === manifest).map((c) => c.path).sort();
+  return paths.length ? { manifest, paths } : null;
+}
+
+// `executors`: one executor for every command, or a choice per command, so a command runs in the image
+// of the component it targets.
+export async function replayInstructions(audit: Audit, executors: Executor | ((cwd: string, command: string) => Executor), copyDir: string, budget: Budget, registryValues: string[], notInstalled: { blocked?: string } | null): Promise<void> {
   for (const item of audit.instructions.filter((i) => i.category === "replay" && i.staticResult === "pass")) {
     if (notInstalled) {
       item.result = "not_run";
@@ -47,10 +124,10 @@ export async function replayInstructions(audit: Audit, ex: Executor, copyDir: st
       continue;
     }
     const wanted = item.cwd ?? (dirname(item.source) === "" ? "." : dirname(item.source));
-    const cwd = exists(join(copyDir, wanted)) ? wanted : ".";
+    const cwd = existsExact(copyDir, wanted) ? wanted : ".";
     // The same command a check already ran, such as `npm run test` next to the test check's
     // `npm test`: its result is that check's, counted once, there.
-    const same = sameAsCheck(audit, item.text, cwd);
+    const same = sameAsCheck(audit, item.text, cwd, copyDir);
     if (same) {
       item.cwd = cwd;
       if (same.result === "pass") {
@@ -67,6 +144,7 @@ export async function replayInstructions(audit: Audit, ex: Executor, copyDir: st
       continue;
     }
     const limit = Math.min(INSTRUCTION_TIMEOUT_SEC, leftSec);
+    const ex = typeof executors === "function" ? executors(cwd, item.text) : executors;
     const out = await ex.exec(item.text, cwd, limit);
     charge(budget, "*", out.durationMs);
     const ok = out.exitCode === 0 && !out.timedOut;
@@ -78,6 +156,30 @@ export async function replayInstructions(audit: Audit, ex: Executor, copyDir: st
       item.result = "not_run";
       item.reason = "not replayed: it uses sudo, which the audit never runs on the host";
       item.blocked = "it uses sudo, which the audit never runs on the host";
+      continue;
+    }
+    // A per-package command written without its folder, such as "run `uv lock` in that server", fails
+    // at the root for want of the package's manifest. It belongs to one of the packages that have one,
+    // and the line doesn't say which, so it can't be replayed as written.
+    const packages = ok ? null : packageCommand(out.output, audit, copyDir, cwd);
+    if (packages) {
+      item.category = "skipped";
+      item.result = "not_run";
+      item.reason = `not replayed: it runs in one of the packages that have a ${packages.manifest} (${packages.paths.join(", ")}), and the line doesn't say which`;
+      item.rule = "per-package";
+      continue;
+    }
+    if (why?.cause === "missing_ref") {
+      item.result = "not_run";
+      item.reason = `not replayed to the end: ${why.detail}, an environment limit rather than a repo defect`;
+      item.blocked = why.detail;
+      continue;
+    }
+    if (why?.cause === "interactive") {
+      item.category = "skipped";
+      item.result = "not_run";
+      item.reason = `not replayed: ${why.detail}`;
+      item.rule = "interactive";
       continue;
     }
     if (why?.cause === "permission") {

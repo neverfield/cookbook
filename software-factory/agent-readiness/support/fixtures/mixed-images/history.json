@@ -1,0 +1,18 @@
+{
+  "commits": [
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 30,
+      "paths": ["notes/n1.md", "notes/n2.md", "services/pricing/notes/n3.md"],
+      "message": "Update pricing in both"
+    },
+    {
+      "author": "Contributor B",
+      "email": "b@example.com",
+      "daysAgo": 10,
+      "paths": ["services/pricing/notes/n4.md", "notes/n5.md"],
+      "message": "Tune the pricing rules"
+    }
+  ]
+}

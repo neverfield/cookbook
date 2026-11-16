@@ -1,7 +1,10 @@
+import { languageImages } from "./languages/index.ts";
+
 // The audit's own images, pinned to the multi-arch index digest (amd64 and arm64) read on Nov 15,
 // 2026, so a replay runs on the same bytes on every machine until the table is refreshed. An image
 // the repo declares, or one passed with --image, is used as given.
-export const IMAGE_DIGESTS: Record<string, string> = {
+// A language file's own images (languages/*.ts `replay.images`) are added to these.
+const BASE_DIGESTS: Record<string, string> = {
   "node:16-bookworm": "sha256:73e677f85fbc56d22c817b4e5d7f72086c5343c0859f3bf8aaadab22aab29ce6",
   "node:18-bookworm": "sha256:c6ae79e38498325db67193d391e6ec1d224d96c693a8a4d943498556716d3783",
   "node:20-bookworm": "sha256:8f693eaa7e0a8e71560c9a82b55fd54c2ae920a2ba5d2cde28bac7d1c01c9ba5",
@@ -21,6 +24,8 @@ export const IMAGE_DIGESTS: Record<string, string> = {
   "ghcr.io/astral-sh/uv:python3.13-bookworm-slim": "sha256:531f855bda2c73cd6ef67d56b733b357cea384185b3022bd09f05e002cd144ca",
   "ghcr.io/astral-sh/uv:python3.14-bookworm-slim": "sha256:7cf77f594be8042dab6daa9fe326f90962252268b4f120a7f5dccce4d947e6c1",
 };
+
+export const IMAGE_DIGESTS: Record<string, string> = { ...BASE_DIGESTS, ...languageImages() };
 
 // Node majors the audit has a pinned image for. Even majors are the LTS lines.
 export const NODE_MAJORS = [16, 18, 20, 22, 24, 26];

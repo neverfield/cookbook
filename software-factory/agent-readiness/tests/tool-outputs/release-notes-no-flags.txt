@@ -1,0 +1,5 @@
+
+> @modelcontextprotocol/servers@0.6.2 release:notes
+> node scripts/release-notes.mjs
+
+release-notes: --milestone, --merge-sha, --merge-branch and --ledger-url are all required

@@ -28,6 +28,14 @@ const TARGETED: { re: RegExp; how: string }[] = [
   { re: /\bpytest\b/, how: "pytest takes a file or -k" },
   { re: /\bunittest\b/, how: "unittest takes a module" },
   { re: /\b(ava|tap|uvu)\b/, how: "the runner takes file paths" },
+  { re: /\bmvnw?\b[^&|;]*\btest\b/, how: "Maven runs one test class with -Dtest=Class" },
+  { re: /\bgradlew?\b[^&|;]*\b(test|jvmTest)\b/, how: "Gradle runs one test class with --tests" },
+  { re: /\bdotnet\b[^&|;]*\btest\b/, how: "dotnet test runs a subset with --filter" },
+  { re: /\bgo\b[^&|;]*\btest\b/, how: "go test takes a package path and -run" },
+  { re: /\bcargo\b[^&|;]*\b(test|nextest)\b/, how: "cargo test takes a test name filter" },
+  { re: /\b(phpunit|pest)\b/, how: "phpunit takes a file or --filter, as Pest does" },
+  { re: /\brspec\b/, how: "rspec takes a spec file path" },
+  { re: /\bruby\b[^&|;]*-I\s*test\b|\brails\s+test\b|\brake\s+test\b/, how: "minitest runs one file with ruby -Itest, rails test or rake test TEST=" },
 ];
 const FIXED_PORT = /(?:--port[= ]|\s-p\s+|\bPORT=|localhost:|127\.0\.0\.1:|0\.0\.0\.0:)(\d{2,5})\b/;
 const COMPOSE_PORT = /^\s*-\s*["']?(?:[\d.]+:)?(\d{2,5}):\d{2,5}/m;

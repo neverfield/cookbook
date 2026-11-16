@@ -1,0 +1,3 @@
+./lint.sh
+./lint.sh: line 3: golangci-lint: command not found
+make: *** [Makefile:8: lint3] Error 127
