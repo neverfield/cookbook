@@ -60,10 +60,13 @@ function gradleDynamic(tree: string, path: string): number {
 // dependency can't be resolved, so the offline test run would find nothing cached. This init script
 // downloads every resolvable configuration's files and fails on the first dependency it couldn't
 // resolve, so a blocked registry's "Could not GET" reaches the diagnosis. A configuration no variant
-// matches is a build's own choice, not a missing dependency, and is left alone. An included build is
-// resolved before the composite substitutes the root build's projects for its dependencies (mockito-
-// kotlin's tests build depends on mockito-kotlin itself), so there only a failed registry request fails.
-const RESOLVE_ALL = "gradle.projectsEvaluated { g -> def chain = { t -> def s = []; while (t) { s << (t.message ?: \"\"); t = t.cause }; s.join(\" \") }; def bad = []; g.rootProject.allprojects { p -> p.configurations.matching { it.canBeResolved }.each { c -> def a; try { a = c.incoming.artifactView { lenient(true) }.artifacts; a.artifactFiles.files } catch (e) { return }; a.failures.findAll { f -> !(f.message =~ /Cannot choose between|No matching variant|No variants of/) && (g.parent == null || chain(f) =~ /Could not (GET|HEAD) /) }.each { bad << it } } }; if (bad) throw bad[0] }";
+// matches is a build's own choice, not a missing dependency, and is left alone: Gradle reports it as
+// "Could not resolve x" with the variant error as its cause, so the whole cause chain is read (moshi's
+// Dokka configurations). A configuration deprecated for resolution, or one that throws, is skipped. An
+// included build is resolved before the composite substitutes the root build's projects for its
+// dependencies (mockito-kotlin's tests build depends on mockito-kotlin itself), so there only a failed
+// registry request fails.
+const RESOLVE_ALL = "gradle.projectsEvaluated { g -> def chain = { t -> def s = []; while (t) { s << (t.message ?: \"\"); t = t.cause }; s.join(\" \") }; def bad = []; g.rootProject.allprojects { p -> p.configurations.matching { it.canBeResolved && !(it.respondsTo(\"isDeprecatedForResolution\") && it.isDeprecatedForResolution()) }.each { c -> try { def a = c.incoming.artifactView { lenient(true) }.artifacts; a.artifactFiles.files; a.failures.findAll { f -> def why = chain(f); !(why =~ /Cannot choose between|No matching variant|No matching configuration|No variants of/) && (g.parent == null || why =~ /Could not (GET|HEAD) /) }.each { bad << it } } catch (e) { } } }; if (bad) throw bad[0] }";
 const RESOLVE_SCRIPT = '"$HOME/readiness-resolve.gradle"';
 
 const gradle: Ecosystem = {
@@ -405,6 +408,10 @@ function imageFor(tree: string, path: string): string {
   return jdk >= 17 ? `gradle:9-jdk${jdk}` : `gradle:8-jdk${jdk}`;
 }
 
+// Surefire's default includes (Test*, *Test, *Tests, *TestCase), each with a method no test has.
+export const MAVEN_TEST_CLASSES = ["Test*", "*Test", "*Tests", "*TestCase"];
+const MAVEN_NO_TEST = `'-Dtest=${MAVEN_TEST_CLASSES.map((c) => `${c}#readinessNoTest`).join(",")}'`;
+
 function jvmCommands(tree: string, path: string): DraftCommand[] {
   const out: DraftCommand[] = [];
   if (isMaven(tree, path)) {
@@ -412,10 +419,11 @@ function jvmCommands(tree: string, path: string): DraftCommand[] {
     const source = "pom.xml";
     const lint = lintTasks(tree, path, true);
     if (lint.length) out.push({ kind: "lint", command: `${mvn} -B -ntp ${lint.join(" ")}`, source, reason: `the lint plugins pom.xml declares (${lint.join(", ")})` });
-    // Surefire resolves its test provider only when it runs, which dependency:go-offline misses. A
-    // filter that matches every class and no method loads the provider while the network is on and
-    // runs no test.
-    out.push({ kind: "build", command: `${mvn} -B -ntp package '-Dtest=*#readinessNoTest' -Dsurefire.failIfNoSpecifiedTests=false -DfailIfNoTests=false`, source, reason: "Maven's package phase, with Surefire's test provider loaded and no test run" });
+    // Surefire resolves its test provider only when it runs, which dependency:go-offline misses, and
+    // skipping tests would skip that too. A filter on Surefire's default test class names with no
+    // matching method loads the provider while the network is on and runs no test. `*` would also
+    // pick up a JPMS test module's module-info.class, which Surefire can't load (gson's test-jpms).
+    out.push({ kind: "build", command: `${mvn} -B -ntp package ${MAVEN_NO_TEST} -Dsurefire.failIfNoSpecifiedTests=false -DfailIfNoTests=false`, source, reason: "Maven's package phase, with Surefire's test provider loaded and no test run" });
     out.push({ kind: "test", command: `${mvn} -B -ntp -o test`, source, reason: "Maven's test phase, offline" });
     return out;
   }

@@ -1,16 +1,20 @@
 import { join } from "node:path";
 import type { Site } from "../mutate.ts";
 import type { Component } from "../types.ts";
-import { exists, readJson } from "../util.ts";
+import { exists, git, listFiles, readJson, readText } from "../util.ts";
 import { inComponent, namedAfter } from "./coverage.ts";
 import type { DraftCommand, Ecosystem, LanguageDef } from "./language.ts";
 
 // Owned by the PHP and Ruby group.
 
 interface ComposerJson {
+  name?: string;
+  type?: string;
+  version?: string;
   require?: Record<string, string>;
   "require-dev"?: Record<string, string>;
   scripts?: Record<string, unknown>;
+  extra?: { "branch-alias"?: Record<string, unknown> };
 }
 
 function composerJson(tree: string, path: string): ComposerJson | null {
@@ -31,6 +35,58 @@ function requiresPackages(tree: string, path: string): boolean {
   return Object.keys({ ...c.require, ...c["require-dev"] }).some((k) => k !== "php" && !k.startsWith("ext-") && !k.startsWith("lib-"));
 }
 
+const SAFE_VERSION = /^v?\d[\w.+-]*$/;
+const RELEASE_TAG = /^v?\d+(\.\d+)*$/;
+const CI_FILES = [".gitlab-ci.yml", ".travis.yml"];
+const CI_ROOT_VERSION = /\bCOMPOSER_ROOT_VERSION\s*[:=]\s*["']?(v?\d[\w.+-]*)["']?/;
+
+// The repo the audit tree was cloned from: the tree is a one-commit clone with no tags or branches,
+// and its FETCH_HEAD names the checkout it was fetched from.
+function sourceRepo(tree: string): string | null {
+  const fetchHead = join(tree, ".git", "FETCH_HEAD");
+  const from = exists(fetchHead) ? readText(fetchHead).match(/ of (.+)$/m)?.[1]?.trim() : undefined;
+  return from && exists(from) ? from : null;
+}
+
+// The highest release tag the audited commit contains, from the tree itself or the repo it came from.
+function latestTag(tree: string): string | null {
+  // Never a repo above the tree, which git would otherwise find.
+  if (!exists(join(tree, ".git"))) return null;
+  const head = git(["rev-parse", "HEAD"], tree);
+  if (!head.ok) return null;
+  for (const repo of [tree, sourceRepo(tree)]) {
+    if (!repo) continue;
+    const tags = git(["tag", "--merged", head.stdout.trim()], repo);
+    const releases = tags.ok ? tags.stdout.split("\n").map((t) => t.trim()).filter((t) => RELEASE_TAG.test(t)).map((t) => t.replace(/^v/, "")) : [];
+    const tag = releases.sort((a, b) => cmp(nums(b), nums(a)))[0];
+    if (tag) return tag;
+  }
+  return null;
+}
+
+// The version Composer should give the root package. The audit checks out a detached commit, where
+// Composer calls the root `dev-<sha>`, so a dev dependency that requires the root back (guzzle's
+// guzzlehttp/test-server needs guzzle ^8.1) can't be met, though it can on the repo's branch. In
+// order: the version the repo's CI sets, its branch alias, then its latest release tag. Nothing for
+// a package that sets its own version, or for an application, which no package requires.
+export function composerRootVersion(tree: string, path: string): { version: string; from: string } | null {
+  const c = composerJson(tree, path);
+  if (!c?.name || c.version || c.type === "project") return null;
+  if (path === ".") {
+    const ci = [...listFiles(join(tree, ".github", "workflows")).filter((f) => /\.ya?ml$/.test(f)).map((f) => `.github/workflows/${f}`), ...CI_FILES.filter((f) => exists(join(tree, f)))];
+    for (const f of ci) {
+      const v = readText(join(tree, f)).match(CI_ROOT_VERSION)?.[1];
+      if (v) return { version: v, from: `the COMPOSER_ROOT_VERSION ${f} sets` };
+    }
+  }
+  const aliases = Object.values(c.extra?.["branch-alias"] ?? {}).filter((v): v is string => typeof v === "string" && SAFE_VERSION.test(v));
+  const aliasKey = (v: string) => nums(v.replace(/^v/, "").replace(/(\.x)?-dev$/, ""));
+  const alias = aliases.sort((a, b) => cmp(aliasKey(b), aliasKey(a)))[0];
+  if (alias) return { version: alias, from: "composer.json's branch-alias" };
+  const tag = path === "." ? latestTag(tree) : null;
+  return tag ? { version: tag, from: "the latest release tag" } : null;
+}
+
 const composer: Ecosystem = {
   id: "composer",
   label: "Composer",
@@ -38,9 +94,12 @@ const composer: Ecosystem = {
   rule: "`composer install` from a committed `composer.lock`",
   install: (tree, path, { ignoreScripts }) => {
     const flags = `--no-interaction --no-progress${ignoreScripts ? " --no-scripts" : ""}`;
+    const root = composerRootVersion(tree, path);
+    const command = `${root ? `COMPOSER_ROOT_VERSION=${root.version} ` : ""}composer install ${flags}`;
+    const as = root ? `, with the root package as ${root.version} (${root.from}), since the audit's detached checkout has no branch` : "";
     return exists(join(tree, path, "composer.lock"))
-      ? { command: `composer install ${flags}`, reason: "install from composer.lock", frozen: true }
-      : { command: `composer install ${flags}`, reason: "no composer.lock, so the install can't be frozen", frozen: false };
+      ? { command, reason: `install from composer.lock${as}`, frozen: true }
+      : { command, reason: `no composer.lock, so the install can't be frozen${as}`, frozen: false };
   },
   unpinned: (tree, path) => (requiresPackages(tree, path) && !exists(join(tree, path, "composer.lock")) ? "no composer.lock is committed" : null),
 };

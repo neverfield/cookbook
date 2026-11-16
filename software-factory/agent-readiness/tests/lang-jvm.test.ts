@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import { commandTimeout, discoverContract, imagePlan } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { ecosystemOf } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
-import { JDKS, cLikeQuoted, cLikeSites, enforcedJava, jdkFor, jvm, jvmTestCounts } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
+import { JDKS, MAVEN_TEST_CLASSES, cLikeQuoted, cLikeSites, enforcedJava, jdkFor, jvm, jvmTestCounts } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
 import { targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { loadRubric, latestRubricVersion } from "../skill/agent-readiness/scripts/lib/rubric.ts";
@@ -134,12 +134,53 @@ describe("JVM: the contract", () => {
 
   test("the Gradle install downloads every configuration's files, since `gradle dependencies` downloads no jar", () => {
     const plan = ecosystemOf("gradle")!.install(repo({ "build.gradle.kts": "", gradlew: "" }), ".", { ignoreScripts: false });
-    assert.match(plan.command, /a\.artifactFiles\.files \} catch \(e\) \{ return \}; a\.failures\.findAll/);
+    assert.match(plan.command, /try \{ def a = c\.incoming\.artifactView \{ lenient\(true\) \}\.artifacts; a\.artifactFiles\.files; a\.failures\.findAll \{[^]*\} catch \(e\) \{ \} \} \}; if \(bad\)/, "a configuration that throws, while resolving or listing its failures, is skipped");
     assert.match(plan.command, /if \(bad\) throw bad\[0\]/, "a dependency that can't be resolved fails the install, unlike gradle dependencies");
-    assert.match(plan.command, /g\.parent == null \|\| chain\(f\) =~ \/Could not \(GET\|HEAD\) \//, "in an included build, resolved before the composite's substitutions, only a failed registry request fails (mockito-kotlin's tests build)");
+    assert.match(plan.command, /g\.parent == null \|\| why =~ \/Could not \(GET\|HEAD\) \//, "in an included build, resolved before the composite's substitutions, only a failed registry request fails (mockito-kotlin's tests build)");
     assert.doesNotMatch(RESOLVE_QUOTES(plan.command), /'/, "the script has no single quote, so the shell's printf keeps it whole");
     assert.match(plan.command, /&& JAVA_TOOL_OPTIONS="-Duser\.home=\$HOME" \.\/gradlew --no-daemon -I "\$HOME\/readiness-resolve\.gradle" help$/, "no -q, so Gradle's Could not GET line reaches the diagnosis");
     assert.equal(plan.frozen, true);
+  });
+
+  // The Mac's open-network run of square/moshi@889013e failed the injected install on Dokka's
+  // configurations ("No matching variant ... org.jetbrains.dokka"). Gradle wraps that error: the
+  // failure's own message is "Could not resolve ...", and the variant error is its cause.
+  test("a configuration no variant matches is skipped wherever the cause chain says so, and so is one deprecated for resolution (square/moshi@889013e)", () => {
+    const script = RESOLVE_QUOTES(ecosystemOf("gradle")!.install(repo({ "build.gradle.kts": "", gradlew: "" }), ".", { ignoreScripts: false }).command);
+    assert.match(script, /def why = chain\(f\); !\(why =~ \/Cannot choose between\|No matching variant\|No matching configuration\|No variants of\/\)/);
+    assert.doesNotMatch(script, /f\.message =~/, "never the top message alone");
+    assert.match(script, /matching \{ it\.canBeResolved && !\(it\.respondsTo\("isDeprecatedForResolution"\) && it\.isDeprecatedForResolution\(\)\) \}/);
+    const variant = /Cannot choose between|No matching variant|No matching configuration|No variants of/;
+    const dokka = [
+      "Could not resolve org.jetbrains.dokka:dokka-base:2.0.0.",
+      "No matching variant of org.jetbrains.dokka:dokka-base:2.0.0 was found. The consumer was configured to find a library for use during runtime, compatible with Java 17, packaged as a jar, preferably optimized for standard JVMs, and its dependencies declared externally, as well as attribute 'org.jetbrains.dokka.format' with value 'html' but:",
+    ];
+    assert.ok(!variant.test(dokka[0]) && variant.test(dokka.join(" ")), "only the chain names the variant error");
+    const blocked = ["Could not resolve com.squareup.okio:okio:3.9.0.", "Could not get resource 'https://repo.maven.apache.org/maven2/com/squareup/okio/okio/3.9.0/okio-3.9.0.pom'.", "Could not GET 'https://repo.maven.apache.org/maven2/com/squareup/okio/okio/3.9.0/okio-3.9.0.pom'."];
+    assert.ok(!variant.test(blocked.join(" ")), "a blocked registry still fails the install");
+  });
+
+  // The Mac's open-network run of google/gson@6c06cbc failed the build in test-jpms with
+  // "NoClassDefFoundError: module-info is not a class because access_flag ACC_MODULE is set": `-Dtest=*`
+  // replaced Surefire's includes, so it tried to load the module's test module-info.class.
+  test("the Maven build loads Surefire's provider through its default test class names, never module-info (google/gson@6c06cbc)", () => {
+    const gson = repo({
+      "pom.xml": "<project><artifactId>gson-parent</artifactId><modules><module>gson</module><module>test-jpms</module></modules></project>",
+      "gson/pom.xml": "<project><artifactId>gson</artifactId></project>",
+      "gson/src/main/java/module-info.java": "module com.google.gson {}\n",
+      "test-jpms/pom.xml": "<project><artifactId>test-jpms</artifactId></project>",
+      "test-jpms/src/test/java/module-info.java": "module com.google.gson.jpms_test { requires com.google.gson; }\n",
+      "test-jpms/src/test/java/com/google/gson/jpms_test/ExportedPackagesTest.java": "",
+    });
+    const build = hooks.commands(gson, { path: "." } as never).find((c) => c.kind === "build")!.command;
+    assert.equal(build, `JAVA_TOOL_OPTIONS="-Duser.home=$HOME" mvn -B -ntp package '-Dtest=Test*#readinessNoTest,*Test#readinessNoTest,*Tests#readinessNoTest,*TestCase#readinessNoTest' -Dsurefire.failIfNoSpecifiedTests=false -DfailIfNoTests=false`);
+    assert.doesNotMatch(build, /-DskipTests|maven\.test\.skip/, "skipping tests would skip the provider download the offline test run needs");
+    const filter = build.match(/'-Dtest=([^']+)'/)![1];
+    const classes = filter.split(",").map((p) => new RegExp(`^${p.replace(/#readinessNoTest$/, "").replace(/\*/g, "[^/]*")}$`));
+    assert.deepEqual(classes.map(String), MAVEN_TEST_CLASSES.map((c) => `/^${c.replace(/\*/g, "[^/]*")}$/`));
+    const matched = (name: string) => classes.some((re) => re.test(name));
+    for (const name of ["module-info", "package-info", "Helpers"]) assert.ok(!matched(name), name);
+    for (const name of ["ExportedPackagesTest", "TestGson", "ReflectionTests", "JsonTestCase"]) assert.ok(matched(name), name);
   });
 
   test("lint runs only for a lint plugin the build declares; a multiplatform build runs its JVM tests", () => {
