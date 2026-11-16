@@ -14,6 +14,9 @@ export interface Stack {
   tier: SupportTier;
   // Why it isn't supported, said after "<label> isn't supported yet: ".
   reason?: string;
+  // The platform it builds on when that platform, not the stack, is what this machine lacks, said
+  // after "needs": "Windows", "macOS with Xcode".
+  needs?: string;
   // The files of a component in this stack, for a root app that shares "." with a root package.json.
   files?: RegExp;
   // Fixtures (fixtures/<name>) or pinned real repos (owner/repo@sha) that show the audit's behaviour.

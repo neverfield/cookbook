@@ -6,7 +6,7 @@ import type { CompStates } from "./score.ts";
 import { sampledScope } from "./scope.ts";
 import { blockedBy, checkCounts } from "./score.ts";
 import type { ComponentResult } from "./seal.ts";
-import { NOT_SUPPORTED, SUPPORTED_DOC } from "./support.ts";
+import { NOT_SUPPORTED, STACKS, SUPPORTED_DOC } from "./support.ts";
 import type { Asset, Audit, CondId, Component, ComponentLevel, HistoryLine, Level, OutcomeStats, OutcomesSnapshot, ReportAction, ReportChanges, ReportJson, Roadmap, RoadmapItem, ScenarioId } from "./types.ts";
 import { EMOJI, fmtDate, fmtShortDate, pct, wordCount } from "./util.ts";
 import { serviceLabel } from "./diagnose.ts";
@@ -233,6 +233,22 @@ function whyNoneAssessed(input: RenderInput): string[] {
   return [detailed, `skipped ${skipped.length} ${skipped.length === 1 ? "component whose toolchain" : "components whose toolchains"} the audit doesn't support yet`];
 }
 
+// When every component is blocked only by the platform it builds on, such as Windows-only .NET or an
+// Xcode app, the headline names that need, so the missing level never reads as a missing toolchain
+// or a broken repo. Null when any component is skipped for another reason.
+function platformBlocked(input: RenderInput): string[] | null {
+  const skipped = input.components.filter((c) => !c.assessed).sort((a, b) => b.changeShare - a.changeShare);
+  const needs = skipped.map((c) => STACKS.find((s) => s.id === c.stack)?.needs);
+  if (!skipped.length || needs.some((n) => !n)) return null;
+  const byNeed = new Map<string, string[]>();
+  skipped.forEach((c, i) => byNeed.set(needs[i]!, [...(byNeed.get(needs[i]!) ?? []), c.id]));
+  const one = skipped.length === 1;
+  const tail = `to build; ${one ? "it's" : "they're"} blocked on this machine, not broken`;
+  const named = [...byNeed].map(([need, ids]) => `${list(ids)} ${ids.length === 1 ? "needs" : "need"} ${need}`);
+  const all = [...byNeed.keys()];
+  return [`${list(named)} ${tail}`, `${one ? "its one component needs" : `all ${skipped.length} components need`} ${all.length === 1 ? all[0] : list(all).replace(/ and /, " or ")} ${tail}`];
+}
+
 // What would let a rerun give the level, for the cause this audit hit; null when only support for
 // the stack would, which the part 1 support line covers.
 function rerunAdvice(input: RenderInput, causes: string[], verb: "give one" | "prove it"): string | null {
@@ -251,6 +267,8 @@ function headlineFor(input: RenderInput, ready: string[], setByShare: number): s
   const active = [...input.active];
   const fit = (...c: string[]) => c.find((x) => wordCount(x) <= rubric.part1.maxHeadlineWords) ?? c[c.length - 1];
   if (noneAssessed(input)) {
+    const platform = platformBlocked(input);
+    if (platform) return fit(...platform.map((why) => `No component could be assessed, so this audit can't give a level yet: ${why}.`));
     return fit(...whyNoneAssessed(input).map((why) => `No component could be assessed, so this audit can't give a level yet: it ${why}.`), "No component could be assessed, so this audit can't give a level yet.");
   }
   if (input.noResults) {
