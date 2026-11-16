@@ -15,7 +15,7 @@
       "safety": "pass",
       "outcome": "proven",
       "contract": {
-        "cmd-orders-install": "JAVA_TOOL_OPTIONS=\"-Duser.home=$HOME\" ./mvnw -B -q dependency:go-offline",
+        "cmd-orders-install": "JAVA_TOOL_OPTIONS=\"-Duser.home=$HOME\" ./mvnw -B -ntp dependency:go-offline",
         "cmd-orders-build": "JAVA_TOOL_OPTIONS=\"-Duser.home=$HOME\" ./mvnw -B -ntp package '-Dtest=*#readinessNoTest' -Dsurefire.failIfNoSpecifiedTests=false -DfailIfNoTests=false",
         "cmd-orders-test": "JAVA_TOOL_OPTIONS=\"-Duser.home=$HOME\" ./mvnw -B -ntp -o test"
       }

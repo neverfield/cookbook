@@ -1,0 +1,5 @@
+--- FAIL: TestRecordAuthWithOAuth2 (7.15s)
+    --- FAIL: TestRecordAuthWithOAuth2/creating_user_(with_mapped_OAuth2_fields_and_avatarURL->file_field) (0.10s)
+        api.go:277: Cannot find "avatar":"logo_ in response body 
+            {"meta":{"expiry":"","rawUser":{},"id":"oauth2_id","isNew":true,"name":"","username":"oauth2_username","avatarURL":"https://pocketbase.io/images/logo.svg","accessToken":"","refreshToken":"","email":"oauth2@example.com","avatarUrl":"https://pocketbase.io/images/logo.svg"},"record":{"avatar":"","collectionId":"_pb_users_auth_","collectionName":"users","created":"2026-11-16 07:50:07.393Z","email":"oauth2@example.com","emailVisibility":true,"file":[],"id":"cff2un8cjrog5h5","name":"test_name","rel":"0yxhwia2amd8gec","updated":"2026-11-16 07:50:07.395Z","username":"oauth2_id","verified":true},"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb2xsZWN0aW9uSWQiOiJfcGJfdXNlcnNfYXV0aF8iLCJleHAiOjE3OTYwMjUwMDcsImlkIjoiY2ZmMnVuOGNqcm9nNWg1IiwicmVmcmVzaGFibGUiOnRydWUsInR5cGUiOiJhdXRoIn0.rfh1VUinMSefZf0WzV1y0PdjQ7JUbYWasejO-yeYLpE"}
+FAIL

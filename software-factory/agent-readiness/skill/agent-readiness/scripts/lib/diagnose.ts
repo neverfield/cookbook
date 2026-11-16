@@ -89,6 +89,10 @@ const NETWORK: { re: RegExp; detail: string }[] = [
   // last line shows; the dependency plugin is Maven's own, so failing to find it means the
   // repository wasn't reached. The Maven Wrapper downloads Maven with wget.
   { re: /Could not transfer (artifact|metadata) [^\n]* from\/to [^\n]*\(https?:\/\/[^)\s]+\): (Remote host terminated the handshake|Connection reset|Connect to [^\n]* failed|[\w.-]+(: (Name or service not known|Temporary failure in name resolution))?$)|No plugin found for prefix 'dependency' in the current project|wget: Failed to fetch https?:\/\//m, detail: "an unreachable package registry on the network" },
+  // Maven while it reads the POMs, as google/gson's build extension did: the transfer error itself
+  // shows only with -X, so "Failed to read artifact descriptor" is all there is. A version that
+  // doesn't exist reads "The POM for ... is missing" and "could not be resolved" instead.
+  { re: /Failed to read artifact descriptor for \S+/, detail: "an unreachable package registry on the network" },
   // Gradle: "Could not GET 'https://repo.maven.apache.org/...'"; a missing version is "Could not find".
   { re: /Could not GET '[^']+'/, detail: "an unreachable package registry on the network" },
   // Go: `Get "https://proxy.golang.org/...": EOF`, or a dial, TLS or reset error after the URL.
@@ -98,7 +102,10 @@ const NETWORK: { re: RegExp; detail: string }[] = [
   { re: /failed to lookup address information|Caused by: dns error/, detail: "it tried to reach the network" },
   { re: /\bcurl: \((5|6|7|28|35|52|56)\)/, detail: "it tried to reach the network" },
   { re: /ProxyError|407 Proxy Authentication|tunneling socket could not be established|proxy[^\n]{0,40}(refused|error|failed)/i, detail: "a proxy error on the network" },
-  { re: /CERT_|certificate verify failed|unable to (get|verify) (the )?(local issuer|first) certificate|self[- ]signed certificate|SSLError|SSL: [A-Z_]+|ERR_SSL|SSL routines|tlsv1 alert|TLS handshake|Client network socket disconnected before secure TLS/i, detail: "a TLS or certificate error on the network" },
+  // uv and other reqwest clients: "error sending request for url (https://files.pythonhosted.org/...)"
+  // ending in "tls handshake eof", which is a host that dropped the connection, not a bad certificate.
+  { re: /error sending request for url[\s\u2502|]*\(https?:\/\/[^)\s]+\)(?![\s\S]*(invalid peer certificate|UnknownIssuer|certificate verify failed))/, detail: "an unreachable package registry on the network" },
+  { re: /CERT_|certificate verify failed|invalid peer certificate|unable to (get|verify) (the )?(local issuer|first) certificate|self[- ]signed certificate|SSLError|SSL: [A-Z_]+|ERR_SSL|SSL routines|tlsv1 alert|TLS handshake|Client network socket disconnected before secure TLS/i, detail: "a TLS or certificate error on the network" },
   { re: /ENOTFOUND|EAI_AGAIN|getaddrinfo|Temporary failure in name resolution|Could not resolve host/, detail: "it tried to reach the network" },
   { re: /ECONNRESET|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|Network is unreachable|socket hang up|\bfetch failed\b|Connection reset by peer|Failed to connect to|Max retries exceeded with url|NewConnectionError|ReadTimeoutError|request to https?:\/\/\S+ failed|ECONNREFUSED (?!127\.0\.0\.1|::1|localhost)[\d.]+:\d+|All attempts to connect to [\w.-]+ failed/, detail: "a network connection failed" },
 ];
@@ -295,6 +302,27 @@ export function nativeAotGap(output: string): string | null {
   return null;
 }
 
+// A host on the internet that a failing test's own output names, such as pocketbase's OAuth2 test
+// fetching https://pocketbase.io/images/logo.svg. Its app swallows the failed download, so no
+// network error is printed. Hosts that never leave the machine, and reserved example and test
+// domains, don't count.
+const LOCAL_HOST = /^(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[?::1\]?|host\.docker\.internal|(.+\.)?(example\.(com|org|net)|test|invalid|local|localhost|internal))$/i;
+
+// Documentation, source hosting and tooling sites that runners and assertion libraries link to in
+// their own messages ("see https://jestjs.io/docs/...").
+const DOC_HOST = /(^|\.)(github\.com|githubusercontent\.com|gitlab\.com|bitbucket\.org|npmjs\.(com|org)|nodejs\.org|jestjs\.io|vitest\.dev|mochajs\.org|go\.dev|golang\.org|rust-lang\.org|docs\.rs|crates\.io|python\.org|pypi\.org|readthedocs\.io|apache\.org|gradle\.org|junit\.org|microsoft\.com|aka\.ms|mozilla\.org|w3\.org|json-schema\.org|stackoverflow\.com|ruby-lang\.org|rubygems\.org|php\.net|getcomposer\.org)$/i;
+const HELP_LINE = /\b(see|docs?|documentation|learn more|more info(rmation)?|read more|refer to|visit|help|issue)\b/i;
+
+export function externalHost(output: string): string | null {
+  for (const line of output.split("\n")) {
+    if (HELP_LINE.test(line)) continue;
+    for (const m of line.matchAll(/https?:\/\/([a-z0-9][a-z0-9.-]*\.[a-z]{2,})(?::\d+)?/gi)) {
+      if (!LOCAL_HOST.test(m[1]) && !DOC_HOST.test(m[1])) return m[1].toLowerCase();
+    }
+  }
+  return null;
+}
+
 export function diagnose(rawOutput: string, timedOut: boolean, phase: string): Diagnosis {
   const clean = rawOutput.replace(/\x1b\[[0-9;]*m/g, "");
   // Stuck with no CPU while the network was off: most likely waiting on a download, such as an
@@ -349,11 +377,13 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   const mod = MISSING_MODULE.map((re) => output.match(re)).filter((m): m is RegExpMatchArray => m !== null).sort((a, b) => (a.index ?? 0) - (b.index ?? 0))[0];
   if (mod) return { cause: "missing_module", detail: `module ${mod[1]} is missing` };
   const network = networkFailure(output);
-  if (network) return { cause: "network", detail: network };
+  if (network) return { cause: "network", detail: phase === "test" ? "a test tried to reach the network, which is off while tests run" : network };
   if (/SyntaxError|error TS\d{4}|IndentationError/.test(output)) return { cause: "compile", detail: "the code doesn't compile" };
   const compiler = compilerError(clean);
   if (compiler) return { cause: "compile", detail: compiler.slice(0, 200) };
   const named = failingTests(clean);
+  const host = phase === "test" ? externalHost(focus) : null;
+  if (host) return { cause: "network", detail: `${named.length ? `${named[0]} failed; it` : "a failing test"} refers to ${host}, and tests run with the network off` };
   if (named.length) return { cause: "unknown", detail: named.length === 1 ? `${named[0]} failed` : `${named[0]} and ${named.length - 1} more failed` };
   const lines = (focus.trim() ? focus : clean).split("\n").map((l) => l.trim()).filter(Boolean);
   // node --test's TAP block lists code, failureType and the like after the error itself.

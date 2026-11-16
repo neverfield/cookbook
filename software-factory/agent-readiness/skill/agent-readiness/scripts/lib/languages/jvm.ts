@@ -37,7 +37,7 @@ const maven: Ecosystem = {
   rule: "`mvn dependency:go-offline` through the committed Maven Wrapper when there is one, with every dependency and plugin version fixed in `pom.xml`: no version ranges, `LATEST` or `RELEASE`",
   install: (tree, path) => {
     const fixed = mavenDynamic(tree, path) === 0;
-    return { command: `${mvnOf(tree, path)} -B -q dependency:go-offline`, reason: fixed ? "resolves the versions pom.xml fixes" : "pom.xml leaves some versions open, so the install can't be frozen", frozen: fixed };
+    return { command: `${mvnOf(tree, path)} -B -ntp dependency:go-offline`, reason: fixed ? "resolves the versions pom.xml fixes" : "pom.xml leaves some versions open, so the install can't be frozen", frozen: fixed };
   },
   unpinned: (tree, path) => {
     const n = mavenDynamic(tree, path);
@@ -104,7 +104,7 @@ const GRADLE_TARGET = [
   /jvmTarget\s*=\s*["'](?:1\.)?(\d+)/g,
   /options\.release(?:\.set)?\s*[=(]\s*(\d+)/g,
 ];
-const MAVEN_TARGET = [/<maven\.compiler\.(?:release|source|target)>\s*(?:1\.)?(\d+)/g, /<(?:release|source)>\s*(?:1\.)?(\d+)\s*<\//g, /<java\.version>\s*(?:1\.)?(\d+)/g];
+const MAVEN_TARGET = [/<maven\.compiler\.(?:release|source|target|testRelease|testSource|testTarget)>\s*(?:1\.)?(\d+)/g, /<(?:release|source|testRelease)>\s*(?:1\.)?(\d+)\s*<\//g, /<java\.version>\s*(?:1\.)?(\d+)/g];
 
 function numbers(text: string, res: RegExp[]): number[] {
   return res.flatMap((re) => [...text.matchAll(re)].map((m) => Number(m[1]))).filter((n) => n >= 6 && n <= 40);
@@ -156,12 +156,35 @@ function gradleRunsOn([major, minor]: [number, number]): { min: number; max: num
   return { min: major >= 9 ? 17 : 8, max };
 }
 
-// The JDK line a component runs on: the pinned version, or the next LTS above it, within what the
-// committed Gradle Wrapper can run on.
+// The Java versions a Maven Enforcer requireJavaVersion rule allows, such as gson's [17,26): the
+// build refuses to start on any other JDK, whatever release it compiles for. A bare version is a
+// minimum. Majors only, with 1.8 read as 8.
+export function enforcedJava(tree: string, path: string): { min: number | null; max: number | null } | null {
+  const major = (v: string) => {
+    const m = v.trim().match(/^(?:1\.)?(\d+)/);
+    return m ? Number(m[1]) : null;
+  };
+  for (const f of filesNamed(tree, path, /^pom\.xml$/)) {
+    const spec = readText(join(tree, path, f)).match(/<requireJavaVersion>[\s\S]*?<version>\s*([^<]+?)\s*<\/version>/)?.[1];
+    if (!spec) continue;
+    const range = spec.match(/^([[(])\s*([^,]*?)\s*,\s*([^\])]*?)\s*([\])])/);
+    if (!range) return { min: major(spec), max: null };
+    const lo = range[2] ? major(range[2]) : null;
+    const hi = range[3] ? major(range[3]) : null;
+    return { min: lo === null ? null : range[1] === "(" ? lo + 1 : lo, max: hi === null ? null : range[4] === ")" ? hi - 1 : hi };
+  }
+  return null;
+}
+
+// The JDK line a component runs on: the pinned version, or the next LTS above it, within what a
+// Maven Enforcer rule allows and what the committed Gradle Wrapper can run on.
 export function jdkFor(tree: string, path: string): number {
   const pin = jdkPin(tree, path);
-  const want = pin?.version ?? DEFAULT_JDK;
+  const enforced = enforcedJava(tree, path);
+  const want = Math.max(pin?.version ?? DEFAULT_JDK, enforced?.min ?? 0);
   let jdk = JDKS.find((v) => v >= want) ?? JDKS[JDKS.length - 1];
+  const floor = Math.max(pin?.version ?? 0, enforced?.min ?? 0);
+  if (enforced?.max != null && jdk > enforced.max) jdk = [...JDKS].reverse().find((v) => v <= enforced.max! && v >= floor) ?? jdk;
   const wrapper = wrapperGradle(tree, path);
   if (wrapper) {
     const runs = gradleRunsOn(wrapper);

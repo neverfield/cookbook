@@ -135,7 +135,7 @@ describe("Level 1 per ecosystem: what counts as a reproducible install", () => {
   test("Maven: no version ranges, LATEST or RELEASE in any pom.xml, through the wrapper when there is one", () => {
     const pom = (v: string) => `<project><dependencies><dependency><groupId>g</groupId><artifactId>a</artifactId><version>${v}</version></dependency></dependencies></project>`;
     const fixed = install("maven", { "pom.xml": pom("1.2.3"), mvnw: "#!/bin/sh\n" });
-    assert.deepEqual([fixed.command, fixed.frozen, fixed.unpinned], ['JAVA_TOOL_OPTIONS="-Duser.home=$HOME" ./mvnw -B -q dependency:go-offline', true, null]);
+    assert.deepEqual([fixed.command, fixed.frozen, fixed.unpinned], ['JAVA_TOOL_OPTIONS="-Duser.home=$HOME" ./mvnw -B -ntp dependency:go-offline', true, null]);
     assert.equal(install("maven", { "pom.xml": pom("1.2.3"), "core/pom.xml": pom("[1.0,2.0)") }).unpinned, "pom.xml leaves 1 version open (a range, LATEST or RELEASE)");
     assert.equal(install("maven", { "pom.xml": pom("LATEST") }).frozen, false);
   });
@@ -411,6 +411,8 @@ describe("a blocked registry is this machine's limit, in every ecosystem", () =>
 
   test("a wrong dependency version stays the repo's failure", () => {
     const wrong = [
+      // google/gson@6c06cbc with a plugin version that doesn't exist, through a reachable Maven Central mirror.
+      readFileSync(join(dirname(OUTPUTS), "tool-outputs", "maven-wrong-version.txt"), "utf8"),
       output("cargo-wrong-version"),
       output("go-wrong-version"),
       "[ERROR] Failed to execute goal on project app: Could not resolve dependencies for project ex:app:jar:1.0: Could not find artifact junit:junit:jar:99.0 in central (https://repo.maven.apache.org/maven2)",
@@ -897,5 +899,41 @@ describe("PHP, Ruby, JVM and .NET commands in the docs are instructions", () => 
       const item = audit.instructions[0];
       assert.deepEqual([item.result, item.reason, item.evidenceId], ["pass", "it runs the same command as the test check, which passed", "ev-001"], documented);
     }
+  });
+});
+
+describe("final review round: blocked registries and tests that need the network (B2, H8, the PyPI handshake)", () => {
+  const out = (name: string) => readFileSync(join(dirname(OUTPUTS), "tool-outputs", `${name}.txt`), "utf8");
+
+  test("google/gson@6c06cbc behind a blocked Maven Central: the build extension's artifact descriptor, the only error -q and -e print, reads as blocked", () => {
+    const d = diagnose(output("maven-extension-egress-blocked"), false, "install");
+    assert.deepEqual(d, { cause: "network", detail: "an unreachable package registry on the network" });
+    assert.match(environmentLimit(inContainer, install, d, []) ?? "", /^the install hit an unreachable package registry/);
+  });
+
+  test("pallets/click@e38188e behind a blocked PyPI: uv's \"tls handshake eof\" is an unreachable registry, not a certificate problem", () => {
+    assert.deepEqual(diagnose(output("uv-egress-blocked"), false, "install"), { cause: "network", detail: "an unreachable package registry on the network" });
+    const badCert = "  ├─▶ error sending request for url (https://files.pythonhosted.org/packages/x.whl)\n  ╰─▶ invalid peer certificate: UnknownIssuer";
+    assert.equal(diagnose(badCert, false, "install").detail, "a TLS or certificate error on the network", "a certificate the client rejects is still a certificate error");
+  });
+
+  test("pocketbase@7f2773e's OAuth2 test fails offline with no network error: the failing test names the host it fetches", () => {
+    const d = diagnose(out("go-test-offline-fetch"), false, "test");
+    assert.deepEqual(d, { cause: "network", detail: "TestRecordAuthWithOAuth2 failed; it refers to pocketbase.io, and tests run with the network off" });
+    assert.equal(environmentLimit(inContainer, { ...install, id: "cmd-app-test", kind: "test" }, d, []), undefined, "a test that needs the network is still the repo's to fix");
+    assert.equal(diagnose(out("go-test-offline-fetch"), false, "install").cause, "unknown", "only a test run is read this way");
+  });
+
+  test("a failing test whose output links to docs, a local server or a reserved domain isn't called a network test", () => {
+    for (const text of [
+      "FAIL src/a.test.ts\n  expect(received).toBe(expected) // see https://jestjs.io/docs/expect\n  Expected: 2\n  Received: 3",
+      "--- FAIL: TestServe (0.00s)\n    serve_test.go:12: GET http://127.0.0.1:8080/health: got 500, want 200",
+      "--- FAIL: TestURL (0.00s)\n    url_test.go:9: parsed https://api.example.com/v1 wrong",
+      "--- FAIL: TestIssue (0.00s)\n    issue_test.go:4: regression for https://github.com/org/repo/issues/12",
+    ]) assert.notEqual(diagnose(text, false, "test").cause, "network", text);
+  });
+
+  test("a network error printed by a test is explained as the network being off for tests", () => {
+    assert.deepEqual(diagnose("--- FAIL: TestFetch (0.01s)\n    fetch_test.go:20: Get \"https://api.stripe.com/v1\": dial tcp: lookup api.stripe.com: Temporary failure in name resolution", false, "test"), { cause: "network", detail: "a test tried to reach the network, which is off while tests run" });
   });
 });
