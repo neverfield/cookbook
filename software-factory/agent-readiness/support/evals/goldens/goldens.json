@@ -113,15 +113,15 @@
         "go"
       ],
       "shape": "single",
-      "reason": "A Go module: the audit must list it as not assessed with its toolchain, give no level and claim nothing it didn't find.",
+      "reason": "A Go module with no dependencies: scored in the newest pinned Go image (it has no go line), it builds, passes its tests offline and its tests catch the planted faults, so Level 2.",
       "expect": {
-        "included": [],
-        "excluded": [
-          {
-            "id": "uuid",
-            "toolchain": "Go"
-          }
-        ]
+        "included": [
+          "uuid"
+        ],
+        "excluded": [],
+        "levels": {
+          "uuid": 2
+        }
       }
     },
     {

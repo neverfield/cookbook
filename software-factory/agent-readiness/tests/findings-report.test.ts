@@ -87,7 +87,7 @@ describe("the instruction checker skips what isn't a step for this repo", () => 
   });
 
   test("a program a build makes first, and a Go command where Go isn't assessed, aren't findings", () => {
-    const by = items({ ...pnpmLib, "go.mod": "module x\n", "main.go": "package main\n", "CONTRIBUTING.md": "# Contributing\n\nRun `go test ./...`, then `./app serve`, then `./scripts/missing.sh`.\n" });
+    const by = items({ ...pnpmLib, "main.go": "package main\n", "CONTRIBUTING.md": "# Contributing\n\nRun `go test ./...`, then `./app serve`, then `./scripts/missing.sh`.\n" });
     assert.equal(by.get("CONTRIBUTING.md:3 go test ./...")!.rule, "unassessed-stack");
     assert.equal(by.get("CONTRIBUTING.md:3 ./app serve")!.rule, "built-program");
     assert.equal(by.get("CONTRIBUTING.md:3 ./scripts/missing.sh")!.result, "fail");
