@@ -47,6 +47,28 @@ describe("JVM: which JDK and image a component runs in", () => {
     assert.equal(jdkFor(repo({ "build.gradle": "kotlin { jvmToolchain(11) }\n", gradlew: "", "gradle/wrapper/gradle-wrapper.properties": WRAPPER("9.4.1") }), "."), 17, "Gradle 9 needs Java 17 to run");
   });
 
+  // The Mac's rerun of square/moshi@889013e at dfe50b0 failed the build with "Cannot find a Java
+  // installation ... matching: {languageVersion=21 ...}" in eclipse-temurin:17-jdk: the root build's
+  // toolchain reads `jdk = "21"` from the version catalog, and only records-tests' literal 17 was seen.
+  test("a Gradle toolchain from the version catalog picks the JDK (square/moshi@889013e)", () => {
+    const moshi = repo({
+      "build.gradle.kts": 'subprojects {\n  pluginManager.withPlugin("java") {\n    configure<JavaPluginExtension> {\n      toolchain { languageVersion.set(libs.versions.jdk.map(JavaLanguageVersion::of)) }\n    }\n    tasks.withType<JavaCompile>().configureEach { options.release.set(8) }\n  }\n}\n',
+      "gradle/libs.versions.toml": '[versions]\njdk = "21"\njvmTarget = "1.8"\nkotlin = "2.3.0"\n\n[libraries]\nokio = { module = "com.squareup.okio:okio", version = "3.16.4" }\n',
+      "moshi/records-tests/build.gradle.kts": "plugins { `java-library` }\n\njava { toolchain { languageVersion.set(JavaLanguageVersion.of(17)) } }\n",
+      "moshi/build.gradle.kts": "tasks.named<JavaCompile>(\"compileJava16Java\") { options.release = 16 }\n",
+      gradlew: "",
+      "gradle/wrapper/gradle-wrapper.properties": WRAPPER("9.5.1"),
+    });
+    assert.equal(jdkFor(moshi, "."), 21);
+    assert.equal(hooks.image(moshi, "."), "eclipse-temurin:21-jdk");
+    const kts = (build: string, toml = '[versions]\njava-toolchain = "17"\n') => jdkFor(repo({ "build.gradle.kts": build, "gradle/libs.versions.toml": toml }), ".");
+    assert.equal(kts("kotlin { jvmToolchain(libs.versions.java.toolchain.get().toInt()) }\n"), 17, "kebab keys are dotted accessors");
+    assert.equal(kts("java { toolchain { languageVersion = JavaLanguageVersion.of(libs.versions.jdk.get()) } }\n", '[versions]\njdk = { strictly = "11" }\n'), 11);
+    assert.equal(kts('java { toolchain { languageVersion = JavaLanguageVersion.of("17") } }\n'), 17, "a quoted literal");
+    assert.equal(kts("java { toolchain { languageVersion = JavaLanguageVersion.of(libs.versions.missing.get()) } }\n"), 21, "a key the catalog lacks: the default");
+    assert.equal(kts('val okio = libs.versions.okio.get()\n', '[versions]\nokio = "3"\n'), 21, "a catalog version outside a toolchain isn't a JDK");
+  });
+
   test("a Maven Enforcer requireJavaVersion range bounds the JDK: google/gson@6c06cbc compiles for 8 and tests on 11 and 17, and enforces [17,26)", () => {
     const gson = repo({
       "pom.xml": `<project><artifactId>gson-parent</artifactId><properties><maven.compiler.release>8</maven.compiler.release><maven.compiler.testRelease>11</maven.compiler.testRelease></properties>
@@ -181,6 +203,17 @@ describe("JVM: the contract", () => {
     const matched = (name: string) => classes.some((re) => re.test(name));
     for (const name of ["module-info", "package-info", "Helpers"]) assert.ok(!matched(name), name);
     for (const name of ["ExportedPackagesTest", "TestGson", "ReflectionTests", "JsonTestCase"]) assert.ok(matched(name), name);
+  });
+
+  // The Mac's rerun of google/gson@6c06cbc at dfe50b0: the build passed, then `mvn -o test` failed at
+  // test-jpms testCompile with "module-info.java:[19,22] module not found: com.google.gson". The test
+  // phase hands test-jpms gson's classes, and ModiTect adds module-info only to the packaged jar.
+  test("a Maven reactor's offline tests run through package, so a module gets its sibling's jar; a single module keeps the test phase (google/gson@6c06cbc)", () => {
+    const test = (files: Record<string, string>) => hooks.commands(repo(files), { path: "." } as never).find((c) => c.kind === "test")!.command;
+    const gson = test({ "pom.xml": "<project><artifactId>gson-parent</artifactId>\n  <modules>\n    <module>gson</module>\n    <module>test-jpms</module>\n  </modules>\n</project>" });
+    assert.equal(gson, 'JAVA_TOOL_OPTIONS="-Duser.home=$HOME" mvn -B -ntp -o package');
+    assert.equal(test({ "pom.xml": pom() }), 'JAVA_TOOL_OPTIONS="-Duser.home=$HOME" mvn -B -ntp -o test', "jsoup and spring-petclinic are single modules");
+    assert.equal(test({ "pom.xml": "<project><!-- <modules><module>old</module></modules> --></project>" }), 'JAVA_TOOL_OPTIONS="-Duser.home=$HOME" mvn -B -ntp -o test', "a commented-out module list");
   });
 
   test("lint runs only for a lint plugin the build declares; a multiplatform build runs its JVM tests", () => {

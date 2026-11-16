@@ -99,7 +99,35 @@ const DEFAULT_JDK = 21;
 const BUILD_SCRIPT = /\.gradle(\.kts)?$/;
 const VERSION_FILES = [".java-version", ".sdkmanrc", ".tool-versions"];
 
-const GRADLE_TOOLCHAIN = [/JavaLanguageVersion\.of\(\s*(\d+)/g, /jvmToolchain\(\s*(\d+)/g];
+const GRADLE_TOOLCHAIN = [/JavaLanguageVersion\.of\s*\(?\s*["']?(\d+)/g, /jvmToolchain\s*\(\s*["']?(\d+)/g];
+// A toolchain whose version comes from the version catalog, as moshi's
+// `toolchain { languageVersion.set(libs.versions.jdk.map(JavaLanguageVersion::of)) }` or
+// `jvmToolchain(libs.versions.jdk.get().toInt())`.
+const GRADLE_CATALOG_TOOLCHAIN = /(?:JavaLanguageVersion|jvmToolchain|languageVersion)\b[^\n]*?\blibs\.versions\.([\w.]+?)\.(?:get|map)\b/g;
+
+// The [versions] table of the Gradle version catalog, keyed by its accessor (`java-toolchain` is
+// `libs.versions.java.toolchain`).
+function catalogVersions(tree: string, path: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const file = [path, "."].map((d) => join(tree, d, "gradle", "libs.versions.toml")).find(exists);
+  if (!file) return out;
+  let inVersions = false;
+  for (const line of readText(file).split("\n")) {
+    const table = line.match(/^\s*\[([^\]]+)\]/);
+    if (table) inVersions = table[1].trim() === "versions";
+    const kv = inVersions && !table ? line.match(/^\s*([\w.-]+)\s*=\s*(?:"([^"]*)"|\{[^}]*?(?:strictly|require|prefer)\s*=\s*"([^"]*)")/) : null;
+    if (kv) out.set(kv[1].replace(/[-_]/g, "."), kv[2] ?? kv[3]);
+  }
+  return out;
+}
+
+function catalogToolchains(text: string, catalog: Map<string, string>): number[] {
+  return [...text.matchAll(GRADLE_CATALOG_TOOLCHAIN)]
+    .map((m) => catalog.get(m[1])?.match(/^(?:1\.)?(\d+)/)?.[1])
+    .filter((v): v is string => v !== undefined)
+    .map(Number)
+    .filter((n) => n >= 6 && n <= 40);
+}
 const GRADLE_TARGET = [
   /JavaVersion\.VERSION_(?:1_)?(\d+)/g,
   /(?:source|target)Compatibility\s*=\s*['"]?(?:1\.)?(\d+)/g,
@@ -137,9 +165,10 @@ function jdkPin(tree: string, path: string): JdkPin | null {
   }
   // A toolchain beats a release level, and a higher version beats a lower one of the same kind.
   const found: JdkPin[] = [];
+  const catalog = catalogVersions(tree, path);
   for (const f of filesNamed(tree, path, BUILD_SCRIPT)) {
     const text = readText(join(tree, path, f));
-    for (const v of numbers(text, GRADLE_TOOLCHAIN)) found.push({ version: v, file: rel(path, f), toolchain: true });
+    for (const v of [...numbers(text, GRADLE_TOOLCHAIN), ...catalogToolchains(text, catalog)]) found.push({ version: v, file: rel(path, f), toolchain: true });
     for (const v of numbers(text, GRADLE_TARGET)) found.push({ version: v, file: rel(path, f), toolchain: false });
   }
   for (const f of filesNamed(tree, path, /^pom\.xml$/)) for (const v of numbers(readText(join(tree, path, f)), MAVEN_TARGET)) found.push({ version: v, file: rel(path, f), toolchain: false });
@@ -198,6 +227,7 @@ export function jdkFor(tree: string, path: string): number {
 }
 
 const isMaven = (tree: string, path: string) => exists(join(tree, path, "pom.xml"));
+const mavenReactor = (tree: string, path: string) => /<modules>\s*<module>/.test(readText(join(tree, path, "pom.xml")).replace(/<!--[\s\S]*?-->/g, ""));
 
 function multiplatform(tree: string, path: string): boolean {
   return filesNamed(tree, path, /^build\.gradle(\.kts)?$/).some((f) => /kotlin\("multiplatform"\)|org\.jetbrains\.kotlin\.multiplatform|kotlin-multiplatform/.test(readText(join(tree, path, f))));
@@ -424,7 +454,12 @@ function jvmCommands(tree: string, path: string): DraftCommand[] {
     // matching method loads the provider while the network is on and runs no test. `*` would also
     // pick up a JPMS test module's module-info.class, which Surefire can't load (gson's test-jpms).
     out.push({ kind: "build", command: `${mvn} -B -ntp package ${MAVEN_NO_TEST} -Dsurefire.failIfNoSpecifiedTests=false -DfailIfNoTests=false`, source, reason: "Maven's package phase, with Surefire's test provider loaded and no test run" });
-    out.push({ kind: "test", command: `${mvn} -B -ntp -o test`, source, reason: "Maven's test phase, offline" });
+    // In a reactor, a module's tests can need a sibling's jar rather than its classes: gson's
+    // test-jpms reads com.google.gson from the jar ModiTect adds module-info to at package. The
+    // package phase runs every module's tests and hands the next module the jar; the build step has
+    // already run it with the network on, so nothing more is downloaded.
+    if (mavenReactor(tree, path)) out.push({ kind: "test", command: `${mvn} -B -ntp -o package`, source, reason: "Maven's tests through the package phase, offline, so a module whose tests need a sibling's jar gets it" });
+    else out.push({ kind: "test", command: `${mvn} -B -ntp -o test`, source, reason: "Maven's test phase, offline" });
     return out;
   }
   const gw = gradleOf(tree, path);
