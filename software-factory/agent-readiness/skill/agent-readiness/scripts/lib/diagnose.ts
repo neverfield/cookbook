@@ -244,6 +244,12 @@ function toolchainGap(text: string): string | null {
   // Composer: "require ext-mongodb ^2.5 -> it is missing from your system".
   const ext = text.match(/\bext-([\w-]+)\b[^\n]*?it is missing from your system/);
   if (ext) return `PHP's ${ext[1]} extension (ext-${ext[1]}) is not installed`;
+  // A Gradle toolchain the image's JDK doesn't satisfy, as moshi's languageVersion=21 under JDK 17.
+  const jdk = text.match(/(?:Cannot find a Java installation on your machine[^\n]*?matching|No matching toolchains found for requested specification): \{languageVersion=(\d+)/);
+  if (jdk) return `JDK ${jdk[1]} is not installed`;
+  // guzzlehttp/test-server starts its server with node and, when node is missing, says only that it
+  // can't reach it.
+  if (/Unable to contact node\.js server/.test(text)) return "node is not installed";
   const pnpmNode = text.match(/This version of pnpm requires at least Node\.js v?([\d.]+)/);
   if (pnpmNode) return `Node ${pnpmNode[1]} or later is not installed`;
   const engine = text.match(/The engine "node" is incompatible with this module\. Expected version "([^"]+)"/) ?? text.match(/Unsupported engine[\s\S]{0,200}?required: \{[^}]*node: '([^']+)'/) ?? text.match(/ERR_PNPM_UNSUPPORTED_ENGINE[\s\S]{0,200}?Expected version: ([^\n]+)/);
@@ -466,6 +472,10 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   if (timedOut) return { cause: "timeout", detail: `the ${phase} step ran out of time` };
   const focus = failingPart(clean);
   const output = `${focus}\n${unwrap(focus)}`;
+  // A Maven module that didn't compile ran no tests, so nothing printed before it explains the
+  // failure, as gson's offline test-jpms "module not found" under the Gson module's test logs.
+  const compiled = compilerError(clean);
+  if (compiled && /^compiler:\w+ failed in module /.test(mavenRoot(clean) ?? "")) return { cause: "compile", detail: compiled.slice(0, 200) };
   const gap = toolchainGap(output);
   if (gap) return { cause: "missing_tool", detail: gap };
   const permission = permissionLimit(output);

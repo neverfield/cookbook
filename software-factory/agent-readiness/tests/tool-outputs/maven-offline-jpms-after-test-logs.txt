@@ -1,0 +1,33 @@
+[INFO] Scanning for projects...
+[INFO] ----------------------< com.google.code.gson:gson >----------------------
+[INFO] Building Gson 2.13.3-SNAPSHOT                                      [2/8]
+[INFO] --- surefire:3.5.3:test (default-test) @ gson ---
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.google.gson.functional.DefaultTypeAdaptersTest
+Nov 16, 2026 7:58:41 PM com.google.gson.internal.bind.TypeAdapters$24 read
+WARNING: could not open http://www.google.com/: java.net.UnknownHostException: www.google.com
+[INFO] Tests run: 112, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.388 s -- in com.google.gson.functional.DefaultTypeAdaptersTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 4682, Failures: 0, Errors: 0, Skipped: 12
+[INFO] 
+[INFO] ----------------< com.google.code.gson:test-jpms >-----------------
+[INFO] Building Test: Java Platform Module System 2.13.3-SNAPSHOT         [3/8]
+[INFO] --- compiler:3.14.0:testCompile (default-testCompile) @ test-jpms ---
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /work/test-jpms/src/test/java/module-info.java:[19,22] module not found: com.google.gson
+[INFO] 1 error
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.14.0:testCompile (default-testCompile) on project test-jpms: Compilation failure
+[ERROR] /work/test-jpms/src/test/java/module-info.java:[19,22] module not found: com.google.gson
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] After correcting the problems, you can resume the build with the command
+[ERROR]   mvn <args> -rf :test-jpms

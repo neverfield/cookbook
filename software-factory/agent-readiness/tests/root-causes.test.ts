@@ -160,6 +160,39 @@ describe("headlines name the cause the output gave", () => {
   });
 });
 
+// The Mac's rerun at dfe50b0, after PR 46 let each repo get one step further. Its reports keep the
+// summaries only ("BUILD FAILED in 3s", "Error in bootstrap script: RuntimeException:", gson's
+// network cause); the outputs are each tool's format around the errors that run reproduced.
+describe("the rerun at dfe50b0", () => {
+  test("google/gson: test-jpms not compiling wins over anything the Gson module's tests logged", () => {
+    const d = diagnose(out("maven-offline-jpms-after-test-logs"), false, "test");
+    assert.deepEqual(d, { cause: "compile", detail: "/work/test-jpms/src/test/java/module-info.java:[19,22] module not found: com.google.gson" });
+    const audit = makeAudit({ components: [{ id: "app", share: 1, test: "fail", diagnosis: d, faults: "not_run" }] });
+    const r = reportFor(audit);
+    assert.equal(r.executive.headline, "Agents can't pass the tests in app from a clean checkout because /work/test-jpms/src/test/java/module-info.java:[19,22] module not found: com.google.gson.");
+    assert.doesNotMatch(r.executive.headline, /network/);
+  });
+
+  test("square/moshi: the build's JDK 21 toolchain, which the audit's JDK 17 image lacks, not \"BUILD FAILED in 3s\"", () => {
+    const d = diagnose(out("gradle-toolchain-jdk21"), false, "build");
+    assert.deepEqual(d, { cause: "missing_tool", detail: "JDK 21 is not installed" });
+    assert.equal(environmentLimit(image("eclipse-temurin:17-jdk"), cmd("build"), d, []), "JDK 21 is not installed in the audit's image (eclipse-temurin:17-jdk)");
+    assert.equal(diagnose("> No matching toolchains found for requested specification: {languageVersion=21, vendor=any, implementation=vendor-specific} for LINUX on aarch64.\n", false, "build").detail, "JDK 21 is not installed", "older Gradle's wording");
+  });
+
+  test("guzzle/guzzle: its test server needs node, which composer:2.11 lacks; blocked, not the network", () => {
+    const d = diagnose(out("phpunit-bootstrap-no-node"), false, "test");
+    assert.deepEqual(d, { cause: "missing_tool", detail: "node is not installed" });
+    const blocked = environmentLimit(image("composer:2.11"), cmd("test"), d, []);
+    assert.equal(blocked, "node is not installed in the audit's image (composer:2.11)");
+    const audit = makeAudit({ components: [{ id: "app", share: 1, test: "fail", diagnosis: d, faults: "not_run" }] });
+    for (const e of audit.evidence.filter((x) => x.condition === "clean.test")) e.blocked = blocked;
+    const r = reportFor(audit);
+    assert.match(r.executive.headline, /couldn't be proved for app because node is not installed in the audit's image \(composer:2\.11\)/);
+    assert.doesNotMatch(r.executive.headline, /network/);
+  });
+});
+
 const tmp = () => mkdtempSync(join(tmpdir(), "readiness-causes-"));
 function gitRepo(files: Record<string, string>): string {
   const dir = tmp();
