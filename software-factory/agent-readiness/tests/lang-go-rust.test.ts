@@ -250,18 +250,25 @@ describe("fault targets for tests that don't sit in or name their source (final 
     assert.equal(cfgActive("target_pointer_width = \"64\"", new Set()), null, "differs between machines, so never a fault site");
   });
 
-  test("namedAfter: a test named after a folder covers it, and one named by feature covers its mirrored folder", () => {
+  test("namedAfter: when no test names a source, a test covers a folder it names, else its mirrored folder", () => {
     const isSource = (f: string) => /\.(rb|cs|java|php)$/.test(f) && !/(_spec|Tests?)\.\w+$/.test(f);
-    const rb = ["lib/jwt.rb", "lib/jwt/encode.rb", "lib/jwt/decode.rb", "lib/other.rb"];
-    assert.deepEqual(namedAfter(["spec/jwt_spec.rb"], rb, isSource), ["lib/jwt.rb", "lib/jwt/decode.rb", "lib/jwt/encode.rb"], "JwtSpec covers lib/jwt/ (ruby-jwt)");
+    const rb = ["lib/jwt/encode.rb", "lib/jwt/decode.rb", "lib/other.rb"];
+    assert.deepEqual(namedAfter(["spec/jwt_spec.rb"], rb, isSource), ["lib/jwt/decode.rb", "lib/jwt/encode.rb"], "jwt_spec covers lib/jwt/");
     const cs = ["src/Shop/Orders/Order.cs", "src/Shop/Orders/Cart.cs", "src/Shop/Pricing/Tax.cs", "src/Other/Thing.cs"];
     assert.deepEqual(namedAfter(["tests/Shop.Tests/Orders/IntegrationTests.cs"], cs, isSource), ["src/Shop/Orders/Cart.cs", "src/Shop/Orders/Order.cs"]);
     assert.deepEqual(namedAfter(["tests/Shop.Tests/IntegrationTests.cs"], cs, isSource), ["src/Shop/Orders/Cart.cs", "src/Shop/Orders/Order.cs", "src/Shop/Pricing/Tax.cs"], "nothing directly in Shop, so what is under it");
     const java = ["gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java", "gson/src/main/java/com/google/gson/Gson.java"];
     assert.deepEqual(namedAfter(["gson/src/test/java/com/google/gson/internal/bind/RecursiveTypesResolveTest.java"], java, isSource), ["gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java"]);
     const php = ["src/Http/Client.php", "src/Http/Request.php", "src/Cache.php"];
-    assert.deepEqual(namedAfter(["tests/Unit/Http/RetryTest.php", "tests/Unit/CacheTest.php"], php, isSource), ["src/Cache.php", "src/Http/Client.php", "src/Http/Request.php"]);
-    assert.deepEqual(namedAfter(["spec/order_spec.rb"], ["app/models/order.rb", "app/models/cart.rb"], isSource), ["app/models/order.rb"], "a name that matches still wins");
+    assert.deepEqual(namedAfter(["tests/Unit/Http/RetryTest.php"], php, isSource), ["src/Http/Client.php", "src/Http/Request.php"]);
     assert.equal(mirroredFolder("tests/Feature/Api/UserTest.php"), mirroredFolder("app/Api/User.php"));
+  });
+
+  test("namedAfter: a component whose tests name their sources keeps exactly those, as symfony/demo and Shopify/packwerk do", () => {
+    const isSource = (f: string) => /\.(rb|php)$/.test(f) && !/(_spec|_test|Test)\.\w+$/.test(f);
+    const php = ["src/Http/Client.php", "src/Http/Request.php", "src/Cache.php"];
+    assert.deepEqual(namedAfter(["tests/Unit/Http/RetryTest.php", "tests/Unit/CacheTest.php"], php, isSource), ["src/Cache.php"], "CacheTest names Cache.php, so RetryTest adds no folder");
+    assert.deepEqual(namedAfter(["spec/order_spec.rb"], ["app/models/order.rb", "app/models/cart.rb"], isSource), ["app/models/order.rb"]);
+    assert.deepEqual(namedAfter(["spec/jwt_spec.rb"], ["lib/jwt.rb", "lib/jwt/encode.rb"], isSource), ["lib/jwt.rb"]);
   });
 });

@@ -42,24 +42,27 @@ export function mirroredFolder(path: string): string {
 }
 
 // Sources named after a test, wherever they are: OrderTest.java covers Order.java, cart_spec.rb
-// covers cart.rb, and jwt_spec.rb covers what is in a jwt/ folder of sources. A test whose name
-// names no source, such as IntegrationTests.cs, covers the sources in its mirrored folder
-// (mirroredFolder), or under it when that folder holds none directly.
+// covers cart.rb. When no test names a source, as when tests are named by feature
+// (IntegrationTests.cs, jwt_spec.rb for lib/jwt/encode.rb), each test covers instead the sources in
+// a folder its name names, else those in its mirrored folder (mirroredFolder), else those under
+// it. The fallback applies only then, so a component whose tests name their sources keeps exactly
+// those targets.
 export function namedAfter(tests: string[], files: string[], isSource: (f: string) => boolean, affixes: RegExp[] = TEST_AFFIXES): string[] {
   const sources = files.filter(isSource);
+  const bareNames = (t: string) => {
+    const s = stem(t);
+    return affixes.map((a) => s.replace(a, "")).filter((b) => b && b !== s).map((b) => b.toLowerCase());
+  };
+  const named = sources.filter((f) => tests.some((t) => bareNames(t).includes(stem(f).toLowerCase())));
+  if (named.length || tests.length === 0) return named.sort();
   const out = new Set<string>();
   for (const t of tests) {
-    const s = stem(t);
-    const bare = affixes.map((a) => s.replace(a, "")).filter((b) => b && b !== s).map((b) => b.toLowerCase());
-    const named = sources.filter((f) => bare.includes(stem(f).toLowerCase()) || dirname(f).split("/").some((d) => bare.includes(d.toLowerCase())));
-    if (named.length) {
-      for (const f of named) out.add(f);
-      continue;
-    }
+    const bare = bareNames(t);
+    const inFolder = sources.filter((f) => dirname(f).split("/").some((d) => bare.includes(d.toLowerCase())));
     const key = mirroredFolder(t);
     const same = sources.filter((f) => mirroredFolder(f) === key);
     const under = same.length || !key ? same : sources.filter((f) => mirroredFolder(f).startsWith(`${key}/`));
-    for (const f of under) out.add(f);
+    for (const f of inFolder.length ? inFolder : under) out.add(f);
   }
   return [...out].sort();
 }
