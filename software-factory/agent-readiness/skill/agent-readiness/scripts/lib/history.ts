@@ -8,16 +8,29 @@ import type { Paths } from "./workspace.ts";
 
 export const HISTORY_BRANCH = "agent-readiness/history";
 
-function guardSecrets(label: string, text: string): void {
-  const hits = scanText(text);
-  if (hits.length > 0) fail(`Refusing to write ${label}: it contains ${hits.map((h) => `${h.type} (line ${h.line})`).join(", ")}. Nothing was written.`);
+// JSON is scanned string by string: serialized, a stored output's lines are joined by `\n` escapes
+// and its quotes escaped, so a line-anchored or quoted secret would pass unseen. HTML is unescaped
+// for the same reason.
+function secretsIn(name: string, value: unknown): string[] {
+  if (typeof value === "string") return scanText(value).map((h) => `${h.type} (${name}, line ${h.line})`);
+  if (Array.isArray(value)) return value.flatMap((v, i) => secretsIn(`${name}[${i}]`, v));
+  if (value && typeof value === "object") return Object.entries(value).flatMap(([k, v]) => [...secretsIn(`${name} key`, k), ...secretsIn(`${name}.${k}`, v)]);
+  return [];
+}
+
+function unescapeHtml(html: string): string {
+  return html.replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+
+function guardSecrets(label: string, found: string[]): void {
+  if (found.length > 0) fail(`Refusing to write ${label}: it contains ${found.join(", ")}. Nothing was written.`);
 }
 
 export function storeAudit(p: Paths, audit: Audit, report: ReportJson, md: string, html: string): string {
   const dir = join(p.history, "audits", audit.id);
   const auditText = JSON.stringify(audit, null, 2) + "\n";
   const reportText = JSON.stringify(report, null, 2) + "\n";
-  guardSecrets(`audit ${audit.id}`, auditText + reportText + md + html);
+  guardSecrets(`audit ${audit.id}`, [...secretsIn("audit.json", audit), ...secretsIn("report.json", report), ...secretsIn("report.md", md), ...secretsIn("report.html", unescapeHtml(html))]);
   writeText(join(dir, "audit.json"), auditText);
   writeText(join(dir, "report.json"), reportText);
   writeText(join(dir, "report.md"), md);
@@ -52,7 +65,7 @@ export function showFromBranch(repo: string, path: string): string | null {
 export function appendHistory(p: Paths, line: HistoryLine): void {
   const f = join(p.history, "history.jsonl");
   const text = JSON.stringify(line) + "\n";
-  guardSecrets("the history line", text);
+  guardSecrets("the history line", secretsIn("history.jsonl", line));
   ensureDir(p.history);
   const prev = mergeHistory(branchHistory(p.repo) ?? "", exists(f) ? readText(f) : "");
   writeText(f, prev + text);
@@ -121,7 +134,7 @@ export function loadSealedAudit(p: Paths, ref: string): { audit: Audit; dir: str
 export function storeRecheck(p: Paths, id: string, record: unknown): string {
   const f = join(p.history, "rechecks", `${id}.json`);
   const text = JSON.stringify(record, null, 2) + "\n";
-  guardSecrets(`recheck ${id}`, text);
+  guardSecrets(`recheck ${id}`, secretsIn(`rechecks/${id}.json`, record));
   writeText(f, text);
   return f;
 }
