@@ -262,7 +262,7 @@ export const dotnet: LanguageDef = {
       tier: "not_yet",
       reason: "it needs Windows, since it targets .NET Framework or Windows (net48, a -windows framework, Windows Forms, WPF, classic ASP.NET or packages.config), and the audit's containers run Linux, so it's blocked on this machine rather than broken",
       files: /\.(cs|fs|vb|csproj|fsproj|vbproj|sln|slnx|razor|resx|config|xaml|aspx|cshtml|asax)$/,
-      proof: ["fixtures/dotnet-framework-windows", "fixtures/dotnet-ios-monorepo"],
+      proof: ["fixtures/dotnet-framework-windows", "fixtures/dotnet-ios-monorepo", "dotnet-architecture/eShopModernizing@63bc9ec", "ShareX/ShareX@abb975d"],
     },
   ],
   detect: {

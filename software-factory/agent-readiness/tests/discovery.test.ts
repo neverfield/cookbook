@@ -150,6 +150,11 @@ describe("native mobile apps and Xcode projects", () => {
     assert.match(components[0].notAssessedReason!, /it needs macOS with Xcode.*blocked on this machine rather than broken\. Read from its files without running anything: it has a Podfile and no committed Podfile\.lock; no \.xcode-version pins the Xcode version$/);
   });
 
+  test("a Gemfile next to an Xcode project is its fastlane or CocoaPods tooling, not the component (kickstarter/ios-oss@2090757)", () => {
+    const { components } = layout(tree({ ...xcode(""), Gemfile: "source 'https://rubygems.org'\ngem 'fastlane'\n", "Gemfile.lock": "GEM\n", "Library/Format.swift": "struct Format {}\n" }));
+    assert.deepEqual(components.map((c) => [c.id, c.stack]), [["Pantry", "xcode"]]);
+  });
+
   test("a native ios/ app next to a backend is a component; under a React Native or Flutter project it stays the shell", () => {
     const native = layout(tree({ ...xcode("ios/"), "backend/go.mod": "module backend\n\ngo 1.22\n", "backend/main.go": "package main\n" }));
     assert.deepEqual(native.components.map((c) => [c.id, c.stack]).sort(), [["backend", "go"], ["ios", "xcode"]]);

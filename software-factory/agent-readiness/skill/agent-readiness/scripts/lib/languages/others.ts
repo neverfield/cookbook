@@ -34,14 +34,15 @@ export const swift: LanguageDef = {
       tier: "not_yet",
       reason: "it needs macOS with Xcode, since only xcodebuild on a Mac builds and tests it, and the audit's containers run Linux, so it's blocked on this machine rather than broken",
       files: /\.(swift|m|mm|h|storyboard|xib|plist|xcconfig|entitlements|strings)$|\.(xcodeproj|xcworkspace|xcassets)\/|(^|\/)(Podfile(\.lock)?|Cartfile(\.resolved)?)$/,
-      proof: ["fixtures/ios-xcode", "fixtures/dotnet-ios-monorepo"],
+      proof: ["fixtures/ios-xcode", "fixtures/dotnet-ios-monorepo", "kickstarter/ios-oss@2090757"],
     },
   ],
   detect: {
-    // An app's workspace or project claims its folder before a Package.swift next to it does.
+    // An app's workspace or project claims its folder before a Package.swift next to it does, and
+    // before a Gemfile, which next to an Xcode project holds fastlane or CocoaPods.
     manifests: [
-      { match: /\.xcworkspace$/, stack: "xcode", rank: 64 },
-      { match: /\.xcodeproj$/, stack: "xcode", rank: 65 },
+      { match: /\.xcworkspace$/, stack: "xcode", rank: 44 },
+      { match: /\.xcodeproj$/, stack: "xcode", rank: 45 },
       { match: /^Package\.swift$/, stack: "swift", rank: 70 },
     ],
     sources: [{ ext: /\.swift$/, stack: "swift", rank: 80 }],
