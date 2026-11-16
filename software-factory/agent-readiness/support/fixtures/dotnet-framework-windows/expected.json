@@ -1,0 +1,36 @@
+{
+  "purpose": "A Windows-only .NET Framework 4.8 solution: a pre-SDK Windows Forms app and classic ASP.NET MVC site with packages.config, a pre-SDK MSTest project, and an SDK-style net48 library. None of it builds in the audit's Linux containers (a pre-SDK project fails with MSB3644 there), so the solution is one component listed as needing Windows and blocked on this machine, with what its files say (net48, the pre-SDK format, three packages.config) and no level. Nothing runs, and the report never says it has no tests or a failing build, as it did when the solution was built as ordinary .NET.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 0,
+      "levels": {},
+      "top": [],
+      "startNow": null,
+      "noBlocker": false,
+      "safety": "pass",
+      "outcome": "not_assessed",
+      "notAssessed": [
+        "Ledger"
+      ],
+      "shares": {
+        "Ledger": 1
+      },
+      "unassessed": {
+        "share": 1,
+        "supportLink": true
+      },
+      "neverRan": [
+        "dotnet restore",
+        "dotnet build",
+        "dotnet test",
+        "msbuild"
+      ],
+      "absent": [
+        "has no tests",
+        "build fails",
+        "isn't bootable"
+      ]
+    }
+  ]
+}

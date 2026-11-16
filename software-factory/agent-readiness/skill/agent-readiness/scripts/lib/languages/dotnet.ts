@@ -1,5 +1,5 @@
 import { readdirSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, posix } from "node:path";
 import { exists, listFiles, readText } from "../util.ts";
 import { namedAfter } from "./coverage.ts";
 import { cLikeQuoted, cLikeSites } from "./jvm.ts";
@@ -11,24 +11,67 @@ const PROJECT = /\.(csproj|fsproj|vbproj)$/;
 const SOLUTION = /\.slnx?$/;
 const OUTPUT = /(^|\/)(bin|obj)\//;
 
+// .NET Framework target monikers: net20 to net481. Modern .NET has a dot (net8.0).
+const NETFX = /^net\d{2,3}$/;
+
+// What makes a project build or run only on Windows, or null when the .NET SDK in a Linux
+// container builds and tests it: "pre-SDK .NET Framework 4.8 format", "Windows Forms", "net48".
+export function windowsOnly(text: string, packagesConfig: boolean): string | null {
+  const sdkStyle = /<Project\b[^>]*\bSdk\s*=/.test(text) || /<Sdk\s+Name\s*=/.test(text) || /<Import\b[^>]*\bSdk\s*=/.test(text);
+  const v = text.match(/<TargetFrameworkVersion>\s*v?([\d.]+)/)?.[1];
+  if (!sdkStyle && (v || /schemas\.microsoft\.com\/developer\/msbuild\/2003/.test(text))) return `pre-SDK .NET Framework${v ? ` ${v}` : ""} format`;
+  if (/<UseWindowsForms>\s*true/i.test(text)) return "Windows Forms";
+  if (/<UseWPF>\s*true/i.test(text)) return "WPF";
+  const tfms = [...text.matchAll(/<TargetFrameworks?>([^<]+)</g)].flatMap((m) => m[1].split(";").map((t) => t.trim()).filter(Boolean));
+  if (tfms.length && tfms.every((t) => NETFX.test(t) || /-windows/.test(t))) return tfms.join(", ");
+  if (packagesConfig) return "packages.config";
+  return null;
+}
+
+const projectFiles = (tree: string, path: string) => listFiles(join(tree, path)).filter((f) => PROJECT.test(f) && !OUTPUT.test(f));
+
+// The folder's projects that need Windows, relative to the folder, each with why.
+export function windowsProjects(tree: string, path: string): { file: string; why: string }[] {
+  return projectFiles(tree, path).flatMap((f) => {
+    const why = windowsOnly(readText(join(tree, path, f)), exists(join(tree, path, dirname(f), "packages.config")));
+    return why ? [{ file: f, why }] : [];
+  });
+}
+
+// The projects a Linux container can build: every project unless some need Windows.
+function portable(tree: string, path: string): string[] {
+  const windows = new Set(windowsProjects(tree, path).map((p) => p.file));
+  return projectFiles(tree, path).filter((f) => !windows.has(f));
+}
+
 // Projects that reference packages, each with whether a packages.lock.json sits next to it.
 function projects(tree: string, path: string): { file: string; locked: boolean }[] {
-  return listFiles(join(tree, path))
-    .filter((f) => PROJECT.test(f) && !OUTPUT.test(f) && /<PackageReference\b/.test(readText(join(tree, path, f))))
+  return portable(tree, path)
+    .filter((f) => /<PackageReference\b/.test(readText(join(tree, path, f))))
     .map((f) => ({ file: f, locked: exists(join(tree, path, dirname(f), "packages.lock.json")) }));
 }
 
 // What `dotnet` builds in a folder: nothing to name when the folder has one solution or project,
-// else the one named after the folder, or the shortest name, as the scan names the component.
-function target(tree: string, path: string): string {
+// else the one named after the folder, or the shortest name, as the scan names the component. A
+// solution that also holds Windows-only projects can't be built whole on Linux, so the portable
+// projects no other portable project references are named instead, and build the rest through
+// their references.
+function targets(tree: string, path: string): string[] {
+  if (windowsProjects(tree, path).length) {
+    const own = portable(tree, path);
+    const referenced = new Set(own.flatMap((f) => [...readText(join(tree, path, f)).matchAll(/<ProjectReference\s+Include="([^"]+)"/g)].map((m) => posix.normalize(posix.join(dirname(f), m[1].replace(/\\/g, "/"))))));
+    return own.filter((f) => !referenced.has(f)).sort().map((f) => ` ${f}`);
+  }
   const names = readdirSync(join(tree, path)).filter((n) => SOLUTION.test(n) || PROJECT.test(n));
   const solutions = names.filter((n) => SOLUTION.test(n));
   const pool = solutions.length ? solutions : names;
-  if (pool.length <= 1 && names.length <= 1) return "";
+  if (pool.length <= 1 && names.length <= 1) return [""];
   const folder = basename(path === "." ? tree : path).toLowerCase();
   const pick = pool.find((n) => n.replace(/\.\w+$/, "").toLowerCase() === folder) ?? [...pool].sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
-  return pick ? ` ${pick}` : "";
+  return [pick ? ` ${pick}` : ""];
 }
+
+const each = (verb: string, on: string[], rest: string) => on.map((t) => `dotnet ${verb}${t}${rest}`).join(" && ");
 
 const nuget: Ecosystem = {
   id: "nuget",
@@ -37,9 +80,10 @@ const nuget: Ecosystem = {
   rule: "`dotnet restore --locked-mode` with a committed `packages.lock.json` next to every project that references packages",
   install: (tree, path) => {
     const open = projects(tree, path).filter((p) => !p.locked);
+    const on = targets(tree, path);
     return open.length === 0
-      ? { command: `dotnet restore${target(tree, path)} --locked-mode`, reason: "locked restore from each project's packages.lock.json", frozen: true }
-      : { command: `dotnet restore${target(tree, path)}`, reason: "some projects have no packages.lock.json, so the restore can't be frozen", frozen: false };
+      ? { command: each("restore", on, " --locked-mode"), reason: "locked restore from each project's packages.lock.json", frozen: true }
+      : { command: each("restore", on, ""), reason: "some projects have no packages.lock.json, so the restore can't be frozen", frozen: false };
   },
   unpinned: (tree, path) => {
     const all = projects(tree, path);
@@ -117,8 +161,7 @@ function sdkPin(tree: string, path: string): { version: string; rollForward: str
 export function sdkFor(tree: string, path: string): number {
   const pin = globalJson(tree, path);
   const pinned = pin ? Number(readText(join(tree, pin)).match(/"version"\s*:\s*"(\d+)\./)?.[1] ?? NaN) : NaN;
-  const frameworks = listFiles(join(tree, path))
-    .filter((f) => PROJECT.test(f) && !OUTPUT.test(f))
+  const frameworks = portable(tree, path)
     .flatMap((f) => [...readText(join(tree, path, f)).matchAll(/<TargetFrameworks?>([^<]+)</g)].flatMap((m) => [...m[1].matchAll(/\bnet(\d+)\.\d/g)].map((x) => Number(x[1]))));
   const want = Number.isFinite(pinned) ? pinned : frameworks.length ? Math.max(...frameworks) : DEFAULT_SDK;
   return SDKS.find((v) => v >= want) ?? SDKS[SDKS.length - 1];
@@ -168,18 +211,35 @@ export function testRuntimes(tree: string, path: string): number[] {
 }
 
 export function aotProjects(tree: string, path: string): string[] {
-  return listFiles(join(tree, path)).filter((f) => PROJECT.test(f) && !OUTPUT.test(f) && /<PublishAot>\s*true\s*</i.test(readText(join(tree, path, f))));
+  return portable(tree, path).filter((f) => /<PublishAot>\s*true\s*</i.test(readText(join(tree, path, f))));
 }
 
 function testProjects(tree: string, path: string): string[] {
-  return listFiles(join(tree, path)).filter((f) => PROJECT.test(f) && !OUTPUT.test(f) && TEST_PROJECT.test(readText(join(tree, path, f))));
+  return portable(tree, path).filter((f) => TEST_PROJECT.test(readText(join(tree, path, f))));
 }
 
 function dotnetCommands(tree: string, path: string): DraftCommand[] {
-  const t = target(tree, path);
-  const out: DraftCommand[] = [{ kind: "build", command: `dotnet build${t} --no-restore`, source: "readiness", reason: "the .NET SDK's build of the restored projects" }];
+  const on = targets(tree, path);
+  const windows = windowsProjects(tree, path);
+  const left = windows.length ? `; ${windows.map((p) => basename(p.file)).join(", ")} ${windows.length === 1 ? "needs" : "need"} Windows and ${windows.length === 1 ? "is" : "are"} listed apart` : "";
+  const out: DraftCommand[] = [{ kind: "build", command: each("build", on, " --no-restore"), source: "readiness", reason: `the .NET SDK's build of the restored projects${left}` }];
   const tests = testProjects(tree, path);
-  if (tests.length) out.push({ kind: "test", command: `dotnet test${t} --no-restore`, source: "readiness", reason: `the .NET SDK's test run of ${tests.length === 1 ? tests[0] : `${tests.length} test projects`}, offline` });
+  if (tests.length) out.push({ kind: "test", command: each("test", windows.length ? tests.map((t) => ` ${t}`) : on, " --no-restore"), source: "readiness", reason: `the .NET SDK's test run of ${tests.length === 1 ? tests[0] : `${tests.length} test projects`}, offline${left}` });
+  return out;
+}
+
+// The facts about a Windows-only component read from its files, since nothing of it runs here.
+function windowsNotes(tree: string, path: string): string[] {
+  const projs = windowsProjects(tree, path);
+  const byWhy = new Map<string, string[]>();
+  for (const p of projs) byWhy.set(p.why, [...(byWhy.get(p.why) ?? []), basename(p.file).replace(PROJECT, "")]);
+  const out = ["Windows-only: " + [...byWhy].map(([why, names]) => `${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0]} (${why})`).join(", ")];
+  const configs = projs.filter((p) => exists(join(tree, path, dirname(p.file), "packages.config"))).length;
+  if (configs) out.push(`${configs === 1 ? "its packages.config pins" : `the packages.config of ${configs} projects pin`} exact package versions`);
+  const refs = projs.filter((p) => /<PackageReference\b/.test(readText(join(tree, path, p.file))));
+  const open = refs.filter((p) => !exists(join(tree, path, dirname(p.file), "packages.lock.json")));
+  if (open.length) out.push(`${open.length} of ${refs.length} projects that reference packages have no packages.lock.json`);
+  else if (refs.length) out.push("every project that references packages has a packages.lock.json");
   return out;
 }
 
@@ -193,7 +253,18 @@ export const dotnet: LanguageDef = {
   id: "dotnet",
   label: ".NET",
   codes: ["csharp"],
-  stacks: [{ id: "dotnet", label: ".NET", kind: "stack", tier: "supported", files: /\.(cs|fs|vb|csproj|fsproj|vbproj|sln|slnx|razor)$/, proof: ["fixtures/dotnet-xunit", "fixtures/nested-apps-dotnet", "fixtures/standalone-nested-mixed", "TheAlgorithms/C-Sharp@6d3b02a"] }],
+  stacks: [
+    { id: "dotnet", label: ".NET", kind: "stack", tier: "supported", files: /\.(cs|fs|vb|csproj|fsproj|vbproj|sln|slnx|razor)$/, proof: ["fixtures/dotnet-xunit", "fixtures/nested-apps-dotnet", "fixtures/standalone-nested-mixed", "fixtures/dotnet-ios-monorepo", "TheAlgorithms/C-Sharp@6d3b02a"] },
+    {
+      id: "dotnet-windows",
+      label: "A Windows-only .NET project",
+      kind: "stack",
+      tier: "not_yet",
+      reason: "it needs Windows, since it targets .NET Framework or Windows (net48, a -windows framework, Windows Forms, WPF, classic ASP.NET or packages.config), and the audit's containers run Linux, so it's blocked on this machine rather than broken",
+      files: /\.(cs|fs|vb|csproj|fsproj|vbproj|sln|slnx|razor|resx|config|xaml|aspx|cshtml|asax)$/,
+      proof: ["fixtures/dotnet-framework-windows", "fixtures/dotnet-ios-monorepo"],
+    },
+  ],
   detect: {
     // A solution file comes first so it groups the projects under it into one component.
     manifests: [
@@ -209,6 +280,25 @@ export const dotnet: LanguageDef = {
       const stem = manifest.split("/").pop()!.replace(/\.\w+$/, "");
       return soleProject(tree, manifest) || stem.toLowerCase() === repoName.toLowerCase() ? stem : undefined;
     },
+    // A folder whose every project needs Windows is listed as blocked here, never built to fail.
+    refine: (manifest, _text, tree) => {
+      if (!tree) return undefined;
+      const dir = dirname(manifest);
+      return windowsProjects(tree, dir).length && !portable(tree, dir).length ? "dotnet-windows" : undefined;
+    },
+    // Next to projects that build on Linux, each Windows-only project in its own folder is listed
+    // apart, so its changes and its reason show, and the rest is still assessed.
+    parts: (tree, dir) => {
+      if (!portable(tree, dir).length) return [];
+      const seen = new Set<string>();
+      return windowsProjects(tree, dir).flatMap((p) => {
+        const sub = dirname(p.file);
+        if (sub === "." || seen.has(sub)) return [];
+        seen.add(sub);
+        return [{ path: dir === "." ? sub : `${dir}/${sub}`, manifest: dir === "." ? p.file : `${dir}/${p.file}`, stack: "dotnet-windows" }];
+      });
+    },
+    notes: (tree, dir, stackId) => (stackId === "dotnet-windows" ? windowsNotes(tree, dir) : []),
   },
   ecosystems: [nuget],
   replay: {
@@ -234,7 +324,7 @@ export const dotnet: LanguageDef = {
       // A test project that also targets an older .NET, such as net8.0 next to net10.0, needs that
       // runtime to run its tests; the SDK image ships only its own.
       const sdk = sdkFor(tree, dir);
-      const aspnet = listFiles(join(tree, dir)).some((f) => PROJECT.test(f) && !OUTPUT.test(f) && /Microsoft\.NET\.Sdk\.Web|FrameworkReference Include="Microsoft\.AspNetCore\.App"/.test(readText(join(tree, dir, f))));
+      const aspnet = portable(tree, dir).some((f) => /Microsoft\.NET\.Sdk\.Web|FrameworkReference Include="Microsoft\.AspNetCore\.App"/.test(readText(join(tree, dir, f))));
       for (const major of testRuntimes(tree, dir).filter((m) => m < sdk)) {
         const runtimes = aspnet ? ["dotnet", "aspnetcore"] : ["dotnet"];
         out.push({
@@ -253,7 +343,10 @@ export const dotnet: LanguageDef = {
     mutation: {
       isTest,
       isSource,
-      covered: (_tree, _comp, tests, files) => namedAfter(tests, files, isSource),
+      covered: (tree, comp, tests, files) => {
+        const windows = windowsProjects(tree, comp.path).filter((p) => dirname(p.file) !== ".").map((p) => posix.join(comp.path, dirname(p.file)));
+        return namedAfter(tests, files.filter((f) => !windows.some((w) => f.startsWith(`${w}/`))), isSource);
+      },
       sites: (line) => cLikeSites(line, true),
       quoted: (text) => cLikeQuoted(text, true),
       compileProbe: (comp) => ({ command: `dotnet build${comp.manifest ? ` ${basename(comp.manifest)}` : ""} --no-restore -v q -nologo`, cwd: comp.path }),

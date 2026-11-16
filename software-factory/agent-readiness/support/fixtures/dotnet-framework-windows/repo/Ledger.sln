@@ -1,0 +1,19 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ledger.Core", "Ledger.Core\Ledger.Core.csproj", "{6F1D2A3B-1C4E-4B8A-9D2F-0A1B2C3D4E11}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ledger.Desktop", "Ledger.Desktop\Ledger.Desktop.csproj", "{6F1D2A3B-1C4E-4B8A-9D2F-0A1B2C3D4E12}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ledger.Web", "Ledger.Web\Ledger.Web.csproj", "{6F1D2A3B-1C4E-4B8A-9D2F-0A1B2C3D4E13}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ledger.Tests", "Ledger.Tests\Ledger.Tests.csproj", "{6F1D2A3B-1C4E-4B8A-9D2F-0A1B2C3D4E14}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+EndGlobal

@@ -86,7 +86,13 @@ function sanitizeId(name: string): string {
 // Lockfiles of the toolchains no language file covers yet, so a component still reports the one it has.
 const OTHER_LOCKFILES = ["Podfile.lock"];
 const LOCKFILES = [...new Set([...NODE_LOCKFILES, ...PY_LOCKFILES, ...lockfileNames(), ...OTHER_LOCKFILES])];
-const SKIP_SEGMENT = /^(\..+|node_modules|fixtures?|__fixtures__|testdata|vendor|dist|build|bin|obj|target)$/;
+// Pods/ and Carthage/ hold an Xcode app's vendored dependencies, often committed, and DerivedData/ its build output.
+const VENDORED = /^(Pods|Carthage|DerivedData)$/;
+const SKIP_SEGMENT = /^(\..+|node_modules|fixtures?|__fixtures__|testdata|vendor|dist|build|bin|obj|target|Pods|Carthage|DerivedData)$/;
+// An Xcode project or workspace is a folder of its own files; the scan sees it as one name, and
+// the file git tracks inside it is the manifest.
+const XCODE_BUNDLE = /\.(xcodeproj|xcworkspace)$/;
+const XCODE_MANIFEST: Record<string, string> = { xcodeproj: "project.pbxproj", xcworkspace: "contents.xcworkspacedata" };
 
 // Manifests of every language file, by rank: a solution file claims its folder before a project
 // file does, and a folder of .tf files is a Terraform module at any depth.
@@ -109,6 +115,18 @@ const EXAMPLE_SEGMENT = /^(samples?|examples?|demos?|bench|benchmarks?)$/;
 // Packaging and mobile platform folders, such as a Homebrew formula next to a Rust CLI or the
 // android/ shell of a Flutter app, hold another toolchain's files without being another product.
 const PACKAGING_SEGMENT = /^(HomebrewFormula|Formula|pkg|packaging|android|ios|debian|rpm|snap)$/;
+const MOBILE_SEGMENT = /^(android|ios)$/;
+
+// An android/ or ios/ folder is a cross-platform app's shell only when the folder holding it is a
+// React Native, Capacitor or Flutter project; next to anything else it is a native app of its own.
+function packagingSegment(tree: string, dir: string): string | undefined {
+  const parts = dir.split("/");
+  const i = parts.findIndex((s) => PACKAGING_SEGMENT.test(s));
+  if (i < 0) return undefined;
+  if (!MOBILE_SEGMENT.test(parts[i])) return parts[i];
+  const parent = parts.slice(0, i).join("/") || ".";
+  return exists(join(tree, parent, "package.json")) || exists(join(tree, parent, "pubspec.yaml")) ? parts[i] : undefined;
+}
 const CONFIG_PACKAGE = /^(@[^/]+\/)?((eslint|prettier|stylelint|babel|jest|vitest|tsconfig|typescript)-config(-[\w.-]+)?|eslint-config|tsconfig|config)$/;
 
 // A Python manifest under docs/ is usually the docs build's requirements, such as Sphinx or MkDocs.
@@ -122,7 +140,7 @@ function satelliteReason(tree: string, m: FoundManifest): string | null {
   if (segment) return `it sits under ${segment}/, which usually holds ${SATELLITE_HOLDS} rather than the product`;
   const docs = m.kind === "py" ? m.dir.split("/").find((s) => DOCS_SEGMENT.test(s)) : undefined;
   if (docs) return `it sits under ${docs}/, which usually holds the documentation build rather than the product`;
-  const packaging = m.kind === "other" ? m.dir.split("/").find((s) => PACKAGING_SEGMENT.test(s)) : undefined;
+  const packaging = m.kind === "other" ? packagingSegment(tree, m.dir) : undefined;
   if (packaging) return `it sits under ${packaging}/, which usually holds ${PACKAGING_HOLDS} rather than the product`;
   const name = m.kind === "js" ? readPackageJson(join(tree, m.dir))?.name : undefined;
   if (name && CONFIG_PACKAGE.test(name)) return `${name} is a shared config package, not a product`;
@@ -149,9 +167,13 @@ function pickManifest(names: string[], preferred: string): string {
 function discoverManifests(tree: string, files: string[], claimed: string[], hasRoot: boolean, rootPy: boolean, repoName: string): { found: FoundManifest[]; satellites: (FoundManifest & { reason: string })[] } {
   const byDir = new Map<string, string[]>();
   for (const f of files) {
-    const dir = dirname(f);
+    const segments = f.split("/");
+    const bundle = segments.findIndex((s) => XCODE_BUNDLE.test(s));
+    const dir = bundle >= 0 ? segments.slice(0, bundle).join("/") || "." : dirname(f);
+    const name = bundle >= 0 ? segments[bundle] : basename(f);
     if (dir !== "." && dir.split("/").some((s) => SKIP_SEGMENT.test(s))) continue;
-    byDir.set(dir, [...(byDir.get(dir) ?? []), basename(f)]);
+    const names = byDir.get(dir) ?? [];
+    if (!names.includes(name)) byDir.set(dir, [...names, name]);
   }
   const found: FoundManifest[] = [];
   const satellites: (FoundManifest & { reason: string })[] = [];
@@ -176,10 +198,12 @@ function discoverManifests(tree: string, files: string[], claimed: string[], has
     }
     const rule = UNSUPPORTED_MANIFESTS.find((u) => names.some((n) => u.match.test(n)));
     if (rule && !(dir === "." && hasRoot) && ![...found, ...satellites].some((f) => within(dir, f.dir))) {
-      const project = pickManifest(names.filter((n) => rule.match.test(n)), dir === "." ? repoName : basename(dir));
+      const picked = pickManifest(names.filter((n) => rule.match.test(n)), dir === "." ? repoName : basename(dir));
+      const bundle = picked.match(XCODE_BUNDLE)?.[1];
+      const project = bundle ? `${picked}/${XCODE_MANIFEST[bundle]}` : picked;
       const manifest = dir === "." ? project : `${dir}/${project}`;
       if (workspaceOnly(tree, manifest, rule.language)) continue;
-      add({ dir, kind: "other", manifest, stack: rule.language.detect.refine?.(manifest, readText(join(tree, manifest))) ?? rule.stack, language: rule.language });
+      add({ dir, kind: "other", manifest, stack: rule.language.detect.refine?.(manifest, readText(join(tree, manifest)), tree) ?? rule.stack, language: rule.language });
     }
   }
   return { found, satellites };
@@ -221,7 +245,8 @@ function languageComponent(tree: string, base: { id: string; path: string; manif
     const c = lang.replay.classify(tree, base.path, base.manifest);
     return { ...comp, language: c.language, packageManager: c.packageManager };
   }
-  return { ...comp, language: "other", notAssessedReason: notSupportedReason(stackId) };
+  const notes = lang?.detect.notes?.(tree, base.path, stackId) ?? [];
+  return { ...comp, language: "other", notAssessedReason: `${notSupportedReason(stackId)}${notes.length ? `. Read from its files without running anything: ${notes.join("; ")}` : ""}` };
 }
 
 // A root package.json often holds only release tooling or a frontend bundle for the real app at the
@@ -326,7 +351,14 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
     let id = sanitizeId(m.dir === "." ? projectName(tree, m.manifest, repoName) : basename(m.dir));
     if (comps.some((c) => c.id === id)) id = sanitizeId(m.dir.replace(/\//g, "-"));
     if (m.kind === "other") {
-      comps.push(languageComponent(tree, { id, path: m.dir, manifest: m.manifest }, m.stack!));
+      const comp = languageComponent(tree, { id, path: m.dir, manifest: m.manifest }, m.stack!);
+      comps.push(comp);
+      if (comp.notAssessedReason) continue;
+      for (const p of m.language?.detect.parts?.(tree, m.dir) ?? []) {
+        let partId = sanitizeId(basename(p.path));
+        if (comps.some((c) => c.id === partId)) partId = sanitizeId(p.path.replace(/\//g, "-"));
+        comps.push(languageComponent(tree, { id: partId, path: p.path, manifest: p.manifest }, p.stack));
+      }
     } else {
       comps.push({ id, path: m.dir, language: m.kind === "js" ? languageOf(tree, m.dir, files) : "py", manifest: m.manifest, scripts: pkg?.scripts ?? {}, changes: 0, changeShare: 0, assessed: false, packageManager: detectPackageManager(join(tree, m.dir)) });
     }
@@ -353,7 +385,7 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
   const rootOnly = comps.length > 0 && comps.every((c) => c.path === ".");
   const rootStacks = new Set(comps.filter((c) => c.path === ".").map((c) => c.stack));
   const claimed = new Set([...comps.map((c) => c.path), ...satelliteList.map((s) => s.path)].map((p) => p.split("/")[0]));
-  const topDirs = [...new Set(files.filter((f) => f.includes("/")).map((f) => f.split("/")[0]))].filter((d) => !d.startsWith(".") && !claimed.has(d));
+  const topDirs = [...new Set(files.filter((f) => f.includes("/")).map((f) => f.split("/")[0]))].filter((d) => !d.startsWith(".") && !claimed.has(d) && !VENDORED.test(d));
   for (const dir of topDirs.sort()) {
     const inside = files.filter((f) => f.startsWith(dir + "/"));
     const hit = UNSUPPORTED.find((u) => inside.some((f) => u.ext.test(f)));
@@ -363,7 +395,7 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
     // By language, so a root build a language file refined (a Gradle build applying the Android
     // plugin) still owns its source folders.
     if ([...rootStacks].some((s) => sameLanguage(s, hit.stack)) && !EXAMPLE_SEGMENT.test(dir)) continue;
-    const holds = SATELLITE_SEGMENT.test(dir) ? SATELLITE_HOLDS : PACKAGING_SEGMENT.test(dir) ? PACKAGING_HOLDS : null;
+    const holds = SATELLITE_SEGMENT.test(dir) ? SATELLITE_HOLDS : packagingSegment(tree, dir) ? PACKAGING_HOLDS : null;
     if (holds && comps.length > 0) {
       satelliteList.push({ path: dir, manifest: inside.find((f) => hit.ext.test(f))!, toolchain: stack(hit.stack).label, reason: `it sits under ${dir}/, which usually holds ${holds} rather than the product` });
       continue;

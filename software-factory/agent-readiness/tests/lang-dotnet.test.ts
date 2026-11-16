@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import { discoverContract, imagePlan } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { diagnose } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
-import { IMAGE_SDK, SDKS, dotnet, dotnetTestCounts, sdkFor, sdkSatisfies } from "../skill/agent-readiness/scripts/lib/languages/dotnet.ts";
+import { IMAGE_SDK, SDKS, dotnet, dotnetTestCounts, sdkFor, sdkSatisfies, windowsOnly } from "../skill/agent-readiness/scripts/lib/languages/dotnet.ts";
 import { ecosystemOf } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
 import { targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
@@ -154,5 +154,64 @@ describe(".NET: where faults go", () => {
     for (const f of ["src/A/obj/Debug/A.AssemblyInfo.cs", "src/A/Form1.Designer.cs", "src/A/Migrations/0001_Init.cs", "tests/A.Tests/ATests.cs"]) assert.ok(!hooks.mutation.isSource(f), f);
     assert.ok(hooks.mutation.compileError!("Invoice.cs(14,20): error CS0103: The name 'zero' does not exist in the current context"));
     assert.ok(!hooks.mutation.compileError!("Failed!  - Failed:     1, Passed:     2"));
+  });
+});
+
+describe(".NET: projects that need Windows", () => {
+  const legacy = '<?xml version="1.0"?><Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><PropertyGroup><TargetFrameworkVersion>v4.8</TargetFrameworkVersion></PropertyGroup></Project>';
+
+  test("the pre-SDK format, .NET Framework or -windows targets, Windows Forms, WPF and packages.config need Windows; modern targets don't", () => {
+    assert.equal(windowsOnly(legacy, false), "pre-SDK .NET Framework 4.8 format");
+    assert.equal(windowsOnly(proj("net48"), false), "net48");
+    assert.equal(windowsOnly(proj("net8.0-windows"), false), "net8.0-windows");
+    assert.equal(windowsOnly('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><UseWPF>true</UseWPF></PropertyGroup></Project>', false), "WPF");
+    assert.equal(windowsOnly(proj("net8.0"), true), "packages.config");
+    for (const ok of [proj("net8.0"), proj("netstandard2.0"), "<Project><PropertyGroup><TargetFrameworks>net48;net8.0</TargetFrameworks></PropertyGroup></Project>", "<Project></Project>"]) assert.equal(windowsOnly(ok, false), null, ok);
+  });
+
+  test("a solution of Windows-only projects is one component that needs Windows, runs nothing, and says what its files pin", () => {
+    const dir = join(FIXTURES, "dotnet-framework-windows", "repo");
+    const profile = buildProfile(dir, dir, rubric);
+    assert.deepEqual(profile.components.map((c) => [c.id, c.stack, c.assessed]), [["Ledger", "dotnet-windows", false]]);
+    const reason = profile.components[0].notAssessedReason!;
+    assert.match(reason, /it needs Windows/);
+    assert.match(reason, /blocked on this machine rather than broken/);
+    assert.match(reason, /Ledger\.Core \(net48\), Ledger\.Desktop, Ledger\.Tests and Ledger\.Web \(pre-SDK \.NET Framework 4\.8 format\)/);
+    assert.match(reason, /the packages\.config of 3 projects pin exact package versions/);
+    assert.deepEqual(discoverContract(profile, dir, rubric, []), []);
+  });
+
+  test("next to projects that build on Linux, a Windows-only project is its own component, and the commands, lock check and faults leave it out", () => {
+    const dir = join(FIXTURES, "dotnet-ios-monorepo", "repo");
+    const profile = buildProfile(dir, dir, rubric);
+    assert.deepEqual(profile.components.filter((c) => c.path.startsWith("backend")).map((c) => [c.id, c.path, c.stack, c.assessed]), [
+      ["backend", "backend", "dotnet", true],
+      ["Billing.Admin", "backend/src/Billing.Admin", "dotnet-windows", false],
+    ]);
+    assert.deepEqual(discoverContract(profile, dir, rubric, []).filter((c) => c.component === "backend").map((c) => [c.kind, c.command]), [
+      ["doctor", "dotnet --version"],
+      ["install", "dotnet restore tests/Billing.Tests/Billing.Tests.csproj --locked-mode"],
+      ["build", "dotnet build tests/Billing.Tests/Billing.Tests.csproj --no-restore"],
+      ["test", "dotnet test tests/Billing.Tests/Billing.Tests.csproj --no-restore"],
+    ]);
+    assert.deepEqual(imagePlan(profile, dir).slice(1), [{ image: "mcr.microsoft.com/dotnet/sdk:8.0", components: ["backend"] }], "net8.0-windows doesn't pick the image");
+    assert.deepEqual(targetFiles(dir, profile.components[0]), ["backend/src/Billing/Invoice.cs"]);
+
+    const mixed = repo({
+      "App.sln": "",
+      "src/Core/Core.csproj": proj("net8.0"),
+      "src/Core/Form.cs": "namespace Core; public static class Form { public static int A(int x) { if (x > 0) { return 1; } return 0; } }",
+      "src/Desk/Desk.csproj": proj("net8.0-windows", '<PackageReference Include="Serilog" Version="4.0.0" /><ProjectReference Include="..\\Core\\Core.csproj" />'),
+      "src/Desk/Form.cs": "namespace Desk; public static class Form { public static int B(int x) { if (x > 0) { return 1; } return 0; } }",
+      "src/Tool/Tool.csproj": proj("net8.0", '<ProjectReference Include="..\\Core\\Core.csproj" />'),
+      "tests/Core.Tests/Core.Tests.csproj": proj("net8.0", XUNIT + '<ProjectReference Include="../../src/Core/Core.csproj" />'),
+      "tests/Core.Tests/packages.lock.json": "{}",
+      "tests/Core.Tests/FormTests.cs": "public class FormTests { }",
+    });
+    assert.equal(ecosystemOf("nuget")!.install(mixed, ".", { ignoreScripts: false }).command, "dotnet restore src/Tool/Tool.csproj --locked-mode && dotnet restore tests/Core.Tests/Core.Tests.csproj --locked-mode", "Desk's unlocked Serilog doesn't unfreeze the restore");
+    const cmds = hooks.commands(mixed, { path: "." } as never);
+    assert.deepEqual(cmds.map((c) => c.command), ["dotnet build src/Tool/Tool.csproj --no-restore && dotnet build tests/Core.Tests/Core.Tests.csproj --no-restore", "dotnet test tests/Core.Tests/Core.Tests.csproj --no-restore"]);
+    assert.match(cmds[0].reason, /Desk\.csproj needs Windows and is listed apart/);
+    assert.deepEqual(hooks.mutation.covered(mixed, { path: "." } as never, ["tests/Core.Tests/FormTests.cs"], ["src/Core/Form.cs", "src/Desk/Form.cs"]), ["src/Core/Form.cs"], "no fault goes into code the build leaves out");
   });
 });
