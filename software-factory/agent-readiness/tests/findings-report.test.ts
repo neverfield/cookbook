@@ -15,6 +15,7 @@ import { renderHtml } from "../skill/agent-readiness/scripts/lib/render-html.ts"
 import { updateRoadmap, watchFor } from "../skill/agent-readiness/scripts/lib/roadmap.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { compute } from "../skill/agent-readiness/scripts/lib/seal.ts";
+import { makeRuleFor, makeTargets } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { INSTRUCTION_RULES, instructionItems, safetyScan } from "../skill/agent-readiness/scripts/lib/static.ts";
 import type { Audit, InstructionItem } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { listFiles } from "../skill/agent-readiness/scripts/lib/util.ts";
@@ -123,6 +124,59 @@ describe("the instruction checker skips what isn't a step for this repo", () => 
     const by = items({ ...pnpmLib, "AGENTS.md": "Run `pnpm test`.\n", "README.md": "## Development\n\nRun `pnpm test`.\n" });
     assert.equal(by.get("AGENTS.md:1 pnpm test")!.category, "replay");
     assert.equal(by.get("README.md:3 pnpm test")!.rule, "duplicate");
+  });
+
+  test("a link's query string and a protocol-relative //host link aren't repo paths (guzzle, jsoup)", () => {
+    const md = "![Guzzle](.github/logo.png?raw=true)\n\n## Author\n\nCreated by [Jonathan Hedley](//jhedley.com). See [setup](docs/setup.md?plain=1 \"Setup\") and [gone](docs/gone.md?x=1).\n";
+    const by = items({ ...pnpmLib, ".github/logo.png": "", "docs/setup.md": "# Setup\n", "README.md": md });
+    const paths = [...by.values()].filter((i) => i.kind === "path").map((i) => `${i.text}:${i.result}`);
+    assert.deepEqual(paths, [".github/logo.png:pass", "docs/setup.md:pass", "docs/gone.md:fail"]);
+  });
+
+  test("paths in a README's usage sections describe the user's project; under a development heading they're checked (sinatra, fd)", () => {
+    const md = [
+      "# sinatra",
+      "## Static Files",
+      "Static files are served from the `./public` directory. A file `./public/css/style.css` is served as `/css/style.css`.",
+      "## How to use",
+      "If there are two such files, `test_basic.py` and `lib/test_advanced.py`, this runs `vim test_basic.py lib/test_advanced.py`.",
+      "## Development",
+      "The specs live in `spec/missing/`.",
+    ].join("\n");
+    const by = items({ ...pnpmLib, "README.md": md });
+    const paths = [...by.values()].filter((i) => i.kind === "path").map((i) => `${i.text}:${i.result}`);
+    assert.deepEqual(paths, ["spec/missing/:fail"]);
+  });
+
+  test("a Make pattern rule such as test-% gives make test-full a target (clap)", () => {
+    const makefile = "FEATURES := full\n\ncheck-%:\n\tcargo check $(ARGS)\n\ntest-%:\n\tnpm run build -- $(@:test-%=%)\n\ndoc:\n\tnpm run build\n";
+    const by = items({ ...pnpmLib, Makefile: makefile, "CONTRIBUTING.md": "```console\n$ make test-full\n$ make doc\n$ make lint-full\n$ make test-\n$ make FEATURES\n```\n" });
+    assert.equal(by.get("CONTRIBUTING.md:2 make test-full")!.staticResult, "pass");
+    assert.equal(by.get("CONTRIBUTING.md:3 make doc")!.staticResult, "pass");
+    assert.match(by.get("CONTRIBUTING.md:4 make lint-full")!.reason!, /no "lint-full" target/);
+    assert.match(by.get("CONTRIBUTING.md:5 make test-")!.reason!, /no "test-" target/, "% matches a non-empty stem");
+    assert.match(by.get("CONTRIBUTING.md:6 make FEATURES")!.reason!, /no "FEATURES" target/, "a := variable isn't a target");
+    const targets = makeTargets(makefile);
+    assert.deepEqual(targets, ["check-%", "test-%", "doc"]);
+    assert.deepEqual(["test-full", "doc", "check-wasm", "lint-full", "test-"].map((t) => makeRuleFor(targets, t)), ["test-%", "doc", "check-%", undefined, undefined]);
+  });
+
+  test("a path the build writes isn't missing, and \"`cmd` in the `dir` module\" runs cmd there (microsoft/TypeScript)", () => {
+    const md = [
+      "# Contributing",
+      "## Building",
+      "Use `generate:go` for the narrower scope of `go test ./...` in the `tsc` module.",
+      "Then run `npm run build`.",
+      "## Compiler tests",
+      "New compiler tests live in `tsc/testdata/cases/`. Generated",
+      "baselines are written below `tsc/testdata/baselines/local/`; accepted",
+      "baselines live below `tsc/testdata/baselines/reference/` and `tsc/testdata/missing/`.",
+    ].join("\n");
+    const by = items({ ...pnpmLib, "tsc/go.mod": "module tsc\n", "tsc/main.go": "package main\n", "tsc/testdata/cases/a.ts": "", "tsc/testdata/baselines/reference/a.js": "", "CONTRIBUTING.md": md });
+    assert.equal(by.get("CONTRIBUTING.md:3 go test ./...")!.cwd, "tsc");
+    assert.equal(by.get("CONTRIBUTING.md:4 npm run build")!.cwd, ".", "the module cue holds for its own span only");
+    const paths = [...by.values()].filter((i) => i.kind === "path").map((i) => `${i.text}:${i.result}`);
+    assert.deepEqual(paths, ["tsc/testdata/cases/:pass", "tsc/testdata/baselines/reference/:pass", "tsc/testdata/missing/:fail"]);
   });
 
   test("every rule an item names has text the report can print", () => {

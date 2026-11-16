@@ -310,8 +310,14 @@ function escapes(path: string): boolean {
   return isAbsolute(path) || normalize(path).split(/[\\/]/).includes("..");
 }
 
-function makeTargets(text: string | null): string[] {
-  return text ? [...text.matchAll(/^([\w.-]+)\s*:(?!=)/gm)].map((m) => m[1]) : [];
+// Explicit targets and pattern rules such as `test-%`, but not `VAR := value`.
+export function makeTargets(text: string | null): string[] {
+  return text ? [...text.matchAll(/^([\w.%-]+)\s*:(?!=)/gm)].map((m) => m[1]) : [];
+}
+
+// Whether `make name` has a rule: a target of that name, or a pattern rule whose % matches a non-empty stem.
+export function makeRuleFor(targets: string[], name: string): string | undefined {
+  return targets.find((t) => t === name) ?? targets.find((t) => t.includes("%") && new RegExp(`^${t.split("%", 2).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".+")}$`).test(name));
 }
 
 // Commands that pass whatever the repo does, so they can never stand in for a check.
@@ -358,7 +364,7 @@ function checkSource(read: CommitReader, profile: Profile, input: { component: s
   const comp = profile.components.find((c) => c.id === input.component);
   const make = command.match(/^make\s+([\w.-]+)$/);
   if (script && (comp?.scripts[script] || profile.components.some((c) => c.path === input.cwd && c.scripts[script]))) return;
-  if (make && makeTargets(read(join(input.cwd, "Makefile"))).includes(make[1])) return;
+  if (make && makeRuleFor(makeTargets(read(join(input.cwd, "Makefile"))), make[1])) return;
   fail(`\`${command}\` doesn't run a script or Make target the repo defines. Add only commands the repo defines, and cite where with --source file:line.`);
 }
 

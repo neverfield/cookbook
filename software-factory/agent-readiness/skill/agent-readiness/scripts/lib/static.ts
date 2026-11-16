@@ -1,6 +1,6 @@
 import { realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, normalize } from "node:path";
-import { checkOnly } from "./contract.ts";
+import { checkOnly, makeRuleFor, makeTargets as targetsIn } from "./contract.ts";
 import { pyproject, readPackageJson } from "./profile.ts";
 import { scanText } from "./redact.ts";
 import type { InstructionItem, Profile, SafetyFinding, ScanBound } from "./types.ts";
@@ -87,6 +87,8 @@ interface Extracted {
 const EXAMPLE_CUE = /\b(like|such as|e\.g\.|eg\.|for example|for instance|i\.e\.|say|as in)[\s,:]*[("'`]*$/i;
 const NEGATED_CUE = /\b(never|don't|do not|doesn't|does not|must not|mustn't|should not|shouldn't|avoid|instead of|rather than|not with|not by|nor)\b/i;
 const DELETED_CUE = /\b(is|are|was|were|has been|have been|got)\s+(now\s+)?(gone|deleted|removed|retired|dropped)\b|\((deleted|removed|gone|retired)\)|\bno longer (exists?|used|there)\b|\bused to (be|live)\b/i;
+// A folder named right after a span, for that span only: "`go generate ./...` in the `tsc` module".
+const TRAILING_DIR = /^\s+in\s+(?:the\s+)?`([^`]+)`\s+(?:module|package|crate|workspace|directory|folder)\b/i;
 const ELSEWHERE_CUE = /\b(inside|within|in|navigate to|go to|switch to|cd into)\s+(the\s+)?`([^`]+)`\s*(directory|folder|repo|repository|checkout|clone|project)?/i;
 
 // The prose right before an inline span, cut at the last clause break, so "don't run `a`, run `b`"
@@ -222,13 +224,17 @@ export function extractFromMarkdown(text: string, opts: { exists?: (p: string) =
       const before = clauseBefore(raw.slice(0, m.index));
       const column = tableHeader ? tableHeader[raw.slice(0, m.index).split("|").length - 2] : undefined;
       const cue: Cue | undefined = inLinkText(raw, m.index!, m.index! + m[0].length) ? "link_text" : column && TOOL_COLUMN.test(column) ? "table_name" : EXAMPLE_CUE.test(before) ? "example" : NEGATED_CUE.test(before) ? "negated" : DELETED_CUE.test(sentenceAt(raw, m.index!)) ? "deleted" : undefined;
-      const base = { line: lineNo, via: "code" as const, ...placeAt(m.index!), ...(cue ? { cue } : {}) };
+      const trailing = raw.slice(m.index! + m[0].length).match(TRAILING_DIR)?.[1].replace(/\/$/, "");
+      const at = placeAt(m.index!);
+      const place = trailing && opts.exists?.(trailing) && !/\.\w+$/.test(trailing) && !at.elsewhere ? { ...at, within: trailing } : at;
+      const base = { line: lineNo, via: "code" as const, ...place, ...(cue ? { cue } : {}) };
       if (COMMAND_START.test(span) && span.includes(" ")) out.push({ kind: "command", text: span, ...base });
       else if (PATH_LIKE.test(span) && !span.startsWith("http") && !span.includes("<")) out.push({ kind: "path", text: span, ...base });
     }
-    for (const m of raw.matchAll(/\[[^\]]*\]\(([^)\s#]+)(?:#[^)]*)?\)/g)) {
+    for (const m of raw.matchAll(/\[[^\]]*\]\(([^)\s#?]+)(?:[?#][^)\s]*)?(?:\s+"[^"]*")?\)/g)) {
       const target = m[1];
-      if (/^([a-z][\w+.-]*:|#)/i.test(target) || target.includes("<")) continue;
+      // A scheme, an anchor or a protocol-relative //host link points off the repo.
+      if (/^([a-z][\w+.-]*:|#|\/\/)/i.test(target) || target.includes("<")) continue;
       out.push({ kind: "path", text: target, line: lineNo, via: "link", ...here });
     }
   });
@@ -254,7 +260,7 @@ function scriptsAt(tree: string, dir: string): { scripts: Record<string, string>
 function makeTargets(tree: string, dir: string): string[] | null {
   for (const d of [dir, "."]) {
     const f = join(tree, d, "Makefile");
-    if (existsExact(tree, join(d, "Makefile"))) return [...readText(f).matchAll(/^([A-Za-z0-9_.-]+)\s*:/gm)].map((m) => m[1]);
+    if (existsExact(tree, join(d, "Makefile"))) return targetsIn(readText(f));
   }
   return null;
 }
@@ -266,8 +272,11 @@ export function makeRecipe(tree: string, dir: string, target: string): string {
   for (const d of [dir, "."]) {
     const f = join(tree, d, "Makefile");
     if (!existsExact(tree, join(d, "Makefile"))) continue;
-    const lines = readText(f).split("\n");
-    const at = lines.findIndex((l) => new RegExp(`^${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*:`).test(l));
+    const text = readText(f);
+    const rule = makeRuleFor(targetsIn(text), target);
+    if (!rule) continue;
+    const lines = text.split("\n");
+    const at = lines.findIndex((l) => new RegExp(`^${rule.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*:(?!=)`).test(l));
     if (at < 0) continue;
     const body: string[] = [];
     for (const l of lines.slice(at + 1)) {
@@ -507,7 +516,7 @@ function checkOne(ctx: CheckCtx, dir: string, words: string[]): Check {
     const targets = makeTargets(ctx.tree, mdir);
     const target = words.slice(1).find((w, i) => !w.startsWith("-") && !w.includes("=") && words[i] !== "-C");
     if (!targets) return { result: "fail", rule: "make-target", reason: "there is no Makefile" };
-    if (target && !targets.includes(target)) return { result: "fail", rule: "make-target", reason: `the Makefile has no "${target}" target` };
+    if (target && !makeRuleFor(targets, target)) return { result: "fail", rule: "make-target", reason: `the Makefile has no "${target}" target` };
     const recipe = target ? makeRecipe(ctx.tree, mdir, target) : "";
     const stack = Object.entries(OTHER_STACK_RECIPES).find(([, re]) => re.test(recipe))?.[0];
     if (stack && !ctx.profile.components.some((c) => c.assessed && c.stack === stack)) {
@@ -588,6 +597,8 @@ function categorize(cmd: string, tree?: string, dir?: string): InstructionItem["
   return "replay";
 }
 
+// A path the build writes, so a fresh checkout doesn't have it: "baselines are written below `out/`".
+const GENERATED = /\b(is|are|gets?|get)\s+(written|generated|emitted|produced)\s+(below|under|to|into|in)\b/i;
 const FUTURE = /\b(will (be )?(add|creat|live|hold|contain)\w*|(to be|not yet) (added|created|written)|(added|created|written|coming) (later|as|when|once)|later on|planned|upcoming|in the future|doesn't exist yet|does not exist yet|TODO)\b/i;
 
 // Commands an instruction shows as a template, asks questions, or changes the dependencies with.
@@ -719,7 +730,7 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
         const found = existsExact(tree, fromFile) || (!normalize(rel).startsWith("..") && (existsExact(tree, rel) || existsExact(tree, normalize(join(pkgDir, rel)))));
         if (!found) {
           // A path the docs say comes later, or say is gone, can't mislead an agent into using it now.
-          if (FUTURE.test(lines[e.line - 1] ?? "") || e.cue === "deleted") continue;
+          if (FUTURE.test(lines[e.line - 1] ?? "") || GENERATED.test(lines[e.line - 1] ?? "") || e.cue === "deleted") continue;
           if (e.elsewhere || e.cue === "example" || e.cue === "negated") continue;
           // Written in prose, ../x is relative to the reader's working directory, such as a sibling worktree.
           if (e.via !== "link" && normalize(rel).startsWith("..")) continue;
@@ -730,6 +741,8 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
           }
         }
         const ok = found || (e.via === "code" && !rel.includes("/")) || (e.via === "code" && packageRelative(tracked(), pkgDir === "." ? "." : pkgDir, rel));
+        // A README's usage sections describe the user's project, such as Sinatra's `./views`.
+        if (!ok && readme && e.via === "code" && !e.headings.some((h) => DEV_HEADING.test(h))) continue;
         const id = `ins-${String(n++).padStart(3, "0")}`;
         items.push({ id, source: file, line: e.line, kind: "path", text: e.text, category: "path", staticResult: ok ? "pass" : "fail", staticReason: ok ? undefined : `${e.text} doesn't exist`, result: ok ? "pass" : "fail", reason: ok ? undefined : `${e.text} doesn't exist`, rule: "path-exists" });
         continue;

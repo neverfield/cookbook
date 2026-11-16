@@ -54,7 +54,7 @@ The repo level is the lowest level among active components:
 
 - An active component is an assessed component with at least 10% of changes over 90 days.
 - A component joins or leaves the active set only after two consecutive audits on the same side of the line. From rubric 2026-11-alpha, a component the last audit didn't have joins at once.
-- Components the audit can't assess, such as a .NET service, never set the repo level. They keep their share of changes, and when more than 20% of changes are in them the report says "partial coverage".
+- Components the audit can't assess, such as a Swift package or a Terraform module, never set the repo level. They keep their share of changes, and when more than 20% of changes are in them the report says "partial coverage".
 - Scenarios never change a component's standard level or the repo level.
 - With no component to assess, or at the read-only tier, there is no level at any tier: the report says "not assessed" and why. Checks blocked on this machine give an unproven result instead, with their reasons.
 - The repo is unproven when every active component at the lowest level is unproven.

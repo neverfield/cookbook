@@ -149,7 +149,7 @@ export const reportGate: Gate = (ws) => {
   return { name, pass: errors.length === 0, detail: errors.slice(0, 3).join("; ") || "valid" };
 };
 
-export const trajectory: Gate = (ws, t, c) => trajectoryGate(ws, t, Boolean(c.remediation));
+export const trajectory: Gate = (ws, t, c) => trajectoryGate(ws, t, Boolean(c.remediation), c.env?.SA_READINESS_ALLOW_HOST === "1");
 
 // Every field of the case's expected.json run, through the checker tests/fixtures.test.ts uses.
 export function expectedJsonMatch(want: ExpectedRun, name = "every expected.json field matches"): Gate {
