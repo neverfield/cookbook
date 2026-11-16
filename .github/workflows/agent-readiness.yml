@@ -64,3 +64,35 @@ jobs:
       - name: No trial skipped
         if: always()
         run: support/tools/no-skips.sh "$RUNNER_TEMP/trials.log"
+
+  negative-evals:
+    name: Scripted negative evals (Docker, no API key)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # The scripted negative cases need no API key. Left out: remediation/compose-env-honest and
+      # remediation/draft-env-service-honest (Debian packages) and scenarios/scenario-repo-wide-honest
+      # (PyPI), which need package registries. tests/workflow.test.ts keeps this list in step.
+      NEGATIVE_CASES: >-
+        multi-audit/diff-catches-weakening-honest,multi-audit/drops-below-share-honest,
+        multi-audit/new-component-joins-honest,multi-audit/recheck-regression-honest,
+        multi-audit/recheck-restore-honest,multi-audit/skip-failing-tests,
+        negative/drop-db-setup,negative/forged-reseal,negative/forged-reseal-latest,
+        negative/hash-test-oracle,negative/honest-fix,negative/seal-tamper,
+        outcomes/level-3-outcomes-honest,outcomes/level-3-short-window-honest,
+        outcomes/level-4-failed-recheck-honest,outcomes/level-4-streak-honest,
+        remediation/draft-verify-skill-honest,remediation/fix-instructions-honest,
+        remediation/fix-safety-hook-honest,
+        scenarios/scenario-components-honest,scope/sampled-scope-honest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: software-factory/agent-readiness/.nvmrc
+          cache: npm
+          cache-dependency-path: software-factory/agent-readiness/package-lock.json
+      - name: Docker is available
+        run: docker info --format 'Docker {{.ServerVersion}}'
+      - run: npm ci
+      - name: npm run evals (scripted negative cases)
+        run: npm run evals -- --tag negative --case "${NEGATIVE_CASES// /}" --concurrency 3

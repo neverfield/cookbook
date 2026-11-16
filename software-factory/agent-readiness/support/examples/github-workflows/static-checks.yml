@@ -17,7 +17,9 @@ permissions:
   contents: read
 env:
   SA_ACCELERATOR_REPO: cursor/cookbook
-  SA_ACCELERATOR_REF: agent-readiness-v0.1.0
+  # The cursor/cookbook commit you copied the skill from: the hash `git -C /tmp/cookbook rev-parse HEAD`
+  # printed in the README's quickstart. No release tag exists yet, so pin that commit, not a branch.
+  SA_ACCELERATOR_REF: ""
   SA_READINESS: node --experimental-strip-types --no-warnings .readiness-accelerator/software-factory/agent-readiness/skill/agent-readiness/scripts/readiness.ts
 jobs:
   static:
@@ -26,6 +28,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Check the pin
+        run: |
+          if [ -z "$SA_ACCELERATOR_REF" ]; then
+            echo "::error::Set SA_ACCELERATOR_REF in this workflow to the cursor/cookbook commit you copied the skill from (git -C /tmp/cookbook rev-parse HEAD in the quickstart)."
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 22

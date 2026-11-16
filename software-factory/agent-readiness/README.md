@@ -74,11 +74,14 @@ Copy the skill into the repository you want to audit, from that repository's roo
 
 ```bash
 git clone --depth 1 https://github.com/cursor/cookbook /tmp/cookbook
+git -C /tmp/cookbook rev-parse HEAD    # the commit you copied: note it, it's your pin
 mkdir -p .cursor/skills
 cp -R /tmp/cookbook/software-factory/agent-readiness/skill/agent-readiness .cursor/skills/
 ```
 
-`.cursor/skills/agent-readiness` is the usual place, and any skills folder your agent reads works. The skill carries its own `package.json`, so it runs whatever module type the repo's `package.json` sets. Pin the cookbook to a commit when you copy it, and copy the whole folder: the seal checks a digest of the scripts, rubric and `package.json`.
+`.cursor/skills/agent-readiness` is the usual place, and any skills folder your agent reads works. The skill carries its own `package.json`, so it runs whatever module type the repo's `package.json` sets. Copy the whole folder: the seal checks a digest of the scripts, rubric and `package.json`. Commit the copy with the commit hash `rev-parse` printed in the message, and use that same hash as `SA_ACCELERATOR_REF` in the [example CI workflows](support/examples/github-workflows/), so CI runs and verifies the release you copied. No release tag exists yet; until one does, pin that commit rather than a branch.
+
+**License.** The cursor/cookbook repository doesn't carry a license file yet, so it grants no license to copy the skill. Check with its maintainers, or your own legal team, before you copy it into another repository.
 
 Then ask the agent in that repo: "Run an agent readiness audit." To see one kind of work broken out, ask for it, for example "and break out bug fixes for web".
 
@@ -89,6 +92,8 @@ node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scr
 ```
 
 The audit reads the committed tree only: it checks out the recorded commit into a temporary folder as a one-commit clone with its own `.git`, plus any submodules and Git LFS files this checkout already has. On a shallow clone it says so, since change shares then come from the commits the clone has; run `git fetch --unshallow` first for the full window.
+
+**A finding is a false positive?** A maintainer lists it in `.agent-readiness/waivers.json`, committed to the repo, with a reason and a reviewer. Only instruction and safety findings can be waived, never a Level 1 check; waived findings are listed in part 5. The format is in [references/report.md](skill/agent-readiness/references/report.md#waivers).
 
 ## Reading the report
 
