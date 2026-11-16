@@ -121,6 +121,37 @@ describe("Ruby", () => {
     assert.deepEqual(commands(ruby, { "Gemfile.lock": lock(["rubocop"]) }), [], "RuboCop only with the repo's .rubocop.yml");
   });
 
+  test("a gem with no Gemfile.lock: the Gemfile and gemspec name the tools as users write them (rspec, rails, sorbet)", () => {
+    const gemspec = (deps: string[]) => `Gem::Specification.new do |spec|\n  spec.name = "x"\n${deps.map((d) => `  spec.add_development_dependency '${d}'\n`).join("")}end\n`;
+    assert.deepEqual(commands(ruby, { Gemfile: "source 'https://rubygems.org'\ngemspec\n", "x.gemspec": gemspec(["rake", "rspec", "rubocop"]), "spec/x_spec.rb": "", ".rubocop.yml": "" }), ["test: bundle exec rspec", "lint: bundle exec rubocop"]);
+    assert.deepEqual(commands(ruby, { Gemfile: 'gem "rake"\ngem "rspec"\n', Rakefile: "require 'rspec/core/rake_task'\nRSpec::Core::RakeTask.new(:unit) do |t|\n  t.pattern = 'checks/**/*_check.rb'\nend\n" }), ["test: bundle exec rake unit"], "an RSpec rake task with its own pattern");
+    assert.deepEqual(commands(ruby, { Gemfile: 'gem "rails", "~> 8.0"\n', "bin/rails": "", "config/application.rb": "" }), ["test: bin/rails test"]);
+    assert.deepEqual(commands(ruby, { Gemfile: 'gem "sorbet", group: :development\ngem "minitest"\n', "sorbet/config": ".", "test/a_test.rb": "" }).map((c) => c.split(":")[0]), ["test", "typecheck"]);
+    assert.deepEqual(commands(ruby, { Gemfile: 'gem "rake"\ngem "minitest"\n', Rakefile: "Rake::TestTask.new(:unit) { |t| t.pattern = 'test/**/*_test.rb' }\n" }), ["test: bundle exec rake unit"]);
+    assert.deepEqual(commands(ruby, { "x.gemspec": "Gem::Specification.new do |s|\n  s.add_runtime_dependency 'rspec-core'\nend\n", "spec/a_spec.rb": "" }), ["test: bundle exec rspec"]);
+  });
+
+  test("jwt/ruby-jwt's shape (no Gemfile.lock, rspec in the gemspec, RSpec::Core::RakeTask.new(:test)) gets RSpec, not 'no tests'", () => {
+    const dir = repo({
+      Gemfile: "# frozen_string_literal: true\n\nsource 'https://rubygems.org'\n\ngemspec\n",
+      "ruby-jwt.gemspec": "Gem::Specification.new do |spec|\n  spec.name = 'jwt'\n  spec.add_dependency 'base64'\n  spec.add_development_dependency 'rake'\n  spec.add_development_dependency 'rspec'\n  spec.add_development_dependency 'rubocop'\nend\n",
+      Rakefile: "require 'rspec/core/rake_task'\nrequire 'rubocop/rake_task'\n\nRSpec::Core::RakeTask.new(:test)\nRuboCop::RakeTask.new(:rubocop)\n\ntask default: %i[rubocop test]\n",
+      ".rubocop.yml": "",
+      "lib/jwt/encode.rb": "",
+      "spec/jwt/encode_spec.rb": "",
+    });
+    const profile = buildProfile(dir, dir, rubric);
+    const c = profile.components.find((x) => x.assessed)!;
+    const contract = discoverContract(profile, dir, rubric, []).map((x) => [x.kind, x.command, x.source]);
+    assert.deepEqual(contract, [
+      ["doctor", "ruby --version && bundle --version", "readiness"],
+      ["install", "bundle install", "readiness"],
+      ["test", "bundle exec rspec", "Gemfile or gemspec rspec"],
+      ["lint", "bundle exec rubocop", ".rubocop.yml"],
+    ]);
+    assert.deepEqual(targetFiles(dir, c), ["lib/jwt/encode.rb"]);
+  });
+
   test("test counts from minitest, test-unit and RSpec, summed over runs", () => {
     assert.deepEqual(rubyTestCounts("239 runs, 615 assertions, 0 failures, 0 errors, 0 skips\n"), { passed: 239, failed: 0, total: 239 });
     assert.deepEqual(rubyTestCounts("10 runs, 19 assertions, 1 failures, 1 errors, 2 skips\n5 tests, 9 assertions, 1 failures, 0 errors, 0 pendings, 0 omissions\n"), { passed: 10, failed: 3, total: 15 });

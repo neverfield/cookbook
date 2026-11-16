@@ -59,31 +59,60 @@ export function rubyImage(tree: string, dir: string): string {
   return `ruby:${pick ?? RUBY_MINORS[RUBY_MINORS.length - 1]}-bookworm`;
 }
 
-// Gems the component's bundle holds: Gemfile.lock's specs, or the Gemfile's and gemspec's names.
+// Gems the component's bundle holds: Gemfile.lock's specs, and the names the Gemfile and gemspecs
+// declare, so a gem that commits no lock (as most libraries don't) still shows its test framework.
 function gems(tree: string, dir: string): Set<string> {
   const lock = read(tree, dir, "Gemfile.lock");
-  if (lock) return new Set([...lock.matchAll(/^ {4}([\w.-]+) \(/gm)].map((m) => m[1]));
   const gemspecs = exists(join(tree, dir)) ? readdirSync(join(tree, dir)).filter((f) => f.endsWith(".gemspec")) : [];
   const text = [read(tree, dir, "Gemfile"), ...gemspecs.map((f) => read(tree, dir, f))].join("\n");
-  return new Set([...text.matchAll(/^\s*(?:gem|\w+\.add_(?:development_)?dependency)\s*\(?\s*["']([\w.-]+)["']/gm)].map((m) => m[1]));
+  return new Set([
+    ...[...lock.matchAll(/^ {4}([\w.-]+) \(/gm)].map((m) => m[1]),
+    ...[...text.matchAll(/^\s*(?:gem|\w+\.add_(?:development_|runtime_)?dependency)\s*\(?\s*["']([\w.-]+)["']/gm)].map((m) => m[1]),
+  ]);
 }
 
-const TEST_TASK = /Rake::TestTask|task\s*\(?\s*[:"']test\b|default:\s*:test|default\s*=>\s*:test/;
+// A tool is in the bundle under any of the gems that ship it: a Gemfile names `rspec`, `rails` or
+// `sorbet`, and the lock lists the `rspec-core`, `railties` or `sorbet-static` they pull in.
+const FAMILIES = {
+  rspec: ["rspec", "rspec-core", "rspec-rails"],
+  rails: ["rails", "railties"],
+  sorbet: ["sorbet", "sorbet-static", "sorbet-static-and-runtime"],
+  minitest: ["minitest", "test-unit"],
+};
+
+// The task a Rakefile defines with `Rake::TestTask.new` or `RSpec::Core::RakeTask.new`, named or
+// with the class's default name.
+function rakeTask(rakefile: string, cls: "Rake::TestTask" | "RSpec::Core::RakeTask"): string | null {
+  const m = rakefile.match(cls === "Rake::TestTask" ? /Rake::TestTask\.new\s*(?:\(\s*[:"']([\w:-]+))?/ : /RSpec::Core::RakeTask\.new\s*(?:\(\s*[:"']([\w:-]+))?/);
+  if (!m) return null;
+  return m[1] ?? (cls === "Rake::TestTask" ? "test" : "spec");
+}
+
+const TEST_TASK = /task\s*\(?\s*[:"']test\b|default:\s*:test|default\s*=>\s*:test/;
 
 function rubyCommands(tree: string, comp: Component): DraftCommand[] {
   const dir = comp.path;
   const g = gems(tree, dir);
+  const locked = exists(join(tree, dir, "Gemfile.lock"));
+  const from = (name: string) => (locked ? `Gemfile.lock ${name}` : `Gemfile or gemspec ${name}`);
+  const inBundle = (family: keyof typeof FAMILIES) => FAMILIES[family].find((n) => g.has(n));
   const has = (f: string) => exists(join(tree, dir, f));
+  const rakefile = read(tree, dir, "Rakefile");
+  const rspec = inBundle("rspec");
+  const rails = inBundle("rails");
+  const rspecTask = rakeTask(rakefile, "RSpec::Core::RakeTask");
+  const testTask = rakeTask(rakefile, "Rake::TestTask") ?? (TEST_TASK.test(rakefile) ? "test" : null);
   const out: DraftCommand[] = [];
-  if (g.has("rspec-core") && has("spec")) out.push({ kind: "test", command: "bundle exec rspec", source: "Gemfile.lock rspec-core", reason: "RSpec, which the bundle holds" });
-  else if (g.has("railties") && has("bin/rails") && has("config/application.rb")) out.push({ kind: "test", command: "bin/rails test", source: "bin/rails", reason: "the Rails app's test runner" });
-  else if (g.has("rake") && TEST_TASK.test(read(tree, dir, "Rakefile"))) out.push({ kind: "test", command: "bundle exec rake test", source: "Rakefile", reason: "the Rakefile's test task" });
-  else if ((g.has("minitest") || g.has("test-unit")) && has("test")) {
+  if (rspec && has("spec")) out.push({ kind: "test", command: "bundle exec rspec", source: from(rspec), reason: "RSpec, which the bundle holds" });
+  else if (rspec && rspecTask && g.has("rake")) out.push({ kind: "test", command: `bundle exec rake ${rspecTask}`, source: "Rakefile", reason: "the Rakefile's RSpec task" });
+  else if (rails && has("bin/rails") && has("config/application.rb")) out.push({ kind: "test", command: "bin/rails test", source: "bin/rails", reason: "the Rails app's test runner" });
+  else if (g.has("rake") && testTask) out.push({ kind: "test", command: `bundle exec rake ${testTask}`, source: "Rakefile", reason: "the Rakefile's test task" });
+  else if (inBundle("minitest") && has("test")) {
     out.push({ kind: "test", command: `bundle exec ruby -Ilib -Itest -e 'Dir.glob("test/**/{*_test,test_*}.rb").sort.each { |f| require File.expand_path(f) }'`, source: "readiness", reason: "every test file under test/, with the bundle's test framework" });
   }
-  if (g.has("standard") && !g.has("rubocop-rails-omakase")) out.push({ kind: "lint", command: "bundle exec standardrb", source: "Gemfile.lock standard", reason: "Standard Ruby, check-only" });
+  if (g.has("standard") && !g.has("rubocop-rails-omakase")) out.push({ kind: "lint", command: "bundle exec standardrb", source: from("standard"), reason: "Standard Ruby, check-only" });
   else if (g.has("rubocop") && has(".rubocop.yml")) out.push({ kind: "lint", command: "bundle exec rubocop", source: ".rubocop.yml", reason: "RuboCop with the repo's config, without autocorrect" });
-  if (g.has("sorbet-static") && has("sorbet/config")) out.push({ kind: "typecheck", command: "bundle exec srb tc", source: "sorbet/config", reason: "Sorbet with the repo's config" });
+  if (inBundle("sorbet") && has("sorbet/config")) out.push({ kind: "typecheck", command: "bundle exec srb tc", source: "sorbet/config", reason: "Sorbet with the repo's config" });
   else if (g.has("steep") && has("Steepfile")) out.push({ kind: "typecheck", command: "bundle exec steep check", source: "Steepfile", reason: "Steep with the repo's Steepfile" });
   return out;
 }
