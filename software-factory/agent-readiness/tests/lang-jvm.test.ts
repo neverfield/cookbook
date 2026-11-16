@@ -98,6 +98,10 @@ describe("JVM: detection, classification and pins", () => {
   });
 });
 
+// The init script printf writes, between the shell's single quotes.
+const OPEN = "printf '%s\\n' '";
+const RESOLVE_QUOTES = (command: string) => command.slice(command.indexOf(OPEN) + OPEN.length, command.indexOf("' > "));
+
 describe("JVM: the contract", () => {
   test("every JVM command sets user.home to the audit's home, so ~/.m2 and ~/.gradle are the same on every machine", () => {
     const dir = join(FIXTURES, "java-maven", "repo");
@@ -114,6 +118,8 @@ describe("JVM: the contract", () => {
     const plan = ecosystemOf("gradle")!.install(repo({ "build.gradle.kts": "", gradlew: "" }), ".", { ignoreScripts: false });
     assert.match(plan.command, /a\.artifactFiles\.files \} catch \(e\) \{ return \}; a\.failures\.findAll/);
     assert.match(plan.command, /if \(bad\) throw bad\[0\]/, "a dependency that can't be resolved fails the install, unlike gradle dependencies");
+    assert.match(plan.command, /g\.parent == null \|\| chain\(f\) =~ \/Could not \(GET\|HEAD\) \//, "in an included build, resolved before the composite's substitutions, only a failed registry request fails (mockito-kotlin's tests build)");
+    assert.doesNotMatch(RESOLVE_QUOTES(plan.command), /'/, "the script has no single quote, so the shell's printf keeps it whole");
     assert.match(plan.command, /&& JAVA_TOOL_OPTIONS="-Duser\.home=\$HOME" \.\/gradlew --no-daemon -I "\$HOME\/readiness-resolve\.gradle" help$/, "no -q, so Gradle's Could not GET line reaches the diagnosis");
     assert.equal(plan.frozen, true);
   });

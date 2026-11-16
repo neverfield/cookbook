@@ -60,8 +60,10 @@ function gradleDynamic(tree: string, path: string): number {
 // dependency can't be resolved, so the offline test run would find nothing cached. This init script
 // downloads every resolvable configuration's files and fails on the first dependency it couldn't
 // resolve, so a blocked registry's "Could not GET" reaches the diagnosis. A configuration no variant
-// matches is a build's own choice, not a missing dependency, and is left alone.
-const RESOLVE_ALL = "gradle.projectsEvaluated { g -> def bad = []; g.rootProject.allprojects { p -> p.configurations.matching { it.canBeResolved }.each { c -> def a; try { a = c.incoming.artifactView { lenient(true) }.artifacts; a.artifactFiles.files } catch (e) { return }; a.failures.findAll { f -> !(f.message =~ /Cannot choose between|No matching variant|No variants of/) }.each { bad << it } } }; if (bad) throw bad[0] }";
+// matches is a build's own choice, not a missing dependency, and is left alone. An included build is
+// resolved before the composite substitutes the root build's projects for its dependencies (mockito-
+// kotlin's tests build depends on mockito-kotlin itself), so there only a failed registry request fails.
+const RESOLVE_ALL = "gradle.projectsEvaluated { g -> def chain = { t -> def s = []; while (t) { s << (t.message ?: \"\"); t = t.cause }; s.join(\" \") }; def bad = []; g.rootProject.allprojects { p -> p.configurations.matching { it.canBeResolved }.each { c -> def a; try { a = c.incoming.artifactView { lenient(true) }.artifacts; a.artifactFiles.files } catch (e) { return }; a.failures.findAll { f -> !(f.message =~ /Cannot choose between|No matching variant|No variants of/) && (g.parent == null || chain(f) =~ /Could not (GET|HEAD) /) }.each { bad << it } } }; if (bad) throw bad[0] }";
 const RESOLVE_SCRIPT = '"$HOME/readiness-resolve.gradle"';
 
 const gradle: Ecosystem = {
