@@ -6,7 +6,9 @@ import { scanText } from "./redact.ts";
 import type { InstructionItem, Profile, SafetyFinding, ScanBound } from "./types.ts";
 import { MAX_FILES, existsExact, inTreePath, listFiles, readText, sha256 } from "./util.ts";
 
-const COMMAND_START = /^(npm|pnpm|yarn|npx|pnpx|bunx|uvx|corepack|make|python3?|pip3?|pytest|uv|poetry|node|bun|cargo|go|tsc|eslint|ruff|cd\s+\S+\s*&&|\.\/[\w./-]+)(\s|$)/;
+// The PHP, Ruby, JVM and .NET tools are commands only when a version doesn't follow (`ruby 3.3`,
+// `gradle 8.5` are prose), and `ruby` and `php` only with a flag or a file to run.
+const COMMAND_START = /^(npm|pnpm|yarn|npx|pnpx|bunx|uvx|corepack|make|python3?|pip3?|pytest|uv|poetry|node|bun|cargo|go|tsc|eslint|ruff|cd\s+\S+\s*&&|\.\/[\w./-]+|(?:composer|bundle|bundler|rake|rspec|rails|bin\/(?:rails|rake|rspec|console|setup)|vendor\/bin\/[\w.-]+|mvn|mvnw|gradle|gradlew|dotnet)(?!\s+v?\d)|ruby(?=\s+(?:-|\S+\.rb\b|\S*\/))|php(?=\s+(?:-|\S+\.php\b|artisan\b|bin\/)))(\s|$)/;
 const SHELL_LANGS = new Set(["", "sh", "bash", "shell", "console", "zsh", "terminal"]);
 const PATH_LIKE = /^(?:\.{1,2}\/)[\w./-]+$|^[\w.-]+(?:\/[\w.-]+)*\/$|^(?:[\w.-]+\/)*[\w.-]+\.(md|mdc|ts|tsx|js|mjs|cjs|json|py|ya?ml|sh|toml|txt|sql)$/;
 
