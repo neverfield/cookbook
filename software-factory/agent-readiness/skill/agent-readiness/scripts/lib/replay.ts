@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { ContainerSession, NETWORK_ENV, buildImage, detectRuntime, hostUser, probeLimits } from "./container.ts";
 import { hooked, imagePlan, toolSetup } from "./contract.ts";
-import { diagnose, testCounts } from "./diagnose.ts";
+import { BUNDLE_GAP, diagnose, rootError, testCounts } from "./diagnose.ts";
 import { addEvidence } from "./evidence.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
@@ -219,6 +219,9 @@ export const REPLAY_STACKS = ["task-graph"];
 // package the audit didn't build first. Returns the blocked reason, or undefined for a repo failure.
 export function environmentLimit(ex: Pick<Executor, "where" | "image" | "imageSource">, cmd: ContractCommand, d: Diagnosis | null, packages: WorkspacePackage[]): string | undefined {
   if (!d) return undefined;
+  // The image has Bundler; the gem sits in a Gemfile group the install leaves out, such as rack's
+  // optional maintenance group, so the audit's command for it couldn't run.
+  if (d.cause === "missing_tool" && d.detail.endsWith(BUNDLE_GAP)) return `${d.detail}, so the audit couldn't run its ${cmd.kind} command`;
   if (d.cause === "missing_tool") {
     if (ex.where !== "container") return `${d.detail} on this machine`;
     if (ex.imageSource !== "repo") return `${d.detail} in the audit's image (${ex.image})`;
@@ -429,6 +432,14 @@ export async function runContract(
   return results;
 }
 
+// The output's last 4 KB, led by the build tool's root error when that falls outside them, as
+// Maven's does once its stack trace and resume hint fill the end.
+export function outputTail(redacted: string): string {
+  const kept = tail(redacted);
+  const root = kept === redacted ? null : rootError(redacted);
+  return root ? `${root}\n${kept}` : kept;
+}
+
 export function evidenceFromPhase(audit: Audit, ex: Executor, r: PhaseResult, registryValues: string[]): Evidence {
   const map = KIND_CHECK[r.cmd.kind];
   const redacted = r.outcome ? redact(r.outcome.output, registryValues) : "";
@@ -456,7 +467,7 @@ export function evidenceFromPhase(audit: Audit, ex: Executor, r: PhaseResult, re
     exitCode: r.outcome?.exitCode ?? null,
     timedOut: r.outcome?.timedOut ?? false,
     durationMs: r.outcome?.durationMs,
-    outputTail: r.outcome ? tail(redacted) : undefined,
+    outputTail: r.outcome ? outputTail(redacted) : undefined,
     outputDigest: r.outcome ? sha256(redacted) : undefined,
     summary,
     diagnosis: r.diagnosis ?? undefined,

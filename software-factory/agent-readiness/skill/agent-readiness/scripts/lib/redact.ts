@@ -53,10 +53,12 @@ const ENV_PLACEHOLDER = /replace|your|goes_?here|here$|todo|sample|redacted|<|\.
 const REDACTED = /\[redacted:[^\]]*\]/;
 
 // A value that describes itself instead of being random: lower-case words that say what it is
-// (`astronomy_password`, `something-with-a-#-hash`), or the last words of its own name.
+// (`astronomy_password`, `something-with-a-#-hash`, Symfony's `not-a-secret--read-the-doc!`, ruby-jwt's
+// `secretkeyforsigning`), or the last words of its own name.
 function namesItself(name: string, value: string): boolean {
-  const v = value.toLowerCase();
-  if (/^[a-z]+(?:[-_.#]+[a-z]+)+$/.test(value) && /(^|[-_.#])(password|passwd|pass|secret|token|key|hash)([-_.#]|$)/.test(v)) return true;
+  const v = value.toLowerCase().replace(/[!?.]+$/, "");
+  if (/^[a-z]+(?:[-_.#]+[a-z]+)+$/.test(v) && v === value.replace(/[!?.]+$/, "") && /(^|[-_.#])(password|passwd|pass|secret|token|key|hash)([-_.#]|$)/.test(v)) return true;
+  if (/^[a-z]+$/.test(value) && /password|passwd|secret|token/.test(value)) return true;
   return name.toLowerCase().replace(/-/g, "_").endsWith(v.replace(/-/g, "_"));
 }
 

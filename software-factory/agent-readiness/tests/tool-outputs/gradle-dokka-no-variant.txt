@@ -1,0 +1,27 @@
+Downloading https://services.gradle.org/distributions/gradle-8.14.3-bin.zip
+.............10%.............20%.............30%.............40%.............50%.............60%.............70%.............80%.............90%.............100%
+
+Welcome to Gradle 8.14.3!
+
+FAILURE: Build failed with an exception.
+
+* Where:
+Initialization script '/tmp/home/readiness-resolve.gradle' line: 1
+
+* What went wrong:
+Could not resolve all dependencies for configuration ':moshi:dokkaHtmlPublicationPluginApiOnly~internal'.
+> Could not resolve org.jetbrains.dokka:all-modules-page-plugin:2.0.0.
+  Required by:
+      project :moshi
+   > No matching variant of org.jetbrains.dokka:all-modules-page-plugin:2.0.0 was found. The consumer was configured to find a library for use during runtime, compatible with Java 17, packaged as a jar, and its dependencies declared externally, as well as attribute 'org.jetbrains.dokka.format' with value 'html' but:
+       - Variant 'apiElements' declared as a library for use during compile-time:
+           - Incompatible because this component declares a component for use during compile-time, as well as attribute 'org.jetbrains.dokka.format' with value 'none'
+
+* Try:
+> Review the variant matching algorithm at https://docs.gradle.org/8.14.3/userguide/variant_attributes.html#sec:abm_algorithm.
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 4m 17s

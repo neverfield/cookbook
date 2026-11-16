@@ -1,0 +1,15 @@
+No composer.lock file present. Updating dependencies to latest instead of installing from lock file. See https://getcomposer.org/install for more information.
+Loading composer repositories with package information
+Updating dependencies
+Your requirements could not be resolved to an installable set of packages.
+
+  Problem 1
+    - Root composer.json requires mongodb/mongodb ^2.5 -> satisfiable by mongodb/mongodb[2.5.0, 2.5.1].
+    - mongodb/mongodb[2.5.0, ..., 2.5.1] require ext-mongodb ^2.5 -> it is missing from your system. Install or enable PHP's mongodb extension.
+
+To enable extensions, verify that they are enabled in your .ini files:
+    - /usr/local/etc/php/php-cli.ini
+    - /usr/local/etc/php/conf.d/docker-php-ext-sodium.ini
+    - /usr/local/etc/php/conf.d/docker-php-ext-zip.ini
+You can also run `php --ini` in a terminal to see which files are used by PHP in CLI mode.
+Alternatively, you can run Composer with `--ignore-platform-req=ext-mongodb` to temporarily ignore these required extensions.

@@ -1,0 +1,33 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Newtonsoft.Json -> /work/Src/Newtonsoft.Json/bin/Debug/net6.0/Newtonsoft.Json.dll
+  Newtonsoft.Json.Tests -> /work/Src/Newtonsoft.Json.Tests/bin/Debug/net10.0/Newtonsoft.Json.Tests.dll
+Test run for /work/Src/Newtonsoft.Json.Tests/bin/Debug/net10.0/Newtonsoft.Json.Tests.dll (.NETCoreApp,Version=v10.0)
+VSTest version 18.0.0 (arm64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+  Failed Newtonsoft.Json.Tests.Issues.Issue1619.Test [12 ms]
+  Error Message:
+     Expected: c:\temp
+  But was:  /work/Src/Newtonsoft.Json.Tests/bin/Debug/net10.0/c:\temp
+
+  Stack Trace:
+     at Newtonsoft.Json.Tests.Issues.Issue1619.Test() in /work/Src/Newtonsoft.Json.Tests/Issues/Issue1619.cs:line 46
+
+  Failed Newtonsoft.Json.Tests.Converters.IsoDateTimeConverterTests.SerializeFormattedDateTimeNewZealandCulture [3 ms]
+  Error Message:
+     Expected string length 32 but was 30. Strings differ at index 22.
+  Expected: "["09/12/2006 20:44:55 p.m.",""]"
+  But was:  "["09/12/2006 20:44:55 pm",""]"
+
+  Failed Newtonsoft.Json.Tests.Serialization.TraceWriterTests.MemoryTraceWriterTest [8 ms]
+  Error Message:
+     Expected: True
+  But was:  False
+
+  Failed Newtonsoft.Json.Tests.Issues.Issue1725.Test_Reader [2 ms]
+  Failed Newtonsoft.Json.Tests.Issues.Issue1725.Test_Writer [1 ms]
+  Failed Newtonsoft.Json.Tests.Converters.IsoDateTimeConverterTests.DeserializeFormattedDateTimeNewZealandCulture [1 ms]
+
+Failed!  - Failed:     6, Passed:  3611, Skipped:     0, Total:  3617, Duration: 5 s - Newtonsoft.Json.Tests.dll (net10.0)

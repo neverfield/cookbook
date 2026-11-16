@@ -1,0 +1,30 @@
+Run options: --seed 41871
+
+# Running:
+
+..............................................S.......................EEEEE.............................S.........S.
+
+Finished in 6.418231s, 174.5029 runs/s, 389.5153 assertions/s.
+
+  1) Error:
+PandocTest#test_0001_renders inline markdown strings:
+Errno::ENOENT: No such file or directory - pandoc
+    /usr/local/lib/ruby/3.4.0/open3.rb:540:in 'Process.spawn'
+    /usr/local/lib/ruby/3.4.0/open3.rb:540:in 'Open3.popen_run'
+    /usr/local/lib/ruby/3.4.0/open3.rb:268:in 'Open3.popen3'
+    /usr/local/bundle/gems/pandoc-ruby-2.0.2/lib/pandoc-ruby.rb:228:in 'PandocRuby#execute'
+    /usr/local/bundle/gems/tilt-2.6.1/lib/tilt/pandoc.rb:40:in 'Tilt::PandocTemplate#prepare'
+    /work/test/markdown_test.rb:24:in 'block in <class:PandocTest>'
+
+  2) Error:
+PandocTest#test_0002_renders .md files in views path:
+Errno::ENOENT: No such file or directory - pandoc
+    /usr/local/lib/ruby/3.4.0/open3.rb:540:in 'Process.spawn'
+    /usr/local/lib/ruby/3.4.0/open3.rb:540:in 'Open3.popen_run'
+    /usr/local/lib/ruby/3.4.0/open3.rb:268:in 'Open3.popen3'
+    /usr/local/bundle/gems/pandoc-ruby-2.0.2/lib/pandoc-ruby.rb:228:in 'PandocRuby#execute'
+    /work/test/markdown_test.rb:30:in 'block in <class:PandocTest>'
+
+1120 runs, 2500 assertions, 0 failures, 5 errors, 3 skips
+rake aborted!
+Command failed with status (1)

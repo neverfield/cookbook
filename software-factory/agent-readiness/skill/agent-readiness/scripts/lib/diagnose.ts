@@ -226,12 +226,24 @@ function unwrap(text: string): string {
   return text.replace(/\\n/g, "\n").replace(/^[\s│|>]+/gm, (m) => m.replace(/[│|>]/g, "")).replace(/\s*\n\s*/g, " ");
 }
 
+export const BUNDLE_GAP = "is not installed by bundle install";
+
 // A tool or setting this machine lacks, as package managers, Node and git say it.
 function toolchainGap(text: string): string | null {
   const env = text.match(/env: ['‘"]?([\w.+-]+)['’"]?: No such file or directory/);
   if (env) return `${env[1]} is not installed`;
   const spawn = text.match(/\bspawn ([\w.+-]+) ENOENT\b/);
   if (spawn) return `${spawn[1]} is not installed`;
+  // Ruby starting a program that isn't there, as pandoc-ruby does for sinatra's PandocTest. A missing
+  // file reads the same, so only one whose backtrace starts a process counts.
+  const rubySpawn = text.match(/(?:Errno::ENOENT: )?No such file or directory - ([A-Za-z][\w+-]*)(?: \(Errno::ENOENT\))?[ \t]*\n(?:[^\n]*\n){0,2}?[^\n]*in '(?:Process\.spawn|Kernel#(?:spawn|system|exec|`)|Open3\.\w+|IO\.popen)'/);
+  if (rubySpawn) return `${rubySpawn[1]} is not installed`;
+  // `bundle exec` for a gem the install left out: Bundler is there, the gem isn't in the bundle.
+  const notBundled = text.match(/\bbundler: command not found: ([\w.+-]+)/);
+  if (notBundled) return `${notBundled[1]} ${BUNDLE_GAP}`;
+  // Composer: "require ext-mongodb ^2.5 -> it is missing from your system".
+  const ext = text.match(/\bext-([\w-]+)\b[^\n]*?it is missing from your system/);
+  if (ext) return `PHP's ${ext[1]} extension (ext-${ext[1]}) is not installed`;
   const pnpmNode = text.match(/This version of pnpm requires at least Node\.js v?([\d.]+)/);
   if (pnpmNode) return `Node ${pnpmNode[1]} or later is not installed`;
   const engine = text.match(/The engine "node" is incompatible with this module\. Expected version "([^"]+)"/) ?? text.match(/Unsupported engine[\s\S]{0,200}?required: \{[^}]*node: '([^']+)'/) ?? text.match(/ERR_PNPM_UNSUPPORTED_ENGINE[\s\S]{0,200}?Expected version: ([^\n]+)/);
@@ -281,11 +293,113 @@ const PROMPT = /↑\/↓ to navigate|Use arrow keys|\(y\/N\)\s*$|\[y\/N\]\s*$/m;
 // The tests a Go or Rust run names as failing: go test's "--- FAIL: TestX" (a subtest only when its
 // parent isn't listed) and cargo test's "test name ... FAILED". Their last line is just "FAIL" or
 // "error: test failed", which says nothing about which test.
+// dotnet test's "  Failed Namespace.Class.Test [12 ms]" and Surefire's summary lines under
+// "[ERROR] Failures:" or "[ERROR] Errors:" ("[ERROR]   CartTest.total:12 expected..."), whose tally
+// says only how many.
 export function failingTests(output: string): string[] {
   const go = [...output.matchAll(/^\s*--- FAIL: (\S+)/gm)].map((m) => m[1]);
   const top = go.filter((t) => !go.some((p) => t.startsWith(`${p}/`)));
   const rust = [...output.matchAll(/^test (\S+) \.\.\. FAILED\s*$/gm)].map((m) => m[1]);
-  return [...new Set([...top, ...rust])];
+  const dotnet = [...output.matchAll(/^\s*Failed ([\w.+`<>,]+(?:\([^)\n]*\))?) \[[^\]\n]+\]\s*$/gm)].map((m) => m[1]);
+  const surefire = [...output.matchAll(/^\[ERROR\] (?:Failures|Errors): ?\n((?:\[ERROR\] {2,}\S[^\n]*\n?)+)/gm)].flatMap((m) => [...m[1].matchAll(/^\[ERROR\] {2,}([\w$.]+?)(?::\d+)?(?: |$)/gm)].map((x) => x[1]));
+  return [...new Set([...top, ...rust, ...dotnet, ...surefire])];
+}
+
+// Maven's [WARNING] lines and the tab-indented lines under them. Offline, Maven warns that it can't
+// fetch plugin descriptors it never needs ("Failed to read artifact descriptor ... from/to central
+// (...): repo.maven.apache.org"), so a warning is no evidence of why the build failed.
+function withoutMavenWarnings(text: string): string {
+  return text.replace(/^\[WARNING\][^\n]*(?:\n\t[^\n]*)*\n?/gm, "");
+}
+
+// Cut at a word boundary, so a message never ends mid-URL.
+function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), max / 2)).replace(/[\s,;:]+$/, "")} …`;
+}
+
+// Lines PHPStan decorates with an emoji (its identifier and tip lines); the report never shows one.
+const PICTOGRAPH = /\p{Extended_Pictographic}/u;
+
+// The error a build tool reports as the cause, rather than its closing lines ("mvn <args> -rf
+// :module", "BUILD FAILED in 4m 17s", "[ERROR] Found 1 error"): Maven's "Failed to execute goal"
+// block, Gradle's "What went wrong", Composer's problem list and PHPStan's error table. Null when the
+// output has none of them.
+export function rootError(output: string): string | null {
+  const text = output.replace(/\x1b\[[0-9;]*m/g, "");
+  return mavenRoot(text) ?? gradleRoot(text) ?? composerRoot(text) ?? phpstanRoot(text);
+}
+
+const MAVEN_GENERIC = /^(Compilation failure|There are test failures\.?|There was an error in the forked process|)$/;
+const MAVEN_BOILERPLATE = /^(-> \[Help \d+\]|To see the full stack trace|Re-run Maven using|For more information about the errors|\[Help \d+\]|After correcting the problems|mvn <args>|Please refer to )/;
+
+function mavenRoot(text: string): string | null {
+  const lines = text.split("\n");
+  const at = lines.findIndex((l) => /^\[ERROR\] Failed to execute goal /.test(l));
+  if (at < 0) return null;
+  const m = lines[at].match(/^\[ERROR\] Failed to execute goal (?:[\w.-]+:([\w.-]+):[\w.-]+:([\w-]+) \([^)]*\) )?on project ([\w.-]+):\s*(.*?)\s*(?:-> \[Help \d+\])?\s*$/);
+  if (!m) return null;
+  const [, artifact, goal, project, message] = m;
+  const step = artifact && goal ? `${artifact.replace(/^maven-/, "").replace(/(-maven)?-plugin$/, "")}:${goal}` : "the build";
+  const rest: string[] = [];
+  for (const l of lines.slice(at + 1)) {
+    if (!l.startsWith("[ERROR]")) break;
+    const body = l.replace(/^\[ERROR\]\s?/, "").trim();
+    if (/^(-> \[Help \d+\]|To see the full stack trace)/.test(body)) break;
+    if (body && !MAVEN_BOILERPLATE.test(body)) rest.push(body);
+  }
+  const compile = rest.find((l) => /\S+\.(java|kt|groovy|scala):\[\d+,\d+\]/.test(l));
+  const thrown = rest.find((l) => /^(?:[a-z][\w$]*\.)+[A-Z][\w$]*(?:Error|Exception)\b/.test(l));
+  const said = message.endsWith(":") ? `${message} ${rest[0] ?? ""}`.trim() : MAVEN_GENERIC.test(message) ? (compile ?? thrown ?? rest[0] ?? message) : message;
+  return clip(`${step} failed in module ${project}: ${said || "no message"}`, 240);
+}
+
+function gradleRoot(text: string): string | null {
+  const block = text.match(/^\* What went wrong:\n([\s\S]*?)(?=\n\* (?:Try|Where|Exception is):|\n\n|(?![\s\S]))/m)?.[1];
+  if (!block) return null;
+  const lines = block.split("\n").map((l) => l.trim()).filter((l) => l && !/^Required by:|^(project|root project) [:']/.test(l));
+  const head = lines[0]?.replace(/^>\s*/, "");
+  if (!head) return null;
+  const deepest = [...lines].reverse().find((l) => l.startsWith(">"))?.replace(/^>\s*/, "");
+  const first = (s: string) => s.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? s;
+  const said = deepest && first(deepest) !== first(head) ? `${first(head).replace(/\.$/, "")}: ${first(deepest)}` : first(head);
+  return clip(said, 240);
+}
+
+function composerRoot(text: string): string | null {
+  const problems = [...text.matchAll(/^\s*Problem \d+\s*\n((?:\s+- [^\n]*\n?)+)/gm)];
+  if (!problems.length) return null;
+  const bullets = problems[0][1].split("\n").map((l) => l.trim().replace(/^- /, "")).filter(Boolean);
+  const last = bullets[bullets.length - 1].replace(/ from composer repo \([^)]*\)/g, "").replace(/\s*See https?:\/\/\S+ for [^.]*\.?$/, "").trim();
+  const more = problems.length > 1 ? ` (and ${problems.length - 1} more ${problems.length === 2 ? "problem" : "problems"})` : "";
+  return `${clip(last, 260)}${more}`;
+}
+
+function phpstanRoot(text: string): string | null {
+  const found = text.match(/\[ERROR\] Found (\d+) errors?/);
+  if (!found) return null;
+  const lines = text.split("\n");
+  const sep = /^\s*-{2,}(\s+-{2,})+\s*$/;
+  for (let i = 0; i < lines.length; i++) {
+    const head = lines[i].match(/^\s*(Line|Error)\s+(\S.*?)?\s*$/);
+    if (!head || !sep.test(lines[i + 1] ?? "")) continue;
+    const file = head[1] === "Line" ? head[2] : undefined;
+    const parts: string[] = [];
+    let line: string | undefined;
+    for (let j = i + 2; j < lines.length && !sep.test(lines[j]); j++) {
+      const row = lines[j].match(/^\s*(:?\d+)?\s{2,}(\S.*?)\s*$/) ?? lines[j].match(/^\s*()(\S.*?)\s*$/);
+      if (!row || PICTOGRAPH.test(lines[j])) continue;
+      if (row[1] && parts.length) break;
+      if (row[1]) line = row[1].replace(/^:/, "");
+      parts.push(row[2]);
+    }
+    if (!parts.length) continue;
+    const n = Number(found[1]);
+    const where = file ? ` in ${file}${line ? `:${line}` : ""}` : "";
+    return clip(`${n === 1 ? `PHPStan found 1 error${where}` : `PHPStan found ${n} errors; the first${where}`}: ${parts.join(" ")}`, 260);
+  }
+  return null;
 }
 
 // What the audit appends to a timed-out command's output when the command's processes used no CPU
@@ -345,7 +459,7 @@ export function externalHost(output: string): string | null {
 }
 
 export function diagnose(rawOutput: string, timedOut: boolean, phase: string): Diagnosis {
-  const clean = rawOutput.replace(/\x1b\[[0-9;]*m/g, "");
+  const clean = withoutMavenWarnings(rawOutput.replace(/\x1b\[[0-9;]*m/g, ""));
   // Stuck with no CPU while the network was off: most likely waiting on a download, such as an
   // npm install of a packed tarball inside a test script.
   if (timedOut && rawOutput.includes(`${IDLE_MARK}`) && rawOutput.includes(IDLE_OFFLINE)) return { cause: "network", detail: `the ${phase} step stopped using CPU ${IDLE_OFFLINE}, likely waiting on the network` };
@@ -409,9 +523,15 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   const host = phase === "test" ? externalHost(goBlocks.trim() ? goBlocks : focus) : null;
   if (host) return { cause: "network", detail: `${named.length ? `${named[0]} failed; it` : "a failing test"} refers to ${host}, and tests run with the network off` };
   if (named.length) return { cause: "unknown", detail: named.length === 1 ? `${named[0]} failed` : `${named[0]} and ${named.length - 1} more failed` };
+  const root = rootError(clean);
+  if (root) return { cause: "unknown", detail: root, fromTool: true };
+  // Ruby's uncaught error: "/path/x.rb:12:in 'Method': message (Class)", above its "from" frames.
+  const ruby = clean.match(/^\S+\.rb:\d+:in '[^'\n]+': ([^\n]+?) \(((?:[A-Z]\w*::)*[A-Z]\w*)\)\s*$/m);
+  if (ruby) return { cause: "unknown", detail: clip(`${ruby[1]} (${ruby[2]})`, 200), fromTool: true };
   const lines = (focus.trim() ? focus : clean).split("\n").map((l) => l.trim()).filter(Boolean);
-  // node --test's TAP block lists code, failureType and the like after the error itself.
-  const noise = /^(npm (error|ERR!|warn)|ELIFECYCLE|error Command failed|>\s|\$ |command failed|at |# |(code|failureType|type|location|duration_ms|stack): )/i;
+  // node --test's TAP block lists code, failureType and the like after the error itself; Ruby lists
+  // its backtrace as "from /path/x.rb:12:in ...".
+  const noise = /^(npm (error|ERR!|warn)|ELIFECYCLE|error Command failed|>\s|\$ |command failed|at |from \S+:\d+:in |# |(code|failureType|type|location|duration_ms|stack): )/i;
   const meaningful = lines.filter((l) => !noise.test(l));
   const errLine = [...meaningful].reverse().find((l) => /error|fail|assert|exception|remove|missing|expected/i.test(l)) ?? meaningful[meaningful.length - 1] ?? lines[lines.length - 1] ?? "no output";
   return { cause: "unknown", detail: errLine.replace(/^error: '(.*)'$/, "$1").slice(0, 160) };

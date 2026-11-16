@@ -154,7 +154,7 @@ describe("the report says tests ran with the network off", () => {
     const r = reportFor(makeAudit({ components: [{ id: "pocketbase", share: 1, test: "fail", faults: "not_run" }] }));
     assert.match(r.executive.coverage, /Tests and planted faults ran in a clean container with the network switched off/);
     assert.match(r.details.record.find((x) => x.label === "Replay environment")!.value, /switched off for tests/);
-    assert.match(r.executive.headline, /from a clean checkout with the network off\./);
+    assert.doesNotMatch(r.executive.headline, /network/, "the headline names the network only when the output showed it");
     const cond = (r.explanations ?? []).find((e) => e.kind === "condition" && e.subject.startsWith("pocketbase: ") && /test/i.test(e.subject) && /network switched off/.test(e.rule));
     assert.ok(cond, "the test condition's rule names the network");
     assert.deepEqual(validatePart1(r, rubric, null), []);
