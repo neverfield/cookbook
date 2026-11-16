@@ -922,6 +922,9 @@ describe("final review round: blocked registries and tests that need the network
     assert.deepEqual(d, { cause: "network", detail: "TestRecordAuthWithOAuth2 failed; it refers to pocketbase.io, and tests run with the network off" });
     assert.equal(environmentLimit(inContainer, { ...install, id: "cmd-app-test", kind: "test" }, d, []), undefined, "a test that needs the network is still the repo's to fix");
     assert.equal(diagnose(out("go-test-offline-fetch"), false, "install").cause, "unknown", "only a test run is read this way");
+    assert.deepEqual(diagnose(out("go-test-offline-fetch-verbose"), false, "test"), d, "go test -v, as the audit runs it: the log sits under the subtest's === RUN line, above the package's FAIL line");
+    const laterPassing = `${out("go-test-offline-fetch-verbose")}\n=== RUN   TestUpload\n    upload_test.go:9: using https://s3.amazonaws.com/bucket\n--- PASS: TestUpload (0.01s)\nok  \tgithub.com/x/y\t0.1s\n`;
+    assert.equal(diagnose(laterPassing, false, "test").detail, d.detail, "a passing test's URL further down isn't the failing test's");
   });
 
   test("a failing test whose output links to docs, a local server or a reserved domain isn't called a network test", () => {

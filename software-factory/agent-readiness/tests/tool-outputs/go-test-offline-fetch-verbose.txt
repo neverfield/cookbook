@@ -1,0 +1,67 @@
+=== RUN   TestRecordAuthWithOAuth2
+=== PAUSE TestRecordAuthWithOAuth2
+=== CONT  TestRecordAuthWithOAuth2
+=== RUN   TestRecordAuthWithOAuth2/disabled_OAuth2_auth
+=== RUN   TestRecordAuthWithOAuth2/invalid_body
+=== RUN   TestRecordAuthWithOAuth2/trigger_form_validations_(missing_provider)
+=== RUN   TestRecordAuthWithOAuth2/trigger_form_validations_(existing_but_disabled_provider)
+=== RUN   TestRecordAuthWithOAuth2/existing_linked_OAuth2_(unverified_user)
+=== RUN   TestRecordAuthWithOAuth2/existing_linked_OAuth2_(verified_user)
+=== RUN   TestRecordAuthWithOAuth2/link_by_email_(unverified_user)
+=== RUN   TestRecordAuthWithOAuth2/link_by_email_(verified_user)
+=== RUN   TestRecordAuthWithOAuth2/link_by_fallback_user_(OAuth2_user_with_different_email)
+=== RUN   TestRecordAuthWithOAuth2/link_by_fallback_user_(user_without_email)
+=== RUN   TestRecordAuthWithOAuth2/link_by_fallback_user_(unverified_user_with_matching_email)
+=== RUN   TestRecordAuthWithOAuth2/creating_user_(no_extra_create_data_or_custom_fields_mapping)
+=== RUN   TestRecordAuthWithOAuth2/creating_user_(submit_failure_-_form_auth_fields_validator)
+=== RUN   TestRecordAuthWithOAuth2/creating_user_(submit_failure_-_record_fields_validator)
+=== RUN   TestRecordAuthWithOAuth2/creating_user_(valid_create_data_with_empty_submitted_email)
+=== RUN   TestRecordAuthWithOAuth2/creating_user_(valid_create_data_with_non-empty_valid_submitted_email)
+=== RUN   TestRecordAuthWithOAuth2/creating_user_(with_mapped_OAuth2_fields_and_avatarURL->file_field)
+    api.go:277: Cannot find "avatar":"logo_ in response body 
+        {"meta":{"id":"oauth2_id","name":"","avatarURL":"https://pocketbase.io/images/logo.svg","refreshToken":"","avatarUrl":"https://pocketbase.io/images/logo.svg","expiry":"","rawUser":{},"username":"oauth2_username","accessToken":"","email":"oauth2@example.com","isNew":true},"record":{"avatar":"","collectionId":"_pb_users_auth_","collectionName":"users","created":"2026-11-16 08:06:12.300Z","email":"oauth2@example.com","emailVisibility":true,"file":[],"id":"grmj79i6ka04wbt","name":"test_name","rel":"0yxhwia2amd8gec","updated":"2026-11-16 08:06:12.301Z","username":"oauth2_id","verified":true},"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb2xsZWN0aW9uSWQiOiJfcGJfdXNlcnNfYXV0aF8iLCJleHAiOjE3OTYwMjU5NzIsImlkIjoiZ3Jtajc5aTZrYTA0d2J0IiwicmVmcmVzaGFibGUiOnRydWUsInR5cGUiOiJhdXRoIn0.LEHak8vrUJ24tsqZxB4VMtsAHcHPtl-tkeAtVCQM-gU"}
+=== RUN   TestRecordAuthWithOAuth2/creating_user_(with_mapped_OAuth2_fields_and_local_avatarURL->file_field;_ensures_that_safeHTTPClient_is_being_used)
+=== RUN   TestRecordAuthWithOAuth2/creating_user_(with_mapped_OAuth2_avatarURL_field_but_empty_OAuth2User.avatarURL_value)
+=== RUN   TestRecordAuthWithOAuth2/creating_user_(with_mapped_OAuth2_fields,_case-sensitive_username_and_avatarURL->non-file_field)
+=== RUN   TestRecordAuthWithOAuth2/creating_user_(with_mapped_OAuth2_fields_and_duplicated_case-insensitive_username)
+=== RUN   TestRecordAuthWithOAuth2/creating_user_(with_mapped_OAuth2_fields_and_username_that_doesn't_match_the_field_validations)
+=== RUN   TestRecordAuthWithOAuth2/OnRecordAuthWithOAuth2Request_tx_body_write_check
+=== RUN   TestRecordAuthWithOAuth2/store_name_with_Apple_provider
+=== RUN   TestRecordAuthWithOAuth2/store_name_with_non-Apple_provider
+=== RUN   TestRecordAuthWithOAuth2/RateLimit_rule_-_users:authWithOAuth2
+=== RUN   TestRecordAuthWithOAuth2/RateLimit_rule_-_*:authWithOAuth2
+=== RUN   TestRecordAuthWithOAuth2/RateLimit_tag_-_users:auth
+=== RUN   TestRecordAuthWithOAuth2/RateLimit_tag_-_*:auth
+--- FAIL: TestRecordAuthWithOAuth2 (6.97s)
+    --- PASS: TestRecordAuthWithOAuth2/disabled_OAuth2_auth (0.02s)
+    --- PASS: TestRecordAuthWithOAuth2/invalid_body (0.02s)
+    --- PASS: TestRecordAuthWithOAuth2/trigger_form_validations_(missing_provider) (0.01s)
+    --- PASS: TestRecordAuthWithOAuth2/trigger_form_validations_(existing_but_disabled_provider) (0.03s)
+    --- PASS: TestRecordAuthWithOAuth2/existing_linked_OAuth2_(unverified_user) (0.55s)
+    --- PASS: TestRecordAuthWithOAuth2/existing_linked_OAuth2_(verified_user) (0.86s)
+    --- PASS: TestRecordAuthWithOAuth2/link_by_email_(unverified_user) (0.55s)
+    --- PASS: TestRecordAuthWithOAuth2/link_by_email_(verified_user) (0.86s)
+    --- PASS: TestRecordAuthWithOAuth2/link_by_fallback_user_(OAuth2_user_with_different_email) (0.86s)
+    --- PASS: TestRecordAuthWithOAuth2/link_by_fallback_user_(user_without_email) (0.86s)
+    --- PASS: TestRecordAuthWithOAuth2/link_by_fallback_user_(unverified_user_with_matching_email) (0.86s)
+    --- PASS: TestRecordAuthWithOAuth2/creating_user_(no_extra_create_data_or_custom_fields_mapping) (0.08s)
+    --- PASS: TestRecordAuthWithOAuth2/creating_user_(submit_failure_-_form_auth_fields_validator) (0.08s)
+    --- PASS: TestRecordAuthWithOAuth2/creating_user_(submit_failure_-_record_fields_validator) (0.09s)
+    --- PASS: TestRecordAuthWithOAuth2/creating_user_(valid_create_data_with_empty_submitted_email) (0.18s)
+    --- PASS: TestRecordAuthWithOAuth2/creating_user_(valid_create_data_with_non-empty_valid_submitted_email) (0.18s)
+    --- FAIL: TestRecordAuthWithOAuth2/creating_user_(with_mapped_OAuth2_fields_and_avatarURL->file_field) (0.08s)
+    --- PASS: TestRecordAuthWithOAuth2/creating_user_(with_mapped_OAuth2_fields_and_local_avatarURL->file_field;_ensures_that_safeHTTPClient_is_being_used) (0.08s)
+    --- PASS: TestRecordAuthWithOAuth2/creating_user_(with_mapped_OAuth2_avatarURL_field_but_empty_OAuth2User.avatarURL_value) (0.09s)
+    --- PASS: TestRecordAuthWithOAuth2/creating_user_(with_mapped_OAuth2_fields,_case-sensitive_username_and_avatarURL->non-file_field) (0.10s)
+    --- PASS: TestRecordAuthWithOAuth2/creating_user_(with_mapped_OAuth2_fields_and_duplicated_case-insensitive_username) (0.08s)
+    --- PASS: TestRecordAuthWithOAuth2/creating_user_(with_mapped_OAuth2_fields_and_username_that_doesn't_match_the_field_validations) (0.08s)
+    --- PASS: TestRecordAuthWithOAuth2/OnRecordAuthWithOAuth2Request_tx_body_write_check (0.08s)
+    --- PASS: TestRecordAuthWithOAuth2/store_name_with_Apple_provider (0.09s)
+    --- PASS: TestRecordAuthWithOAuth2/store_name_with_non-Apple_provider (0.09s)
+    --- PASS: TestRecordAuthWithOAuth2/RateLimit_rule_-_users:authWithOAuth2 (0.03s)
+    --- PASS: TestRecordAuthWithOAuth2/RateLimit_rule_-_*:authWithOAuth2 (0.04s)
+    --- PASS: TestRecordAuthWithOAuth2/RateLimit_tag_-_users:auth (0.03s)
+    --- PASS: TestRecordAuthWithOAuth2/RateLimit_tag_-_*:auth (0.01s)
+FAIL
+FAIL	github.com/pocketbase/pocketbase/apis	6.974s
+FAIL

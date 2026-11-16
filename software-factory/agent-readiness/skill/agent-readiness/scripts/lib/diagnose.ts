@@ -313,6 +313,27 @@ const LOCAL_HOST = /^(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[?::1\]?|host\.do
 const DOC_HOST = /(^|\.)(github\.com|githubusercontent\.com|gitlab\.com|bitbucket\.org|npmjs\.(com|org)|nodejs\.org|jestjs\.io|vitest\.dev|mochajs\.org|go\.dev|golang\.org|rust-lang\.org|docs\.rs|crates\.io|python\.org|pypi\.org|readthedocs\.io|apache\.org|gradle\.org|junit\.org|microsoft\.com|aka\.ms|mozilla\.org|w3\.org|json-schema\.org|stackoverflow\.com|ruby-lang\.org|rubygems\.org|php\.net|getcomposer\.org)$/i;
 const HELP_LINE = /\b(see|docs?|documentation|learn more|more info(rmation)?|read more|refer to|visit|help|issue)\b/i;
 
+// Each failing Go test's own lines. With -v a test logs under its "=== RUN" line, above the
+// package's FAIL line that failingPart keeps; without -v under its "--- FAIL" line, indented.
+export function goFailingBlocks(output: string): string {
+  const lines = output.split("\n");
+  const failed = new Set([...output.matchAll(/^\s*--- FAIL: (\S+)/gm)].map((m) => m[1]));
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const run = lines[i].match(/^=== RUN\s+(\S+)\s*$/);
+    const fail = lines[i].match(/^(\s*)--- FAIL: \S+/);
+    if (!(run && failed.has(run[1])) && !fail) continue;
+    const indent = fail ? fail[1].length : -1;
+    for (let j = i + 1; j < lines.length; j++) {
+      const l = lines[j];
+      if (/^\s*(=== (RUN|PAUSE|CONT|NAME)|--- (PASS|FAIL|SKIP))/.test(l)) break;
+      if (fail && l.trim() && (l.match(/^\s*/)?.[0].length ?? 0) <= indent) break;
+      out.push(l);
+    }
+  }
+  return out.join("\n");
+}
+
 export function externalHost(output: string): string | null {
   for (const line of output.split("\n")) {
     if (HELP_LINE.test(line)) continue;
@@ -382,7 +403,10 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   const compiler = compilerError(clean);
   if (compiler) return { cause: "compile", detail: compiler.slice(0, 200) };
   const named = failingTests(clean);
-  const host = phase === "test" ? externalHost(focus) : null;
+  // Go's -v output keeps later packages' passing logs after the first FAIL line, so a Go run is
+  // read only from its failing tests' own lines.
+  const goBlocks = phase === "test" ? goFailingBlocks(clean) : "";
+  const host = phase === "test" ? externalHost(goBlocks.trim() ? goBlocks : focus) : null;
   if (host) return { cause: "network", detail: `${named.length ? `${named[0]} failed; it` : "a failing test"} refers to ${host}, and tests run with the network off` };
   if (named.length) return { cause: "unknown", detail: named.length === 1 ? `${named[0]} failed` : `${named[0]} and ${named.length - 1} more failed` };
   const lines = (focus.trim() ? focus : clean).split("\n").map((l) => l.trim()).filter(Boolean);
