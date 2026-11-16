@@ -33,6 +33,20 @@ export const dart: LanguageDef = {
   ecosystems: [],
 };
 
+export const elixir: LanguageDef = {
+  id: "elixir",
+  label: "Elixir",
+  codes: [],
+  stacks: [{ id: "elixir", label: "Elixir", kind: "stack", tier: "not_assessed", files: /\.(ex|exs|heex)$|(^|\/)mix\.(exs|lock)$/, proof: ["tests/discovery.test.ts"] }],
+  detect: {
+    manifests: [{ match: /^mix\.exs$/, stack: "elixir", rank: 80 }],
+    sources: [{ ext: /\.exs?$/, stack: "elixir", rank: 85 }],
+    lockfiles: ["mix.lock"],
+    projectName: (_tree, manifest, text) => (manifest === "mix.exs" ? text.match(/\bapp:\s*:(\w+)/)?.[1] : undefined),
+  },
+  ecosystems: [],
+};
+
 // A folder of .tf files is a Terraform module, so a root module and nested root modules are found
 // at any depth.
 export const terraform: LanguageDef = {
