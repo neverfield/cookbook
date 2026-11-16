@@ -15,12 +15,12 @@ import { php } from "../skill/agent-readiness/scripts/lib/languages/php.ts";
 import { ruby } from "../skill/agent-readiness/scripts/lib/languages/ruby.ts";
 import { chooseSites, targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
-import { RAN_OUT_BEFORE, banRepeats, budgetFloors, environmentLimit, instructionExecutor, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { RAN_OUT_BEFORE, banRepeats, budgetFloors, environmentLimit, instructionExecutor, newBudget, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { IDLE_MARK, IDLE_OFFLINE, compilerError, diagnose, failingTests, missingRef } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { extractFromMarkdown, instructionItems } from "../skill/agent-readiness/scripts/lib/static.ts";
 import { staticSignals } from "../skill/agent-readiness/scripts/lib/signals.ts";
-import { instructionKey, packageCommand } from "../skill/agent-readiness/scripts/lib/instructions.ts";
+import { instructionKey, packageCommand, replayInstructions } from "../skill/agent-readiness/scripts/lib/instructions.ts";
 import { existsExact } from "../skill/agent-readiness/scripts/lib/util.ts";
 import { scanText } from "../skill/agent-readiness/scripts/lib/redact.ts";
 import { jvm } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
@@ -868,6 +868,34 @@ describe("mcp-servers' instruction findings are explained on their merits", () =
       assert.equal(gone.exitCode, 0, `the orphan stayed a zombie: ${gone.output}`);
     } finally {
       s.remove();
+    }
+  });
+});
+
+describe("PHP, Ruby, JVM and .NET commands in the docs are instructions", () => {
+  test("they're extracted, and a version or a word after the tool's name stays prose", () => {
+    const md = "# Dev\n\n- `composer test`\n- `bundle exec rake test`\n- `bin/rails test test/models/cart_test.rb`\n- `vendor/bin/phpunit --filter Cart`\n- `php artisan test`\n- `ruby -Itest test/cart_test.rb`\n- `./mvnw test`\n- `gradle test`\n- `dotnet test`\n- `mvn -B verify`\n\nNeeds `ruby 3.3`, `php 8.2`, `gradle 8.5` and `dotnet 8.0`; see `ruby docs` too.\n";
+    assert.deepEqual(extractFromMarkdown(md).filter((e) => e.kind === "command").map((e) => e.text), ["composer test", "bundle exec rake test", "bin/rails test test/models/cart_test.rb", "vendor/bin/phpunit --filter Cart", "php artisan test", "ruby -Itest test/cart_test.rb", "./mvnw test", "gradle test", "dotnet test", "mvn -B verify"]);
+  });
+
+  test("a documented test command takes the test check's result instead of running again", async () => {
+    const cases: [string, string][] = [
+      ["bundle exec rake test", "bundle exec rake test"],
+      ["composer test", "composer run-script --timeout=0 test"],
+      ["./mvnw test", "./mvnw -B -q test"],
+      ["dotnet test", "dotnet test --nologo"],
+    ];
+    for (const [documented, contract] of cases) {
+      const dir = repo({ "package.json": '{"name":"app"}', mvnw: "#!/bin/sh\n", "AGENTS.md": `# App\n\n- Test: \`${documented}\`\n` });
+      const audit = makeAudit({ components: [] });
+      audit.instructions = instructionItems(dir, buildProfile(dir, dir, rubric)).filter((i) => i.kind === "command");
+      assert.equal(audit.instructions.length, 1, documented);
+      audit.contract = [{ id: "cmd-app-test", kind: "test", component: "app", cwd: ".", command: contract, source: "readiness", reason: "x", timeoutSec: 600 }];
+      audit.evidence = [{ id: "ev-001", at: audit.createdAt, checkId: "bootstrap.cold_replay", condition: "clean.test", component: "app", kind: "test", contractId: "cmd-app-test", strength: "clean_replay", where: "container", result: "pass", command: contract, summary: "test passed" }];
+      const ex = { ...({} as Executor), where: "container", exec: async () => assert.fail(`${documented} ran again`) } as unknown as Executor;
+      await replayInstructions(audit, ex, dir, newBudget(15, 60), [], null);
+      const item = audit.instructions[0];
+      assert.deepEqual([item.result, item.reason, item.evidenceId], ["pass", "it runs the same command as the test check, which passed", "ev-001"], documented);
     }
   });
 });
