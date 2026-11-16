@@ -1,0 +1,22 @@
+{
+  "purpose": "A Ruby library pinned to Ruby 3.4.12 by .ruby-version, whose Gemfile.lock locks exactly the rake and minitest the Ruby 3.4 image ships, so the frozen bundle install needs no RubyGems. The Rakefile's test task passes 10 of 10 tests, and the planted faults go in lib/loyalty/points.rb and lib/loyalty/tier.rb, named after their tests; none lands in the heredoc, the =begin block or the %w list. Nothing reaches the network, so the result is the same on every machine.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "ruby-bundler": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:ruby-bundler",
+      "noBlocker": true,
+      "safety": "pass",
+      "contract": {
+        "cmd-ruby-bundler-install": "BUNDLE_FROZEN=true bundle install",
+        "cmd-ruby-bundler-test": "bundle exec rake test"
+      }
+    }
+  ]
+}

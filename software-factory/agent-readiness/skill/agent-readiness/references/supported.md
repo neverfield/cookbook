@@ -22,6 +22,8 @@ A component outside the supported tier never sets the repo level. When it holds 
 | `poetry` | Poetry | `poetry.lock`, or `[tool.poetry]` in `pyproject.toml` | the audit adds the Poetry that wrote poetry.lock to its Python image, from PyPI, and installs into .venv | `fixtures/poetry-only`, `python-poetry/cleo@fd264ef` |
 | `bun` | Bun | `bun.lock`, `bun.lockb` or a `bun@` pin | the audit adds the pinned Bun to its Node image, from the npm registry | `fixtures/bun-lock`, `elysiajs/elysia@e037eca` |
 | `yarn-berry` | Yarn 2 or later | a `yarn@2` or later pin, `.yarnrc.yml`, or a Berry `yarn.lock` | Corepack runs the pinned Yarn, or Yarn hands over to the yarnPath release; the install is immutable | `fixtures/yarn-berry` |
+| `php` | PHP | `composer.json`, or `.php` files in a top-level folder | runs in the official Composer image whose PHP (8.5, 8.4 or 8.3) composer.json's require.php allows; extensions beyond that image's must be added by the repo's .cursor/environment.json | `fixtures/php-composer`, `symfony/demo@f42980c` |
+| `ruby` | Ruby | `Gemfile`, or `.rb` files in a top-level folder | runs in the official Ruby image (3.2 to 4.0) the repo's .ruby-version, .tool-versions or Gemfile names; Bundler switches to the version Gemfile.lock was bundled with | `fixtures/ruby-bundler`, `Shopify/packwerk@31e5342` |
 | `docker` | Docker | `docker info` | | `tests/fixtures.test.ts` |
 | `no-container` | No container runtime on Linux or macOS | no Docker or Podman answers, or the audit's container doesn't start | nothing runs outside a container without the user's yes: Level 1 is unproven on this machine, and the report says why | `fixtures/declared-image-missing-toolchain`, `fixtures/sudo-start`, `tests/safety.test.ts` |
 | `host-mode` | Host mode on Linux or macOS, with --allow-host | the user said yes to running the repo's commands outside a container | only on the user's yes; the repo's commands run in a copy with a throwaway home and no account credentials, but can read this user's local files, so Level 1 can't be proved there | `tests/safety.test.ts` |
@@ -51,8 +53,6 @@ A Python, PHP or Ruby app next to a root `package.json` is listed with its own s
 | `rust` | Rust | `Cargo.toml`, or `.rs` files in a top-level folder | | `BurntSushi/ripgrep@91f5d22` |
 | `jvm` | JVM | `pom.xml`, `build.gradle` or `build.gradle.kts`, or `.java`, `.kt` or `.scala` files | | `spring-projects/spring-petclinic@500158f` |
 | `dotnet` | .NET | `.sln`, `.csproj`, `.fsproj` or `.vbproj`, or `.cs` or `.fs` files | | `fixtures/nested-apps-dotnet`, `fixtures/standalone-nested-mixed`, `ShareX/ShareX@12d6342` |
-| `ruby` | Ruby | `Gemfile`, or `.rb` files in a top-level folder | | `spree/spree@cdd9a02` |
-| `php` | PHP | `composer.json`, or `.php` files in a top-level folder | | `laravel/laravel@def7ce1` |
 | `swift` | Swift | `Package.swift`, or `.swift` files in a top-level folder | | `fixtures/swift-package`, `apple/swift-argument-parser@38ca4ec` |
 | `dart` | Dart | `pubspec.yaml`; a workspace's root `pubspec.yaml` lists its packages instead | | `fixtures/dart-packages`, `dart-lang/http@8c0d66a` |
 | `terraform` | Terraform | a folder of `.tf` files at any depth, the root module included | | `fixtures/terraform-modules`, `fixtures/monorepo-mixed`, `terraform-aws-modules/terraform-aws-vpc@b3abd6d` |

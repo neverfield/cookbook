@@ -7,7 +7,7 @@ import { startArgs } from "../skill/agent-readiness/scripts/lib/container.ts";
 import { diagnose } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { buildProfile, discoverLayout } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { environmentLimit } from "../skill/agent-readiness/scripts/lib/replay.ts";
-import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
+import { latestRubricVersion, loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { inventory } from "../skill/agent-readiness/scripts/lib/assets.ts";
 import { instructionItems, notShipped, prodCredential, safetyScan } from "../skill/agent-readiness/scripts/lib/static.ts";
 import type { ContractCommand, Diagnosis } from "../skill/agent-readiness/scripts/lib/types.ts";
@@ -250,10 +250,17 @@ describe("real-repo gate fixes", () => {
     for (const f of ["integration-tests/a.ts", "packages/x/e2e-tests/b.ts", "src/test-utils/c.ts", "src/testing/d.ts", "lib/thing_spec.rb"]) assert.equal(notShipped(f), "test", f);
   });
 
-  test("Saleor and Laravel: the root package says it wasn't assessed and why, never that it has no tests", () => {
-    const files = { "package.json": "{\"scripts\":{\"build\":\"vite build\"}}", "composer.json": "{\"name\":\"laravel/laravel\"}", "app/User.php": "" };
+  test("Saleor: the root package says it wasn't assessed and why, never that it has no tests", () => {
+    const files = { "package.json": "{\"scripts\":{\"build\":\"vite build\"}}", "pyproject.toml": "[project]\nname = \"saleor\"\n", "saleor/app.py": "" };
     const [root] = layout(tree(files), files).components;
-    assert.equal(root.notAssessedReason, "it goes with the PHP app at the root, which isn't supported yet, so it isn't assessed on its own");
+    assert.equal(root.notAssessedReason, "it goes with the Python app at the root, which isn't supported yet, so it isn't assessed on its own");
     assert.doesNotMatch(root.notAssessedReason!, /no tests/);
+  });
+
+  test("Laravel: the root package is assessed on its own next to a scored PHP app", () => {
+    const files = { "package.json": "{\"scripts\":{\"build\":\"vite build\"}}", "composer.json": "{\"name\":\"laravel/laravel\"}", "app/User.php": "" };
+    const dir = tree(files);
+    const comps = buildProfile(dir, dir, loadRubric(latestRubricVersion())).components.map((c) => [c.id, c.language, c.assessed, c.notAssessedReason ?? null]);
+    assert.deepEqual(comps, [["root", "js", true, null], ["laravel", "php", true, null]]);
   });
 });
