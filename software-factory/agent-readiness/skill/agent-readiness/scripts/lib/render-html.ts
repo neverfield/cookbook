@@ -1,5 +1,5 @@
 import { describeRate } from "./outcomes.ts";
-import { EXPERIMENTAL_NOTE, groupedSteps, isExperimental, levelDefinition, markedLevel, nextMove, pageNumbers, shortReason, stepOf } from "./render.ts";
+import { EXPERIMENTAL_NOTE, changeMove, groupedSteps, nowLevelText, isExperimental, levelDefinition, markedLevel, nextMove, pageNumbers, shortReason, stepOf, waiverHint } from "./render.ts";
 import type { Level, ReportJson } from "./types.ts";
 import { fmtDate, fmtShortDate } from "./util.ts";
 
@@ -220,12 +220,8 @@ function evLinks(ids: string[]): string {
 
 // One line on what changed, for the top of the page; part 2 and the history carry the rest.
 function changeLine(r: ReportJson): string | null {
-  const ch = r.progress?.changes;
-  if (!ch) return null;
-  const since = fmtShortDate(ch.since.date);
-  const from = ch.repo.from;
-  const to = ch.repo.to;
-  const move = from === to ? `Unchanged since ${since}` : from !== null && to !== null && to > from ? `Up from Level ${from} since ${since}` : from !== null && to !== null ? `Down from Level ${from} since ${since}` : `Changed since ${since}`;
+  const move = changeMove(r);
+  if (!move) return null;
   const closed = r.progress!.closed.length;
   return `${move}${closed ? ` · ${closed} ${closed === 1 ? "step" : "steps"} closed` : ""}`;
 }
@@ -279,11 +275,12 @@ function improved(r: ReportJson): string {
   if (!r.progress) return `<section id="improved" class="small"><p class="muted" style="margin:0">This is the first audit, so there is nothing to compare yet. Rerun the audit after your first fix to see what changed here.</p></section>`;
   const out: string[] = [`<section id="improved"><h2>What changed</h2>`];
   const ch = r.progress.changes;
-  const dir = (from: Level | null, to: Level | null) => (from === to ? `<span class="none">no change</span>` : from !== null && to !== null && to > from ? `<span class="ok">up</span>` : from !== null && to !== null ? `<span class="bad">down</span>` : `<span class="none">changed</span>`);
+  const dir = (from: Level | null, to: Level | null) => (from === to ? `<span class="none">no change</span>` : from !== null && to !== null && to > from ? `<span class="ok">up</span>` : from !== null && to !== null ? `<span class="bad">down</span>` : `<span class="none">not compared</span>`);
   if (ch) {
+    const unprovenComp = new Set(r.components.included.filter((c) => c.unproven).map((c) => c.id));
     out.push(`<ul class="changes">`);
-    out.push(`<li><strong>Repo:</strong> ${esc(levelText(ch.repo.from))} to ${esc(levelText(ch.repo.to))}, ${dir(ch.repo.from, ch.repo.to)}, since ${esc(fmtDate(ch.since.date))}</li>`);
-    for (const c of ch.components) out.push(`<li><code>${esc(c.id)}</code>: ${esc(levelText(c.from))} to ${esc(levelText(c.to))}, ${dir(c.from, c.to)}</li>`);
+    out.push(`<li><strong>Repo:</strong> ${esc(levelText(ch.repo.from))} to ${esc(nowLevelText(ch.repo.to, r.maturity.unproven))}, ${dir(ch.repo.from, ch.repo.to)}, since ${esc(fmtDate(ch.since.date))}</li>`);
+    for (const c of ch.components) out.push(`<li><code>${esc(c.id)}</code>: ${esc(levelText(c.from))} to ${esc(nowLevelText(c.to, unprovenComp.has(c.id)))}, ${dir(c.from, c.to)}</li>`);
     for (const m of ch.nowMet) out.push(`<li><span class="ok">Now met:</span> <code>${esc(m.component)}</code> ${esc(m.label)}</li>`);
     for (const m of ch.nowFailing) out.push(`<li><span class="bad">Now failing:</span> <code>${esc(m.component)}</code> ${esc(m.label)} (${esc(m.reason)})</li>`);
     const word = (ok: boolean | null) => (ok === true ? "passed" : ok === false ? "failed" : "not proven");
@@ -310,6 +307,8 @@ function needle(r: ReportJson): string {
     out.push(`<p class="unlocks">${inline(a.movesTheNeedle)}</p><dl class="facts"><dt>Effort and owner</dt><dd>${inline(a.effortAndOwner)}</dd><dt>Why it matters</dt><dd>${inline(a.why)}</dd>`);
     if (a.decision) out.push(`<dt>Decision</dt><dd>${inline(a.decision)}.</dd>`);
     if (a.dependsOn.length) out.push(`<dt>Depends on</dt><dd>${inline(list(a.dependsOn))}</dd>`);
+    const hint = waiverHint(r, a.itemId);
+    if (hint) out.push(`<dt>False positives</dt><dd>${esc(hint)}</dd>`);
     if (a.evidence?.length) out.push(`<dt>Evidence</dt><dd>${evLinks(a.evidence)}</dd>`);
     out.push(`<dt>Done when</dt><dd>${inline(a.doneWhen)} <a href="#how-${anchor(a.itemId)}">How to do it</a></dd></dl></div></li>`);
   });

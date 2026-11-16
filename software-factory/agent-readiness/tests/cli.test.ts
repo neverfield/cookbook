@@ -158,7 +158,7 @@ describe("CLI", { concurrency: 4 }, () => {
     assert.match(report.executive.gaps[0].blocks, /^Can start now; blocks Level 2 for admin-web/);
     assert.equal(report.maturity.outcome, "blocked", "real results exist, and Level 1 still needs a clean container");
     // The .NET services have no test project, a gap no machine can unblock, so the repo is not bootable rather than unproven.
-    assert.equal(report.executive.heading, "Level 0 of 4, not bootable; Level 1 is blocked on this machine");
+    assert.equal(report.executive.heading, "Level 0 of 4, not bootable; Level 1 isn't met, and some of its checks were blocked on this machine");
     const included = report.components.included as { id: string; level: number; capReasons: { state: string; condition?: string }[] }[];
     assert.deepEqual(Object.fromEntries(included.map((c) => [c.id, c.level])), { "admin-web": 0, "buyer-web": 0, "commerce-core": 0, "identity-dev": 0 });
     for (const app of ["buyer-web", "admin-web"]) assert.ok(included.find((c) => c.id === app)!.capReasons.every((x) => x.state === "blocked"), `${app} is held back only by what this machine blocks`);

@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { before, describe, test } from "node:test";
 import { detectRuntime } from "../../skill/agent-readiness/scripts/lib/container.ts";
+import { headlineCauseErrors } from "../../skill/agent-readiness/scripts/lib/render.ts";
+import type { ReportJson } from "../../skill/agent-readiness/scripts/lib/types.ts";
 import { readiness, SKILL, SUPPORT } from "../tools/fixture.ts";
 
 // Real public repos pinned at the commits the Nov 14 reviews audited. Each run's observed summary must
@@ -24,6 +26,8 @@ interface Observed {
   notAssessed: string[];
   instructionFailures: string[];
   blockingSafety: string[];
+  // Compared only where a recording has it, so a recorded headline can't drift unnoticed.
+  headline?: string | null;
 }
 
 interface Target {
@@ -133,7 +137,14 @@ function observe(repo: string, code: number): Observed {
     notAssessed: (report?.components?.excluded ?? []).map((c: { id: string }) => c.id).sort(),
     instructionFailures: (audit?.instructions ?? []).filter((i: { result: string }) => i.result === "fail").map((i: { source: string; line: number }) => `${i.source}:${i.line}`),
     blockingSafety: (audit?.safety ?? []).filter((s: { blocking: boolean }) => s.blocking).map((s: { file: string; line?: number; kind: string }) => `${s.kind} ${s.file}${s.line ? `:${s.line}` : ""}`),
+    headline: report?.executive?.headline ?? null,
   };
+}
+
+// Every cause the headline names for a component must match that component's condition states.
+function headlineErrors(repo: string): string[] {
+  const file = join(repo, ".agent-readiness/latest/report.json");
+  return existsSync(file) ? headlineCauseErrors(JSON.parse(readFileSync(file, "utf8")) as ReportJson) : [];
 }
 
 // Every result short of a pass, with why, and each planted fault's outcome, so a level that differs
@@ -202,6 +213,7 @@ describe("pinned trial repos", { concurrency: 2 }, () => {
       const ff = falseFindings(t, o);
       const gaps = targetGaps(t, o);
       ctx.diagnostic(`observed (${key}${blocked.length ? `, blocked: ${blocked.join(", ")}` : ""}): ${JSON.stringify(o)}`);
+      ctx.diagnostic(`headline: ${o.headline}`);
       ctx.diagnostic(`false instruction findings: ${ff.length} (ceiling ${t.falseInstructionFindings})`);
       ctx.diagnostic(gaps.length ? `short of target: ${gaps.join("; ")}` : "meets target");
       if (!o.sealed) ctx.diagnostic(`not sealed, output ends: ${r.out.trim().split("\n").slice(-5).join(" | ")}`);
@@ -215,11 +227,14 @@ describe("pinned trial repos", { concurrency: 2 }, () => {
         return;
       }
       assert.ok(o.sealed || t.recorded[key]?.sealed === false, `the audit didn't seal (exit ${r.code}):\n${r.out.slice(-3000)}`);
+      const wrongCauses = headlineErrors(repo);
+      assert.deepEqual(wrongCauses, [], `${t.id}'s headline names a cause its own conditions contradict: ${o.headline}`);
       assert.ok(ff.length <= t.falseInstructionFindings, `${ff.length} false instruction findings, above the recorded ${t.falseInstructionFindings}: ${ff.join(", ")}`);
       const want = t.recorded[key];
       assert.ok(want, `no result recorded for the "${key}" network; run with SA_TRIALS_RECORD=1 and commit trials.json`);
-      const { instructionFailures: _a, ...got } = o;
-      const { instructionFailures: _b, ...exp } = want;
+      const { instructionFailures: _a, headline: gotHeadline, ...got } = o;
+      const { instructionFailures: _b, headline: wantHeadline, ...exp } = want;
+      if (wantHeadline !== undefined) assert.equal(gotHeadline, wantHeadline, `${t.id}'s headline changed from its recorded one; if that is intended, re-record it and say why in the PR`);
       assert.deepEqual(got, exp, `${t.id} changed from its recorded result; if that is intended, re-record it and say why in the PR`);
       if (TARGET) assert.deepEqual(gaps, [], `${t.id} is short of its target`);
     });
