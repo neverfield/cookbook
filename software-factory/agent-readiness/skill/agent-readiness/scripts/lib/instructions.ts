@@ -50,6 +50,12 @@ function testRunKey(cmd: string): string | null {
   if (tool === "phpunit") return `phpunit:${positional(1)}`;
   if (tool === "rspec") return `rspec:${positional(1)}`;
   if (tool === "rake" && words[1] === "test") return "rake:test";
+  // `composer test`, `composer run test` and `composer run-script --timeout=0 test` run one script.
+  if (tool === "composer") {
+    const rest = words.slice(1).filter((w) => !w.startsWith("-"));
+    const script = rest[0] === "run" || rest[0] === "run-script" ? rest[1] : rest[0];
+    if (script && !["install", "update", "require", "remove", "dump-autoload", "validate", "create-project"].includes(script)) return `composer-script:${script}`;
+  }
   return null;
 }
 
