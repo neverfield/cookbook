@@ -1,0 +1,38 @@
+{
+  "commits": [
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 40,
+      "paths": [
+        "backend/notes/n1.md",
+        "backend/notes/n2.md",
+        "backend/notes/n3.md",
+        "backend/notes/n4.md",
+        "backend/notes/n5.md"
+      ],
+      "message": "Update backend"
+    },
+    {
+      "author": "Contributor B",
+      "email": "b@example.com",
+      "daysAgo": 30,
+      "paths": [
+        "ios/notes/n1.md",
+        "ios/notes/n2.md",
+        "ios/notes/n3.md",
+        "ios/notes/n4.md"
+      ],
+      "message": "Update the iOS app"
+    },
+    {
+      "author": "Contributor C",
+      "email": "c@example.com",
+      "daysAgo": 10,
+      "paths": [
+        "backend/src/Billing.Admin/notes/n1.md"
+      ],
+      "message": "Update the admin tool"
+    }
+  ]
+}

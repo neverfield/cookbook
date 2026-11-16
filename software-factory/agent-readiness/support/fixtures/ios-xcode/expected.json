@@ -1,0 +1,36 @@
+{
+  "purpose": "An iOS app at the repo root: an Xcode project and workspace, CocoaPods with a committed Podfile.lock and vendored Pods/, and a Swift package pinned in the project's Package.resolved. It is one component named after the project, listed as needing macOS with Xcode and blocked on this machine, with what its files say about its lockfiles and Xcode version, and no level. Pods/ and the PantryTests/ target folder are part of it, not components of their own, and nothing runs.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 0,
+      "levels": {},
+      "top": [],
+      "startNow": null,
+      "noBlocker": false,
+      "safety": "pass",
+      "outcome": "not_assessed",
+      "notAssessed": [
+        "Pantry"
+      ],
+      "shares": {
+        "Pantry": 1
+      },
+      "unassessed": {
+        "share": 1,
+        "supportLink": true
+      },
+      "neverRan": [
+        "xcodebuild",
+        "swift build",
+        "swift test",
+        "pod install"
+      ],
+      "absent": [
+        "has no tests",
+        "build fails",
+        "isn't bootable"
+      ]
+    }
+  ]
+}

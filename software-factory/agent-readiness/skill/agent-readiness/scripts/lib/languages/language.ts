@@ -45,8 +45,15 @@ export interface Detect {
   // The name a root-level project gives itself, read from its manifest (a path relative to the tree).
   projectName?(tree: string, manifest: string, text: string, repoName: string): string | undefined;
   // A different stack of this language for one manifest, such as Android for a Gradle build that
-  // applies the Android plugin.
-  refine?(manifest: string, text: string): string | undefined;
+  // applies the Android plugin, or Windows-only .NET for a solution whose every project needs Windows.
+  refine?(manifest: string, text: string, tree?: string): string | undefined;
+  // Folders inside a found project that are listed as components of their own in another stack of
+  // this language (tree-relative), such as a Windows-only project in a solution that otherwise
+  // builds on Linux.
+  parts?(tree: string, dir: string): { path: string; manifest: string; stack: string }[];
+  // Facts read from the files of a component in a stack that isn't scored, such as which lockfiles
+  // it commits, so the report says what was checked without running anything.
+  notes?(tree: string, dir: string, stack: string): string[];
   // A manifest that only lists other projects, such as a Dart workspace's root pubspec.yaml.
   workspaceOnly?(manifest: string, text: string): boolean;
 }

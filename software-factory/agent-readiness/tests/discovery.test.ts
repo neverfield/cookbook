@@ -133,3 +133,37 @@ describe("a file cap on a large tree", () => {
     assert.deepEqual(capCutFolders({ profile: { ...audit.profile, scope: { ...audit.profile.scope!, fileCap: null } } }), []);
   });
 });
+
+describe("native mobile apps and Xcode projects", () => {
+  const xcode = (dir: string) => ({
+    [`${dir}Pantry.xcodeproj/project.pbxproj`]: "// !$*UTF8*$!\n{ objects = { }; }\n",
+    [`${dir}Pantry.xcodeproj/project.xcworkspace/contents.xcworkspacedata`]: "<Workspace/>\n",
+    [`${dir}Pantry/AppDelegate.swift`]: "import UIKit\n",
+    [`${dir}PantryTests/PantryTests.swift`]: "import XCTest\n",
+    [`${dir}Pods/Alamofire/Source/AF.swift`]: "public enum AF {}\n",
+    [`${dir}Podfile`]: "pod 'Alamofire'\n",
+  });
+
+  test("an Xcode project at the root is one component named after it, with its target folders and Pods/ inside it", () => {
+    const { components } = layout(tree(xcode("")));
+    assert.deepEqual(components.map((c) => [c.id, c.path, c.stack, c.manifest]), [["Pantry", ".", "xcode", "Pantry.xcodeproj/project.pbxproj"]]);
+    assert.match(components[0].notAssessedReason!, /it needs macOS with Xcode.*blocked on this machine rather than broken\. Read from its files without running anything: it has a Podfile and no committed Podfile\.lock; no \.xcode-version pins the Xcode version$/);
+  });
+
+  test("a Gemfile next to an Xcode project is its fastlane or CocoaPods tooling, not the component (kickstarter/ios-oss@2090757)", () => {
+    const { components } = layout(tree({ ...xcode(""), Gemfile: "source 'https://rubygems.org'\ngem 'fastlane'\n", "Gemfile.lock": "GEM\n", "Library/Format.swift": "struct Format {}\n" }));
+    assert.deepEqual(components.map((c) => [c.id, c.stack]), [["Pantry", "xcode"]]);
+  });
+
+  test("a native ios/ app next to a backend is a component; under a React Native or Flutter project it stays the shell", () => {
+    const native = layout(tree({ ...xcode("ios/"), "backend/go.mod": "module backend\n\ngo 1.22\n", "backend/main.go": "package main\n" }));
+    assert.deepEqual(native.components.map((c) => [c.id, c.stack]).sort(), [["backend", "go"], ["ios", "xcode"]]);
+    assert.deepEqual(native.satellites, []);
+    const roots: Record<string, string>[] = [{ "package.json": JSON.stringify({ name: "app", dependencies: { "react-native": "0.76.0" } }), "package-lock.json": "{}" }, { "pubspec.yaml": "name: app\n" }];
+    for (const root of roots) {
+      const shell = layout(tree({ ...xcode("ios/"), ...root }));
+      assert.ok(!shell.components.some((c) => c.stack === "xcode"), "no Xcode component");
+      assert.deepEqual(shell.satellites.map((s) => s.path), ["ios"]);
+    }
+  });
+});

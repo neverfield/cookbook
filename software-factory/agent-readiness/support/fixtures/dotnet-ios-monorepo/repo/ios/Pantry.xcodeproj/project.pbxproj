@@ -1,0 +1,23 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+		A1000001 /* PantryList.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001 /* PantryList.swift */; };
+		A2000001 /* PantryList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PantryList.swift; sourceTree = "<group>"; };
+		A2000002 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		A3000001 /* Pantry */ = {isa = PBXNativeTarget; name = Pantry; productType = "com.apple.product-type.application"; };
+		A3000002 /* PantryTests */ = {isa = PBXNativeTarget; name = PantryTests; productType = "com.apple.product-type.bundle.unit-test"; };
+		A4000001 /* XCRemoteSwiftPackageReference "swift-collections" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-collections";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.0;
+			};
+		};
+	};
+	rootObject = A5000001 /* Project object */;
+}

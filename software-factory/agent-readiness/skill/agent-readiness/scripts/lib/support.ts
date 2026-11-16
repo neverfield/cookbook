@@ -49,7 +49,7 @@ export function supported(id: string): boolean {
 // or a component's name.
 export function notSupportedReason(id: string): string {
   const s = stack(id);
-  return `${s.label.replace(/^A /, "a ")} isn't supported yet${s.reason ? `: ${s.reason}` : ""}`;
+  return `${s.label.replace(/^An? /, (a) => a.toLowerCase())} isn't supported yet${s.reason ? `: ${s.reason}` : ""}`;
 }
 
 export const NOT_SUPPORTED = / isn't supported yet\b/;

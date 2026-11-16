@@ -1,0 +1,41 @@
+{
+  "purpose": "The customer stack: a .NET 8 billing backend in backend/ whose solution also holds a Windows Forms admin tool (net8.0-windows), next to a native iOS app in ios/ (Xcode, CocoaPods, Swift packages). The backend is assessed in the .NET 8 SDK image with its restore, build and test aimed at the test project, so the admin tool never runs and can't fail it; it reaches Level 2 like dotnet-xunit. The admin tool is its own component with its own share, listed as needing Windows, and ios/ is a component listed as needing macOS with Xcode, never a mobile platform shell, since no React Native or Flutter project holds it.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "backend": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:backend",
+      "noBlocker": true,
+      "safety": "pass",
+      "outcome": "proven",
+      "notAssessed": [
+        "Billing.Admin",
+        "ios"
+      ],
+      "shares": {
+        "backend": 0.5,
+        "Billing.Admin": 0.1,
+        "ios": 0.4
+      },
+      "contract": {
+        "cmd-backend-install": "dotnet restore tests/Billing.Tests/Billing.Tests.csproj --locked-mode",
+        "cmd-backend-build": "dotnet build tests/Billing.Tests/Billing.Tests.csproj --no-restore",
+        "cmd-backend-test": "dotnet test tests/Billing.Tests/Billing.Tests.csproj --no-restore"
+      },
+      "neverRan": [
+        "Billing.Admin",
+        "Billing.sln",
+        "xcodebuild"
+      ],
+      "absent": [
+        "mobile platform shell"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+platform :ios, '16.0'
+
+target 'Pantry' do
+  use_frameworks!
+  pod 'Alamofire', '5.9.1'
+
+  target 'PantryTests' do
+    inherit! :search_paths
+  end
+end
