@@ -1,5 +1,7 @@
 # What the audit supports
 
+> Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.
+
 A running list of the stacks and machines the audit has been checked on, and of what the scripts do with tools and files they recognize. The checks themselves are described in [checks.md](checks.md). Every entry sits in one tier and names the fixture (under `support/fixtures/` in the accelerator) or the pinned public repo that shows how the audit behaves on it. `scripts/lib/support.ts` holds the same list, and a test fails when the two drift apart.
 
 - **Supported:** the audit installs, builds and tests it, and gives a level.

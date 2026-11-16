@@ -1,5 +1,7 @@
 # Agent Readiness
 
+> Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.
+
 A Cursor skill that finds what would stop a coding agent in a repository, and helps fix the two things that matter most: a working environment and a way to verify changes.
 
 ![The top of a sample report in light mode: the repo level, the next move, three numbers and each component's level](docs/sample-report.png)

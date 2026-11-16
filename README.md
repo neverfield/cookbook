@@ -24,6 +24,8 @@ Tools and templates for preparing repos and teams to ship work with coding agent
 
 A copyable Cursor skill that audits a repository for what would stop a coding agent: it runs install, build and test in a clean container, plants faults the tests should catch, and seals a leveled report. It needs Node 22.14 or later. Create the repo's skills folder with `mkdir -p .cursor/skills`, then copy [`skill/agent-readiness`](software-factory/agent-readiness/skill/agent-readiness) into it; see the [quickstart](software-factory/agent-readiness/README.md#quickstart).
 
+> Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.
+
 ## Cursor SDK
 
 The Cursor SDK is the TypeScript API for running Cursor's coding agent from your own apps, scripts, and workflows. It supports the same agent across local workspaces and cloud runtimes, streams agent events as runs progress, and lets you manage prompts, models, cancellation, artifacts, and conversation state from code.

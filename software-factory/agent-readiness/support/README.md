@@ -1,5 +1,7 @@
 # Maintainer support
 
+> Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.
+
 This folder is for people who change the agent-readiness skill and need to validate those changes. End users only need the skill under `../skill/agent-readiness/` and the example reports under `../examples/`.
 
 | Path | Purpose |

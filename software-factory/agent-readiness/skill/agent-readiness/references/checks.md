@@ -1,5 +1,7 @@
 # The checks (rubric 2026-11-beta)
 
+> Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.
+
 Six checks, plus an informational inventory of agent assets. The checks are the same under 2026-10-alpha; 2026-11-alpha changed Levels 3 and 4, the repo rollup and the action matrix, which [levels.md](levels.md) describes, and 2026-11-beta changed how planted faults are chosen and how many must be caught, and assesses up to 10 components instead of 6. What the audit supports, stack by stack, is in [supported.md](supported.md). Each check lists what it runs, when it passes, the evidence strength it needs, why it matters, and the usual fixes.
 
 Evidence strength, weakest to strongest: stated in docs (`asserted`), read from files (`static`), ran on host (`executed`), ran in a clean container (`clean_replay`), confirmed by outcomes (`outcome_validated`). A check passes only at its required strength. A pass below it reads "not proven", never "passed".

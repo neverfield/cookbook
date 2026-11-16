@@ -3,6 +3,7 @@ import { describeRate, rate, windowLabel } from "./outcomes.ts";
 import { watchFor } from "./roadmap.ts";
 import type { Rubric } from "./rubric.ts";
 import type { CompStates } from "./score.ts";
+import { PREVIEW } from "./preview.ts";
 import { sampledScope } from "./scope.ts";
 import { blockedBy, checkCounts } from "./score.ts";
 import type { ComponentResult } from "./seal.ts";
@@ -776,6 +777,7 @@ export function buildReport(input: RenderInput): ReportJson {
   const report: ReportJson = {
     schema: "agent-readiness/report@1",
     repo: audit.repo.name,
+    ...(PREVIEW ? { preview: PREVIEW } : {}),
     audit: {
       id: audit.id,
       date: audit.createdAt.slice(0, 10),
@@ -1426,6 +1428,7 @@ export function renderMarkdown(r: ReportJson, rubric: Rubric): string {
   const conf = r.maturity.confidence;
   const noResults = r.maturity.outcome === "not_assessed";
   out.push(`# Agent readiness: ${r.repo}`, "");
+  if (r.preview) out.push(`> ${r.preview}`, "");
   for (const n of r.notices ?? []) out.push(`> **Action needed:** ${n.text}`, "");
 
   // Page 1: where the repo stands, what changed and what to do next. Measures, methodology and
