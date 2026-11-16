@@ -112,8 +112,9 @@ describe("JVM: the contract", () => {
 
   test("the Gradle install downloads every configuration's files, since `gradle dependencies` downloads no jar", () => {
     const plan = ecosystemOf("gradle")!.install(repo({ "build.gradle.kts": "", gradlew: "" }), ".", { ignoreScripts: false });
-    assert.match(plan.command, /artifactView \{ lenient\(true\) \}\.files\.files/);
-    assert.match(plan.command, /&& JAVA_TOOL_OPTIONS="-Duser\.home=\$HOME" \.\/gradlew --no-daemon -q -I "\$HOME\/readiness-resolve\.gradle" help$/);
+    assert.match(plan.command, /a\.artifactFiles\.files \} catch \(e\) \{ return \}; a\.failures\.findAll/);
+    assert.match(plan.command, /if \(bad\) throw bad\[0\]/, "a dependency that can't be resolved fails the install, unlike gradle dependencies");
+    assert.match(plan.command, /&& JAVA_TOOL_OPTIONS="-Duser\.home=\$HOME" \.\/gradlew --no-daemon -I "\$HOME\/readiness-resolve\.gradle" help$/, "no -q, so Gradle's Could not GET line reaches the diagnosis");
     assert.equal(plan.frozen, true);
   });
 

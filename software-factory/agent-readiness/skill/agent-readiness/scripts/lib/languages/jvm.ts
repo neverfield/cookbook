@@ -56,20 +56,23 @@ function gradleDynamic(tree: string, path: string): number {
   return filesNamed(tree, path, /^(build\.gradle(\.kts)?|libs\.versions\.toml)$/).reduce((n, f) => n + [...readText(join(tree, path, f)).matchAll(GRADLE_DYNAMIC)].length, 0);
 }
 
-// `gradle dependencies` resolves the dependency graph without downloading a jar, so the offline test
-// run would find nothing cached. This init script downloads every resolvable configuration's files.
-const RESOLVE_ALL = "gradle.projectsEvaluated { g -> g.rootProject.allprojects { p -> p.configurations.matching { it.canBeResolved }.each { c -> try { c.incoming.artifactView { lenient(true) }.files.files } catch (e) { } } } }";
+// `gradle dependencies` resolves the dependency graph without downloading a jar, and exits 0 when a
+// dependency can't be resolved, so the offline test run would find nothing cached. This init script
+// downloads every resolvable configuration's files and fails on the first dependency it couldn't
+// resolve, so a blocked registry's "Could not GET" reaches the diagnosis. A configuration no variant
+// matches is a build's own choice, not a missing dependency, and is left alone.
+const RESOLVE_ALL = "gradle.projectsEvaluated { g -> def bad = []; g.rootProject.allprojects { p -> p.configurations.matching { it.canBeResolved }.each { c -> def a; try { a = c.incoming.artifactView { lenient(true) }.artifacts; a.artifactFiles.files } catch (e) { return }; a.failures.findAll { f -> !(f.message =~ /Cannot choose between|No matching variant|No variants of/) }.each { bad << it } } }; if (bad) throw bad[0] }";
 const RESOLVE_SCRIPT = '"$HOME/readiness-resolve.gradle"';
 
 const gradle: Ecosystem = {
   id: "gradle",
   label: "Gradle",
   lockfiles: ["gradle.lockfile"],
-  rule: "every resolvable configuration's dependencies downloaded through the committed Gradle Wrapper, with dependency locking (`gradle.lockfile`) committed, or with no dynamic versions (`1.+`, `latest.release`, ranges) in the build",
+  rule: "every resolvable configuration's dependencies downloaded through the committed Gradle Wrapper, failing on any it can't resolve, with dependency locking (`gradle.lockfile`) committed, or with no dynamic versions (`1.+`, `latest.release`, ranges) in the build",
   install: (tree, path) => {
     const fixed = gradleLocked(tree, path) || gradleDynamic(tree, path) === 0;
     return {
-      command: `printf '%s\\n' '${RESOLVE_ALL}' > ${RESOLVE_SCRIPT} && ${gradleOf(tree, path)} --no-daemon -q -I ${RESOLVE_SCRIPT} help`,
+      command: `printf '%s\\n' '${RESOLVE_ALL}' > ${RESOLVE_SCRIPT} && ${gradleOf(tree, path)} --no-daemon -I ${RESOLVE_SCRIPT} help`,
       reason: fixed ? "downloads the versions the build fixes or locks, for every configuration" : "the build uses dynamic versions and commits no gradle.lockfile, so the install can't be frozen",
       frozen: fixed,
     };
