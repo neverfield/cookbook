@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import { discoverContract, imagePlan } from "../skill/agent-readiness/scripts/lib/contract.ts";
+import { diagnose } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { IMAGE_SDK, SDKS, dotnet, dotnetTestCounts, sdkFor, sdkSatisfies } from "../skill/agent-readiness/scripts/lib/languages/dotnet.ts";
 import { ecosystemOf } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
 import { targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
+import { environmentLimit } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric, latestRubricVersion } from "../skill/agent-readiness/scripts/lib/rubric.ts";
+import type { ContractCommand } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { FIXTURES } from "../support/tools/fixture.ts";
 
 const rubric = loadRubric(latestRubricVersion());
@@ -63,6 +66,42 @@ describe(".NET: an SDK global.json pins that the image doesn't ship", () => {
     assert.match(t.install, /dotnet-install\.sh --version 10\.0\.100 --install-dir \/usr\/share\/dotnet --no-path/);
     assert.deepEqual(hooks.setup!(join(FIXTURES, "dotnet-xunit", "repo"), "."), [], "8.0.100 with latestFeature runs on the image's 8.0.428");
     assert.deepEqual(hooks.setup!(repo({ "A.csproj": proj("net8.0") }), "."), [], "nothing pinned, nothing added");
+  });
+});
+
+describe(".NET: a NativeAOT project needs the platform's C toolchain", () => {
+  // serilog/serilog@43105b3's test/AotTestApp: PublishAot, published on every build.
+  const AOT_APP = '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><PublishAot>true</PublishAot></PropertyGroup><Target Name="PublishOnBuild" AfterTargets="Build" DependsOnTargets="Publish" /></Project>';
+  const cmd = (kind: ContractCommand["kind"]): ContractCommand => ({ id: `cmd-Serilog-${kind}`, kind, component: "Serilog", cwd: ".", command: "dotnet build", source: "readiness", reason: "x", timeoutSec: 1200 });
+  const auditImage = { where: "container" as const, image: "mcr.microsoft.com/dotnet/sdk:10.0", imageSource: "audit" as const };
+
+  test("the setup adds the older runtimes the tests target, and clang and zlib1g-dev (Microsoft's Linux prerequisites) only when a project publishes with NativeAOT", () => {
+    const tests = `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFrameworks Condition=" '$(OS)' == 'Windows_NT'">net48;net462</TargetFrameworks><TargetFrameworks>$(TargetFrameworks);net10.0;net9.0;net8.0</TargetFrameworks></PropertyGroup><ItemGroup>${XUNIT}</ItemGroup></Project>`;
+    const serilogLike = repo({ "Serilog.sln": "", "global.json": '{"sdk":{"version":"10.0.100","rollForward":"latestFeature"}}', "src/Serilog/Serilog.csproj": proj("net10.0"), "test/Serilog.Tests/Serilog.Tests.csproj": tests, "test/AotTestApp/AotTestApp.csproj": AOT_APP });
+    const setup = hooks.setup!(serilogLike, ".");
+    assert.deepEqual(setup.map((t) => [t.tool, t.spec]), [
+      ["dotnet-runtime-8.0", ".NET 8.0 runtime"],
+      ["dotnet-runtime-9.0", ".NET 9.0 runtime"],
+      ["clang", "clang and zlib1g-dev (for NativeAOT)"],
+    ], "10.0.100 with latestFeature runs on the image's 10.0.404; the tests also run on net8.0 and net9.0, and the Windows-only net48 is left out");
+    assert.match(setup[0].install, /dotnet-install\.sh --runtime dotnet --channel 8\.0 --install-dir \/usr\/share\/dotnet --no-path/);
+    assert.match(setup[2].install, /apt-get install -y -qq --no-install-recommends clang zlib1g-dev/);
+    assert.deepEqual(hooks.setup!(repo({ "A.csproj": proj("net10.0") }), "."), []);
+  });
+
+  test("a missing native linker is a missing tool, blocked in the audit's image and the repo's to fix in its own", () => {
+    // The build lines of serilog@43105b3 in the pinned sdk:10.0 image without a linker (GitHub runner).
+    const real = readFileSync(join(dirname(new URL(import.meta.url).pathname), "tool-outputs", "dotnet-nativeaot-no-linker.txt"), "utf8");
+    const want = { cause: "missing_tool", detail: "clang or gcc, the native linker NativeAOT needs, is not installed" };
+    for (const kind of ["build", "test"] as const) {
+      const d = diagnose(real, false, kind);
+      assert.deepEqual(d, want, `${kind}: the test run builds the AOT project too, so it fails the same way after its tests pass`);
+      assert.equal(environmentLimit(auditImage, cmd(kind), d, []), "clang or gcc, the native linker NativeAOT needs, is not installed in the audit's image (mcr.microsoft.com/dotnet/sdk:10.0)");
+      assert.equal(environmentLimit({ ...auditImage, imageSource: "repo" }, cmd(kind), d, []), undefined);
+    }
+    const line = "/usr/share/dotnet/sdk/10.0.404/Sdks/Microsoft.DotNet.ILCompiler/build/Microsoft.NETCore.Native.Unix.targets(316,5): error : Platform linker ('clang' or 'gcc') not found in PATH. Ensure you have all the required prerequisites documented at https://aka.ms/nativeaot-prerequisites. [/work/test/AotTestApp/AotTestApp.csproj]";
+    assert.deepEqual(diagnose(line, false, "build"), want, "the line the Mac's serilog golden run printed");
+    assert.equal(diagnose("Microsoft.NETCore.Native.Unix.targets(400,5): error : Symbol stripping tool ('objcopy' or 'llvm-objcopy') not found in PATH.", false, "build").detail, "objcopy, which NativeAOT strips symbols with, is not installed");
   });
 });
 

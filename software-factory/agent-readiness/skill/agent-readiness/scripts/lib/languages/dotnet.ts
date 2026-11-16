@@ -3,7 +3,7 @@ import { basename, dirname, join } from "node:path";
 import { exists, listFiles, readText } from "../util.ts";
 import { namedAfter } from "./coverage.ts";
 import { cLikeQuoted, cLikeSites } from "./jvm.ts";
-import type { DraftCommand, Ecosystem, LanguageDef } from "./language.ts";
+import type { DraftCommand, Ecosystem, LanguageDef, ToolSetup } from "./language.ts";
 
 // Owned by the Java, Kotlin and .NET group. C# projects built with the .NET SDK are scored.
 
@@ -157,6 +157,20 @@ const isSource = (f: string) => /\.cs$/.test(f) && !isTest(f) && !OUTPUT.test(f)
 // A folder without one has no tests to run, as a Node package without a test script has none.
 const TEST_PROJECT = /<IsTestProject>\s*true|Include="(Microsoft\.NET\.Test\.Sdk|xunit(\.v3)?|NUnit|MSTest(\.TestFramework|\.Sdk)?|TUnit|Microsoft\.Testing\.Platform)"|Sdk="MSTest\.Sdk/i;
 
+// The .NET majors the test projects run on, from target frameworks with no Condition, so a
+// Windows-only net48 is left out.
+export function testRuntimes(tree: string, path: string): number[] {
+  const majors = new Set<number>();
+  for (const f of testProjects(tree, path)) {
+    for (const m of readText(join(tree, path, f)).matchAll(/<TargetFrameworks?>([^<]+)</g)) for (const t of m[1].matchAll(/\bnet(\d+)\.\d/g)) majors.add(Number(t[1]));
+  }
+  return [...majors].sort((a, b) => a - b);
+}
+
+export function aotProjects(tree: string, path: string): string[] {
+  return listFiles(join(tree, path)).filter((f) => PROJECT.test(f) && !OUTPUT.test(f) && /<PublishAot>\s*true\s*</i.test(readText(join(tree, path, f))));
+}
+
 function testProjects(tree: string, path: string): string[] {
   return listFiles(join(tree, path)).filter((f) => PROJECT.test(f) && !OUTPUT.test(f) && TEST_PROJECT.test(readText(join(tree, path, f))));
 }
@@ -211,11 +225,28 @@ export const dotnet: LanguageDef = {
     // default `patch` policy next to the image's 10.0.404, gets that exact SDK added from Microsoft's
     // install script, as a CI's setup-dotnet would. Where that can't be fetched the install is blocked.
     setup: (tree, dir) => {
+      const out: ToolSetup[] = [];
       const pin = sdkPin(tree, dir);
-      if (!pin || !parse(pin.version)) return [];
-      if (sdkSatisfies(IMAGE_SDK[sdkFor(tree, dir)], pin.version, pin.rollForward)) return [];
-      const v = pin.version;
-      return [{ tool: `dotnet-sdk-${v}`, spec: `dotnet-sdk@${v}`, install: `curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && bash /tmp/dotnet-install.sh --version ${v} --install-dir /usr/share/dotnet --no-path && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet-sdk-${v}` }];
+      if (pin && parse(pin.version) && !sdkSatisfies(IMAGE_SDK[sdkFor(tree, dir)], pin.version, pin.rollForward)) {
+        const v = pin.version;
+        out.push({ tool: `dotnet-sdk-${v}`, spec: `dotnet-sdk@${v}`, install: `curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && bash /tmp/dotnet-install.sh --version ${v} --install-dir /usr/share/dotnet --no-path && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet-sdk-${v}` });
+      }
+      // A test project that also targets an older .NET, such as net8.0 next to net10.0, needs that
+      // runtime to run its tests; the SDK image ships only its own.
+      const sdk = sdkFor(tree, dir);
+      const aspnet = listFiles(join(tree, dir)).some((f) => PROJECT.test(f) && !OUTPUT.test(f) && /Microsoft\.NET\.Sdk\.Web|FrameworkReference Include="Microsoft\.AspNetCore\.App"/.test(readText(join(tree, dir, f))));
+      for (const major of testRuntimes(tree, dir).filter((m) => m < sdk)) {
+        const runtimes = aspnet ? ["dotnet", "aspnetcore"] : ["dotnet"];
+        out.push({
+          tool: `dotnet-runtime-${major}.0`,
+          spec: `.NET ${major}.0 runtime${aspnet ? " and ASP.NET Core runtime" : ""}`,
+          install: `curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && ${runtimes.map((r) => `bash /tmp/dotnet-install.sh --runtime ${r} --channel ${major}.0 --install-dir /usr/share/dotnet --no-path`).join(" && ")} && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet-runtime-${major}.0`,
+        });
+      }
+      // A NativeAOT project links with the platform's C toolchain, which the SDK image doesn't ship;
+      // Microsoft's Linux prerequisites are clang and zlib1g-dev.
+      if (aotProjects(tree, dir).length) out.push({ tool: "clang", spec: "clang and zlib1g-dev (for NativeAOT)", install: "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends clang zlib1g-dev >/dev/null" });
+      return out;
     },
     testCounts: dotnetTestCounts,
     budget: { commandTimeoutSec: 1200, componentMinutes: 45, mutationRunTimeoutSec: 900 },
