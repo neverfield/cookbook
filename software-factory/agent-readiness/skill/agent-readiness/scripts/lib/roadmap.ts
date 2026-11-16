@@ -3,7 +3,7 @@ import { describeRate, rate, windowLabel } from "./outcomes.ts";
 import type { Rubric, RubricTemplate } from "./rubric.ts";
 import type { CompStates } from "./score.ts";
 import { commandsFor } from "./score.ts";
-import type { Audit, CondId, CondState, Component, Effort, Fix, Level, OutcomeStats, OutcomesSnapshot, Roadmap, RoadmapItem, Watch } from "./types.ts";
+import type { Audit, CondId, CondState, Component, Effort, Fix, Level, OutcomeStats, OutcomesSnapshot, Roadmap, RoadmapItem, SafetyFinding, Watch } from "./types.ts";
 import { fill, nowIso } from "./util.ts";
 import { serviceLabel } from "./diagnose.ts";
 
@@ -48,6 +48,17 @@ function stateMaps(ctx: RoadmapContext): Map<string, StateMap> {
 // longer finds has nothing left to fix.
 function fixesMet(item: RoadmapItem, real: Map<string, StateMap>): boolean {
   return item.fixes.every((f) => (f.component === "*" ? [...real.keys()] : [f.component]).every((id) => !real.has(id) || real.get(id)![f.condition] === "met"));
+}
+
+// The safety items all fix the one repo-wide safety condition, so each is also done once the safety
+// check ran and no blocking finding of its own kinds is left, while another kind keeps safety unmet.
+const SAFETY_KINDS: Record<string, SafetyFinding["kind"][]> = { "safety:secret": ["secret"], "safety:hook": ["network_piped"], "safety:credential": ["credential_needed"] };
+
+function ownSafetyFixed(item: RoadmapItem, audit: Audit, real: Map<string, StateMap>): boolean {
+  const kinds = SAFETY_KINDS[item.template];
+  if (!kinds || real.size === 0) return false;
+  const measured = [...real.values()].every((m) => m.safety === "met" || m.safety === "not_met");
+  return measured && !audit.safety.some((s) => s.blocking && kinds.includes(s.kind));
 }
 
 function standardLevels(rubric: Rubric, maps: Map<string, StateMap>): Map<string, Level> {
@@ -324,7 +335,7 @@ export function updateRoadmap(prev: Roadmap | null, ctx: RoadmapContext): Roadma
     if (currentIds.has(item.id) || ctx.decisionsOnly) continue;
     // A step is done only when this audit shows every condition it fixes met; a condition left
     // unknown or blocked, by --no-mutants, a cut-off budget or a machine without Docker, keeps it open.
-    if (item.kind === "fix" && item.status !== "done" && fixesMet(item, real)) {
+    if (item.kind === "fix" && item.status !== "done" && (fixesMet(item, real) || ownSafetyFixed(item, audit, real))) {
       item.status = "done";
       item.closedAt = date;
       item.closedBy = audit.id;

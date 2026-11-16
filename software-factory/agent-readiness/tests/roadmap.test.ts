@@ -102,6 +102,30 @@ describe("roadmap", () => {
     assert.deepEqual(second.top.map((t) => t.id), ["faults:worker"]);
   });
 
+  test("a fixed safety item closes while another safety finding keeps the safety condition unmet", () => {
+    const hook = { id: "saf-001", kind: "network_piped" as const, file: "package.json", detail: "postinstall pipes curl into sh", blocking: true };
+    const secret = { id: "saf-002", kind: "secret" as const, file: "config/prod.env", line: 2, detail: "Stripe live key", blocking: true };
+    const app = [{ id: "app", share: 1, faults: "pass" as const }];
+    const first = updateRoadmap(null, ctxFor(makeAudit({ components: app, safety: [hook, secret] })));
+    assert.deepEqual(first.roadmap.items.filter((i) => i.template.startsWith("safety")).map((i) => i.id).sort(), ["safety:hook", "safety:secret"]);
+    const second = updateRoadmap(first.roadmap, ctxFor(makeAudit({ id: "aud-2026-10-28-abc1234-0002", components: app, safety: [{ ...secret, id: "saf-001" }] })));
+    const byId = new Map(second.roadmap.items.map((i) => [i.id, i]));
+    assert.equal(byId.get("safety:hook")!.status, "done");
+    assert.equal(byId.get("safety:hook")!.closedBy, "aud-2026-10-28-abc1234-0002");
+    assert.notEqual(byId.get("safety:secret")!.status, "done");
+    const back = updateRoadmap(second.roadmap, ctxFor(makeAudit({ id: "aud-2026-10-29-abc1234-0003", components: app, safety: [hook, secret] })));
+    assert.notEqual(back.roadmap.items.find((i) => i.id === "safety:hook")!.status, "done", "a hook that comes back reopens the item");
+  });
+
+  test("a credential finding moved onto a test item doesn't close the safety credential item", () => {
+    const cred = { id: "saf-001", kind: "credential_needed" as const, file: "test/payments.test.js", detail: "tests need PAYMENTS_KEY", blocking: true };
+    const first = updateRoadmap(null, ctxFor(makeAudit({ components: [{ id: "app", share: 1, faults: "pass" }], safety: [cred] })));
+    assert.ok(first.roadmap.items.some((i) => i.id === "safety:credential"));
+    const credTest = { id: "app", share: 1, test: "fail" as const, diagnosis: { cause: "credential" as const, detail: "PAYMENTS_KEY is not set" }, faults: "not_run" as const };
+    const second = updateRoadmap(first.roadmap, ctxFor(makeAudit({ id: "aud-2026-10-28-abc1234-0002", components: [credTest], safety: [cred] })));
+    assert.notEqual(second.roadmap.items.find((i) => i.id === "safety:credential")!.status, "done");
+  });
+
   test("observed outcomes come from the item's own metric after it closed, and shared values say so", () => {
     const base = outcomes("2026-09-27", "2026-10-27", stats(9, 7, 3, 4), stats(41, 35, 29, 7), { api: stats(5, 4, 1, 2), worker: stats(3, 2, 1, 2), shared: stats(2, 2, 2, 0) });
     const first = updateRoadmap(null, ctxFor(makeAudit({ ...mixed, outcomes: base })));
