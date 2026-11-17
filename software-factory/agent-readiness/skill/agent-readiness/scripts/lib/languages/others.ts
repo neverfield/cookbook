@@ -32,6 +32,7 @@ export const swift: LanguageDef = {
       label: "An Xcode app (iOS or macOS)",
       kind: "stack",
       tier: "not_yet",
+      needs: "macOS with Xcode",
       reason: "it needs macOS with Xcode, since only xcodebuild on a Mac builds and tests it, and the audit's containers run Linux, so it's blocked on this machine rather than broken",
       files: /\.(swift|m|mm|h|storyboard|xib|plist|xcconfig|entitlements|strings)$|\.(xcodeproj|xcworkspace|xcassets)\/|(^|\/)(Podfile(\.lock)?|Cartfile(\.resolved)?)$/,
       proof: ["fixtures/ios-xcode", "fixtures/dotnet-ios-monorepo", "kickstarter/ios-oss@2090757"],
