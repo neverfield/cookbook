@@ -467,7 +467,7 @@ export function renderHtml(r: ReportJson): string {
   return [
     "<!doctype html>",
     `<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>Agent readiness: ${esc(r.repo)}</title><style>${CSS}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}</style></head>`,
-    `<body><input type="checkbox" id="theme" class="theme-switch"><div class="theme"><div class="page"><header><h1>Agent readiness: ${esc(r.repo)}</h1><div class="meta"><span class="when">${esc(fmtDate(r.audit.date))}</span><label for="theme" class="toggle"><span class="knob" aria-hidden="true"></span>Dark mode</label></div></header>${notices}<main>`,
+    `<body><input type="checkbox" id="theme" class="theme-switch"><div class="theme"><div class="page"><header><h1>Agent readiness: ${esc(r.repo)}</h1><div class="meta"><span class="when">${esc(fmtDate(r.audit.date))}</span><label for="theme" class="toggle"><span class="knob" aria-hidden="true"></span>Dark mode</label></div></header>${r.preview ? `<p class="note">${esc(r.preview)}</p>` : ""}${notices}<main>`,
     summary(r),
     improved(r),
     needle(r),

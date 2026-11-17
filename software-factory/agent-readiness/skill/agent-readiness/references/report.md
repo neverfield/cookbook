@@ -1,5 +1,7 @@
 # The report
 
+> Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.
+
 `readiness seal` writes `report.json` (schema `agent-readiness/report@1`), the view model, and two views of it: `report.md` and `report.html`, a self-contained page with inline CSS and SVG and no scripts. The seal covers all three. Every number comes from computed fields. Any other renderer, such as a dashboard or a canvas, reads `report.json` and hardcodes nothing, not even component names.
 
 ## The three tiers in `report.json`
@@ -11,6 +13,8 @@
 ## The parts
 
 The executive fields (heading, headline, numbers, next-level line, gaps, ask and coverage) are what the part 1 rules below govern; the views place them where the reader needs them.
+
+Until 1.0, `preview` holds the skill's Preview label, quoted at the top of this page, and both views show it under the title, above part 1. It comes from `scripts/lib/preview.ts` and never changes a level or score.
 
 1. **Where am I now.** One screen, written like an executive slide, holding only what the reader acts on:
    - A notice only when the reader should act, phrased as the action (for example "This audit ran without a container runtime, so Level 1 is unproven. Install Docker or Podman, or run it in CI, and rerun the audit."). Integrity, provenance and eval-mode notes are in "About this report" at the end.

@@ -5,6 +5,8 @@ description: Audit whether coding agents can work in this repository, from evide
 
 # Agent readiness audit
 
+> Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.
+
 You run the audit. The scripts decide every result: they run the repo's commands, plant faults, score, seal and write the report. Your job is to pick the scope, help the scripts find the right commands, explain what they found in plain words, and stop.
 
 Run the CLI from the repository root:

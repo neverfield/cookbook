@@ -7,6 +7,7 @@ import { addEvidence, recordObservation } from "./lib/evidence.ts";
 import { ghAvailable, ghJson } from "./lib/gh.ts";
 import { auditIds, loadSealedAudit, pushHistory, readHistory, readRoadmap, writeRoadmap } from "./lib/history.ts";
 import { MAX_PRS, computeOutcomes, fetchPrs, loadPrsFile } from "./lib/outcomes.ts";
+import { PREVIEW } from "./lib/preview.ts";
 import { buildProfile } from "./lib/profile.ts";
 import { redact } from "./lib/redact.ts";
 import { ALLOW_HOST_ENV, assertPlatformSupported, evidenceFromPhase, hostExecutor, newBudget, registryValuesOf, replay, runContract } from "./lib/replay.ts";
@@ -420,6 +421,7 @@ function cmdSeal(a: Args): void {
   log(`Report: ${join(p.latest, "report.md")}`);
   log(`Stored: ${r.dir}`);
   log(`Headline: ${r.report.executive.headline}`);
+  if (PREVIEW) log(PREVIEW);
 }
 
 function cmdVerify(a: Args): void {
@@ -584,6 +586,7 @@ function cmdFeedback(a: Args): void {
 function cmdVersion(a: Args): void {
   const m = releaseManifest();
   log(`agent-readiness skill ${m?.version ?? "unreleased"} (${m?.tag ?? "no release manifest"}), rubric ${latestRubricVersion()}`);
+  if (PREVIEW) log(PREVIEW);
   const upstream = opt(a, "upstream");
   if (upstream) {
     if (str(a, "tier", "local-exec") !== "external-systems") fail("--upstream reads GitHub, so it needs --tier external-systems.");
@@ -685,7 +688,7 @@ async function main(): Promise<void> {
   if (a.flags["allow-host"]) process.env[ALLOW_HOST_ENV] = "1";
   const cmd = a.positional[0];
   if (!cmd || a.flags.help || cmd === "help") {
-    process.stdout.write(HELP);
+    process.stdout.write(PREVIEW ? `${PREVIEW}\n\n${HELP}` : HELP);
     return;
   }
   const table: Record<string, (a: Args) => void | Promise<void>> = {

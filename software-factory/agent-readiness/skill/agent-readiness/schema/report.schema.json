@@ -6,6 +6,7 @@
   "properties": {
     "schema": { "const": "agent-readiness/report@1" },
     "repo": { "type": "string", "minLength": 1 },
+    "preview": { "type": "string", "minLength": 1, "description": "The skill's Preview label, from scripts/lib/preview.ts; absent from 1.0." },
     "audit": {
       "type": "object",
       "required": ["id", "date", "commit", "dirtyTree", "rubric", "tier", "scriptsDigest", "seedPinned", "sealStatus", "staleCopy", "previous", "storedAt"],

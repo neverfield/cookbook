@@ -1,5 +1,7 @@
 # Levels, the rollup rule and scenarios
 
+> Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.
+
 Every audit reports levels in three tiers, in the report, the seal, `report.json` and the history:
 
 1. **The repo:** one rollup level, Level 0 to 4.

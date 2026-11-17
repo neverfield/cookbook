@@ -445,6 +445,8 @@ export interface RateValue {
 export interface ReportJson {
   schema: "agent-readiness/report@1";
   repo: string;
+  // The skill's Preview label (lib/preview.ts), shown at the top of every view; absent from 1.0.
+  preview?: string;
   audit: {
     id: string;
     date: string;
