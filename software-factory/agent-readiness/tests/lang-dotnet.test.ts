@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
@@ -213,5 +213,31 @@ describe(".NET: projects that need Windows", () => {
     assert.deepEqual(cmds.map((c) => c.command), ["dotnet build src/Tool/Tool.csproj --no-restore && dotnet build tests/Core.Tests/Core.Tests.csproj --no-restore", "dotnet test tests/Core.Tests/Core.Tests.csproj --no-restore"]);
     assert.match(cmds[0].reason, /Desk\.csproj needs Windows and is listed apart/);
     assert.deepEqual(hooks.mutation.covered(mixed, { path: "." } as never, ["tests/Core.Tests/FormTests.cs"], ["src/Core/Form.cs", "src/Desk/Form.cs"]), ["src/Core/Form.cs"], "no fault goes into code the build leaves out");
+  });
+});
+
+// A fixture's projects must build where they're meant to, so "blocked on this machine" never hides a
+// broken file: msbuild on a .sln skips any project without an ActiveCfg and Build.0 per configuration.
+describe(".NET: fixture solutions are well-formed", () => {
+  const files = (readdirSync(FIXTURES, { recursive: true }) as string[]).map((f) => join(FIXTURES, f));
+
+  test("every project in a fixture .sln builds in every solution configuration", () => {
+    const slns = files.filter((f) => f.endsWith(".sln"));
+    assert.ok(slns.length >= 2);
+    for (const sln of slns) {
+      const text = readFileSync(sln, "utf8");
+      const guids = [...text.matchAll(/^Project\("\{[^}]+\}"\) = "[^"]+", "[^"]+\.(?:cs|fs|vb)proj", "\{([^}]+)\}"/gm)].map((m) => m[1]);
+      const configs = [...(text.match(/GlobalSection\(SolutionConfigurationPlatforms\)[^\n]*\n([\s\S]*?)\tEndGlobalSection/)?.[1] ?? "").matchAll(/^\t\t(.+?) = /gm)].map((m) => m[1]);
+      assert.ok(guids.length && configs.length, sln);
+      for (const guid of guids) for (const config of configs) for (const key of ["ActiveCfg", "Build.0"]) assert.ok(text.includes(`{${guid}}.${config}.${key} = `), `${sln}: {${guid}}.${config}.${key}`);
+    }
+  });
+
+  test("a fixture project that imports from $(VSToolsPath) defines it first", () => {
+    for (const proj of files.filter((f) => /\.(cs|fs|vb)proj$/.test(f))) {
+      const text = readFileSync(proj, "utf8");
+      const use = text.indexOf('Project="$(VSToolsPath)');
+      if (use >= 0) assert.ok(text.lastIndexOf("<VSToolsPath ", use) >= 0, proj);
+    }
   });
 });
