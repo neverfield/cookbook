@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
@@ -238,6 +238,19 @@ describe(".NET: fixture solutions are well-formed", () => {
       const text = readFileSync(proj, "utf8");
       const use = text.indexOf('Project="$(VSToolsPath)');
       if (use >= 0) assert.ok(text.lastIndexOf("<VSToolsPath ", use) >= 0, proj);
+    }
+  });
+
+  test("a fixture packages.config project points only at the packages it pins, guards their build imports, and references the whole MSTest framework", () => {
+    const projs = files.filter((f) => /\.(cs|fs|vb)proj$/.test(f) && existsSync(join(dirname(f), "packages.config")));
+    assert.ok(projs.length >= 3);
+    for (const proj of projs) {
+      const text = readFileSync(proj, "utf8");
+      const pinned = new Set([...readFileSync(join(dirname(proj), "packages.config"), "utf8").matchAll(/<package id="([^"]+)" version="([^"]+)"/g)].map((m) => `${m[1]}.${m[2]}`));
+      for (const m of text.matchAll(/\.\.\\packages\\([^\\]+)\\/g)) assert.ok(pinned.has(m[1]), `${proj}: ${m[1]} isn't in packages.config`);
+      for (const m of text.matchAll(/<Import Project="(\.\.\\packages\\[^"]+)"/g)) assert.ok(text.includes(`<Error Condition="!Exists('${m[1]}')"`), `${proj}: ${m[1]} has no EnsureNuGetPackageBuildImports check`);
+      const mstest = [...pinned].find((p) => p.startsWith("MSTest.TestFramework."));
+      if (mstest) for (const dll of ["TestFramework", "TestFramework.Extensions"]) assert.ok(text.includes(`<HintPath>..\\packages\\${mstest}\\lib\\net462\\Microsoft.VisualStudio.TestPlatform.${dll}.dll</HintPath>`), `${proj}: ${dll}.dll`);
     }
   });
 });
