@@ -226,6 +226,71 @@ export function jdkFor(tree: string, path: string): number {
   return jdk;
 }
 
+// The JDK a Maven Toolchains requirement needs that the image's own doesn't satisfy: an exact major
+// for a bare version, else the lowest LTS inside the range. Null when the image's JDK will do.
+function mavenToolchainJdk(spec: string, main: number): number | null {
+  const major = (v: string) => {
+    const m = v.trim().match(/^(?:1\.)?(\d+)/);
+    return m ? Number(m[1]) : null;
+  };
+  const range = spec.match(/^([[(])\s*([^,\])]*?)\s*(?:,\s*([^\])]*?)\s*)?([\])])$/);
+  if (!range) return major(spec);
+  const lo = range[2] ? major(range[2]) : null;
+  if (range[3] === undefined) return lo;
+  const min = lo === null ? 0 : range[1] === "(" ? lo + 1 : lo;
+  const hiRaw = range[3] ? major(range[3]) : null;
+  const max = hiRaw === null ? Infinity : range[4] === ")" ? hiRaw - 1 : hiRaw;
+  if (main >= min && main <= max) return null;
+  return JDKS.find((v) => v >= min && v <= max) ?? null;
+}
+
+// A JDK a Maven Toolchains plugin or Surefire's jdkToolchain asks for.
+const MAVEN_TOOLCHAIN = /<(?:jdkToolchain|toolchains>\s*<jdk)>(?:(?!<\/jdk(?:Toolchain)?>)[\s\S])*?<version>\s*([^<]+?)\s*<\/version>/g;
+
+// Every JDK the build's toolchains ask for beyond the one the image ships, with the file that first
+// asks for it. A Gradle toolchain needs that exact JDK, and Gradle can't download one with the network
+// off: moshi's records-tests asks for 17 next to the root's 21. JDKs the audit has no image for
+// (non-LTS lines) are left out.
+export function extraJdks(tree: string, path: string): { version: number; file: string; reason: string }[] {
+  const main = jdkFor(tree, path);
+  const out: { version: number; file: string; reason: string }[] = [];
+  const add = (version: number | null, file: string, reason: string) => {
+    if (version === null || version === main || !JDKS.includes(version) || out.some((o) => o.version === version)) return;
+    out.push({ version, file, reason });
+  };
+  const catalog = catalogVersions(tree, path);
+  for (const f of filesNamed(tree, path, BUILD_SCRIPT).sort()) {
+    const text = readText(join(tree, path, f));
+    for (const v of [...numbers(text, GRADLE_TOOLCHAIN), ...catalogToolchains(text, catalog)]) add(v, rel(path, f), `${rel(path, f)} asks for a Java ${v} toolchain`);
+  }
+  for (const f of filesNamed(tree, path, /^pom\.xml$/).sort()) {
+    const text = readText(join(tree, path, f)).replace(/<!--[\s\S]*?-->/g, "");
+    for (const m of text.matchAll(MAVEN_TOOLCHAIN)) {
+      const v = mavenToolchainJdk(m[1], main);
+      add(v, rel(path, f), `${rel(path, f)} asks Maven Toolchains for JDK ${m[1]}`);
+    }
+  }
+  return out.sort((a, b) => a.version - b.version);
+}
+
+const JDK_COPIES = "/usr/lib/jvm/readiness-jdk-";
+
+// Registers every copied JDK, for Gradle in the Gradle user home's gradle.properties and for Maven in
+// ~/.m2/toolchains.xml next to the image's own JDK, which Maven Toolchains doesn't find on its own.
+// /usr/lib/jvm is also where Gradle's auto-detection looks on Linux.
+export function registerJdks(home: string): string {
+  const entry = `echo "  <toolchain><type>jdk</type><provides><version>$v</version></provides><configuration><jdkHome>$d</jdkHome></configuration></toolchain>"`;
+  return [
+    `g="\${GRADLE_USER_HOME:-${home}/.gradle}"`,
+    `mkdir -p "$g" ${home}/.m2`,
+    `p=$(ls -d ${JDK_COPIES}* | paste -sd, -)`,
+    `touch "$g/gradle.properties"`,
+    `sed -i '/^org\\.gradle\\.java\\.installations\\.paths=/d' "$g/gradle.properties"`,
+    `echo "org.gradle.java.installations.paths=$p" >> "$g/gradle.properties"`,
+    `{ echo '<toolchains>'; for d in ${JDK_COPIES}* "$JAVA_HOME"; do [ -x "$d/bin/java" ] || continue; v=$("$d/bin/java" -XshowSettings:properties -version 2>&1 | sed -n 's/^ *java\\.specification\\.version = //p'); ${entry}; done; echo '</toolchains>'; } > ${home}/.m2/toolchains.xml`,
+  ].join(" && ");
+}
+
 const isMaven = (tree: string, path: string) => exists(join(tree, path, "pom.xml"));
 const mavenReactor = (tree: string, path: string) => /<modules>\s*<module>/.test(readText(join(tree, path, "pom.xml")).replace(/<!--[\s\S]*?-->/g, ""));
 
@@ -556,6 +621,8 @@ export const jvm: LanguageDef = {
       return { found, missing };
     },
     commands: (tree, comp) => jvmCommands(tree, comp.path),
+    toolchains: (tree, dir) =>
+      extraJdks(tree, dir).map((j) => ({ spec: `JDK ${j.version}`, image: temurin(j.version), from: "/opt/java/openjdk", to: `${JDK_COPIES}${j.version}`, reason: j.reason, register: registerJdks })),
     testCounts: jvmTestCounts,
     budget: { commandTimeoutSec: 1200, componentMinutes: 45, mutationRunTimeoutSec: 900 },
     mutation: {

@@ -1,7 +1,7 @@
 import { isAbsolute, join, normalize } from "node:path";
 import { DEFAULT_NODE, NODE_MAJORS } from "./images.ts";
 import { ecosystemOf, languageOf } from "./languages/index.ts";
-import type { ToolSetup } from "./languages/language.ts";
+import type { ToolchainCopy, ToolSetup } from "./languages/language.ts";
 import { POETRY_ENV, VENV, poetryVersion, pyproject, testGroups } from "./languages/python.ts";
 import type { Rubric } from "./rubric.ts";
 import { readPackageJson } from "./languages/node.ts";
@@ -9,7 +9,7 @@ import type { CommandKind, Component, ContractCommand, Profile, SafetyFinding } 
 import { exists, fail, listFiles, readText, shellQuote } from "./util.ts";
 
 export { POETRY_ENV, VENV, poetryVersion, testGroups };
-export type { ToolSetup };
+export type { ToolchainCopy, ToolSetup };
 
 const PLACEHOLDER_TEST = /no test specified/;
 
@@ -439,6 +439,16 @@ export function toolSetup(profile: Profile, tree: string, only?: Set<string>): T
   }
   for (const c of profile.components.filter((x) => x.assessed && (!only || only.has(x.id)))) {
     for (const t of hooked(c)?.setup?.(tree, c.path) ?? []) if (!out.some((o) => o.spec === t.spec)) out.push(t);
+  }
+  return out;
+}
+
+// Toolchains the components one image runs need beside the image's own, such as a second JDK, each
+// copied in once from its own pinned image.
+export function toolchainCopies(profile: Profile, tree: string, only?: Set<string>): ToolchainCopy[] {
+  const out: ToolchainCopy[] = [];
+  for (const c of profile.components.filter((x) => x.assessed && (!only || only.has(x.id)))) {
+    for (const t of hooked(c)?.toolchains?.(tree, c.path) ?? []) if (!out.some((o) => o.to === t.to)) out.push(t);
   }
   return out;
 }

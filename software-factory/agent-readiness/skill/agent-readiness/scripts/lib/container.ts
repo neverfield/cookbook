@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { basename, dirname, isAbsolute } from "node:path";
 import { IDLE_MARK, IDLE_OFFLINE } from "./diagnose.ts";
 import { pinnedRef } from "./images.ts";
 import { runCommand } from "./run.ts";
@@ -170,6 +170,12 @@ export function parseUserEntry(ok: boolean, output: string): UserEntry {
   return /\badded\b/.test(output) ? "added" : "present";
 }
 
+// Streams a folder out of a created (never started) container of another image into a staging
+// folder of the audit's container, as a tar through the runtime's `cp`, so nothing in either image runs.
+export function copyPipeline(bin: string, source: string, from: string, target: string, stage: string): string {
+  return `${shellQuote(bin)} cp ${shellQuote(`${source}:${from}`)} - | ${shellQuote(bin)} cp - ${shellQuote(`${target}:${stage}`)}`;
+}
+
 export function disconnectArgs(name: string, network = "bridge"): string[] {
   return ["network", "disconnect", network, name];
 }
@@ -237,6 +243,23 @@ export class ContainerSession {
   asImageUser(command: string, timeoutMs = 300000, opts: { registry?: boolean } = {}): { ok: boolean; output: string } {
     const r = spawnSync(this.runtime.bin, imageUserArgs(this.name, command, opts.registry ? this.registryEnv : []), { encoding: "utf8", timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 });
     return { ok: r.status === 0, output: (r.stdout ?? "") + (r.stderr ?? "") };
+  }
+
+  // Copies a folder of another pinned image into this container, with the network still on for the pull.
+  copyFromImage(image: string, from: string, to: string, timeoutMs = 900000): { ok: boolean; output: string } {
+    const created = spawnSync(this.runtime.bin, ["create", pinnedRef(image)], { encoding: "utf8", timeout: timeoutMs });
+    if (created.status !== 0) return { ok: false, output: (created.stdout ?? "") + (created.stderr ?? "") };
+    const source = created.stdout.trim().split("\n").pop()!;
+    const stage = `/tmp/readiness-copy-${randomHex(3)}`;
+    try {
+      const mk = this.asImageUser(`mkdir -p ${stage}`, 30000);
+      if (!mk.ok) return mk;
+      const piped = spawnSync("bash", ["-o", "pipefail", "-c", copyPipeline(this.runtime.bin, source, from, this.name, stage)], { encoding: "utf8", timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 });
+      if (piped.status !== 0) return { ok: false, output: (piped.stdout ?? "") + (piped.stderr ?? "") };
+      return this.asImageUser(`mkdir -p ${shellQuote(dirname(to))} && rm -rf ${shellQuote(to)} && mv ${shellQuote(`${stage}/${basename(from)}`)} ${shellQuote(to)} && rm -rf ${stage}`, 120000);
+    } finally {
+      spawnSync(this.runtime.bin, ["rm", "-f", source], { encoding: "utf8" });
+    }
   }
 
   // Gives the shared home, and the caches a setup step left in it, back to the ordinary user.

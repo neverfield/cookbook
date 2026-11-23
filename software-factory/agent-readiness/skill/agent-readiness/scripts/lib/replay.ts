@@ -1,8 +1,8 @@
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
-import { ContainerSession, NETWORK_ENV, buildImage, detectRuntime, hostUser, probeLimits } from "./container.ts";
-import { hooked, imagePlan, toolSetup } from "./contract.ts";
+import { ContainerSession, HOME_DIR, NETWORK_ENV, buildImage, detectRuntime, hostUser, probeLimits } from "./container.ts";
+import { hooked, imagePlan, toolchainCopies, toolSetup } from "./contract.ts";
 import { BUNDLE_GAP, diagnose, rootError, testCounts } from "./diagnose.ts";
 import { addEvidence } from "./evidence.ts";
 import { digestOf } from "./images.ts";
@@ -836,6 +836,18 @@ function startContainer(audit: Audit, runtime: NonNullable<ReturnType<typeof det
       (audit.environment.tools ??= []).push({ spec: t.spec, added: added.ok });
       log(added.ok ? `Added ${t.spec} to the image for the frozen install.` : `Couldn't add ${t.spec} to the image, so its install will be blocked: ${tail(added.output, 300)}`);
     }
+    const copies = toolchainCopies(audit.profile!, copyDir, new Set(comps.map((c) => c.id)));
+    const registers = new Set<string>();
+    for (const t of copies) {
+      const copied = session.copyFromImage(t.image, t.from, t.to);
+      (audit.environment.toolchains ??= []).push({ spec: t.spec, image: t.image, reason: t.reason, added: copied.ok });
+      if (copied.ok) registers.add(t.register(HOME_DIR));
+      log(copied.ok ? `Added ${t.spec} from ${t.image} at ${t.to}, because ${t.reason}.` : `Couldn't add ${t.spec} from ${t.image}, needed because ${t.reason}: ${tail(copied.output, 300)}`);
+    }
+    for (const r of registers) {
+      const done = session.asImageUser(r, 60000);
+      if (!done.ok) log(`Couldn't register the added toolchains: ${tail(done.output, 300)}`);
+    }
   }
   session.reclaimHome();
   return containerExecutor(session, copyDir, imageSource);
@@ -867,6 +879,7 @@ export function makeExecutors(audit: Audit, copyDir: string, runtimePref: string
     imageSource = "repo";
   }
   delete audit.environment.userEntryMissing;
+  delete audit.environment.toolchains;
   const plan = imagePlan(profile, copyDir, single);
   const assessed = profile.components.filter((c) => c.assessed);
   const wanted = plan.filter((g, i) => g.components.length > 0 || (i === 0 && repoWide));

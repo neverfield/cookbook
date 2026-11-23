@@ -907,7 +907,7 @@ export function buildReport(input: RenderInput): ReportJson {
             : audit.environment.containerRuntime
               ? (imagesUsed(audit.environment)
                   ? `${audit.environment.containerRuntime} containers, ${imagesUsed(audit.environment)}`
-                  : `${audit.environment.containerRuntime} container, ${audit.environment.image}`) + userEntryNote(audit.environment) + networkNote(audit)
+                  : `${audit.environment.containerRuntime} container, ${audit.environment.image}`) + toolchainsNote(audit.environment) + userEntryNote(audit.environment) + networkNote(audit)
               : audit.evidence.some((e) => e.where === "fresh_copy")
                 ? "fresh copy on the host (no container runtime)"
                 : `none: no repo command ran${noneAssessed(input) ? ", because no component could be assessed" : ""}`,
@@ -1049,6 +1049,13 @@ function ranTestsInContainer(audit: Audit): boolean {
 
 function networkNote(audit: Audit): string {
   return ranTestsInContainer(audit) ? `; ${NETWORK_OFF_NOTE}` : "";
+}
+
+// Each toolchain the audit copied in beside the image's own, and why the build needs it.
+export function toolchainsNote(env: Audit["environment"]): string {
+  return (env.toolchains ?? [])
+    .map((t) => (t.added ? `; added ${t.spec} from ${t.image}, because ${t.reason}` : `; couldn't add ${t.spec} from ${t.image}, needed because ${t.reason}`))
+    .join("");
 }
 
 function userEntryNote(env: Audit["environment"]): string {
