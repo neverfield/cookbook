@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
-import { commandTimeout, discoverContract, imagePlan } from "../skill/agent-readiness/scripts/lib/contract.ts";
+import { ContainerSession, HOME_DIR, copyPipeline, detectRuntime, hostUser } from "../skill/agent-readiness/scripts/lib/container.ts";
+import { commandTimeout, discoverContract, imagePlan, toolchainCopies } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { ecosystemOf } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
-import { JDKS, MAVEN_TEST_CLASSES, cLikeQuoted, cLikeSites, enforcedJava, jdkFor, jvm, jvmTestCounts } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
+import { JDKS, JVM_HOME, MAVEN_TEST_CLASSES, cLikeQuoted, cLikeSites, enforcedJava, extraJdks, jdkFor, jvm, jvmTestCounts, registerJdks } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
 import { targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
+import { toolchainsNote } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric, latestRubricVersion } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { FIXTURES } from "../support/tools/fixture.ts";
 
@@ -87,14 +89,127 @@ describe("JVM: which JDK and image a component runs in", () => {
     assert.equal(jdkFor(withEnforcer("[21,)", "<maven.compiler.release>17</maven.compiler.release>"), "."), 21);
   });
 
-  test("a wrapper runs on the plain JDK image; without one the build tool's own image supplies it", () => {
-    assert.equal(hooks.image(repo({ "pom.xml": pom("<maven.compiler.release>17</maven.compiler.release>"), mvnw: "" }), "."), "eclipse-temurin:17-jdk");
+  test("a wrapper runs on the plain JDK image; without one the build tool's own image supplies it", () => {    assert.equal(hooks.image(repo({ "pom.xml": pom("<maven.compiler.release>17</maven.compiler.release>"), mvnw: "" }), "."), "eclipse-temurin:17-jdk");
     assert.equal(hooks.image(repo({ "pom.xml": pom() }), "."), "maven:3.9-eclipse-temurin-21");
     assert.equal(hooks.image(repo({ "build.gradle.kts": "", gradlew: "" }), "."), "eclipse-temurin:21-jdk");
     assert.equal(hooks.image(repo({ "build.gradle.kts": "" }), "."), "gradle:9-jdk21");
     assert.equal(hooks.image(repo({ "build.gradle": "sourceCompatibility = '11'\n" }), "."), "gradle:8-jdk11");
     for (const tag of [...JDKS.map((j) => `eclipse-temurin:${j}-jdk`), ...JDKS.map((j) => `maven:3.9-eclipse-temurin-${j}`), "gradle:8-jdk8", "gradle:8-jdk11", "gradle:9-jdk17", "gradle:9-jdk21", "gradle:9-jdk25"]) {
       assert.match(hooks.images[tag] ?? "", /^sha256:[0-9a-f]{64}$/, `${tag} is pinned`);
+    }
+  });
+});
+
+const MOSHI = {
+  "build.gradle.kts": 'subprojects {\n  pluginManager.withPlugin("java") {\n    configure<JavaPluginExtension> {\n      toolchain { languageVersion.set(libs.versions.jdk.map(JavaLanguageVersion::of)) }\n    }\n  }\n}\n',
+  "settings.gradle.kts": 'rootProject.name = "moshi-root"\ninclude(":moshi", ":moshi:records-tests")\n',
+  "gradle/libs.versions.toml": '[versions]\njdk = "21"\n',
+  "moshi/records-tests/build.gradle.kts": "plugins { `java-library` }\n\njava { toolchain { languageVersion.set(JavaLanguageVersion.of(17)) } }\n",
+  "moshi/records-tests/src/test/java/com/squareup/moshi/records/RecordsTest.java": "class RecordsTest {}\n",
+  "moshi/build.gradle.kts": "tasks.named<JavaCompile>(\"compileJava16Java\") { options.release = 16 }\n",
+  "moshi/src/main/java/com/squareup/moshi/Moshi.java": "class Moshi {}\n",
+  gradlew: "",
+  "gradle/wrapper/gradle-wrapper.properties": WRAPPER("9.5.1"),
+};
+
+// square/moshi@889013e ran in eclipse-temurin:21-jdk, the JDK its catalog's toolchain names, and
+// `./gradlew --offline test` failed in records-tests: "Cannot find a Java installation on your machine
+// ... matching: {languageVersion=17 ...}. Toolchain download repositories have not been configured."
+describe("JVM: every JDK the build's toolchains ask for is in the container", () => {
+  test("a second Gradle toolchain gets its JDK copied in from its own pinned image (square/moshi@889013e)", () => {
+    const moshi = repo(MOSHI);
+    assert.equal(hooks.image(moshi, "."), "eclipse-temurin:21-jdk", "the image still follows the main toolchain");
+    assert.deepEqual(extraJdks(moshi, "."), [{ version: 17, file: "moshi/records-tests/build.gradle.kts", reason: "moshi/records-tests/build.gradle.kts asks for a Java 17 toolchain" }]);
+    const copies = hooks.toolchains!(moshi, ".");
+    assert.deepEqual(
+      copies.map(({ register: _r, ...c }) => c),
+      [{ spec: "JDK 17", image: "eclipse-temurin:17-jdk", from: "/opt/java/openjdk", to: "/usr/lib/jvm/readiness-jdk-17", reason: "moshi/records-tests/build.gradle.kts asks for a Java 17 toolchain" }],
+    );
+    assert.match(hooks.images[copies[0].image] ?? "", /^sha256:[0-9a-f]{64}$/, "the JDK comes from a pinned image");
+    const profile = buildProfile(moshi, moshi, rubric);
+    assert.deepEqual(toolchainCopies(profile, moshi).map((c) => c.to), ["/usr/lib/jvm/readiness-jdk-17"], "the replay finds it through the component");
+  });
+
+  test("only toolchains count, only JDKs other than the image's, and only lines the audit has an image for", () => {
+    const extra = (files: Record<string, string>) => extraJdks(repo(files), ".").map((j) => j.version);
+    assert.deepEqual(extra({ "build.gradle.kts": "kotlin { jvmToolchain(21) }\n" }), [], "one toolchain is the image's own");
+    assert.deepEqual(extra({ "build.gradle.kts": "tasks.withType<JavaCompile> { options.release = 8 }\njava { sourceCompatibility = JavaVersion.VERSION_11 }\n" }), [], "a release or compatibility level runs on the newer JDK");
+    assert.deepEqual(
+      extra({ "build.gradle.kts": 'java { toolchain { languageVersion = JavaLanguageVersion.of(17) } }\ntasks.register<Test>("testOn11") { javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(11) } }\ntasks.register<Test>("testOn8") { javaLauncher = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(8)) } }\n' }),
+      [8, 11],
+      "a test task's launcher is a toolchain too",
+    );
+    assert.deepEqual(extra({ "build.gradle": "java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }\n", "legacy/build.gradle": "java { toolchain { languageVersion = JavaLanguageVersion.of(16) } }\n" }), [], "no image ships JDK 16");
+    assert.deepEqual(extra({ "build.gradle.kts": "kotlin { jvmToolchain(21) }\n", "build/generated/build.gradle.kts": "kotlin { jvmToolchain(11) }\n" }), [], "build output isn't the build");
+  });
+
+  test("Maven Toolchains and Surefire's jdkToolchain ask for JDKs too, and a range the image's JDK meets needs none", () => {
+    const extra = (plugin: string, release = "17") =>
+      extraJdks(repo({ "pom.xml": `<project><properties><maven.compiler.release>${release}</maven.compiler.release></properties><build><plugins>${plugin}</plugins></build></project>` }), ".").map((j) => [j.version, j.reason]);
+    const toolchains = (version: string) => `<plugin><artifactId>maven-toolchains-plugin</artifactId><configuration><toolchains><jdk><version>${version}</version></jdk></toolchains></configuration></plugin>`;
+    const surefire = (version: string) => `<plugin><artifactId>maven-surefire-plugin</artifactId><configuration><jdkToolchain><vendor>temurin</vendor><version>${version}</version></jdkToolchain></configuration></plugin>`;
+    assert.deepEqual(extra(toolchains("11")), [[11, "pom.xml asks Maven Toolchains for JDK 11"]]);
+    assert.deepEqual(extra(toolchains("1.8")), [[8, "pom.xml asks Maven Toolchains for JDK 1.8"]]);
+    assert.deepEqual(extra(surefire("[21,)")), [[21, "pom.xml asks Maven Toolchains for JDK [21,)"]], "the lowest LTS in a range the image's 17 is below");
+    assert.deepEqual(extra(surefire("[11,)")), [], "the image's 17 is in the range");
+    assert.deepEqual(extra(toolchains("17")), [], "the image's own");
+    assert.deepEqual(extra(`<!-- ${toolchains("11")} -->`), [], "a commented-out plugin");
+  });
+
+  test("the copies are registered for Gradle and for Maven, in the home every command shares", () => {
+    const cmd = registerJdks("/tmp/home");
+    assert.match(cmd, /g="\$\{GRADLE_USER_HOME:-\/tmp\/home\/\.gradle\}"/);
+    assert.match(cmd, /p=\$\(ls -d \/usr\/lib\/jvm\/readiness-jdk-\* \| paste -sd, -\)/);
+    assert.match(cmd, /sed -i '\/\^org\\\.gradle\\\.java\\\.installations\\\.paths=\/d' "\$g\/gradle\.properties" && echo "org\.gradle\.java\.installations\.paths=\$p" >> "\$g\/gradle\.properties"/, "a rerun replaces the line rather than adding another");
+    assert.match(cmd, /for d in \/usr\/lib\/jvm\/readiness-jdk-\* "\$JAVA_HOME"; do/, "Maven Toolchains also needs the image's own JDK listed");
+    assert.match(cmd, /> \/tmp\/home\/\.m2\/toolchains\.xml$/);
+  });
+
+  test("the copy streams a tar between the runtime's cp commands, so nothing in the other image runs", () => {
+    assert.equal(copyPipeline("docker", "abc123", "/opt/java/openjdk", "readiness-aud-1", "/tmp/readiness-copy-x"), "'docker' cp 'abc123:/opt/java/openjdk' - | 'docker' cp - 'readiness-aud-1:/tmp/readiness-copy-x'");
+  });
+
+  test("the report's replay environment says which JDKs were added and why, or that one couldn't be", () => {
+    const env = (added: boolean) => ({ containerRuntime: "docker", image: "eclipse-temurin:21-jdk", registryEnv: [], inheritEnv: false, toolchains: [{ spec: "JDK 17", image: "eclipse-temurin:17-jdk", reason: "moshi/records-tests/build.gradle.kts asks for a Java 17 toolchain", added }] });
+    assert.equal(toolchainsNote(env(true)), "; added JDK 17 from eclipse-temurin:17-jdk, because moshi/records-tests/build.gradle.kts asks for a Java 17 toolchain");
+    assert.equal(toolchainsNote(env(false)), "; couldn't add JDK 17 from eclipse-temurin:17-jdk, needed because moshi/records-tests/build.gradle.kts asks for a Java 17 toolchain");
+    assert.equal(toolchainsNote({ containerRuntime: "docker", image: "eclipse-temurin:21-jdk", registryEnv: [], inheritEnv: false }), "");
+  });
+
+  const docker = { skip: detectRuntime("auto") ? false : "no container runtime: this needs docker or podman", timeout: 15 * 60 * 1000 };
+
+  // Gradle's own image, so no wrapper download is needed, with auto-detection off so only the
+  // registration can find the copy, and the network cut before the build, as in the test phase.
+  test("with the network off, Gradle compiles with the copied JDK 17 in a JDK 21 image", docker, async () => {
+    const dir = repo({
+      "settings.gradle.kts": 'rootProject.name = "records"\n',
+      "gradle.properties": "org.gradle.java.installations.auto-detect=false\n",
+      "build.gradle.kts": "plugins { java }\njava { toolchain { languageVersion = JavaLanguageVersion.of(17) } }\n",
+      "src/main/java/records/Point.java": "package records;\npublic record Point(int x, int y) {}\n",
+    });
+    chmodSync(dir, 0o777);
+    const s = new ContainerSession(detectRuntime("auto")!, `readiness-jdk-${Date.now()}-${Math.floor(Math.random() * 1e6)}`, "gradle:9-jdk21", dir, [], hostUser());
+    const started = s.start();
+    assert.ok(started.ok, started.output);
+    try {
+      const gradle = `${JVM_HOME} gradle --no-daemon --offline compileJava`;
+      const before = await s.exec(gradle, ".", 600);
+      assert.notEqual(before.exitCode, 0);
+      assert.match(before.output, /languageVersion=17/, "the image alone lacks the toolchain, as moshi's records-tests did");
+      const copied = s.copyFromImage("eclipse-temurin:17-jdk", "/opt/java/openjdk", "/usr/lib/jvm/readiness-jdk-17");
+      assert.ok(copied.ok, copied.output);
+      const registered = s.asImageUser(registerJdks(HOME_DIR));
+      assert.ok(registered.ok, registered.output);
+      s.reclaimHome();
+      assert.ok(s.disconnectNetwork(), "the network is off");
+      const after = await s.exec(`${gradle} && javap -v build/classes/java/main/records/Point.class | grep 'major version'`, ".", 600);
+      assert.equal(after.exitCode, 0, after.output);
+      assert.match(after.output, /major version: 61/, "compiled by JDK 17");
+      const xml = await s.exec(`cat ${HOME_DIR}/.m2/toolchains.xml`, ".", 60);
+      assert.match(xml.output, /<version>17<\/version><\/provides><configuration><jdkHome>\/usr\/lib\/jvm\/readiness-jdk-17</);
+      assert.match(xml.output, /<version>21<\/version><\/provides><configuration><jdkHome>\/opt\/java\/openjdk</);
+    } finally {
+      s.stop();
     }
   });
 });

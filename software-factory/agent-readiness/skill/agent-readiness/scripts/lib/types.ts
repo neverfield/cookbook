@@ -309,6 +309,9 @@ export interface Audit {
     registryEnv: string[];
     inheritEnv: boolean;
     tools?: { spec: string; added: boolean }[];
+    // Toolchains copied in from another pinned image beside the image's own, such as a second JDK a
+    // Gradle toolchain asks for, why, and whether it could be.
+    toolchains?: { spec: string; image: string; reason: string; added: boolean }[];
     // The digest the audit's image was pulled at, when the audit pins it.
     imageDigest?: string;
     // The container's CPU, memory and process limits.

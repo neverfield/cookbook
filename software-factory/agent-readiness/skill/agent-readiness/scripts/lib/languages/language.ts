@@ -78,6 +78,24 @@ export interface ToolSetup {
   install: string;
 }
 
+// A toolchain another of the audit's pinned images ships, copied into a component's container next
+// to the image's own with the network on, before the install: a second JDK a Gradle toolchain asks
+// for. Nothing is downloaded once the network is off, so the build finds it offline.
+export interface ToolchainCopy {
+  // As the report names it, such as "JDK 17".
+  spec: string;
+  // The pinned image it comes from, a key of `images`.
+  image: string;
+  // The folder in that image, and where it goes in the component's container.
+  from: string;
+  to: string;
+  // Why the build needs it, as the report says it after "because".
+  reason: string;
+  // Points the build tool at every copy, run as the image's user once they are in. `home` is the
+  // home every command shares. One command for all of a language's copies, so it may run once.
+  register(home: string): string;
+}
+
 // Raised floors for a slow toolchain, such as a cold JVM or .NET build. The rubric's values apply
 // when they are higher.
 export interface ToolchainBudget {
@@ -124,6 +142,8 @@ export interface ReplayHooks {
   // report says how many passed. Omitted: the runners diagnose.ts knows.
   testCounts?(output: string): { passed: number; failed: number; total: number } | null;
   setup?(tree: string, dir: string): ToolSetup[];
+  // Toolchains the build needs beside the image's own, copied in from other pinned images.
+  toolchains?(tree: string, dir: string): ToolchainCopy[];
   budget?: ToolchainBudget;
   mutation: MutationHooks;
 }
