@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { ContainerSession, HOME_DIR, NETWORK_ENV, buildImage, detectRuntime, hostUser, probeLimits } from "./container.ts";
 import { hooked, imagePlan, toolchainCopies, toolSetup } from "./contract.ts";
+import { ALLOW_HOST_ENV } from "./guard.ts";
 import { BUNDLE_GAP, diagnose, rootError, testCounts } from "./diagnose.ts";
 import { addEvidence } from "./evidence.ts";
 import { digestOf } from "./images.ts";
@@ -77,7 +78,7 @@ export function registryValuesOf(audit: Audit): string[] {
 
 // Host mode: the repo's commands run on this machine instead of in a container. Only on the user's
 // explicit yes (`--allow-host`, which sets this variable), never as a fallback.
-export const ALLOW_HOST_ENV = "SA_READINESS_ALLOW_HOST";
+export { ALLOW_HOST_ENV };
 
 export function hostAllowed(explicit?: boolean): boolean {
   return explicit ?? process.env[ALLOW_HOST_ENV] === "1";

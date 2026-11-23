@@ -91,6 +91,8 @@ describe("no silent host fallback: without a container nothing runs, and the res
     assert.match(container.out, /the headline says something ran in a clean container, but no command ran in one/);
     const noRerun = sealWith("healthy-node sets the level: Level 1 couldn't be proved, because this machine has no container runtime and its install and tests didn't run.");
     assert.match(noRerun.out, /must say where a rerun can prove it/);
+    const delegate = sealWith("healthy-node sets the level: Level 1 couldn't be proved, because this machine has no container runtime. A rerun with Docker can prove it, and then you can delegate work.");
+    assert.match(delegate.out, /says "delegate", but Delegable is Level 3's name and the repo is at Level 0/);
     const ok = sealWith("healthy-node sets the level: Level 1 couldn't be proved, because this machine has no container runtime. A rerun where Docker is available, such as CI, can prove it.");
     assert.equal(ok.code, 0, ok.out);
   });

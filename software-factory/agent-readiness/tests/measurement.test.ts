@@ -353,6 +353,17 @@ describe("the judges see what `readiness status` shows the narrator", () => {
     assert.match(block, /Recorded registry variables: NPM_TOKEN, passed to the setup steps by name/);
     assert.doesNotMatch(block, /Recorded (audit|commit|skill digest|seal|stored in):/i);
   });
+
+  test("the headline judge sees the computed numbers, the measured outcomes, and a skipped component's toolchain and manifest", () => {
+    const r = loadBase("nested-apps-dotnet");
+    const excluded = r.components.excluded[0];
+    const block = evidenceBlock(r).join("\n");
+    assert.ok(block.includes(`Not assessed ${excluded.id}: `) && block.includes(`${excluded.toolchain}, from ${excluded.manifest}; ${excluded.reason}.`), block);
+    for (const n of r.executive.numbers) assert.ok(block.includes(`Computed number, ${n.label}: ${n.value}. ${n.comparison}.`), n.label);
+    const rate = (count: number, n: number) => ({ count, n, rate: n ? count / n : null, window: "the last 30 days" });
+    r.details.outcomes = { window: "2026-10-24 to 2026-11-23", filter: "head branch starts with cursor/", source: "file", series: [{ label: "Agent PRs", opened: 20, merged: rate(18, 20), firstTimeCi: rate(16, 20), changesRequested: rate(2, 20), medianDaysToMerge: 1 }], byComponent: [], multiComponentNote: "", matchedPrs: [], caveat: "" };
+    assert.match(headlinePrompt(r), /Outcomes, Agent PRs \(2026-10-24 to 2026-11-23\): 20 opened; merged 18 of 20; passed CI the first time 16 of 20; changes requested on 2 of 20\./);
+  });
 });
 
 describe("the headline judge lift names the cases behind it", () => {

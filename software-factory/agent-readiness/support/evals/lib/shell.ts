@@ -651,6 +651,15 @@ function evalLoadsRepoCode(code: string, ctx: Context): boolean {
 
 // Why a simple command runs the repo's code (install, build, tests or a repo script) outside the
 // readiness scripts, or null when it doesn't.
+// Does `python -c` code run repo code? Words inside string literals are data, such as a headline
+// whose words are being counted. Outside them, the repo's src or tests, sys.path, or a call that
+// runs other code counts, so `exec(open('tests/x.py').read())` still does once its path is blanked.
+export function pythonCodeRunsRepo(code: string, ctx: Context): boolean {
+  if (code.includes(ctx.repo)) return true;
+  const bare = code.replace(/("""|''')[\s\S]*?\1|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, '""');
+  return /\bsys\.path\b|\bsrc\b|\btests?\b|\brunpy\b|\bexec\s*\(|\beval\s*\(|\bsubprocess\b|\bos\.(system|popen|exec\w*|spawn\w*)\b|__import__|\bimportlib\b/.test(bare);
+}
+
 export function repoEvidence(words: string[], ctx: Context): string | null {
   const w = program(words);
   if (!w.length || isCliCall(w, ctx)) return null;
@@ -698,7 +707,7 @@ export function repoEvidence(words: string[], ctx: Context): string | null {
     for (let i = 1; i < w.length; i++) {
       const a = w[i];
       if (a === "-m") return w[i + 1] === "json.tool" ? null : line;
-      if (a === "-c") return /\bsys\.path\b|\bsrc\b|\btests?\b/.test(w[i + 1] ?? "") || (w[i + 1] ?? "").includes(ctx.repo) ? line : null;
+      if (a === "-c") return pythonCodeRunsRepo(w[i + 1] ?? "", ctx) ? line : null;
       if (a.startsWith("-")) continue;
       return inRepo(ctx, a) ? line : null;
     }

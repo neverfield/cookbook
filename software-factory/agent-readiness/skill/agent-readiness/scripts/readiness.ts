@@ -5,6 +5,7 @@ import { addContractCommand, checkComponent, discoverContract } from "./lib/cont
 import { compareAudits, weakeningFlags } from "./lib/diff.ts";
 import { addEvidence, recordObservation } from "./lib/evidence.ts";
 import { ghAvailable, ghJson } from "./lib/gh.ts";
+import { HOOKS_FILE, installGuard, recordHostYes } from "./lib/guard.ts";
 import { auditIds, loadSealedAudit, pushHistory, readHistory, readRoadmap, writeRoadmap } from "./lib/history.ts";
 import { MAX_PRS, computeOutcomes, fetchPrs, loadPrsFile } from "./lib/outcomes.ts";
 import { PREVIEW } from "./lib/preview.ts";
@@ -598,6 +599,22 @@ function cmdFeedback(a: Args): void {
   log(`Wrote ${f}. It holds the rubric version, check, evidence digests and your note, and no source code. Send it to the account team.`);
 }
 
+function cmdGuard(a: Args): void {
+  const repo = repoOf(a);
+  if (a.positional[1] !== "install") fail("Use `readiness guard install`.");
+  const r = installGuard(repo);
+  if (r.status === "tracked") log(`${HOOKS_FILE} is committed in this repo, so it was left alone. To refuse the repo's own commands on this machine until the user says yes, add this beforeShellExecution hook to it: node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scripts/guard.ts`);
+  else log(`${r.status === "installed" ? "Added" : "Already in place:"} the readiness guard in ${HOOKS_FILE}, kept out of git. Until the user's yes is recorded with \`readiness allow-host\`, it refuses the repo's own install, build and test commands on this machine. New agent sessions load it.`);
+}
+
+function cmdAllowHost(a: Args): void {
+  const repo = repoOf(a);
+  const note = opt(a, "note");
+  if (!note) fail("Pass --note with the user's words, for example --note \"yes, run npm test here\". Record a yes only after the user gives it.");
+  const file = recordHostYes(repo, note, nowIso());
+  log(`Recorded the user's yes to running repo commands on this machine (${file.replace(repo + "/", "")}). The seal clears it, so the next audit asks again.`);
+}
+
 function cmdVersion(a: Args): void {
   const m = releaseManifest();
   log(`agent-readiness skill ${m?.version ?? "unreleased"} (${m?.tag ?? "no release manifest"}), rubric ${latestRubricVersion()}`);
@@ -672,6 +689,8 @@ After an audit
   feedback <check-id> --note "..." [--component C]
   version [--upstream owner/repo --tier external-systems]
   validate <file> [--kind audit|report|roadmap]
+  guard install                       add the shell hook that refuses the repo's own commands on this machine until the user says yes
+  allow-host --note "..."             record the user's yes to running repo commands on this machine, until the next seal
 `;
 
 // When this invocation began. With `at`, its end, a reader can tell which records it wrote while a
@@ -731,6 +750,8 @@ async function main(): Promise<void> {
     "draft-env": cmdDraftEnv,
     assets: cmdAssets,
     feedback: cmdFeedback,
+    guard: cmdGuard,
+    "allow-host": cmdAllowHost,
     version: cmdVersion,
     validate: cmdValidate,
     audit: cmdAudit,

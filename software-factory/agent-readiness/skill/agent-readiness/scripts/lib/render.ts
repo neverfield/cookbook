@@ -305,7 +305,7 @@ function headlineFor(input: RenderInput, ready: string[], setByShare: number): s
     // "builds" only when every active component has a build step that passed; many have none.
     const built = active.every((id) => input.audit.contract.some((c) => c.kind === "build" && (c.component === id || c.component === "*") && input.audit.evidence.some((e) => e.contractId === c.id && e.result === "pass")));
     const does = one ? (built ? "it installs, builds and passes its" : "it installs and passes its") : built ? "they install, build and pass their" : "they install and pass their";
-    return `Nothing blocks agents in ${where}: from a clean checkout ${does} tests, and ${one ? "its" : "their"} tests caught the planted bugs. Start delegating work to agents.`;
+    return `Nothing blocks agents in ${where}: from a clean checkout ${does} tests, and ${one ? "its" : "their"} tests caught the planted bugs. Start giving agents work there.`;
   }
   const names = list(rollup.setBy);
   const share = active.length > 1 ? `, and ${pct(setByShare, 1)}% of recent changes land there` : "";
@@ -1205,6 +1205,8 @@ export function narrationClaimErrors(report: ReportJson, audit: Audit): string[]
   for (const [name, t] of texts) {
     if (gave.length && NO_RESULT.test(t)) errors.push(`the ${name} says no check gave a result, but ${list(gave.map((c) => c.name.toLowerCase()))} did (${gave[0].result}); say which repo commands couldn't run instead`);
     if (CLEAN_CONTAINER.test(t) && !audit.evidence.some((e) => e.where === "container" && e.result !== "not_run")) errors.push(`the ${name} says something ran in a clean container, but no command ran in one in this audit`);
+    // Delegable is Level 3's name, so "delegate" below it reads as a claim of Level 3.
+    if (report.maturity.level < 3 && /\bdelegat\w*/i.test(t)) errors.push(`the ${name} says "delegate", but Delegable is Level 3's name and the repo is at Level ${report.maturity.level}; say "give agents work there" instead`);
   }
   const m = report.maturity;
   // As in rerunAdvice: a block only support for the stack can lift needs no rerun advice.

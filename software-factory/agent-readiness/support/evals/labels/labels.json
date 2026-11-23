@@ -1,7 +1,7 @@
 {
   "passAt": 0.6,
   "failAt": 0.4,
-  "judgePrompt": "c5a3f5bfb49f",
+  "judgePrompt": "f20522a662b7",
   "labels": [
     {
       "id": "good-healthy-node-headline",
@@ -9,7 +9,7 @@
       "base": "healthy-node",
       "construction": "known-good",
       "expected": "pass",
-      "headline": "healthy-node installs, builds and passes its tests from a clean checkout, and its tests caught every planted bug. Nothing here blocks agents: start delegating work to them.",
+      "headline": "healthy-node installs, builds and passes its tests from a clean checkout, and its tests caught every planted bug. Nothing here blocks agents: start giving them work here.",
       "reason": "Every claim is in the evidence: install, build and 5 of 5 tests passed, and 5 of 5 planted faults were caught."
     },
     {
@@ -46,7 +46,7 @@
       "base": "slugify",
       "construction": "known-good",
       "expected": "pass",
-      "headline": "slugify installs and passes its tests from a clean checkout, and its tests caught every planted bug. Nothing here blocks agents: start delegating work to them.",
+      "headline": "slugify installs and passes its tests from a clean checkout, and its tests caught every planted bug. Nothing here blocks agents: start giving them work here.",
       "reason": "The pinned slugify golden is Level 2: install and tests passed in a clean container and every planted fault was caught."
     },
     {

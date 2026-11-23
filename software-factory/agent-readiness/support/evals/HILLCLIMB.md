@@ -789,3 +789,30 @@ The 5-repeat re-baseline at `c466a22` failed `--release-check`. Its headline jud
 - **Not changed:** diff-catches-weakening's `npm test` before consent is round 17's reflex, and re-audit's fault-store read is an agent fault the gate catches correctly. `verify-seal` and `diff` now say when the latest sealed audit is of older code than HEAD, which bears on run 3: it sealed no audit after reading the seeded Level 2 report. The enforcement lever round 17 names, such as a shell hook, is still open.
 - **Remeasure:** not run. The API key's team allow list blocks the machine that made the change. Recalibrate the panel, then run the targeted cases for 5 repeats with both arms, then the full set for the baseline.
 - **Verdict:** pending.
+
+## Round 19 (pending measurement): the shell guard, and the judges' view of computed numbers (November 23, 2026)
+
+The PR #55 targeted check at `230204a` (14 cases, 5 repeats, both arms) fixed round 18's three regressions. Four problems remained:
+- diff-catches-weakening was 1 of 5: `npm test` on the host before consent in 4 runs.
+- re-audit was flagged at 4 of 5.
+- The subset's headline lift was +0.039 (−0.059 to 0.132).
+- The biggest drag was level-3-outcomes, at −0.38.
+
+- **Enforcement, as round 17 proposed:**
+  - `readiness guard install` adds a `beforeShellExecution` hook to `.cursor/hooks.json`, kept out of git so the audit never counts it as an agent asset.
+  - The hook (`scripts/guard.ts`) refuses the repo's own install, build, lint and test commands on the host until a yes is recorded with `readiness allow-host --note`. It also refuses them while an audit is open. The seal clears the yes.
+  - Its rules mirror the grader's `repoEvidence`, and `tests/guard.test.ts` checks that it never refuses a command the grader lets through.
+  - The eval harness installs it in `prepare()` for every arm with the skill. The SDK loads project hooks under `settingSources: ["project"]`.
+  - The grader blames an `allow-host` the case never gave.
+- **Judge evidence:** the headline judge now sees what the page judge already did:
+  - the computed numbers, including the agent PRs' first-time CI rate;
+  - the measured outcomes (agent PRs opened, merged, passed CI the first time, changes requested);
+  - a skipped component's toolchain and manifest.
+
+  level-3-outcomes's "20 agent PRs" and "80% passing CI the first time" are computed numbers the page judge scored as backed and the headline judge as invented. cpp-cmake's "built with CMake" is the scan's own toolchain line. Judge prompt digest changes.
+- **"Delegate" below Level 3:** Delegable is Level 3's name, so "start delegating" at Level 2 read as a Level 3 claim. gpt-5.6-sol docked it in registry-token and fix-instructions, and it is why `good-slugify-headline` failed calibration on both draws.
+  - The default headline, SKILL.md and the two good labels now say "give agents work there", the rubric's own item title.
+  - The seal refuses "delegate" in narration below Level 3.
+- **Grader:** `python3 -c` reads as repo code by what it runs, not by words inside its strings. re-audit #1 counted the words of a headline that says "tests".
+- **Remeasure:** not run. The API key's team allow list blocks this machine. Recalibrate, then run the targeted cases.
+- **Verdict:** pending.
