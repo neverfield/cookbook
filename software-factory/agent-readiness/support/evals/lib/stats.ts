@@ -67,6 +67,22 @@ export function bootstrapDiff(a: Map<string, number[]>, b: Map<string, number[]>
   return bootstrapMean(diffs, opts);
 }
 
+export interface CaseDiff {
+  id: string;
+  agent: number;
+  control: number;
+  diff: number;
+}
+
+// Each case's mean a, mean b and a - b, over cases both have, most negative first: the cases that
+// pull a lift down lead.
+export function caseDiffs(a: Map<string, number[]>, b: Map<string, number[]>): CaseDiff[] {
+  return [...a.keys()]
+    .filter((k) => a.get(k)!.length && b.get(k)?.length)
+    .map((id) => ({ id, agent: r3(mean(a.get(id)!)), control: r3(mean(b.get(id)!)), diff: r3(mean(a.get(id)!) - mean(b.get(id)!)) }))
+    .sort((x, y) => x.diff - y.diff || x.id.localeCompare(y.id));
+}
+
 // k of n per case, against what the baseline's pass rate predicts for n runs: one run short is a
 // flag (one flake in a handful is expected), two or more is a regression.
 export function kOfN(passed: number, runs: number, baseRate: number): "ok" | "flag" | "regression" {

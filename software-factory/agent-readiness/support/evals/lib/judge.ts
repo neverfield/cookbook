@@ -70,6 +70,9 @@ export function setupLine(r: ReportJson): string[] {
   return [`Setup the audit ran before the tests: ${steps.map((e) => `${step(e)} ${e.result}${e.ran && e.ran !== e.summary ? ` (\`${e.ran.slice(0, 80)}\`)` : ""}`).join(", ") || "none"}${started ? "" : "; no start step, so the setup starts no service"}.`];
 }
 
+// The record lines that say how this audit ran; the rest (ids, digests, where it's stored) back no claim.
+const RECORD_LINES = ["Permission tier", "Planted faults", "Replay environment", "Registry variables"];
+
 // What the scripts computed, for checking the narration's claims. Never written by the agent.
 export function evidenceBlock(r: ReportJson): string[] {
   const comps = r.components.included;
@@ -81,6 +84,9 @@ export function evidenceBlock(r: ReportJson): string[] {
     ...r.components.excluded.map((c) => `Not assessed ${c.id}: ${pctOf(c.changeShare)} of recent changes; ${c.reason}.`),
     ...comps.flatMap((c) => c.capReasons.map((x) => `${c.level !== null && c.level >= 2 ? `Level ${c.level + 1} (beyond what agents need to start) for ${c.id} needs` : `Holds ${c.id} at Level ${c.level ?? 0}`}: ${x.label}: ${x.state.replace("_", " ")}: ${x.reason}`)),
     ...setupLine(r),
+    // `readiness status` shows the agent these, so a narrated claim taken from them is backed.
+    ...r.details.checks.filter((c) => c.result).map((c) => `Check result, ${c.name}: ${c.result}.`),
+    ...r.details.record.filter((x) => RECORD_LINES.includes(x.label)).map((x) => `Recorded ${x.label.toLowerCase()}: ${x.value}.`),
   ];
   const evidence = r.details.evidence.map((e) => `Evidence ${e.check}${e.component ? ` ${e.component}` : ""}, ${e.where}: ${e.result}: ${e.summary.slice(0, 240)}${e.ran && e.ran !== e.summary ? ` (ran \`${e.ran.slice(0, 160)}\`)` : ""}`);
   return [...lines, ...evidence];
@@ -135,7 +141,7 @@ export const PROMPTS: Record<JudgeKind, (r: ReportJson) => string> = { headline:
 
 // Changes whenever what the judge is told changes, so compare() can refuse a baseline judged differently.
 export function judgePromptDigest(): string {
-  const src = [REPLY, OPEN, CLOSE, TRUST, BARE_LEVEL, TRUTH, UNPROVEN_HEADLINE, UNPROVEN_PAGE, SCALE, untrusted, unprovenFacts, setupLine, evidenceBlock, headlinePrompt, pagePrompt].map(String).join("\n");
+  const src = [REPLY, OPEN, CLOSE, TRUST, BARE_LEVEL, TRUTH, UNPROVEN_HEADLINE, UNPROVEN_PAGE, SCALE, RECORD_LINES.join("|"), untrusted, unprovenFacts, setupLine, evidenceBlock, headlinePrompt, pagePrompt].map(String).join("\n");
   return createHash("sha256").update(src).digest("hex").slice(0, 12);
 }
 

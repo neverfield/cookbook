@@ -424,9 +424,22 @@ function cmdSeal(a: Args): void {
   if (PREVIEW) log(PREVIEW);
 }
 
+// When the audited commit's tree differs from HEAD's outside .agent-readiness/, the sealed report
+// describes an older tree: a level read from it isn't HEAD's.
+function staleAuditNote(repo: string, audit: Audit): string | null {
+  const head = git(["rev-parse", "HEAD"], repo).stdout.trim();
+  if (!head || head === audit.repo.commit) return null;
+  const same = git(["diff", "--quiet", "--no-ext-diff", "--no-textconv", audit.repo.commit, head, "--", ".", ":(exclude).agent-readiness"], repo).ok;
+  if (same) return null;
+  const n = Number(git(["rev-list", "--count", `${audit.repo.commit}..${head}`], repo).stdout.trim()) || 0;
+  return `NOTE: ${audit.id} audited ${audit.repo.commit.slice(0, 7)}; HEAD (${head.slice(0, 7)}) is ${n ? `${n} commit${n === 1 ? "" : "s"} later and ` : ""}different code, so this report doesn't describe HEAD. Run a new audit, or \`readiness recheck\` to rerun its commands on HEAD in a clean container.`;
+}
+
 function cmdVerify(a: Args): void {
   const p = paths(repoOf(a));
   const { audit } = loadSealedAudit(p, a.positional[1] ?? "latest");
+  const stale = staleAuditNote(p.repo, audit);
+  if (stale) log(stale);
   const r = verifySeal(p, audit.id, { releaseRepo: opt(a, "release-repo"), releaseRef: opt(a, "release-ref"), tierExternal: opt(a, "tier") === "external-systems" || audit.tier === "external-systems", allowUnkeyed: Boolean(a.flags["allow-unkeyed"]) });
   for (const l of r.lines) log(l);
   if (!r.ok) fail("Seal verification failed.", 2);
@@ -446,6 +459,8 @@ function cmdDiff(a: Args): void {
   const to = loadSealedAudit(p, a.positional[2] ?? "latest").audit;
   const history = readHistory(p);
   const d = compareAudits(p.repo, from, to, history.find((h) => h.id === from.id), history.find((h) => h.id === to.id));
+  const stale = a.flags.json ? null : staleAuditNote(p.repo, to);
+  if (stale) log(stale);
   if (a.flags.json) log(JSON.stringify(d, null, 2));
   else {
     log(`${d.from} -> ${d.to}${d.rubricChanged ? ` (rubric ${d.rubricChanged.from} -> ${d.rubricChanged.to})` : ""}`);
@@ -659,12 +674,16 @@ After an audit
   validate <file> [--kind audit|report|roadmap]
 `;
 
+// When this invocation began. With `at`, its end, a reader can tell which records it wrote while a
+// shell that moved it to the background ran other commands.
+const STARTED_AT = nowIso();
+
 function logInvocation(argv: string[], code: number): void {
   try {
     const repo = resolveRepo(process.cwd());
     const p = paths(repo);
     if (!exists(p.records)) return;
-    appendFileSync(join(p.records, "cli.log"), JSON.stringify({ at: nowIso(), argv: argv.map((x) => redact(x)), code }) + "\n");
+    appendFileSync(join(p.records, "cli.log"), JSON.stringify({ started: STARTED_AT, at: nowIso(), argv: argv.map((x) => redact(x)), code }) + "\n");
   } catch {
     return;
   }

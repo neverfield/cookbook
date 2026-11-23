@@ -24,6 +24,8 @@ export interface Snapshot {
   call: string;
   phase: "before" | "after";
   digest: string;
+  // Epoch milliseconds when the digest was taken; absent in trajectories recorded before it was kept.
+  at?: number;
 }
 
 // sdk: an agent driven through @cursor/sdk. external: an agent driven by hand or another harness,

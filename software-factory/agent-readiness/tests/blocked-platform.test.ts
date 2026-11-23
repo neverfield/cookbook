@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { notSupportedReason } from "../skill/agent-readiness/scripts/lib/support.ts";
+import { defectClaim } from "../support/evals/lib/platforms.ts";
 import { makeAudit, reportFor } from "./helpers.ts";
 
 // Every component skipped, each in the given stack: the headline the report would carry.
@@ -36,5 +37,19 @@ describe("the headline when every component is blocked by the platform it builds
       assert.ok(h.startsWith(`${PREFIX}it skipped `), h);
       assert.doesNotMatch(h, /blocked on this machine, not broken/);
     }
+  });
+});
+
+describe("the eval gate on platform-blocked parts reads who can't build", () => {
+  test("the machine or its containers as the subject is the limit; the component as the subject is a defect", () => {
+    for (const ok of [
+      "Decide whether to run Ledger's checks on a Windows machine, since the audit's Linux containers can't build or test a Windows desktop app.",
+      "Ledger needs Windows to build; it's blocked on this machine, not broken.",
+      "This machine can't build Ledger, which needs Windows.",
+    ])
+      assert.equal(defectClaim(ok), null, ok);
+    assert.equal(defectClaim("Ledger can't build in a clean checkout."), "can't build");
+    assert.equal(defectClaim("Ledger is broken and its containers can't build it."), "broken");
+    assert.equal(defectClaim("Ledger has no tests."), "has no tests");
   });
 });

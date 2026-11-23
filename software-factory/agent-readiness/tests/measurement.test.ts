@@ -11,7 +11,7 @@ import type { Baseline } from "../support/evals/lib/baseline.ts";
 import { scriptedArgs, scriptedAudit, tierOf } from "../support/evals/lib/controls.ts";
 import { expectedProblems } from "../support/evals/lib/expected.ts";
 import { DEFAULT_GATES, actionsGate, conditionsWithoutAction, expectedJsonGate, narrationGate } from "../support/evals/lib/grade.ts";
-import { JUDGE_CANDIDATES, chooseJudge, family, headlinePrompt, judgePromptDigest, pagePrompt, parseJudge } from "../support/evals/lib/judge.ts";
+import { JUDGE_CANDIDATES, chooseJudge, evidenceBlock, family, headlinePrompt, judgePromptDigest, pagePrompt, parseJudge } from "../support/evals/lib/judge.ts";
 import { ISOLATION, isolateHome, userAgentDirs } from "../support/evals/lib/isolation.ts";
 import { releaseVerdict } from "../support/evals/lib/release.ts";
 import { currentBinding } from "../support/evals/lib/binding.ts";
@@ -182,6 +182,20 @@ describe("narration and action checks", () => {
     assert.equal(narrationCheck(["shared (6% of changes) is next."], r, null).problems.length, 1);
   });
 
+  test("the rubric's kill rate in a sentence about changes isn't read as a change share", () => {
+    const r = loadBase("tautological-tests");
+    const id = r.components.included[0].id;
+    for (const text of [
+      `${id} sets the level: its tests caught 0 of 5 planted faults, below the 60% required, so they can't yet catch wrong changes.`,
+      `${id}'s tests can't catch wrong changes: they caught 0 of 5 planted bugs, below the required 60%.`,
+      `${id} can't catch wrong changes yet; the rubric requires 60% of planted faults caught.`,
+    ])
+      assert.deepEqual(narrationCheck([text], r, null).problems, [], text);
+    assert.deepEqual(narrationCheck([`${id} (60% of changes) can't catch wrong changes.`], r, null).problems, [`says 60% of changes next to ${id}, but ${id} has 100%`]);
+    const m = loadBase("monorepo-mixed");
+    assert.deepEqual(narrationCheck(["worker misses planted faults and api has 40% of recent changes."], m, null).problems, ["says 40% of changes next to api, but api has 56%"]);
+  });
+
   test("a share next to a list of components may be their sum", () => {
     const r = loadBase("monorepo-mixed");
     assert.deepEqual(narrationCheck(["api and worker hold 83% of recent changes."], r, null).problems, []);
@@ -328,6 +342,37 @@ describe("labels", () => {
   });
 });
 
+describe("the judges see what `readiness status` shows the narrator", () => {
+  test("check results and the record lines on how the audit ran are evidence; ids and digests aren't", () => {
+    const r = loadBase("monorepo-mixed");
+    r.details.record.push({ label: "Registry variables", value: "NPM_TOKEN, passed to the setup steps by name; their values are never recorded" });
+    const block = evidenceBlock(r).join("\n");
+    const instructions = r.details.checks.find((c) => c.id === "context.instructions_verified")!;
+    assert.ok(block.includes(`Check result, ${instructions.name}: ${instructions.result}.`), block);
+    assert.match(block, /Recorded replay environment: /);
+    assert.match(block, /Recorded registry variables: NPM_TOKEN, passed to the setup steps by name/);
+    assert.doesNotMatch(block, /Recorded (audit|commit|skill digest|seal|stored in):/i);
+  });
+});
+
+describe("the headline judge lift names the cases behind it", () => {
+  test("per-case means of both arms are kept, most negative first, and the release check lists the ones that pull it down", () => {
+    const agent = [run("a", 1, { sealed: true }, 0.9), run("a", 2, { sealed: true }, 1), run("b", 1, { sealed: true }, 0.3), run("b", 2, { sealed: true }, 0.4), run("c", 1, { sealed: true }, 1)];
+    const scripted = [run("a", 1, { sealed: false }, 0.8, 0.7, { arm: "scripted" }), run("b", 1, { sealed: false }, 0.9, 0.7, { arm: "scripted" }), run("c", 1, { sealed: false }, 1, 0.7, { arm: "scripted" })];
+    const b = withControls(summarize(agent, { ...O, repeats: 5 }), agent, { scripted });
+    assert.deepEqual(b.controls!.scripted!.lift.judgeByCase, [
+      { id: "b", agent: 0.35, control: 0.9, diff: -0.55 },
+      { id: "c", agent: 1, control: 1, diff: 0 },
+      { id: "a", agent: 0.95, control: 0.8, diff: 0.15 },
+    ]);
+    const line = releaseVerdict(b, {}).lines.find((l) => l.startsWith("REPORT headline judge lift by case"));
+    assert.equal(line, "REPORT headline judge lift by case, most negative first: b -0.55 (agent 0.35, scripted 0.9)");
+    const old = structuredClone(b);
+    delete old.controls!.scripted!.lift.judgeByCase;
+    assert.ok(releaseVerdict(old, {}).lines.includes("REPORT headline judge lift by case: not recorded in this run; re-summarize it with this harness"));
+  });
+});
+
 describe("control arms and holdouts", () => {
   test("three fixtures are held out and none is in the smoke set", () => {
     const held = fixtureCases.filter((c) => c.tags.includes("holdout")).map((c) => c.id).sort();
@@ -371,7 +416,7 @@ describe("control arms and holdouts", () => {
     step(["init", "--tier", "local-exec", "--force"]);
     step(["scan"]);
     step(["replay"]);
-    step(["narrate", "--headline", "hidden-service's tests need a Redis cache that the setup doesn't start, so agents can't pass them from a clean checkout.", "--ask", "Decision needed: approve committing the setup files."]);
+    step(["narrate", "--headline", "hidden-service's tests need a Redis cache that the setup doesn't start, so agents can't pass them from a clean checkout. A rerun with Docker can prove it.", "--ask", "Decision needed: approve committing the setup files."]);
     step(["seal"]);
     const g = narrationGate(ws, t, c);
     assert.equal(g.pass, false);

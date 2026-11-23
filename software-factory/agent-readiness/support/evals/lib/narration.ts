@@ -107,6 +107,26 @@ const near = (n: number, share: number) => Math.abs(n - share * 100) < 1;
 // What may sit between two components that a percentage covers together: "alpha and bravo", "a, b or c".
 const LIST_GAP = /^(?:,\s*|\s+(?:and|or)\s+|,\s+(?:and|or)\s+)$/i;
 
+// A percentage is a change share when it stands on its own ("worker (27%)", "api has 56%") or the
+// words after it are about changes ("56% of recent changes", "a 40% share"). One followed by other
+// words is another figure in a sentence that also mentions changes, such as the rubric's kill rate
+// in "caught 0 of 5 planted faults, below the 60% required to catch wrong changes".
+const BARE = /^\s*(?:$|[),;:.!?]|\s(?:and|or|but|of\s+(?:all\s+|the\s+|its\s+|their\s+|recent\s+|the\s+repo's\s+)*(?:recent\s+)?(?:changes?|commits?|work|activity)\b))/i;
+const SHARE_WORDS = /^\s*(?:[\w'’-]+\s+){0,3}?(?:changes?|share)\b/i;
+// The planted-fault rate or the rubric's bar for it, at most three words before the figure.
+const FAULT_RATE = /\b(?:faults?|bugs?|kill rate|rubric|requir\w*|threshold|minimum)(?:[\s,]+[\w'’-]+){0,3}[\s,(]*$/i;
+
+// Where a fault-rate word before the figure starts, or null when there is none.
+export function faultRateAt(before: string): number | null {
+  return FAULT_RATE.exec(before)?.index ?? null;
+}
+
+// "explicit": the words after the figure name changes; "bare": nothing after it says what it counts.
+export function shareClaim(after: string): "explicit" | "bare" | null {
+  if (SHARE_WORDS.test(after) || /^\s+of\s/i.test(after) && BARE.test(after)) return "explicit";
+  return BARE.test(after) ? "bare" : null;
+}
+
 function shareProblems(texts: string[], r: ReportJson): string[] {
   const comps = [...r.components.included, ...r.components.excluded];
   const sum = (xs: { changeShare: number }[]) => xs.reduce((s, c) => s + c.changeShare, 0);
@@ -124,6 +144,10 @@ function shareProblems(texts: string[], r: ReportJson): string[] {
       for (const m of sentence.matchAll(/(\d+(?:\.\d+)?)%/g)) {
         const n = Number(m[1]);
         const at = m.index!;
+        const claim = shareClaim(sentence.slice(at + m[0].length));
+        if (!claim) continue;
+        const rate = claim === "bare" ? faultRateAt(sentence.slice(0, at)) : null;
+        if (rate !== null && !mentions.some((x) => x.start >= rate && x.end <= at)) continue;
         if (!mentions.length) {
           if (![...comps.map((c) => c.changeShare), ...totals, ...unnamed].some((x) => near(n, x))) problems.push(`says ${m[0]} of changes, but no component or total has ${m[0]}`);
           continue;

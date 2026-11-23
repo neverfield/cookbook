@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
-import { bootstrapDiff, bootstrapMean, kOfN, wilson } from "./stats.ts";
-import type { MeanCi, Rate } from "./stats.ts";
+import { bootstrapDiff, bootstrapMean, caseDiffs, kOfN, wilson } from "./stats.ts";
+import type { CaseDiff, MeanCi, Rate } from "./stats.ts";
 import type { Binding } from "./binding.ts";
 import type { Arm, CaseRun } from "./types.ts";
 
@@ -75,6 +75,9 @@ export interface Lift {
   // Per-case mean differences, bootstrapped over cases both arms have.
   judge: MeanCi;
   page: MeanCi;
+  // The headline judge's per-case means in both arms and their difference, most negative first, so
+  // the cases behind the judge lift can be named. Absent in baselines recorded before it was kept.
+  judgeByCase?: CaseDiff[];
 }
 
 export interface Baseline {
@@ -230,7 +233,7 @@ export function lift(agent: CaseRun[], control: CaseRun[]): Lift {
   };
   const a = totalsOf(byCase(agent)).pooled.rate;
   const c = totalsOf(byCase(control)).pooled.rate;
-  return { pooled: a === null || c === null ? null : Math.round((a - c) * 1000) / 1000, gates: bootstrapDiff(passes(agent), passes(control)), judge: bootstrapDiff(scores(agent, "judge"), scores(control, "judge")), page: bootstrapDiff(scores(agent, "page"), scores(control, "page")) };
+  return { pooled: a === null || c === null ? null : Math.round((a - c) * 1000) / 1000, gates: bootstrapDiff(passes(agent), passes(control)), judge: bootstrapDiff(scores(agent, "judge"), scores(control, "judge")), page: bootstrapDiff(scores(agent, "page"), scores(control, "page")), judgeByCase: caseDiffs(scores(agent, "judge"), scores(control, "judge")) };
 }
 
 export function withControls(base: Baseline, agent: CaseRun[], controls: Partial<Record<Arm, CaseRun[]>>, holdout?: Set<string>): Baseline {

@@ -289,3 +289,19 @@ describe("CLI", { concurrency: 4 }, () => {
     assert.match(readiness(repo, ["version"]).out, /agent-readiness skill 0\.2\.0 \(agent-readiness-v0\.2\.0\), rubric 2026-11-beta/);
   });
 });
+
+describe("a sealed report of an older tree says it doesn't describe HEAD", () => {
+  test("verify-seal and diff name the audited commit once HEAD's code differs, and stay quiet for a records-only commit", () => {
+    const repo = materialize("healthy-node");
+    assert.equal(readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none"]).code, 0);
+    const note = /NOTE: aud-\S+ audited [0-9a-f]{7}; HEAD \([0-9a-f]{7}\) is 2 commits later and different code, so this report doesn't describe HEAD\. Run a new audit, or `readiness recheck`/;
+    assert.doesNotMatch(readiness(repo, ["verify-seal"]).out, /doesn't describe HEAD/);
+    commitAll(repo, "Commit the readiness records");
+    assert.doesNotMatch(readiness(repo, ["verify-seal"]).out, /doesn't describe HEAD/, "a commit of .agent-readiness/ alone changes no code");
+    const f = join(repo, "src/pricing.js");
+    writeFileSync(f, readFileSync(f, "utf8").replace("if (total >= 100) {", "if (total > 100) {"));
+    execFileSync("git", ["-c", "commit.gpgsign=false", "-c", "user.name=Contributor A", "-c", "user.email=a@example.com", "commit", "-q", "-am", "Change the discount rule"], { cwd: repo });
+    assert.match(readiness(repo, ["verify-seal"]).out, note);
+    assert.match(readiness(repo, ["diff", "latest", "latest"]).out, note);
+  });
+});
