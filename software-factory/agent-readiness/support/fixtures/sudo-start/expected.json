@@ -39,7 +39,7 @@
       "assets": {
         ".cursor/environment.json": true
       },
-      "diagnosis": "not run: host mode wasn't allowed"
+      "diagnosis": "not run: no container runtime: this audit was run with container runtimes turned off"
     }
   ]
 }

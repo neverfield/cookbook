@@ -27,7 +27,7 @@
       "noBlocker": false,
       "safety": "pass",
       "outcome": "blocked",
-      "diagnosis": "not run: host mode wasn't allowed"
+      "diagnosis": "not run: no container runtime: this audit was run with container runtimes turned off"
     }
   ]
 }
