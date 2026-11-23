@@ -11,6 +11,8 @@ import type { Baseline } from "../support/evals/lib/baseline.ts";
 import { scriptedArgs, scriptedAudit, tierOf } from "../support/evals/lib/controls.ts";
 import { expectedProblems } from "../support/evals/lib/expected.ts";
 import { DEFAULT_GATES, actionsGate, conditionsWithoutAction, expectedJsonGate, narrationGate } from "../support/evals/lib/grade.ts";
+import { narrationClaimErrors } from "../skill/agent-readiness/scripts/lib/render.ts";
+import type { Audit } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { JUDGE_CANDIDATES, chooseJudge, evidenceBlock, family, headlinePrompt, judgePromptDigest, pagePrompt, parseJudge } from "../support/evals/lib/judge.ts";
 import { ISOLATION, isolateHome, userAgentDirs } from "../support/evals/lib/isolation.ts";
 import { releaseVerdict } from "../support/evals/lib/release.ts";
@@ -363,6 +365,28 @@ describe("the judges see what `readiness status` shows the narrator", () => {
     const rate = (count: number, n: number) => ({ count, n, rate: n ? count / n : null, window: "the last 30 days" });
     r.details.outcomes = { window: "2026-10-24 to 2026-11-23", filter: "head branch starts with cursor/", source: "file", series: [{ label: "Agent PRs", opened: 20, merged: rate(18, 20), firstTimeCi: rate(16, 20), changesRequested: rate(2, 20), medianDaysToMerge: 1 }], byComponent: [], multiComponentNote: "", matchedPrs: [], caveat: "" };
     assert.match(headlinePrompt(r), /Outcomes, Agent PRs \(2026-10-24 to 2026-11-23\): 20 opened; merged 18 of 20; passed CI the first time 16 of 20; changes requested on 2 of 20\./);
+  });
+});
+
+describe("round 3: what backs a remediation headline", () => {
+  test("the judge sees the roadmap items this audit closed and each safety finding", () => {
+    const r = loadBase("monorepo-mixed");
+    r.roadmap.items[0] = { ...r.roadmap.items[0], status: "done", title: "Remove the install hook that pipes a download into a shell" };
+    r.explanations = [...(r.explanations ?? []), { kind: "safety", subject: "test/payments.test.js:3", result: "blocks Level 2", ran: "the secret and script scan", where: "read from files", happened: "tests read PAYMENTS_KEY, a production credential", rule: "x" } as never];
+    const block = evidenceBlock(r).join("\n");
+    assert.match(block, /Roadmap item done, its checks pass in this audit: Remove the install hook that pipes a download into a shell\./);
+    assert.match(block, /Safety finding, test\/payments\.test\.js:3 \(blocks Level 2\): tests read PAYMENTS_KEY, a production credential\./);
+  });
+
+  test("the seal refuses \"its instructions check out\" when some were wrong or didn't run, and takes the count", () => {
+    const r = loadBase("monorepo-mixed");
+    const audit = (headline: string) => ({ narration: { headline }, evidence: [] }) as unknown as Audit;
+    const says = (headline: string) => narrationClaimErrors(r, audit(headline)).filter((e) => /instructions check out/.test(e));
+    assert.match(says("api sets the level; its instructions check out and shared is ready for agents.")[0], /the audit found 4 of 7 instruction items check out, 3 wrong; give that count instead/);
+    assert.deepEqual(says("api sets the level; 4 of 7 instruction items check out."), []);
+    const all = loadBase("monorepo-mixed");
+    all.details.checks = all.details.checks.map((c) => (c.id === "context.instructions_verified" ? { ...c, result: "7 of 7 instruction items check out" } : c));
+    assert.deepEqual(narrationClaimErrors(all, audit("api sets the level; its instructions check out.")).filter((e) => /instructions/.test(e)), []);
   });
 });
 

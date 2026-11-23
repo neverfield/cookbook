@@ -816,3 +816,14 @@ The PR #55 targeted check at `230204a` (14 cases, 5 repeats, both arms) fixed ro
 - **Grader:** `python3 -c` reads as repo code by what it runs, not by words inside its strings. re-audit #1 counted the words of a headline that says "tests".
 - **Remeasure:** not run. The API key's team allow list blocks this machine. Recalibrate, then run the targeted cases.
 - **Verdict:** pending.
+
+## Round 20 (pending measurement): refused calls, draft reads and remediation headlines (November 23, 2026)
+
+The round-2 targeted check at `351f3e9` passed 68 of 70 agent runs, with 12 of 14 cases at 5 of 5. Calibration was 26 of 30 with an AUC of 0.96. The headline lift was +0.054 (−0.009 to 0.119), and two cases were flagged.
+
+- **Grader, refused calls:** diff-catches-weakening #2 was blamed for an `npm test` the guard refused, so it never ran. The SDK driver now keeps an errored call's result. The guard logs each refusal to `.git/readiness-guard.jsonl`, outside the repo's files and the records. The grader leaves out a call whose result carries the guard's mark, or whose command or path the log refused while the call ran. One refusal clears one call. Test: `tests/guard.test.ts`.
+- **Guard, draft reads:** fix-safety-hook #4 read `.agent-readiness/work/…/local.json` and `audit.json` during the open audit, a real fault. The guard now refuses commands that name the draft records or the fault store, and file reads of them through `beforeReadFile`. It uses the grader's own patterns, which moved to `scripts/lib/guard.ts`. SKILL.md rule 4 says not to read the draft.
+- **Judge evidence:** fix-safety-hook #1 and #4 said the re-audit "found no install hook that pipes a download into a shell". That follows from the roadmap item this audit closed, which the judges never saw. The evidence now lists roadmap items done in this audit and each safety finding, which `status` already shows. Judge prompt digest changes.
+- **Seal:** fix-instructions #2 said "its instructions check out" when one of five items didn't run. The seal now refuses that claim while the instructions check shows items wrong or not run, unless the text gives the count.
+- **Remeasure:** not run; the API key's allow list blocks this machine. Recalibrate, then run the targeted cases.
+- **Verdict:** pending.

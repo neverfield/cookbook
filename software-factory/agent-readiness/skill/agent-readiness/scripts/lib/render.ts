@@ -1190,6 +1190,7 @@ export function headlineCauseErrors(report: ReportJson): string[] {
 
 const NO_RESULT = /\bno (?:check|checks)\b[^.;:]{0,30}?\b(?:results?|ran|could run|was run|were run)\b|\bnothing (?:produced|gave) (?:a |any )?(?:real )?results?\b/i;
 const CLEAN_CONTAINER = /\b(?:clean|fresh) container\b/i;
+const INSTRUCTIONS_OK = /\binstructions?\b[^.;:]{0,30}?\b(?:check(?:s|ed)? out|are (?:accurate|correct|right|up to date)|all pass(?:ed)?)\b/i;
 const RERUN = /\b(?:re-?runs?|run (?:it |them |this |the audit |the checks )?again|re-?audits?|another machine|a machine (?:with|that|where)|where (?:docker|podman|the network|network|the image|it|they|these)|in CI|open network|with (?:docker|podman|network))\b/i;
 
 // Narrated claims the audit's own records contradict, which a reader can't check from the text:
@@ -1202,7 +1203,11 @@ export function narrationClaimErrors(report: ReportJson, audit: Audit): string[]
   const texts = ([["headline", n.headline ?? ""], ["ask", n.ask ?? ""], ...Object.values(n.gaps ?? {}).map((g) => ["gap", g])] as [string, string][]).filter(([, t]) => t.trim());
   const errors: string[] = [];
   const gave = report.details.checks.filter((c) => c.counts.passed + c.counts.failed > 0);
+  const instructions = report.details.checks.find((c) => c.id === "context.instructions_verified");
+  const counted = instructions ? /^(\d+) of (\d+) /.exec(instructions.result) : null;
+  const partial = instructions && (/\b(wrong|not run)\b/.test(instructions.result) || (counted !== null && counted[1] !== counted[2])) ? instructions.result : null;
   for (const [name, t] of texts) {
+    if (partial && INSTRUCTIONS_OK.test(t) && !/\b\d+ of \d+ instruction/i.test(t)) errors.push(`the ${name} says the instructions check out, but the audit found ${partial}; give that count instead`);
     if (gave.length && NO_RESULT.test(t)) errors.push(`the ${name} says no check gave a result, but ${list(gave.map((c) => c.name.toLowerCase()))} did (${gave[0].result}); say which repo commands couldn't run instead`);
     if (CLEAN_CONTAINER.test(t) && !audit.evidence.some((e) => e.where === "container" && e.result !== "not_run")) errors.push(`the ${name} says something ran in a clean container, but no command ran in one in this audit`);
     // Delegable is Level 3's name, so "delegate" below it reads as a claim of Level 3.

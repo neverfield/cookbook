@@ -97,6 +97,8 @@ export function evidenceBlock(r: ReportJson): string[] {
     ...r.details.checks.filter((c) => c.result).map((c) => `Check result, ${c.name}: ${c.result}.`),
     ...r.executive.numbers.map((n) => `Computed number, ${n.label}: ${n.value}. ${n.comparison}.`),
     ...outcomeLines(r),
+    ...r.roadmap.items.filter((i) => i.status === "done").map((i) => `Roadmap item done, its checks pass in this audit: ${i.title}.`),
+    ...(r.explanations ?? []).filter((x) => x.kind === "safety").map((x) => `Safety finding, ${x.subject} (${x.result}): ${x.happened}.`),
     ...r.details.record.filter((x) => RECORD_LINES.includes(x.label)).map((x) => `Recorded ${x.label.toLowerCase()}: ${x.value}.`),
   ];
   const evidence = r.details.evidence.map((e) => `Evidence ${e.check}${e.component ? ` ${e.component}` : ""}, ${e.where}: ${e.result}: ${e.summary.slice(0, 240)}${e.ran && e.ran !== e.summary ? ` (ran \`${e.ran.slice(0, 160)}\`)` : ""}`);

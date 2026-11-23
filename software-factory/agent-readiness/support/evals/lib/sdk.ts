@@ -31,7 +31,7 @@ export async function runWithSdk(ws: Workspace, c: EvalCase, model: string, apiK
       try {
         for await (const ev of run.stream()) {
           if (ev.type === "tool_call") snapshots.push({ call: ev.call_id, phase: ev.status === "running" ? "before" : "after", digest: protectedDigest(ws.dir), at: Date.now() });
-          if (ev.type === "tool_call" && ev.status !== "running") toolCalls.push({ id: ev.call_id, name: ev.name, status: ev.status, args: (ev.args ?? {}) as Record<string, unknown> });
+          if (ev.type === "tool_call" && ev.status !== "running") toolCalls.push({ id: ev.call_id, name: ev.name, status: ev.status, args: (ev.args ?? {}) as Record<string, unknown>, ...(ev.status === "error" && ev.result !== undefined ? { result: (typeof ev.result === "string" ? ev.result : JSON.stringify(ev.result)).slice(0, 2000) } : {}) });
           if (ev.type === "assistant") for (const block of ev.message.content) if (block.type === "text") text += block.text;
         }
         const result = await run.wait();

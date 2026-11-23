@@ -17,6 +17,8 @@ export interface ToolCall {
   name: string;
   status: string;
   args: Record<string, unknown>;
+  // The start of the tool's result when the call ended in an error, such as a hook's refusal.
+  result?: string;
 }
 
 // The digest of the protected files (see protected.ts) when a tool call started or finished.

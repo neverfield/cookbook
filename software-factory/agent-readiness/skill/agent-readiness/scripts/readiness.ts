@@ -603,7 +603,7 @@ function cmdGuard(a: Args): void {
   const repo = repoOf(a);
   if (a.positional[1] !== "install") fail("Use `readiness guard install`.");
   const r = installGuard(repo);
-  if (r.status === "tracked") log(`${HOOKS_FILE} is committed in this repo, so it was left alone. To refuse the repo's own commands on this machine until the user says yes, add this beforeShellExecution hook to it: node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scripts/guard.ts`);
+  if (r.status === "tracked") log(`${HOOKS_FILE} is committed in this repo, so it was left alone. To refuse the repo's own commands on this machine until the user says yes, add this command as a beforeShellExecution and a beforeReadFile hook: node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scripts/guard.ts`);
   else log(`${r.status === "installed" ? "Added" : "Already in place:"} the readiness guard in ${HOOKS_FILE}, kept out of git. Until the user's yes is recorded with \`readiness allow-host\`, it refuses the repo's own install, build and test commands on this machine. New agent sessions load it.`);
 }
 
