@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { renderHtml } from "../skill/agent-readiness/scripts/lib/render-html.ts";
-import { ladderLine, nextMove, pageNumbers, renderMarkdown, scaleLine, shortReason, trendLine, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { ladderLine, nextMove, pageNumbers, shortReason, trendLine } from "../skill/agent-readiness/scripts/lib/format.ts";
+import { renderMarkdown, scaleLine, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { validateAgainst } from "../skill/agent-readiness/scripts/lib/schema.ts";
 import type { HistoryLine } from "../skill/agent-readiness/scripts/lib/types.ts";

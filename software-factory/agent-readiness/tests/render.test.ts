@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { computeOutcomes, describeRate, rate } from "../skill/agent-readiness/scripts/lib/outcomes.ts";
-import { allowedNumbers, danglingEvidence, renderMarkdown, scaleLine, unprovenHeading, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { allowedNumbers, danglingEvidence } from "../skill/agent-readiness/scripts/lib/claims.ts";
+import { unprovenHeading } from "../skill/agent-readiness/scripts/lib/model.ts";
+import { renderMarkdown, scaleLine, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { consistencyErrors, sealStatusFor } from "../skill/agent-readiness/scripts/lib/seal.ts";
 import { skillDigest } from "../skill/agent-readiness/scripts/lib/workspace.ts";

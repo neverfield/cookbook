@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { blocksText, headlineCauseErrors, renderMarkdown, startFailureCause, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { blocksText, startFailureCause } from "../skill/agent-readiness/scripts/lib/model.ts";
+import { headlineCauseErrors, renderMarkdown, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { renderHtml } from "../skill/agent-readiness/scripts/lib/render-html.ts";
 import { latestRubricVersion, loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import type { Audit, HistoryLine, ReportJson, RoadmapItem } from "../skill/agent-readiness/scripts/lib/types.ts";

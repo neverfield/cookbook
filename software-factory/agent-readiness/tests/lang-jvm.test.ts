@@ -9,7 +9,7 @@ import { ecosystemOf } from "../skill/agent-readiness/scripts/lib/languages/inde
 import { JDKS, JVM_HOME, MAVEN_TEST_CLASSES, cLikeQuoted, cLikeSites, enforcedJava, extraJdks, jdkFor, jvm, jvmTestCounts, registerJdks } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
 import { targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
-import { toolchainsNote } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { toolchainsNote } from "../skill/agent-readiness/scripts/lib/model.ts";
 import { loadRubric, latestRubricVersion } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { FIXTURES } from "../support/tools/fixture.ts";
 

@@ -1,4 +1,4 @@
-import type { RenderInput } from "./render.ts";
+import type { ModelInput } from "./model.ts";
 import { INSTRUCTION_RULES, SAFETY_RULES } from "./static.ts";
 import type { Audit, CondId, CondState, Evidence, Explanation, InstructionItem, ReportJson, ReportWaivers, SafetyFinding } from "./types.ts";
 import { usedWaivers } from "./waivers.ts";
@@ -47,14 +47,14 @@ function ranOf(evs: Evidence[]): string {
   return all.length ? list(all) : "nothing ran for it";
 }
 
-function levelNeeding(input: RenderInput, c: CondId): string {
+function levelNeeding(input: ModelInput, c: CondId): string {
   const { rubric } = input;
   if (rubric.level1.includes(c)) return "Level 1 needs it";
   if (rubric.level2.includes(c)) return "Level 2 needs it";
   return "Reported with Level 1; no level waits on it alone";
 }
 
-function conditionRule(input: RenderInput, c: CondId, state: CondState): string {
+function conditionRule(input: ModelInput, c: CondId, state: CondState): string {
   const cond = input.rubric.conditions[c];
   const check = input.rubric.checks.find((k) => k.id === cond.check);
   return `${levelNeeding(input, c)}: ${cond.label}${check ? ` (${check.title})` : ""}. ${STATE_RULE[state]}`;
@@ -73,7 +73,7 @@ export function imagesUsed(env: Audit["environment"]): string | null {
   return runs.map((r) => `${r.image} (${r.components.map((c) => (c === "*" ? "the repo" : c)).join(", ")}${r.started ? "" : ", didn't start"})`).join("; ");
 }
 
-function environmentLine(input: RenderInput): string {
+function environmentLine(input: ModelInput): string {
   const { audit } = input;
   if (audit.tier === "read-only") return "nowhere: the read-only tier runs no repo command";
   if (audit.environment.notRun) return `nowhere: ${audit.environment.notRun}`;
@@ -86,7 +86,7 @@ function environmentLine(input: RenderInput): string {
   return "nowhere: no repo command ran";
 }
 
-function componentLevel(input: RenderInput, report: ReportJson): Explanation[] {
+function componentLevel(input: ModelInput, report: ReportJson): Explanation[] {
   const { audit, rubric } = input;
   const out: Explanation[] = [];
   const rules = `${report.details.levelRules.level1}. ${report.details.levelRules.level2}. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets.`;
@@ -114,7 +114,7 @@ function componentLevel(input: RenderInput, report: ReportJson): Explanation[] {
   return out;
 }
 
-function conditions(input: RenderInput): Explanation[] {
+function conditions(input: ModelInput): Explanation[] {
   const { audit, rubric } = input;
   const out: Explanation[] = [];
   const conds: CondId[] = [...rubric.level1, ...rubric.level2.filter((c) => !rubric.level1.includes(c)), "toolchain", "lockfile"];
@@ -167,7 +167,7 @@ function safety(audit: Audit): Explanation[] {
   }));
 }
 
-function repoLevel(input: RenderInput, report: ReportJson): Explanation {
+function repoLevel(input: ModelInput, report: ReportJson): Explanation {
   const m = report.maturity;
   const active = [...input.active];
   const result = report.maturity.outcome === "not_assessed" ? "not assessed" : m.unproven ? "Level 1 unproven on this machine" : `Level ${m.level}${m.couldBe !== null ? `, could be ${m.couldBe}` : ""}`;
@@ -187,7 +187,7 @@ function repoLevel(input: RenderInput, report: ReportJson): Explanation {
 }
 
 // Every result in the report with what ran, where it ran, what happened and the rule behind it.
-export function explanationsOf(input: RenderInput, report: ReportJson): Explanation[] {
+export function explanationsOf(input: ModelInput, report: ReportJson): Explanation[] {
   return [repoLevel(input, report), ...componentLevel(input, report), ...conditions(input), ...instructions(input.audit), ...safety(input.audit)];
 }
 

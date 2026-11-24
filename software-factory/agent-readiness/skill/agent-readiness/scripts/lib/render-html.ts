@@ -1,7 +1,5 @@
-import { describeRate } from "./outcomes.ts";
-import { EXPERIMENTAL_NOTE, changeMove, groupedSteps, nowLevelText, isExperimental, levelDefinition, markedLevel, nextMove, pageNumbers, shortReason, signalsNote, stepOf, waiverHint } from "./render.ts";
+import { EXPERIMENTAL_NOTE, changeMove, describeRate, fmtDate, fmtShortDate, groupedSteps, isExperimental, levelDefinition, levelText, list, markedLevel, nextMove, nowLevelText, pageNumbers, shortReason, signalsNote, stepOf, waiverHint } from "./format.ts";
 import type { Level, ReportJson } from "./types.ts";
-import { fmtDate, fmtShortDate } from "./util.ts";
 
 // report.html: the same sealed report.json as report.md, as one self-contained page. Inline CSS and
 // SVG only, no scripts and nothing fetched, so it opens offline, prints, and follows the reader's
@@ -15,13 +13,7 @@ const inline = (s: string) =>
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/https?:\/\/[^\s<)]+[^\s<).,;]/g, (u) => `<a href="${u}">${u}</a>`);
 
-const levelText = (l: Level | null | undefined) => (l === null || l === undefined ? "no level" : `Level ${l}`);
-
 const anchor = (itemId: string) => `step-${itemId.replace(/[^a-z0-9-]/gi, "-")}`;
-
-function list(items: string[]): string {
-  return items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
-}
 
 // Tokens. One accent carries links, reached levels and the next move; status hues appear only next to
 // a word that says the same thing. Every text pair meets WCAG AA and every mark 3:1, in both modes.

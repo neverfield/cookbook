@@ -1,5 +1,5 @@
 import { partialCoverage } from "../skill/agent-readiness/scripts/lib/levels.ts";
-import { buildReport } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { buildReport } from "../skill/agent-readiness/scripts/lib/model.ts";
 import { updateRoadmap } from "../skill/agent-readiness/scripts/lib/roadmap.ts";
 import { latestRubricVersion, loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { compute } from "../skill/agent-readiness/scripts/lib/seal.ts";
