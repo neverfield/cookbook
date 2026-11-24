@@ -306,6 +306,13 @@
     "componentMinutes": 15,
     "totalMinutes": 60
   },
+  "safety": {
+    "blockingSecretClasses": [
+      "provider_token",
+      "private_key",
+      "url_credential"
+    ]
+  },
   "outcomes": {
     "windowDays": 30,
     "minRateN": 5,
@@ -647,8 +654,8 @@
           "detail": "Treat every listed secret as exposed and rotate it before removing it."
         },
         {
-          "title": "Remove and ignore",
-          "detail": "Move values to the secret store and add the files to `.gitignore`."
+          "title": "Move the values out",
+          "detail": "{removal}"
         },
         {
           "title": "Prove it",

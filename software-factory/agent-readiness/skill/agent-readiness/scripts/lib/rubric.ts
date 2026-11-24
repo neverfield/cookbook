@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ProofKind } from "./proofenv.ts";
-import type { CondId, Effort, Level, ScenarioId, Strength } from "./types.ts";
+import type { CondId, Effort, Level, ScenarioId, SecretClass, Strength } from "./types.ts";
 import { SKILL_ROOT, readJson, readText, sha256 } from "./util.ts";
 
 export interface RubricCheck {
@@ -51,6 +51,9 @@ export interface Rubric {
   // and the level stay fixed until the code changes; without it, a fresh seed each audit.
   mutation: { perComponent: number; minForPass: number; killRate?: number; seedFrom?: "audit" | "code"; languages: string[]; operators: string[]; runTimeoutSec: number; flakeRuns: number; targeting: string };
   budgets: { commandTimeoutSec: number; componentMinutes: number; totalMinutes: number };
+  // blockingSecretClasses (from 2026-12-beta): the secret classes in secrets.ts that block Level 2
+  // when found in shipped code; the others are listed for review. Without it, every class blocks.
+  safety?: { blockingSecretClasses?: SecretClass[] };
   // typecheck (from 2026-12-beta): a passing type-check meets the commands condition only once it
   // failed on a type error the audit planted. Without it, exit 0 is enough.
   canary?: { typecheck?: boolean };

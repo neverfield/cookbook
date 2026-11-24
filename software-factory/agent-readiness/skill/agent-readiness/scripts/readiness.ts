@@ -135,7 +135,7 @@ function cmdScan(a: Args): void {
   const profile = buildProfile(repo, local.tree, rubric, audit.repo.commit);
   profile.scope = bound.scope;
   audit.profile = profile;
-  audit.safety = safetyScan(local.tree, profile, bound);
+  audit.safety = safetyScan(local.tree, profile, bound, rubric.safety?.blockingSecretClasses);
   audit.instructions = instructionItems(local.tree, profile);
   for (const item of audit.instructions.filter((i) => i.staticResult === "fail")) {
     const ev = addEvidence(audit, { checkId: "context.instructions_verified", condition: "instructions", strength: "static", where: "static", result: "fail", summary: `${item.source}:${item.line} \`${item.text}\`: ${item.staticReason}` });

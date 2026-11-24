@@ -1,0 +1,145 @@
+{
+  "purpose": "Synthetic, labelled secret-scan corpus across languages and template styles. A line is an array of parts joined at test time, so this repository never holds a token-shaped string. Every value is fake. `expect` lists each line a finding must be on, with its class and whether it blocks Level 2 under rubric 2026-12-beta; a finding on any other line, or a blocking one that isn't labelled blocking, fails tests/secrets.test.ts.",
+  "cases": [
+    {
+      "file": "src/mediabot/settings.py",
+      "lines": [
+        "import os",
+        ["AWS_ACCESS_KEY_ID = '", "AKIA", "QQQQFAKEKEY22222", "'"],
+        "DATABASE_URL = os.environ.get('DATABASE_URL', 'postgres://localhost/mediabot')"
+      ],
+      "expect": [{ "line": 2, "class": "provider_token", "blocking": true }]
+    },
+    {
+      "file": "src/mediabot/clients/movies.py",
+      "lines": [
+        "# A public API key the app ships for its own client.",
+        ["API_KEY = '", "b3f1c9a7d2e84f6a", "9c0d1e2f3a4b5c6d", "'"]
+      ],
+      "expect": [{ "line": 2, "class": "generic_assignment", "blocking": false }]
+    },
+    {
+      "file": "src/mediabot/ftp.py",
+      "lines": [
+        "def url(self):",
+        "    return f'ftp://{self.username}:{self.password}@{self.host}/'",
+        "LEGACY = 'ftp://%(user)s:%(password)s@%(host)s/'",
+        "TEMPLATE = 'sftp://{0}:{1}@{2}/'",
+        "NAMED = 'sftp://{user}:{password}@files.acme-corp.io/'"
+      ],
+      "expect": []
+    },
+    {
+      "file": "src/db.py",
+      "lines": [
+        ["ENGINE_URL = 'postgresql://reporting:", "Qm7vT2xK9pLw", "@db.acme-corp.io:5432/warehouse'"],
+        "LOCAL_URL = 'postgresql://postgres:postgres@localhost:5432/dev'"
+      ],
+      "expect": [{ "line": 1, "class": "url_credential", "blocking": true }]
+    },
+    {
+      "file": "src/keys.py",
+      "lines": [
+        ["SIGNING_KEY = '''-----BEGIN ", "RSA PRIVATE KEY-----"],
+        ["MIIEowIBAAKCAQEA", "7nQ2vF8sK3pL1xT9mR4wZ6yB0cD5eG7hJ2kM8nP4qS1tU3vW5xY7zA9bC2dE4fG6"],
+        "-----END RSA PRIVATE KEY-----'''"
+      ],
+      "expect": [{ "line": 1, "class": "private_key", "blocking": true }]
+    },
+    {
+      "file": "src/crypto_notes.py",
+      "lines": [
+        "def load(path):",
+        ["    \"\"\"Reads a PEM file that starts with -----BEGIN ", "PRIVATE KEY-----.\"\"\""]
+      ],
+      "expect": [{ "line": 2, "class": "private_key", "blocking": false }]
+    },
+    {
+      "file": "src/deploy.ts",
+      "lines": [
+        "import { Octokit } from \"@octokit/rest\";",
+        ["const token = \"", "ghp_", "Zq8mN2pL7vX4kR9tHw3sJ9dK2mQ7xV5cAb12", "\";"]
+      ],
+      "expect": [{ "line": 2, "class": "provider_token", "blocking": true }]
+    },
+    {
+      "file": "src/client.ts",
+      "lines": [
+        "export const config = {",
+        ["  apiKey: \"", "pk_web_4f8a2c9e", "1b7d3f6a\",", ""],
+        "  url: `https://${user}:${pass}@${host}/v1`,",
+        "};"
+      ],
+      "expect": [{ "line": 2, "class": "generic_assignment", "blocking": false }]
+    },
+    {
+      "file": "test/fixtures/tokens.ts",
+      "lines": [
+        ["export const TOKEN = \"", "ghp_", "Hw3sJ9dK2mQ7xV5cZq8mN2pL7vX4kR9tAb34", "\";"]
+      ],
+      "expect": [{ "line": 1, "class": "provider_token", "blocking": false }]
+    },
+    {
+      "file": "internal/billing/stripe.go",
+      "lines": [
+        "package billing",
+        ["const stripeKey = \"", "sk_live_", "Lw4pQ9xT2vM7kR3nB8cF6hJ1", "\""],
+        "var dsn = \"postgres://\" + user + \":\" + pass + \"@db/app\""
+      ],
+      "expect": [{ "line": 2, "class": "provider_token", "blocking": true }]
+    },
+    {
+      "file": "config/cache.yml",
+      "lines": [
+        "redis:",
+        "  url: \"redis://:{{redis_password}}@cache.acme-corp.io:6379/0\"",
+        "  backup: \"redis://:<%= ENV['REDIS_PASS'] %>@cache.acme-corp.io:6379/1\"",
+        "  shell: \"redis://:${REDIS_PASS}@cache.acme-corp.io:6379/2\""
+      ],
+      "expect": []
+    },
+    {
+      "file": "docker-compose.yml",
+      "lines": [
+        "services:",
+        "  db:",
+        "    environment:",
+        ["      POSTGRES_PASSWORD: \"", "localdevpassword", "123\""]
+      ],
+      "expect": [{ "line": 4, "class": "generic_assignment", "blocking": false }]
+    },
+    {
+      "file": ".env.production",
+      "lines": [
+        ["STRIPE_KEY=", "sk_live_", "Bn5tR8wQ2yK6mP9vC3xL7hD4"],
+        ["SESSION_SECRET=", "k9Fz2Lq8Vw3Xn7Rt5Yp1"]
+      ],
+      "expect": [
+        { "line": 1, "class": "provider_token", "blocking": true },
+        { "line": 2, "class": "generic_assignment", "blocking": false }
+      ]
+    },
+    {
+      "file": "docs/setup.md",
+      "lines": [
+        ["Set `GITHUB_TOKEN=", "ghp_", "Ab56Zq8mN2pL7vX4kR9tHw3sJ9dK2mQ7xV5c", "` in your shell."]
+      ],
+      "expect": [{ "line": 1, "class": "provider_token", "blocking": false }]
+    },
+    {
+      "file": "app/config/aws.rb",
+      "lines": [
+        ["ACCESS_KEY = '", "AKIA", "IOSFODNN7EXAMPLE", "'"]
+      ],
+      "expect": [{ "line": 1, "class": "provider_token", "blocking": false }]
+    },
+    {
+      "file": "lib/waf/crypto.py",
+      "lines": [
+        ["KEY = '", "0123456789abcdef", "fedcba9876543210", "'"],
+        ["token = '", "q7Rk2vLx9TzW4mPa", "'"]
+      ],
+      "expect": [{ "line": 2, "class": "generic_assignment", "blocking": false }]
+    }
+  ]
+}

@@ -2,8 +2,8 @@ import { realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, normalize } from "node:path";
 import { checkOnly, makeRuleFor, makeTargets as targetsIn } from "./contract.ts";
 import { pyproject, readPackageJson } from "./profile.ts";
-import { scanText } from "./redact.ts";
-import type { InstructionItem, Profile, SafetyFinding, ScanBound } from "./types.ts";
+import { secretFindings } from "./secrets.ts";
+import type { InstructionItem, Profile, SafetyFinding, ScanBound, SecretClass } from "./types.ts";
 import { MAX_FILES, existsExact, inTreePath, listFiles, readText, sha256 } from "./util.ts";
 
 // The PHP, Ruby, JVM and .NET tools are commands only when a version doesn't follow (`ruby 3.3`,
@@ -856,6 +856,7 @@ export const SAFETY_RULES: Record<string, string> = {
   "secret-not-shipped": "A key or token in tests, fixtures, evals, docs, examples or generated code is listed for review and doesn't block.",
   "secret-example": "A value the vendor documents as an example, such as the access key in AWS's documentation, is listed for review and doesn't block.",
   "secret-no-key": "A private key header with no key after it, as in a comment or a placeholder, is listed for review and doesn't block.",
+  "secret-generic": "A value assigned to a name that sounds secret, with no provider's token shape, is listed for review with its name and length and doesn't block: public client keys an app ships, test values and placeholders look the same.",
   "credential-needed": "Tests that read a production credential block Level 2, since agents can't run them without production access.",
   "credential-fixture": "A production credential read in a test fixture, which is test data for the repo's own tests, is listed for review and doesn't block.",
   "network-piped": "An install hook that pipes a download into a shell blocks Level 2; in another script it's listed for review.",
@@ -866,17 +867,6 @@ export const SAFETY_RULES: Record<string, string> = {
   "host-mode": "Host mode runs the repo's commands on this machine as this user, so the report says it could read local files; it is never a sandbox.",
   waived: INSTRUCTION_RULES.waived,
 };
-
-// Values vendors publish in their docs as examples; they appear in many repos and grant nothing.
-// Built from parts so this file never holds a value the secret scan matches.
-const DOCUMENTED_EXAMPLES = new RegExp(["AKIA" + "IOSFODNN7EXAMPLE", "wJalrXUtnFEMI/K7MDENG/bPxRfiCY" + "EXAMPLEKEY"].join("|"));
-
-// A PEM header counts as a key only with a base64 body after it, before its END line.
-function pemHasKey(lines: string[], index: number): boolean {
-  const after = lines[index].split(/-----BEGIN [A-Z ]*PRIVATE KEY-----/)[1] ?? "";
-  const body = [after, ...lines.slice(index + 1, index + 4)].join("\n").split(/-----END/)[0];
-  return /[A-Za-z0-9+/]{40,}/.test(body.replace(/\\n/g, "\n"));
-}
 
 // An environment read written inside a string, such as test data for the scanner itself, reads nothing.
 function insideString(line: string, index: number): boolean {
@@ -893,7 +883,8 @@ function insideString(line: string, index: number): boolean {
 
 // Past the scan's time bound, the secret scan stops and records how many files it read; the
 // manifest and script checks after it are cheap and always run.
-export function safetyScan(tree: string, profile: Profile, bound?: ScanBound): SafetyFinding[] {
+// `blockingSecrets`: the secret classes that block in shipped code, from the rubric's safety block.
+export function safetyScan(tree: string, profile: Profile, bound?: ScanBound, blockingSecrets?: readonly SecretClass[]): SafetyFinding[] {
   const findings: SafetyFinding[] = [];
   let n = 1;
   const add = (f: Omit<SafetyFinding, "id">) => findings.push({ id: `saf-${String(n++).padStart(3, "0")}`, ...f });
@@ -912,13 +903,7 @@ export function safetyScan(tree: string, profile: Profile, bound?: ScanBound): S
     const text = readText(full);
     const where = notShipped(file);
     const lines = text.split("\n");
-    for (const hit of scanText(text)) {
-      const line = lines[hit.line - 1] ?? "";
-      if (where) add({ kind: "secret", file, line: hit.line, detail: `${hit.type} in a ${where} file, listed for review`, blocking: false, rule: "secret-not-shipped" });
-      else if (DOCUMENTED_EXAMPLES.test(line)) add({ kind: "secret", file, line: hit.line, detail: `${hit.type}: a documented example value, listed for review`, blocking: false, rule: "secret-example" });
-      else if (hit.type === "Private key" && !pemHasKey(lines, hit.line - 1)) add({ kind: "secret", file, line: hit.line, detail: "a private key header with no key after it, listed for review", blocking: false, rule: "secret-no-key" });
-      else add({ kind: "secret", file, line: hit.line, detail: hit.type, blocking: true, rule: "secret" });
-    }
+    for (const f of secretFindings(file, text, where, blockingSecrets)) add({ kind: "secret", file, line: f.line, detail: f.detail, blocking: f.blocking, rule: f.rule, secretClass: f.class });
     if (where === "test") {
       const fixture = /(^|\/)(fixtures?|__fixtures__|testdata)\//.test(file);
       lines.forEach((l, i) => {

@@ -1,5 +1,6 @@
 import type { Rubric } from "./rubric.ts";
 import { strengthRank } from "./rubric.ts";
+import { SECRET_PATTERN_COUNT } from "./secrets.ts";
 import type { Audit, CondId, CondState, Evidence } from "./types.ts";
 
 export interface CondDetail {
@@ -171,6 +172,14 @@ function instructionsMetReason(items: Audit["instructions"]): string {
   return `${checked} of ${items.length} instruction items check out; ${why}`;
 }
 
+// "No findings" says what was looked at, so it never reads as a guarantee the scan didn't make.
+function safetyCoverage(audit: Audit): string {
+  const read = audit.profile?.scope?.secrets.scanned;
+  const listed = audit.safety.filter((s) => !s.blocking).length;
+  const over = read === undefined ? "" : ` from ${SECRET_PATTERN_COUNT} secret patterns over ${read} ${read === 1 ? "file" : "files"}`;
+  return `no blocking safety findings${over}${listed ? `; ${listed} ${listed === 1 ? "item" : "items"} listed for review` : ""}`;
+}
+
 export function repoStates(audit: Audit, rubric: Rubric): Record<"instructions" | "safety" | "toolchain" | "lockfile", CondDetail> {
   const items = audit.instructions;
   const failed = items.filter((i) => i.result === "fail");
@@ -185,7 +194,7 @@ export function repoStates(audit: Audit, rubric: Rubric): Record<"instructions" 
           ? { state: "unknown", reason: `${pending.length} instruction commands haven't been run`, evidence: insEvidence }
           : { state: "met", reason: instructionsMetReason(items), evidence: insEvidence };
   const blocking = audit.safety.filter((s) => s.blocking);
-  const safety: CondDetail = blocking.length > 0 ? { state: "not_met", reason: blocking.map((b) => b.detail).join("; "), evidence: [] } : { state: "met", reason: "no blocking safety findings", evidence: [] };
+  const safety: CondDetail = blocking.length > 0 ? { state: "not_met", reason: blocking.map((b) => b.detail).join("; "), evidence: [] } : { state: "met", reason: safetyCoverage(audit), evidence: [] };
   const tc = audit.profile?.toolchain;
   const toolchain: CondDetail = !tc ? { state: "unknown", reason: "not scanned", evidence: [] } : tc.pinned ? { state: "met", reason: `pinned in ${tc.files.join(", ")}`, evidence: [] } : { state: "not_met", reason: `missing ${tc.missing.join(" and ")}`, evidence: [] };
   const lockfile = fromEvidence(rubric, latest(audit.evidence.filter((e) => e.condition === "lockfile")), "bootstrap.cold_replay", "the frozen install hasn't run");

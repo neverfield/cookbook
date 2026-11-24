@@ -2,6 +2,7 @@ import type { ProofEnv } from "./proofenv.ts";
 export type Strength = "asserted" | "static" | "executed" | "clean_replay" | "outcome_validated";
 export type Tier = "read-only" | "local-exec" | "external-systems";
 export type ScenarioId = "first_pr" | "bug_fixes" | "features" | "repo_wide";
+export type SecretClass = "provider_token" | "private_key" | "url_credential" | "generic_assignment";
 
 // An optional breakdown a user adds; reported nested under the components it names. "*" names
 // every assessed component.
@@ -186,6 +187,8 @@ export interface SafetyFinding {
   blocking: boolean;
   // The id of the rule in SAFETY_RULES (static.ts) that decided whether it blocks.
   rule?: string;
+  // For a secret: its class in secrets.ts, which decides whether it can block and what advice it gets.
+  secretClass?: SecretClass;
   waived?: AppliedWaiver;
 }
 

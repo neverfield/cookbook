@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import { diagnose, rootError } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
-import { scanText } from "../skill/agent-readiness/scripts/lib/redact.ts";
+import { scanText } from "../skill/agent-readiness/scripts/lib/secrets.ts";
 import { INSTALL_BLOCKED, environmentLimit, outputTail } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
