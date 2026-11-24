@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-readiness/holdout-truth@1",
+  "title": "What is true about one repository at one commit, written from the repository and its CI, never from the tool's output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "repo", "commit", "ci", "components", "unownedShare", "secrets", "nextAction", "dropped"],
+  "properties": {
+    "schema": { "const": "agent-readiness/holdout-truth@1" },
+    "purpose": { "type": "string", "description": "For a development-set fixture only: the shape it reproduces and why" },
+    "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "description": "owner/name on GitHub" },
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "writtenAt": { "type": "string", "format": "date" },
+    "ci": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conclusion"],
+      "properties": {
+        "conclusion": { "enum": ["success", "failure", "none", "undetermined"], "description": "The upstream CI conclusion at the commit, from the checks API: success when every required check that runs the tests passed" },
+        "source": { "type": "string", "description": "How the conclusion was read, for example the check-runs API call" }
+      }
+    },
+    "components": {
+      "type": "array",
+      "description": "Every unit of the repository a reader would call a project, by the repository's own workspace files, manifests and CODEOWNERS",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "ecosystem", "placement", "changeShare", "hasTests", "install", "test", "testsNeed", "cleanPasses"],
+        "properties": {
+          "path": { "type": "string", "pattern": "^(\\.|[^/].*[^/]|[^/])$", "description": "POSIX path from the repository root; . is the root" },
+          "ecosystem": { "enum": ["node", "python", "go", "rust", "jvm", "dotnet", "php", "ruby", "swift", "dart", "elixir", "terraform", "cpp", "android", "xcode", "other"] },
+          "placement": { "enum": ["component", "member", "satellite", "excluded"], "description": "component: a product unit in its own right. member: built and tested as part of the component named by of. satellite: examples, benchmarks, tooling or docs that support a component. excluded: vendored, generated or test data" },
+          "of": { "type": "string", "description": "For a member or satellite, the path of the component it belongs to" },
+          "changeShare": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Share of the files changed in the 90 days before the commit that lie under this path and no deeper listed path; null when not measured" },
+          "hasTests": { "type": "boolean", "description": "The unit has test files its own test command runs" },
+          "install": { "type": "array", "items": { "type": "string" }, "description": "Install commands CI runs for this unit, each an accepted form, run from path" },
+          "test": { "type": "array", "items": { "type": "string" }, "description": "Test commands CI runs for this unit, each an accepted form, run from path. Empty when CI runs none" },
+          "testsNeed": { "enum": ["nothing", "service", "network", "undetermined"], "description": "What the tests need beyond the installed dependencies: a service (database, browser, emulator), network access at test time, or nothing" },
+          "cleanPasses": { "enum": ["yes", "no", "undetermined"], "description": "A clean install and the test command pass at the commit on Linux, with what testsNeed names provided" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "unownedShare": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Share of the files changed in the 90 days before the commit that lie under no listed component, member or satellite; null when not measured" },
+    "secrets": {
+      "type": "array",
+      "description": "Secret-shaped strings in tracked files, and whether each is a real credential. A blocking finding the tool reports that is not listed here as real counts as false",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "real"],
+        "properties": {
+          "file": { "type": "string" },
+          "line": { "type": ["integer", "null"], "minimum": 1 },
+          "real": { "type": "boolean" },
+          "why": { "type": "string" }
+        }
+      }
+    },
+    "nextAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["fix_failing_tests", "make_tests_hermetic", "add_tests", "strengthen_tests", "pin_toolchain", "add_lockfile", "fix_instructions", "add_agent_instructions", "remove_secret", "declare_environment", "none", "other"] },
+        "text": { "type": "string", "description": "The one action that would most help an agent work in the repository, in a sentence" }
+      }
+    },
+    "dropped": { "type": "integer", "minimum": 0, "description": "Items the two truth writers disagreed on and left out" }
+  }
+}

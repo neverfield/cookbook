@@ -1,0 +1,279 @@
+{
+  "schema": "agent-readiness/collision-log@1",
+  "about": "Every public repository anyone on the implementing side has run the tool on, or reproduced in a test. The holdout steward skips them in the draw and swaps out any that turn up in a set (PROTOCOL.md, section 8). Add an entry in the pull request that runs the tool on a new repository.",
+  "entries": [
+    {
+      "repo": "vercel/ms",
+      "commit": "4ff48cec099f0514c3e9bbca18706c9c21122bfb",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "pmndrs/zustand",
+      "commit": "9fed2eb2f3af672da9f7bf694b996df3831fc207",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "changesets/changesets",
+      "commit": "9a035ec36045aeb6141dd0bbac9ab9e3c69ac0bc",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "motdotla/dotenv",
+      "commit": "4c5450405612e4368e0d46d44da01942cf22a707",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "tj/commander.js",
+      "commit": "a5a7dc084d4d2b7932e85ca049c5204e50a2c721",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "modelcontextprotocol/servers",
+      "commit": "e1dc4b18dbb948921da37f3d4224a628730b43b0",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "pocketbase/pocketbase",
+      "commit": "7f2773ec234b62d0b80ca47c508397cb3d0da3ea",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "neverfield/cookbook",
+      "commit": "0695c7896dca31d95adfca8aeecaebcf98b59265",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "symfony/demo",
+      "commit": "f42980c690b4bf335fa41bbafdb075bb67b719c2",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "Shopify/packwerk",
+      "commit": "31e534283f93a225b520cddab3c2d735557c76de",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "google/uuid",
+      "commit": "2d3c2a9cc518326daf99a383f07c4d3c44317e4d",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "BurntSushi/ripgrep",
+      "commit": "91f5d22ef48bde459d90a8c7dbeab416e97d0f2b",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "spring-projects/spring-petclinic",
+      "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "mockito/mockito-kotlin",
+      "commit": "5969d27280ea670520003c75776057b20f7f3dfb",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "TheAlgorithms/C-Sharp",
+      "commit": "6d3b02a6b026abe253e942fe0d84d1244b8fbeb1",
+      "date": "2026-11-14",
+      "by": "ci:trials",
+      "why": "pinned trial: audited by npm run trials in CI, and in the Nov 14 reviews"
+    },
+    {
+      "repo": "umami-software/umami",
+      "commit": "dbb8d606fbd4e99220fb83bcb4abad3e0f97f42a",
+      "date": "2026-11-24",
+      "by": "bc-ea29f187-3967-5a13-bc80-7e7fc913c148",
+      "why": "pinned trial: audited by npm run trials in CI; recorded on the PR A worker's VM, and audited in the Nov 24 first-run sims"
+    },
+    {
+      "repo": "uber-go/zap",
+      "commit": "4892335e05f14bce8a98a69a577fcf3844a42623",
+      "date": "2026-11-24",
+      "by": "bc-ea29f187-3967-5a13-bc80-7e7fc913c148",
+      "why": "pinned trial: audited by npm run trials in CI; recorded on the PR A worker's VM, and audited in the Nov 24 first-run sims"
+    },
+    {
+      "repo": "Flexget/Flexget",
+      "commit": "881fc079ba0f47eaa67ab7a34ec44477278c9bb9",
+      "date": "2026-11-24",
+      "by": "bc-ea29f187-3967-5a13-bc80-7e7fc913c148",
+      "why": "pinned trial: audited by npm run trials in CI; recorded on the PR A worker's VM, and audited in the Nov 24 first-run sims"
+    },
+    {
+      "repo": "sindresorhus/slugify",
+      "commit": "3b17b2e84b97624a683aafaa38184bf2746fab22",
+      "date": "2026-11-14",
+      "by": "support/evals/goldens",
+      "why": "golden repo: audited by npm run goldens"
+    },
+    {
+      "repo": "expressjs/express",
+      "commit": "1c6f1b0fe4000977b9a7b4f34097e4d527dd9824",
+      "date": "2026-11-14",
+      "by": "support/evals/goldens",
+      "why": "golden repo: audited by npm run goldens"
+    },
+    {
+      "repo": "encode/starlette",
+      "commit": "2745bbc5afa2f8ce900d290bedca2bc5d3f3cfe8",
+      "date": "2026-11-14",
+      "by": "support/evals/goldens",
+      "why": "golden repo: audited by npm run goldens"
+    },
+    {
+      "repo": "t3-oss/create-t3-turbo",
+      "commit": "8f945b7bb3bfb3ca8358d48b1ff0214079bc11ee",
+      "date": "2026-11-14",
+      "by": "support/evals/goldens",
+      "why": "golden repo: audited by npm run goldens"
+    },
+    {
+      "repo": "serilog/serilog",
+      "commit": "43105b35095337d77f022561a8f2d3db2f9a7937",
+      "date": "2026-11-14",
+      "by": "support/evals/goldens",
+      "why": "golden repo: audited by npm run goldens"
+    },
+    {
+      "repo": "apple/swift-argument-parser",
+      "commit": "38ca4ec",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "dart-lang/http",
+      "commit": "8c0d66a",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "dotnet-architecture/eShopModernizing",
+      "commit": "63bc9ec",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "elysiajs/elysia",
+      "commit": "e037eca",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "google/gson",
+      "commit": "6c06cbc",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "guzzle/guzzle",
+      "commit": "f8aca40",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "jwt/ruby-jwt",
+      "commit": "c22701e",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "kickstarter/ios-oss",
+      "commit": "2090757",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "pallets/click",
+      "commit": "e38188e",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "python-poetry/cleo",
+      "commit": "fd264ef",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "saleor/saleor",
+      "commit": "dfbf139",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "ShareX/ShareX",
+      "commit": "abb975d",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "spree/spree",
+      "commit": "cdd9a02",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "square/moshi",
+      "commit": "889013e",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "terraform-aws-modules/terraform-aws-vpc",
+      "commit": "b3abd6d",
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "audited while building the language layer; cited at this commit in skill/agent-readiness/references/supported.md or the tests"
+    },
+    {
+      "repo": "open-telemetry/opentelemetry-demo",
+      "commit": null,
+      "date": "2026-11-14",
+      "by": "earlier work",
+      "why": "its layout is reproduced in tests/discovery.test.ts"
+    }
+  ]
+}
