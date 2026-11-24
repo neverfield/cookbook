@@ -1,5 +1,5 @@
-import { attributes } from "./attribute.ts";
 import { serviceLabel } from "./diagnose.ts";
+import { currentEvidence } from "./evidence.ts";
 import { explanationsOf, imagesUsed, waiversOf } from "./explain.ts";
 import { list } from "./format.ts";
 import { LANGUAGE_LABELS } from "./languages/index.ts";
@@ -13,8 +13,8 @@ import { UNDETERMINED, blockedBy, checkCounts, gatingInstruction } from "./score
 import { sampledScope } from "./scope.ts";
 import type { ComponentResult } from "./seal.ts";
 import { NOT_SUPPORTED, STACKS, SUPPORTED_DOC } from "./support.ts";
-import type { Asset, Audit, CondId, Component, ComponentLevel, HistoryLine, Level, LevelStatus, OutcomeStats, OutcomesSnapshot, ReportAction, ReportChanges, ReportJson, RevertsSnapshot, Roadmap, RoadmapItem, ScenarioId, SettleBy } from "./types.ts";
-import { fmtShortDate, pct, wordCount } from "./util.ts";
+import type { Asset, Audit, CapReason, CommandKind, CondId, Component, ComponentLevel, Evidence, HistoryLine, Level, LevelStatus, OutcomeStats, OutcomesSnapshot, ProofEnvKind, ReportAction, ReportChanges, ReportJson, RevertsSnapshot, Roadmap, RoadmapItem, ScenarioId, SettleBy } from "./types.ts";
+import { fmtShortDate, pct, shellQuote, wordCount } from "./util.ts";
 import { WAIVER_FILE } from "./waivers.ts";
 
 // The report model, built once from the audit: every state, count, level and sentence the report
@@ -721,11 +721,12 @@ function checkResult(input: ModelInput, checkId: string): { result: string; ok: 
   }
   if (checkId === "context.instructions_verified") {
     const k = checkCounts(audit, checkId);
-    const total = k.passed + k.failed + k.notRun;
+    const skipped = k.skipped ?? 0;
+    const total = k.passed + k.failed + k.notRun + skipped;
     const gating = audit.instructions.filter((i) => gatingInstruction(input.rubric, i));
     const listed = audit.instructions.filter((i) => i.result === "fail").length - gating.filter((i) => i.result === "fail").length;
     const wrong = k.failed - listed;
-    return { result: `${k.passed} of ${total} instruction items check out${wrong ? `, ${wrong} wrong` : ""}${listed ? `, ${listed} wrong outside the agent files, listed` : ""}${k.notRun ? `, ${k.notRun} not run` : ""}`, ok: wrong ? false : gating.some((i) => i.result === "not_run" && i.category === "replay") ? null : true };
+    return { result: `${k.passed} of ${total} instruction items check out${wrong ? `, ${wrong} wrong` : ""}${listed ? `, ${listed} wrong outside the agent files, listed` : ""}${k.notRun ? `, ${k.notRun} not run` : ""}${skipped ? `, ${skipped} skipped` : ""}`, ok: wrong ? false : gating.some((i) => i.result === "not_run" && i.category === "replay") ? null : true };
   }
   if (checkId === "safety.execution_boundary") {
     const blocking = audit.safety.filter((s) => s.blocking);
@@ -735,7 +736,10 @@ function checkResult(input: ModelInput, checkId: string): { result: string; ok: 
   return { result: "", ok: null };
 }
 
-export function buildReport(input: ModelInput): ReportJson {
+// Every fact is read from the current evidence rows; the evidence log alone keeps the rows a later
+// result superseded, folded under it.
+export function buildReport(raw: ModelInput): ReportJson {
+  const input: ModelInput = { ...raw, audit: { ...raw.audit, evidence: currentEvidence(raw.audit) } };
   const { audit, rubric, roadmap, top, startNow } = input;
   const L = input.rollup.level;
   const ready = [...input.active].filter((id) => (compLevel(input, id)?.level ?? 0) >= 2 && !input.rollup.setBy.includes(id));
@@ -805,6 +809,9 @@ export function buildReport(input: ModelInput): ReportJson {
         ...(rubric.outcomes.revertDays !== undefined ? { reverted: x.s.revertKnown === undefined ? null : rate(x.s.reverted ?? 0, x.s.revertKnown, rubric, x.w) } : {}),
       }))
     : [];
+  const components = componentsOf(input);
+  const repoUnproven = !none && unprovenLevel1(L, input.rollup.couldBe, caps);
+  const repoStatus = levelStatus(none ? null : L, repoUnproven, undetermined(input));
   const prevAudits = input.history.filter((h) => h.kind === "audit");
   const allLines = [...input.history, input.currentLine];
   const progress =
@@ -840,8 +847,10 @@ export function buildReport(input: ModelInput): ReportJson {
       staleCopy: input.staleCopy,
       previous: prevAudits.length ? prevAudits[prevAudits.length - 1].id : null,
       storedAt: input.storedAt,
+      integrity: integrityOf(input.sealStatus),
     },
     scale: rubric.scale,
+    assumptions: assumptionsOf(input),
     scenarios: (audit.scenarios ?? []).map((s) => ({ id: s.id, label: rubric.scenarios.find((x) => x.id === s.id)!.label, components: s.components })),
     maturity: {
       level: L,
@@ -854,17 +863,19 @@ export function buildReport(input: ModelInput): ReportJson {
       outcome,
       confidence: confidenceOf(input, outcome),
       capReasons: caps,
-      unproven: !none && unprovenLevel1(L, input.rollup.couldBe, caps),
-      ...(rubricStatus(input) ? { status: levelStatus(none, undetermined(input), unprovenLevel1(L, input.rollup.couldBe, caps)), settleBy: settleByOf(input, caps) } : {}),
+      unproven: repoUnproven,
+      status: repoStatus,
+      provenIn: provenIn(input, input.rollup.setBy, repoStatus, L),
+      settleBy: settleBy(input, repoStatus, caps),
       next: L < 4 ? { level: (L + 1) as Level, name: rubric.scale[L + 1].name, met: [], unmet: [] } : null,
     },
-    components: componentsOf(input),
+    components,
     executive: {
       heading: noneAssessed(input)
         ? "Not assessed: none of the components found can be assessed yet"
         : none
           ? `Not assessed: ${audit.tier === "read-only" ? "the read-only tier runs no repo code" : "no check could run on this machine"}`
-          : `${undetermined(input) ? undeterminedHeading(caps) : !none && unprovenLevel1(L, input.rollup.couldBe, caps) ? unprovenHeading(caps) : `Level ${L} of 4, ${rubric.scale[L].plain}${outcome === "blocked" ? (failedCap ? `; Level ${L + 1} isn't met, and some of its checks were blocked on this machine` : `; Level ${L + 1} is blocked on this machine`) : ""}`}${mostlyUnassessed(input) ? `; it covers only ${pct(1 - input.partial.unassessedShare, 1)}% of recent changes, and the rest isn't assessed` : ""}`,
+          : `${undetermined(input) ? undeterminedHeading(caps) : repoUnproven ? unprovenHeading(blockedHeld(components)) : `Level ${L} of 4, ${rubric.scale[L].plain}${outcome === "blocked" ? (failedCap ? `; Level ${L + 1} isn't met, and some of its checks were blocked on this machine` : `; Level ${L + 1} is blocked on this machine`) : ""}`}${mostlyUnassessed(input) ? `; it covers only ${pct(1 - input.partial.unassessedShare, 1)}% of recent changes, and the rest isn't assessed` : ""}`,
       headline: narr.headline ?? headlineFor(input, ready, setByShare),
       numbers: stats3(input),
       nextLine: nextLine(input),
@@ -931,7 +942,7 @@ export function buildReport(input: ModelInput): ReportJson {
       assets: audit.assets.map((a: Asset) => ({ kind: a.kind, path: a.path, authors: a.authors.map((x) => x.name), lastChanged: a.lastChanged, status: a.status, ok: a.ok })),
       missingAssets: missingList(audit.assets),
       signals: audit.signals ?? [],
-      evidence: audit.evidence.map((e) => {
+      evidence: raw.audit.evidence.map((e) => {
         const blocked = blockedBy(e);
         return {
           id: e.id,
@@ -941,6 +952,9 @@ export function buildReport(input: ModelInput): ReportJson {
           where: e.result === "not_run" ? "not run" : rubric.strengthLabels[e.strength],
           result: blocked ? "blocked" : e.result,
           summary: blocked && e.result === "fail" ? `${e.kind ?? "step"} blocked: ${blocked}` : blocked && !e.summary.includes(blocked) ? `${e.summary}; blocked: ${blocked}` : e.summary,
+          durationMs: e.result === "not_run" ? null : (e.durationMs ?? null),
+          repro: reproOf(raw.audit, e),
+          supersededBy: e.supersededBy ?? null,
         };
       }),
       record: [
@@ -949,22 +963,10 @@ export function buildReport(input: ModelInput): ReportJson {
         { label: "Rubric", value: audit.rubric },
         { label: "Permission tier", value: audit.tier },
         { label: "Seal", value: input.sealStatus },
+        { label: "Integrity", value: integrityOf(input.sealStatus) === "keyed" ? "keyed: the seal is an HMAC only the key's holder can produce" : "unsigned: the seal is a digest that shows edits, but anyone with the scripts could reseal an edited audit" },
         { label: "Skill digest", value: audit.skill.scriptsDigest.slice(0, 12) },
         { label: "Planted faults", value: plantedFaultsRecord(audit, rubric) },
-        {
-          label: "Replay environment",
-          value: audit.environment.notRun
-            ? `none: ${audit.environment.notRun}`
-            : audit.environment.containerRuntime
-              ? (imagesUsed(audit.environment)
-                  ? `${audit.environment.containerRuntime} containers, ${imagesUsed(audit.environment)}`
-                  : `${audit.environment.containerRuntime} container, ${audit.environment.image}`) + toolchainsNote(audit.environment) + userEntryNote(audit.environment) + networkNote(audit)
-              : audit.evidence.some((e) => e.where === "disposable_vm")
-                ? vmEnvironmentNote(audit)
-                : audit.evidence.some((e) => e.where === "fresh_copy")
-                  ? "fresh copy on the host (no container runtime)"
-                  : `none: no repo command ran${noneAssessed(input) ? ", because no component could be assessed" : ""}`,
-        },
+        { label: "Replay environment", value: replayEnvironment(input) },
         ...(audit.environment.proofEnv?.canary.checks.length ? [{ label: "Environment self-check", value: canaryNote(audit.environment.proofEnv.canary) }] : []),
         ...(audit.environment.registryEnv.length ? [{ label: "Registry variables", value: `${audit.environment.registryEnv.join(", ")}, passed to the setup steps by name; their values are never recorded` }] : []),
         { label: "Stored in", value: input.storedAt },
@@ -1032,6 +1034,59 @@ export function changesOf(prev: ReportJson, now: ReportJson, rubric: Rubric): Re
   return { since: { audit: prev.audit.id, date: prev.audit.date }, repo: { from: repoLevel(prev), to: repoLevel(now) }, components, nowMet, nowFailing, checks };
 }
 
+function replayEnvironment(input: ModelInput): string {
+  const { audit } = input;
+  if (audit.environment.notRun) return `none: ${audit.environment.notRun}`;
+  if (audit.environment.containerRuntime) {
+    const images = imagesUsed(audit.environment);
+    return (images ? `${audit.environment.containerRuntime} containers, ${images}` : `${audit.environment.containerRuntime} container, ${audit.environment.image}`) + toolchainsNote(audit.environment) + userEntryNote(audit.environment) + networkNote(audit);
+  }
+  if (audit.evidence.some((e) => e.where === "disposable_vm")) return vmEnvironmentNote(audit);
+  if (audit.evidence.some((e) => e.where === "fresh_copy")) return "fresh copy on the host (no container runtime)";
+  return `none: no repo command ran${noneAssessed(input) ? ", because no component could be assessed" : ""}`;
+}
+
+function integrityOf(sealStatus: string): "keyed" | "unsigned" {
+  return /\bthe seal is keyed\b/.test(sealStatus) ? "keyed" : "unsigned";
+}
+
+const SETUP_BEFORE: Record<CommandKind, CommandKind[]> = { doctor: [], install: [], lint: ["install"], build: ["install"], typecheck: ["install", "build"], test: ["install", "build"], start: ["install", "build"] };
+
+// A pasteable command that reruns one step as the audit did, from a clean checkout of the audited
+// commit: the setup steps that passed before it in the same place, then the step. The audit cuts the
+// network for tests and planted faults; the command leaves it on. Null when no command ran, and for a
+// type-check canary, which ran on a copy with a planted error.
+export function reproOf(audit: Pick<Audit, "evidence" | "environment">, e: Evidence): string | null {
+  if (!e.command || e.result === "not_run" || e.where === "static" || e.canary) return null;
+  const at = audit.evidence.indexOf(e);
+  const kinds: CommandKind[] = e.kind ? SETUP_BEFORE[e.kind] : ["install", "build"];
+  const mine = (c?: string) => !c || c === "*" || (Boolean(e.component) && c === e.component);
+  const setup = new Map<string, Evidence>();
+  for (const x of audit.evidence.slice(0, Math.max(0, at))) {
+    if (x.kind && kinds.includes(x.kind) && x.result === "pass" && x.command && x.where === e.where && x.image === e.image && mine(x.component)) setup.set(x.contractId ?? x.command, x);
+  }
+  const step = (x: Evidence) => (x.cwd && x.cwd !== "." ? `(cd ${shellQuote(x.cwd)} && ${x.command})` : x.command!);
+  const script = [...setup.values(), e].map(step).join(" && ");
+  const rt = audit.environment.containerRuntime ?? "docker";
+  return e.where === "container" ? `${rt} run --rm -v "$PWD":/work -w /work ${e.image ?? audit.environment.image ?? "<image>"} bash -lc ${shellQuote(script)}` : `bash -lc ${shellQuote(script)}`;
+}
+
+// What the audit took as given, on the first screen: the component map, each command with where it
+// came from, where the commands ran, and the toolchain versions the doctor printed there.
+function assumptionsOf(input: ModelInput): ReportJson["assumptions"] {
+  const { audit } = input;
+  const components = [
+    ...input.components.map((c) => ({ id: c.id, path: c.path, manifest: c.manifest, assessed: c.assessed, note: c.assessed ? null : (c.notAssessedReason ?? "not assessed") })),
+    ...(audit.profile?.satellites ?? []).map((s) => ({ id: s.path.split("/").pop()!, path: s.path, manifest: s.manifest, assessed: false, note: `not a component: ${s.reason}` })),
+  ];
+  const commands = audit.contract.filter((k) => k.kind !== "doctor" && !k.fallbackFor).map((k) => ({ component: k.component, kind: k.kind, command: k.command, cwd: k.cwd, source: k.source, reason: k.reason }));
+  const kind = audit.tier === "read-only" || audit.environment.notRun ? "none" : audit.environment.containerRuntime ? "container" : audit.evidence.some((e) => e.where === "disposable_vm") ? "disposable_vm" : audit.evidence.some((e) => e.where === "fresh_copy") ? "fresh_copy" : "none";
+  const toolchains = audit.evidence
+    .filter((e) => e.kind === "doctor" && e.result === "pass" && e.outputTail)
+    .map((e) => ({ where: e.where === "container" ? (e.image ?? audit.environment.image ?? "the audit's container") : "this machine", command: e.command ?? "", versions: e.outputTail!.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 6).join(", ") }));
+  return { components, commands, environment: { kind, text: replayEnvironment(input) }, toolchains };
+}
+
 function plantedFaultsRecord(audit: Audit, rubric: Rubric): string {
   const faults = audit.evidence.filter((e) => e.condition === "faults");
   if (faults.length > 0 && faults.every((e) => e.skipped)) return `not planted: ${faults[0].skipped} skipped them, so no fault check ran`;
@@ -1039,12 +1094,16 @@ function plantedFaultsRecord(audit: Audit, rubric: Rubric): string {
   return rubric.mutation.seedFrom === "code" ? "chosen from the code, so they stay the same until the component's code or tests change" : "fresh seed for this audit";
 }
 
-// Held at Level 0 only because this machine couldn't check Level 1: nothing that ran failed.
-// Every Level 1 condition left is blocked here, and a blocked step may have run (a build cut off by
-// the network), so the heading says none failed rather than that every one that ran passed.
-export function unprovenHeading(caps: { condition: string; state: string }[]): string {
-  const n = new Set(caps.filter((c) => c.state === "blocked").map((c) => c.condition)).size;
-  return `Level 1 unproven on this machine: no Level 1 check failed, and ${n} ${n === 1 ? "was" : "were"} blocked here`;
+// Held at Level 0 only because this machine couldn't check Level 1: nothing that ran failed. An
+// unproven result is no level, so the heading names none, as the ladder marks none. A blocked step
+// may have run (a build cut off by the network), so it says none failed rather than that every one
+// that ran passed. The count is the blocked checks the components hold, as their rows list them.
+export function unprovenHeading(blocked: number): string {
+  return `Unproven on this machine: no Level 1 check failed, and ${blocked} ${blocked === 1 ? "was" : "were"} blocked here`;
+}
+
+function blockedHeld(components: ReportJson["components"]): number {
+  return components.included.flatMap((c) => c.capReasons).filter((k) => k.state === "blocked").length;
 }
 
 // No level is named: the heading's level would be one the audit couldn't decide.
@@ -1055,15 +1114,6 @@ export function undeterminedHeading(caps: { condition: string; state: string }[]
 
 function undetermined(input: ModelInput): boolean {
   return !notAssessed(input) && Boolean(input.rollup.undetermined);
-}
-
-// Status and settleBy are reported from the rubric that can make a level undetermined.
-function rubricStatus(input: ModelInput): boolean {
-  return attributes(input.rubric);
-}
-
-function levelStatus(none: boolean, undet: boolean, unproven: boolean): LevelStatus {
-  return none ? "not_assessed" : undet ? "undetermined" : unproven ? "unproven" : "proven";
 }
 
 // The first condition the audit couldn't decide, in plain words for part 1.
@@ -1088,6 +1138,35 @@ export function settleByOf(input: ModelInput, caps: { component: string; state: 
 
 export function unprovenLevel1(level: Level | null, couldBe: Level | null, caps: { state: string }[]): boolean {
   return level === 0 && couldBe === 1 && caps.length > 0 && caps.every((c) => c.state === "blocked");
+}
+
+function levelStatus(level: Level | null, unproven: boolean, undetermined = false): LevelStatus {
+  return level === null ? "not_assessed" : undetermined ? "undetermined" : unproven ? "unproven" : "proven";
+}
+
+// Where a proven level was shown: the clean container or disposable VM a Level 1 check of these
+// components ran in. Level 1 can't be met anywhere else, and a Level 0 from "no tests" ran nowhere.
+function provenIn(input: ModelInput, ids: string[], status: LevelStatus, level: Level): ProofEnvKind | null {
+  if (status !== "proven") return null;
+  const mine = (c?: string) => !c || c === "*" || ids.includes(c);
+  const ran = input.audit.evidence.find((e) => (e.where === "container" || e.where === "disposable_vm") && e.result !== "not_run" && e.condition !== undefined && input.rubric.level1.includes(e.condition) && mine(e.component));
+  if (ran) return ran.where === "disposable_vm" ? "disposable_vm" : "container";
+  return level >= 1 ? (input.audit.environment.proofEnv?.kind === "disposable_vm" ? "disposable_vm" : "container") : null;
+}
+
+// The one thing that would settle a result that isn't proven, or null when only support for the
+// stack would, which the not-assessed line covers.
+function settleBy(input: ModelInput, status: LevelStatus, caps: CapReason[]): SettleBy | null {
+  if (status === "proven") return null;
+  if (status === "undetermined") return settleByOf(input, caps);
+  if (status === "unproven") {
+    const held = [...new Set(caps.map((c) => c.component).filter((c) => c !== "*"))];
+    const text = rerunAdvice(input, blockedCauses(input, held.length ? held : null), "prove it");
+    return text ? { kind: "rerun", text } : null;
+  }
+  if (noneAssessed(input)) return null;
+  const text = rerunAdvice(input, blockedCauses(input), "give one");
+  return text ? { kind: "rerun", text } : null;
 }
 
 function componentCaps(input: ModelInput, id: string): ComponentLevel["capReasons"] {
@@ -1119,9 +1198,9 @@ function componentsOf(input: ModelInput): ReportJson["components"] {
         const couldBe = none || !l ? null : l.couldBe;
         const unproven = unprovenLevel1(level, couldBe, caps);
         const undet = !none && Boolean(l?.undetermined);
-        const status = rubricStatus(input) ? { status: levelStatus(none || !l, undet, unproven), settleBy: undet || unproven ? settleByOf(input, caps) : null } : {};
+        const status = levelStatus(level, unproven, undet);
         const scenarios = [...(input.scenarioLevels.get(c.id) ?? new Map<ScenarioId, LevelResult>()).entries()].map(([sid, s]) => ({ id: sid, label: input.rubric.scenarios.find((x) => x.id === sid)!.label, level: none ? null : s.level, couldBe: none ? null : s.couldBe, unproven: unproven && s.level === 0 && s.couldBe === 1 }));
-        return { ...row(c), placement: "component" as const, active: input.active.has(c.id), level: undet ? null : level, couldBe, unproven, ...status, capReasons: caps, scenarios };
+        return { ...row(c), placement: "component" as const, active: input.active.has(c.id), level: undet ? null : level, couldBe, unproven, status, provenIn: level === null || undet ? null : provenIn(input, [c.id], status, level), settleBy: settleBy(input, status, caps), capReasons: caps, scenarios };
       }),
     excluded: [
       ...comps.filter((c) => !c.assessed).map((c) => ({ ...row(c), placement: "component" as const, reason: c.notAssessedReason ?? "not assessed" })),

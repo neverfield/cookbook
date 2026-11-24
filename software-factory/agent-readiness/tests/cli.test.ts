@@ -77,8 +77,8 @@ describe("CLI", { concurrency: 4 }, () => {
     const repo = materialize("healthy-node");
     for (const args of [["init", "--tier", "local-exec"], ["scan"], ["scenario", "add", "bug_fixes", "--components", "healthy-node"], ["replay", "--runtime", "none", "--no-mutants"]]) assert.equal(readiness(repo, args, HOST).code, 0, args.join(" "));
     const status = readiness(repo, ["status"]).out;
-    assert.match(status, /Repo level: Level 1 unproven on this machine \(could be 1\)/);
-    assert.match(status, /healthy-node: Level 1 unproven on this machine \(could be 1\); scenarios bug_fixes Level 1 unproven on this machine \(could be 1\)/);
+    assert.match(status, /Repo level: Unproven on this machine \(could be 1\)/);
+    assert.match(status, /healthy-node: Unproven on this machine \(could be 1\); scenarios bug_fixes Unproven on this machine \(could be 1\)/);
     assert.doesNotMatch(status, /level Level/);
   });
 
@@ -125,7 +125,7 @@ describe("CLI", { concurrency: 4 }, () => {
     const report = JSON.parse(readFileSync(join(repo, ".agent-readiness/latest/report.json"), "utf8"));
     assert.deepEqual([report.maturity.outcome, report.maturity.unproven], ["blocked", true]);
     assert.equal(report.maturity.confidence.level, "low");
-    assert.equal(report.executive.heading, "Level 1 unproven on this machine: no Level 1 check failed, and 3 were blocked here");
+    assert.equal(report.executive.heading, "Unproven on this machine: no Level 1 check failed, and 3 were blocked here");
     assert.deepEqual(report.actions, [], "no fix is offered for a limit of this machine");
     assert.match(report.executive.headline, /^Level 1 couldn't be proved for healthy-node because this machine has no container runtime and readiness-test-missing-toolchain is not installed on this machine\./);
     assert.match(report.executive.coverage, /Level 1 isn't provable on this machine: it has no container runtime, so setup ran in a fresh copy on the host\./);

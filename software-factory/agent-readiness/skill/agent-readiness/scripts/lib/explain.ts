@@ -1,4 +1,6 @@
+import { levelResult } from "./format.ts";
 import type { ModelInput } from "./model.ts";
+import { blockedBy } from "./score.ts";
 import { INSTRUCTION_RULES, SAFETY_RULES } from "./static.ts";
 import type { Audit, CondId, CondState, Evidence, Explanation, InstructionItem, ReportJson, ReportWaivers, SafetyFinding } from "./types.ts";
 import { usedWaivers } from "./waivers.ts";
@@ -42,8 +44,13 @@ function places(audit: Audit, evs: Evidence[]): string {
   return all.length ? list(all) : "not run";
 }
 
+// A step a limit of this machine kept from finishing reads as blocked, whatever its exit code.
+export function resultWord(e: Evidence): string {
+  return blockedBy(e) ? "blocked" : e.result === "not_run" ? "not run" : e.result;
+}
+
 function ranOf(evs: Evidence[]): string {
-  const all = [...new Set(evs.map((e) => (e.command ? `\`${e.command}\` (${e.result === "not_run" ? "not run" : e.result})` : e.summary)))];
+  const all = [...new Set(evs.map((e) => (e.command ? `\`${e.command}\` (${resultWord(e)})` : e.summary)))];
   return all.length ? list(all) : "nothing ran for it";
 }
 
@@ -93,8 +100,8 @@ function componentLevel(input: ModelInput, report: ReportJson): Explanation[] {
   for (const c of report.components.included) {
     const contract = audit.contract.filter((k) => k.component === c.id || k.component === "*");
     const evs = contract.map((k) => [...audit.evidence].reverse().find((e) => e.contractId === k.id)).filter((e): e is Evidence => Boolean(e));
-    const ran = contract.length ? list(contract.map((k) => `\`${k.command}\` (${evs.find((e) => e.contractId === k.id)?.result.replace("not_run", "not run") ?? "not run"})`), 6) : "no command: the scan found none to run";
-    const result = c.level === null ? "not assessed" : c.unproven ? "Level 1 unproven on this machine" : `Level ${c.level}${c.couldBe !== null ? `, could be ${c.couldBe}` : ""}`;
+    const ran = contract.length ? list(contract.map((k) => { const e = evs.find((x) => x.contractId === k.id); return `\`${k.command}\` (${e ? resultWord(e) : "not run"})`; }), 6) : "no command: the scan found none to run";
+    const result = levelResult(c);
     const held = c.capReasons.map((k) => `${k.label}: ${STATE_WORD[k.state]} (${k.reason})`);
     const happened = c.level === null ? "no level: the audit has no real check results to give one from" : held.length ? `Held ${c.unproven ? "unproven" : `at Level ${c.level}`} by ${list(held, 6)}` : c.level >= 4 ? "every condition up to Level 4 is met" : `every Level ${c.level} condition is met`;
     out.push({ kind: "level", subject: c.id, result, ran, where: evs.length ? places(audit, evs) : environmentLine(input), happened, rule: c.unproven ? `${rules} Unproven is its own result: no Level 1 check failed, and the ones left were blocked on this machine.` : rules });
@@ -170,7 +177,7 @@ function safety(audit: Audit): Explanation[] {
 function repoLevel(input: ModelInput, report: ReportJson): Explanation {
   const m = report.maturity;
   const active = [...input.active];
-  const result = report.maturity.outcome === "not_assessed" ? "not assessed" : m.unproven ? "Level 1 unproven on this machine" : `Level ${m.level}${m.couldBe !== null ? `, could be ${m.couldBe}` : ""}`;
+  const result = levelResult({ level: m.outcome === "not_assessed" ? null : m.level, couldBe: m.couldBe, unproven: m.unproven, status: m.status });
   const held = m.capReasons.map((k) => `${k.component === "*" ? "repo" : k.component}: ${k.label}, ${STATE_WORD[k.state]} (${k.reason})`);
   const share = report.executive.unassessed?.share ?? 0;
   const coverage = share > 0.5 ? ` It covers only ${Math.round((1 - share) * 1000) / 10}% of recent changes: ${report.executive.unassessed!.text}.` : "";

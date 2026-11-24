@@ -7,7 +7,7 @@ import type { Budget, Executor } from "./replay.ts";
 import { SUDO_SHIM_MARK } from "./run.ts";
 import { makeRecipe } from "./static.ts";
 import { CUT_OFF } from "./scope.ts";
-import type { Audit } from "./types.ts";
+import type { Audit, InstructionItem } from "./types.ts";
 import { existsExact, sha256 } from "./util.ts";
 import { applyWaivers } from "./waivers.ts";
 
@@ -114,6 +114,7 @@ export function packageCommand(output: string, audit: Audit, tree: string, cwd: 
 // `executors`: one executor for every command, or a choice per command, so a command runs in the image
 // of the component it targets.
 export async function replayInstructions(audit: Audit, executors: Executor | ((cwd: string, command: string) => Executor), copyDir: string, budget: Budget, registryValues: string[], notInstalled: { blocked?: string } | null): Promise<void> {
+  const ran = new Map<string, InstructionItem>();
   for (const item of audit.instructions.filter((i) => i.category === "replay" && i.staticResult === "pass")) {
     if (notInstalled) {
       item.result = "not_run";
@@ -131,125 +132,140 @@ export async function replayInstructions(audit: Audit, executors: Executor | ((c
     }
     const wanted = item.cwd ?? (dirname(item.source) === "" ? "." : dirname(item.source));
     const cwd = existsExact(copyDir, wanted) ? wanted : ".";
-    // The same command a check already ran, such as `npm run test` next to the test check's
-    // `npm test`: its result is that check's, counted once, there.
-    const same = sameAsCheck(audit, item.text, cwd, copyDir);
-    if (same) {
-      item.cwd = cwd;
-      if (same.result === "pass") {
-        item.result = "pass";
-        item.reason = `it runs the same command as the ${same.kind} check, which passed`;
-        item.rule = "same-as-check";
-        item.evidenceId = same.id;
-      } else {
-        item.category = "skipped";
-        item.result = "not_run";
-        item.reason = `not replayed again: it runs the same command as the ${same.kind} check, which ${same.result === "fail" ? "failed" : "didn't run"}; that result counts under the ${same.kind} check`;
-        item.rule = "same-as-check";
-      }
-      continue;
-    }
-    const limit = Math.min(INSTRUCTION_TIMEOUT_SEC, leftSec);
     const ex = typeof executors === "function" ? executors(cwd, item.text) : executors;
-    const out = await ex.exec(item.text, cwd, limit);
-    charge(budget, "*", out.durationMs);
-    const ok = out.exitCode === 0 && !out.timedOut;
-    const redacted = redact(out.output, registryValues);
-    const why = ok ? null : diagnose(out.output, out.timedOut, "instruction");
-    item.cwd = cwd;
-    item.rule = "replay-environment";
-    if (!ok && ex.where !== "container" && out.output.includes(SUDO_SHIM_MARK)) {
-      item.result = "not_run";
-      item.reason = "not replayed: it uses sudo, which the audit never runs on the host";
-      item.blocked = "it uses sudo, which the audit never runs on the host";
+    // The same command in the same folder and image runs once in this phase: a second document that
+    // gives it shares the first one's result and evidence.
+    const key = `${ex.image ?? ex.where}\u0000${cwd}\u0000${item.text}`;
+    const earlier = ran.get(key);
+    if (earlier) {
+      Object.assign(item, { cwd, result: earlier.result, reason: earlier.reason, rule: earlier.rule, evidenceId: earlier.evidenceId, blocked: earlier.blocked, category: earlier.category });
       continue;
     }
-    // A per-package command written without its folder, such as "run `uv lock` in that server", fails
-    // at the root for want of the package's manifest. It belongs to one of the packages that have one,
-    // and the line doesn't say which, so it can't be replayed as written.
-    const packages = ok ? null : packageCommand(out.output, audit, copyDir, cwd);
-    if (packages) {
-      item.category = "skipped";
-      item.result = "not_run";
-      item.reason = `not replayed: it runs in one of the packages that have a ${packages.manifest} (${packages.paths.join(", ")}), and the line doesn't say which`;
-      item.rule = "per-package";
-      continue;
-    }
-    if (why?.cause === "missing_ref") {
-      item.result = "not_run";
-      item.reason = `not replayed to the end: ${why.detail}, an environment limit rather than a repo defect`;
-      item.blocked = why.detail;
-      continue;
-    }
-    if (why?.cause === "interactive") {
-      item.category = "skipped";
-      item.result = "not_run";
-      item.reason = `not replayed: ${why.detail}`;
-      item.rule = "interactive";
-      continue;
-    }
-    if (why?.cause === "permission") {
-      item.result = "not_run";
-      item.reason = `not replayed: ${why.detail} on this machine, an environment limit rather than a repo defect`;
-      item.blocked = `${why.detail} on this machine`;
-      continue;
-    }
-    if (why?.cause === "missing_tool" && (ex.where !== "container" || ex.imageSource !== "repo")) {
-      const where = why.detail.endsWith(BUNDLE_GAP) ? "here" : ex.where === "container" ? `in the audit's image (${ex.image})` : "on this machine";
-      item.result = "not_run";
-      item.reason = `not replayed: ${why.detail} ${where}, an environment limit rather than a repo defect`;
-      item.blocked = `${why.detail} ${where}`;
-      continue;
-    }
-    if (why && (why.cause === "credential" || why.cause === "network" || why.cause === "service" || why.cause === "registry")) {
-      item.category = "needs_access";
-      item.result = "not_run";
-      item.reason = `not replayed: it ${why.cause === "network" ? "needs the network" : why.detail}, which the replay doesn't provide`;
-      continue;
-    }
-    // A timeout the budget forced is the audit's limit, not a slow instruction.
-    if (out.timedOut && overBudget(budget, "*")) {
-      item.result = "not_run";
-      item.reason = CUT_OFF;
-      item.rule = "replay-budget";
-      continue;
-    }
-    // On the host the copy isn't a clean environment: a failure there can come from this machine,
-    // so it leaves the instruction unproven rather than wrong.
-    if (!ok && ex.where !== "container") {
-      item.result = "not_run";
-      item.reason = `not proven: it failed in a fresh copy on this machine (${why!.detail}), and only a clean container can show an instruction is wrong`;
-      item.blocked = "it ran on this machine, not in a clean container";
-      continue;
-    }
-    // A command that is still running at the limit, such as a full pre-push gate, isn't shown wrong.
-    if (out.timedOut) {
-      item.category = "long_running";
-      item.result = "not_run";
-      item.reason = `not replayed to the end: it was still running after ${limit} seconds, the limit for one instruction`;
-      item.rule = "long-running";
-      continue;
-    }
-    const ev = addEvidence(audit, {
-      checkId: "context.instructions_verified",
-      condition: "instructions",
-      strength: ex.strength,
-      where: ex.where,
-      result: ok ? "pass" : "fail",
-      command: item.text,
-      cwd,
-      image: ex.image ?? undefined,
-      exitCode: out.exitCode,
-      timedOut: out.timedOut,
-      durationMs: out.durationMs,
-      outputTail: tail(redacted, 1500),
-      outputDigest: sha256(redacted),
-      summary: `${item.source}:${item.line} \`${item.text}\` ${ok ? "replays" : "fails: " + why!.detail}`,
-    });
-    item.result = ok ? "pass" : "fail";
-    item.reason = ok ? undefined : why!.detail;
-    item.rule = "replay";
-    item.evidenceId = ev.id;
+    await replayOne(audit, item, ex, cwd, copyDir, budget, registryValues, leftSec);
+    ran.set(key, item);
   }
   applyWaivers(audit);
 }
+
+// One documented command, run in the replay copy and judged; its result goes on the item.
+async function replayOne(audit: Audit, item: InstructionItem, ex: Executor, cwd: string, copyDir: string, budget: Budget, registryValues: string[], leftSec: number): Promise<void> {
+  // The same command a check already ran, such as `npm run test` next to the test check's
+  // `npm test`: its result is that check's, counted once, there.
+  const same = sameAsCheck(audit, item.text, cwd, copyDir);
+  if (same) {
+    item.cwd = cwd;
+    if (same.result === "pass") {
+      item.result = "pass";
+      item.reason = `it runs the same command as the ${same.kind} check, which passed`;
+      item.rule = "same-as-check";
+      item.evidenceId = same.id;
+    } else {
+      item.category = "skipped";
+      item.result = "not_run";
+      item.reason = `not replayed again: it runs the same command as the ${same.kind} check, which ${same.result === "fail" ? "failed" : "didn't run"}; that result counts under the ${same.kind} check`;
+      item.rule = "same-as-check";
+    }
+    return;
+  }
+  const limit = Math.min(INSTRUCTION_TIMEOUT_SEC, leftSec);
+  const out = await ex.exec(item.text, cwd, limit);
+  charge(budget, "*", out.durationMs);
+  const ok = out.exitCode === 0 && !out.timedOut;
+  const redacted = redact(out.output, registryValues);
+  const why = ok ? null : diagnose(out.output, out.timedOut, "instruction");
+  item.cwd = cwd;
+  item.rule = "replay-environment";
+  if (!ok && ex.where !== "container" && out.output.includes(SUDO_SHIM_MARK)) {
+    item.result = "not_run";
+    item.reason = "not replayed: it uses sudo, which the audit never runs on the host";
+    item.blocked = "it uses sudo, which the audit never runs on the host";
+    return;
+  }
+  // A per-package command written without its folder, such as "run `uv lock` in that server", fails
+  // at the root for want of the package's manifest. It belongs to one of the packages that have one,
+  // and the line doesn't say which, so it can't be replayed as written.
+  const packages = ok ? null : packageCommand(out.output, audit, copyDir, cwd);
+  if (packages) {
+    item.category = "skipped";
+    item.result = "not_run";
+    item.reason = `not replayed: it runs in one of the packages that have a ${packages.manifest} (${packages.paths.join(", ")}), and the line doesn't say which`;
+    item.rule = "per-package";
+    return;
+  }
+  if (why?.cause === "missing_ref") {
+    item.result = "not_run";
+    item.reason = `not replayed to the end: ${why.detail}, an environment limit rather than a repo defect`;
+    item.blocked = why.detail;
+    return;
+  }
+  if (why?.cause === "interactive") {
+    item.category = "skipped";
+    item.result = "not_run";
+    item.reason = `not replayed: ${why.detail}`;
+    item.rule = "interactive";
+    return;
+  }
+  if (why?.cause === "permission") {
+    item.result = "not_run";
+    item.reason = `not replayed: ${why.detail} on this machine, an environment limit rather than a repo defect`;
+    item.blocked = `${why.detail} on this machine`;
+    return;
+  }
+  if (why?.cause === "missing_tool" && (ex.where !== "container" || ex.imageSource !== "repo")) {
+    const where = why.detail.endsWith(BUNDLE_GAP) ? "here" : ex.where === "container" ? `in the audit's image (${ex.image})` : "on this machine";
+    item.result = "not_run";
+    item.reason = `not replayed: ${why.detail} ${where}, an environment limit rather than a repo defect`;
+    item.blocked = `${why.detail} ${where}`;
+    return;
+  }
+  if (why && (why.cause === "credential" || why.cause === "network" || why.cause === "service" || why.cause === "registry")) {
+    item.category = "needs_access";
+    item.result = "not_run";
+    item.reason = `not replayed: it ${why.cause === "network" ? "needs the network" : why.detail}, which the replay doesn't provide`;
+    return;
+  }
+  // A timeout the budget forced is the audit's limit, not a slow instruction.
+  if (out.timedOut && overBudget(budget, "*")) {
+    item.result = "not_run";
+    item.reason = CUT_OFF;
+    item.rule = "replay-budget";
+    return;
+  }
+  // On the host the copy isn't a clean environment: a failure there can come from this machine,
+  // so it leaves the instruction unproven rather than wrong.
+  if (!ok && ex.where !== "container") {
+    item.result = "not_run";
+    item.reason = `not proven: it failed in a fresh copy on this machine (${why!.detail}), and only a clean container can show an instruction is wrong`;
+    item.blocked = "it ran on this machine, not in a clean container";
+    return;
+  }
+  // A command that is still running at the limit, such as a full pre-push gate, isn't shown wrong.
+  if (out.timedOut) {
+    item.category = "long_running";
+    item.result = "not_run";
+    item.reason = `not replayed to the end: it was still running after ${limit} seconds, the limit for one instruction`;
+    item.rule = "long-running";
+    return;
+  }
+  const ev = addEvidence(audit, {
+    checkId: "context.instructions_verified",
+    condition: "instructions",
+    strength: ex.strength,
+    where: ex.where,
+    result: ok ? "pass" : "fail",
+    command: item.text,
+    cwd,
+    image: ex.image ?? undefined,
+    exitCode: out.exitCode,
+    timedOut: out.timedOut,
+    durationMs: out.durationMs,
+    outputTail: tail(redacted, 1500),
+    outputDigest: sha256(redacted),
+    summary: `${item.source}:${item.line} \`${item.text}\` ${ok ? "replays" : "fails: " + why!.detail}`,
+  });
+  item.result = ok ? "pass" : "fail";
+  item.reason = ok ? undefined : why!.detail;
+  item.rule = "replay";
+  item.evidenceId = ev.id;
+}
+

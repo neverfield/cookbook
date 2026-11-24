@@ -46,7 +46,7 @@ describe("an unproven re-audit is never compared as Level 0", () => {
     const md = renderMarkdown(r, rubric);
     assert.doesNotMatch(md, /Down from Level 2|Level 2 to Level 0|to Level 0/);
     assert.match(md, /Level 2 at the audit on Oct 27; this audit couldn't prove a level on this machine, so it isn't a change in the repo/);
-    assert.match(md, /- \*\*Repo level:\*\* Level 2 to Level 1 unproven on this machine \(no level, so not a drop\)\./);
+    assert.match(md, /- \*\*Repo level:\*\* Level 2 to unproven on this machine \(no level, so not a drop\)\./);
     const html = renderHtml(r);
     assert.doesNotMatch(html, /Changed since|Down from/);
     assert.match(html, /couldn&#39;t prove a level on this machine|couldn't prove a level on this machine/);

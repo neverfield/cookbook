@@ -4,6 +4,7 @@ import { inventory, orgSkillBuilders } from "./lib/assets.ts";
 import { addContractCommand, checkComponent, discoverContract } from "./lib/contract.ts";
 import { compareAudits, weakeningFlags } from "./lib/diff.ts";
 import { addEvidence, recordObservation } from "./lib/evidence.ts";
+import { levelResult } from "./lib/format.ts";
 import { ghAvailable, ghJson } from "./lib/gh.ts";
 import { HOOKS_FILE, guardInstalled, installGuard, uninstallGuard } from "./lib/guard.ts";
 import { auditIds, loadSealedAudit, pushHistory, readHistory, readRoadmap, writeRoadmap } from "./lib/history.ts";
@@ -22,7 +23,7 @@ import { cleanupLeftovers } from "./lib/cleanup.ts";
 import { composeServices, renderEnvFiles, renderVerifySkill, serviceKey, writeFiles } from "./lib/skill.ts";
 import { staticSignals } from "./lib/signals.ts";
 import { instructionItems, safetyScan } from "./lib/static.ts";
-import type { Audit, CommandKind, Narration, Result, Roadmap, ScanBound, ScenarioId, ScenarioSpec, Strength, Tier } from "./lib/types.ts";
+import type { Audit, CommandKind, Level, Narration, Result, Roadmap, ScanBound, ScenarioId, ScenarioSpec, Strength, Tier } from "./lib/types.ts";
 import { addDays, exists, fail, git, nowIso, randomHex, readJson, readText, sha256, today, writeJson } from "./lib/util.ts";
 import { WAIVER_FILE, applyWaivers, loadWaivers } from "./lib/waivers.ts";
 import { commitReader, currentDraftId, initAudit, loadDraft, paths, refreshTree, releaseManifest, resolveRepo, saveDraft, scratchTree, writeRecordsIgnore } from "./lib/workspace.ts";
@@ -366,11 +367,9 @@ function cmdNarrate(a: Args): void {
 }
 
 // One wording for a level wherever status prints it, matching part 4 of the report.
-function levelText(row: { level: number | null; couldBe: number | null; unproven: boolean; status?: string; settleBy?: { text: string } | null } | undefined): string {
-  if (row?.status === "undetermined") return `Level 1 undetermined${row.settleBy ? `; to settle it: ${row.settleBy.text}` : ""}`;
-  if (!row || row.level === null) return "not assessed";
-  if (row.unproven) return "Level 1 unproven on this machine (could be 1)";
-  return `Level ${row.level}${row.couldBe !== null ? ` (could be ${row.couldBe})` : ""}`;
+function levelText(row: { level: Level | null; couldBe: Level | null; unproven: boolean; status?: string; settleBy?: { text: string } | null } | undefined): string {
+  if (!row) return "not assessed";
+  return row.status === "undetermined" && row.settleBy ? `${levelResult(row)}; to settle it: ${row.settleBy.text}` : levelResult(row);
 }
 
 function cmdStatus(a: Args): void {

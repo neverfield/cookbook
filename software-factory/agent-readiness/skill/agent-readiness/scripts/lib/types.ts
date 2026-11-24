@@ -187,6 +187,8 @@ export interface Evidence {
   attribution?: Attribution;
   // "on": the step ran with the network on, as the rerun of a test that failed with it cut.
   network?: "on";
+  // The later row that is the current result for the same check, component and command.
+  supersededBy?: string;
   at: string;
 }
 
@@ -566,8 +568,13 @@ export interface ReportJson {
     staleCopy: string | null;
     previous: string | null;
     storedAt: string;
+    // unsigned: an unkeyed digest that shows edits but not who sealed it. keyed: an HMAC only the
+    // holder of SA_READINESS_SEAL_KEY can produce.
+    integrity?: "unsigned" | "keyed";
   };
   scale: { level: Level; name: string; plain: string; meaning: string; measuredBy: string }[];
+  // What the audit took as given, shown on the first screen.
+  assumptions?: ReportAssumptions;
   scenarios: { id: ScenarioId; label: string; components: string[] }[];
   // Tier 1: the repo rollup.
   maturity: {
@@ -587,11 +594,9 @@ export interface ReportJson {
     capReasons: CapReason[];
     // True when the level is 0 only because this machine couldn't check Level 1.
     unproven: boolean;
-    // From 2026-12-beta. proven: the level rests on checks that ran. unproven: this machine couldn't
-    // check Level 1, and another machine settles it. undetermined: no Level 1 check failed for a reason
-    // in the repo, and the audit couldn't tell the rest; one fact about the repo settles it.
-    status?: LevelStatus;
-    settleBy?: SettleBy | null;
+    status: LevelStatus;
+    provenIn: ProofEnvKind | null;
+    settleBy: SettleBy | null;
     next: { level: Level; name: string; met: string[]; unmet: string[] } | null;
   };
   // Tier 2: each component found, with tier 3, the scenarios added for it, nested under it.
@@ -632,6 +637,13 @@ export interface ReportJson {
   waivers?: ReportWaivers | null;
 }
 
+export interface ReportAssumptions {
+  components: { id: string; path: string; manifest: string | null; assessed: boolean; note: string | null }[];
+  commands: { component: string; kind: CommandKind; command: string; cwd: string; source: string; reason: string }[];
+  environment: { kind: "container" | "disposable_vm" | "fresh_copy" | "none"; text: string };
+  toolchains: { where: string; command: string; versions: string }[];
+}
+
 export interface Explanation {
   kind: "level" | "condition" | "not_assessed" | "instruction" | "safety";
   subject: string;
@@ -668,6 +680,8 @@ export interface CapReason {
   reason: string;
 }
 
+export type ProofEnvKind = "container" | "disposable_vm" | "host";
+
 // level is null when the audit has no real results to give one from, or the component's Level 1 is
 // undetermined.
 export interface ComponentLevel {
@@ -682,8 +696,9 @@ export interface ComponentLevel {
   level: Level | null;
   couldBe: Level | null;
   unproven: boolean;
-  status?: LevelStatus;
-  settleBy?: SettleBy | null;
+  status: LevelStatus;
+  provenIn: ProofEnvKind | null;
+  settleBy: SettleBy | null;
   capReasons: CapReason[];
   scenarios: { id: ScenarioId; label: string; level: Level | null; couldBe: Level | null; unproven: boolean }[];
 }
@@ -742,7 +757,7 @@ export interface ReportProgress {
 
 export interface ReportDetails {
   steps: { itemId: string; title: string; steps: { title: string; detail: string }[] }[];
-  checks: { id: string; name: string; why: string; sources: { claim: string; caveat: string; url: string }[]; result: string; ok: boolean | null; counts: { passed: number; failed: number; notRun: number }; evidence: string[] }[];
+  checks: { id: string; name: string; why: string; sources: { claim: string; caveat: string; url: string }[]; result: string; ok: boolean | null; counts: { passed: number; failed: number; notRun: number; skipped?: number }; evidence: string[] }[];
   notAssessed: string[];
   levelRules: { level1: string; level2: string; scenarios: { id: ScenarioId; label: string; bar: string }[] };
   outcomes: {
@@ -761,6 +776,8 @@ export interface ReportDetails {
   assets: { kind: string; path: string; authors: string[]; lastChanged: string | null; status: string; ok: boolean }[];
   missingAssets: string[];
   signals: Signal[];
-  evidence: { id: string; check: string; component: string | null; ran: string; where: string; result: string; summary: string }[];
+  // Every row, current or not; supersededBy names the row that is now the result for the same check,
+  // component and command. repro reruns the step from a clean checkout, or is null when nothing ran.
+  evidence: { id: string; check: string; component: string | null; ran: string; where: string; result: string; summary: string; durationMs?: number | null; repro?: string | null; supersededBy?: string | null }[];
   record: { label: string; value: string }[];
 }

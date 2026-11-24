@@ -119,13 +119,68 @@ export function trendLine(r: ReportJson): string {
   return `Trend: ${sparkline(h.map((x) => x.repoLevel))} ${h.map((x) => recordLabel(x, x.repoLevel)).join(" → ")}`;
 }
 
+export function fmtDuration(ms: number): string {
+  if (ms < 1000) return "under 1 s";
+  const s = Math.round(ms / 1000);
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
+}
+
+// Page 1's account of what the audit took as given, one line per kind of assumption. Null for a
+// report sealed before the model carried it.
+export function assumptionLines(r: ReportJson): { label: string; text: string }[] | null {
+  const a = r.assumptions;
+  if (!a) return null;
+  const comp = (c: (typeof a.components)[number]) => `\`${c.path}\`${c.manifest ? ` (${c.manifest})` : ""}${c.assessed ? "" : `, not assessed: ${c.note}`}`;
+  const cmd = (k: (typeof a.commands)[number]) => `\`${k.command}\` (${k.kind}${k.component === "*" ? "" : `, ${k.component}`}${k.cwd !== "." ? `, in ${k.cwd}` : ""}; from ${k.source})`;
+  const lines = [
+    { label: "Components", text: a.components.length ? a.components.map(comp).join("; ") : "none found" },
+    { label: "Commands", text: a.commands.length ? a.commands.map(cmd).join("; ") : "none: the scan found no command to run" },
+    { label: "Where they ran", text: a.environment.text },
+  ];
+  if (a.toolchains.length) lines.push({ label: "Toolchains the doctor found", text: a.toolchains.map((t) => `${t.where}: ${t.versions}`).join("; ") });
+  if (r.details.evidence.some((e) => e.repro)) lines.push({ label: "Reruns", text: `every step that ran has a command in part 5 that reruns it from a clean checkout of ${r.audit.commit}` });
+  return lines;
+}
+
+// The evidence log in reading order: each current row, then the rows it superseded, oldest first.
+export function evidenceLog(r: ReportJson): { row: ReportJson["details"]["evidence"][number]; current: boolean }[] {
+  const rows = r.details.evidence;
+  const byId = new Map(rows.map((e) => [e.id, e]));
+  const finalOf = (e: (typeof rows)[number]): string => {
+    let at = e;
+    for (let hops = 0; at.supersededBy && byId.has(at.supersededBy) && hops < rows.length; hops++) at = byId.get(at.supersededBy)!;
+    return at.id;
+  };
+  const folded = new Map<string, (typeof rows)[number][]>();
+  for (const e of rows) if (e.supersededBy) folded.set(finalOf(e), [...(folded.get(finalOf(e)) ?? []), e]);
+  return rows.filter((e) => !e.supersededBy).flatMap((e) => [{ row: e, current: true }, ...(folded.get(e.id) ?? []).map((row) => ({ row, current: false }))]);
+}
+
+// One wording for a level result in every view. An unproven result is no level, so it never reads
+// as a level the ladder doesn't mark.
+export const UNPROVEN_RESULT = "Unproven on this machine (could be 1)";
+
+export const UNDETERMINED_RESULT = "Undetermined: one fact about the repo would settle it";
+
+export function levelResult(row: { level: Level | null; couldBe: Level | null; unproven: boolean; status?: string }, name: (l: Level) => string = (l) => `Level ${l}`): string {
+  if (row.status === "undetermined") return UNDETERMINED_RESULT;
+  if (row.level === null) return "not assessed";
+  if (row.unproven) return UNPROVEN_RESULT;
+  return `${name(row.level)}${row.couldBe !== null ? ` (could be ${row.couldBe})` : ""}`;
+}
+
+// Page 1's short form, beside a mini ladder.
+export function levelShort(row: { level: Level | null; unproven: boolean; status?: string }): string {
+  return row.status === "undetermined" ? "Undetermined" : row.unproven ? "Unproven here" : levelText(row.level);
+}
+
 export function levelText(l: Level | null | undefined): string {
   return l === null || l === undefined ? "no level" : `Level ${l}`;
 }
 
 // This audit's side of a comparison: an unproven result is named as such, not as a drop to Level 0.
 export function nowLevelText(l: Level | null, unproven: boolean): string {
-  return l === null && unproven ? "Level 1 unproven on this machine (no level, so not a drop)" : levelText(l);
+  return l === null && unproven ? "unproven on this machine (no level, so not a drop)" : levelText(l);
 }
 
 // One line on what changed since the last audit, or null on a first audit.

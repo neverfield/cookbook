@@ -1,6 +1,6 @@
 import type { Rubric } from "./rubric.ts";
 import type { Level, ReportJson } from "./types.ts";
-import { EMOJI, EXPERIMENTAL_NOTE, WAIVER_FILE, changeSummary, describeRate, fmtDate, fmtShortDate, groupedSteps, isExperimental, ladderLine, levelDefinition, levelText, list, markedLevel, nextMove, nowLevelText, pageNumbers, shortReason, signalsNote, sparkline, stepOf, trendLine, waiverHint, wordCount } from "./format.ts";
+import { EMOJI, EXPERIMENTAL_NOTE, assumptionLines, evidenceLog, fmtDuration, levelResult, levelShort, WAIVER_FILE, changeSummary, describeRate, fmtDate, fmtShortDate, groupedSteps, isExperimental, ladderLine, levelDefinition, levelText, list, markedLevel, nextMove, nowLevelText, pageNumbers, shortReason, signalsNote, sparkline, stepOf, trendLine, waiverHint, wordCount } from "./format.ts";
 
 export { scaleLine } from "./format.ts";
 
@@ -205,13 +205,15 @@ export function renderMarkdown(r: ReportJson, rubric: Rubric): string {
   if (comps.included.length + listed.length > 1) {
     out.push("| Component | Level | Ladder 0 to 4 | Share of changes | Trend | What holds it |", "|---|---|---|---|---|---|");
     for (const c of [...comps.included].sort((a, b) => b.changeShare - a.changeShare)) {
-      const level = c.unproven ? "Level 1 unproven here" : levelText(c.level);
+      const level = levelShort(c);
       out.push(`| \`${c.id}\` | ${level} | ${c.unproven ? miniLadder(null) : miniLadder(c.level)} | ${Math.round(c.changeShare * 100)}%${c.active ? "" : " (under 10%)"} | ${componentTrend(r, c.id)} | ${holdsText(r, c)} |`);
     }
     for (const c of listed) out.push(`| \`${c.id}\` | not assessed: ${c.reason} | | ${Math.round(c.changeShare * 100)}% | | |`);
     out.push("", "Share of changes: the component's share of changed files over the last 90 days.", "");
   }
   if (ex.unassessed) out.push(`- **Not assessed:** ${ex.unassessed.text}.${supportLink(ex.unassessed.supportDoc)}`, "");
+  const assumed = assumptionLines(r);
+  if (assumed) out.push("<details><summary>What this audit assumed</summary>", "", ...assumed.map((a) => `- **${a.label}:** ${a.text}.`), "", "</details>", "");
 
   out.push("## 2. Have I improved", "");
   if (!r.progress) out.push("This is the first audit, so there is nothing to compare yet. Rerun the audit after your first fix to see what changed here.", "");
@@ -302,15 +304,15 @@ export function renderMarkdown(r: ReportJson, rubric: Rubric): string {
     out.push(`| ${c.name} (\`${c.id}\`) | ${c.why}${src} | ${result} | ${c.evidence.slice(0, 6).map((e) => `\`${e}\``).join(", ")}${c.evidence.length > 6 ? ` and ${c.evidence.length - 6} more` : ""} |`);
   }
   out.push("", `Not assessed by this rubric version, which is different from unknown: ${list(r.details.notAssessed.map((n) => n.charAt(0).toLowerCase() + n.slice(1)))}.`, "");
-  const levelCell = (level: Level | null, couldBe: Level | null, unproven = false) => (level === null ? "not assessed" : unproven ? "Level 1 unproven on this machine (could be 1)" : `${levelWord(rubric, level)}${couldBe !== null ? ` (could be ${couldBe})` : ""}`);
+  const levelCell = (level: Level | null, couldBe: Level | null, unproven = false, status?: string) => levelResult({ level, couldBe, unproven, status }, (l) => levelWord(rubric, l));
   out.push("### Levels by component", "", `Repo shape: ${comps.shape === "sampled_monorepo" ? "monorepo, sampled (only the most active supported components are assessed)" : comps.shape}. Each component gets one standard level; scenarios someone added appear under the components they cover.`, "", "| Component | Path | Toolchain | Manifest | Lockfile | Share of changes | Level |", "|---|---|---|---|---|---|---|");
   const file = (f: string | null) => (f ? `\`${f}\`` : "none");
   for (const c of comps.included) {
-    out.push(`| \`${c.id}\`${c.active ? "" : " (under 10%)"} | \`${c.path}\` | ${c.toolchain} | ${file(c.manifest)} | ${file(c.lockfile)} | ${Math.round(c.changeShare * 100)}% | ${levelCell(c.level, c.couldBe, c.unproven)} |`);
+    out.push(`| \`${c.id}\`${c.active ? "" : " (under 10%)"} | \`${c.path}\` | ${c.toolchain} | ${file(c.manifest)} | ${file(c.lockfile)} | ${Math.round(c.changeShare * 100)}% | ${levelCell(c.level, c.couldBe, c.unproven, c.status)} |`);
     for (const s of c.scenarios) out.push(`| \`${c.id}\` › ${s.label} | | | | | | ${levelCell(s.level, s.couldBe, s.unproven)} |`);
   }
   for (const c of comps.excluded) out.push(`| \`${c.id}\` | \`${c.path}\` | ${c.toolchain} | ${file(c.manifest)} | ${file(c.lockfile)} | ${c.reason.startsWith("not a component") ? "n/a" : `${Math.round(c.changeShare * 100)}%`} | not assessed: ${c.reason} |`);
-  out.push("", `Repo level: ${noResults ? "not assessed" : r.maturity.unproven ? "Level 1 unproven on this machine (could be 1)" : levelWord(rubric, r.maturity.level)}. ${r.maturity.rule}`, "");
+  out.push("", `Repo level: ${levelResult({ level: noResults ? null : r.maturity.level, couldBe: null, unproven: r.maturity.unproven, status: r.maturity.status }, (l) => levelWord(rubric, l))}. ${r.maturity.rule}`, "");
   if (r.maturity.capReasons.length) {
     out.push(r.maturity.unproven ? "What keeps Level 1 unproven on this machine:" : `What holds the repo at Level ${r.maturity.level}:`, "");
     for (const c of r.maturity.capReasons) out.push(`- ${c.component === "*" ? "Repo" : `\`${c.component}\``}: ${c.label}, ${c.state === "blocked" ? "blocked on this machine" : c.state === "unknown" ? "not proven" : "not met"} (${c.reason}).`);
@@ -349,10 +351,14 @@ export function renderMarkdown(r: ReportJson, rubric: Rubric): string {
   out.push(...explanationLines(r));
   // Five columns: where a check ran goes with its result, and a check read from files names no command.
   out.push("### Evidence log", "", "<details><summary>All evidence</summary>", "", "| ID | Check | Component | What ran | Result |", "|---|---|---|---|---|");
-  for (const e of r.details.evidence) {
-    const ran = e.ran === e.summary ? `(${e.where})` : `${e.ran.replace(/\|/g, "\\|").slice(0, 120)} (${e.where})`;
-    out.push(`| \`${e.id}\` | \`${e.check}\` | ${e.component ?? "repo"} | ${ran} | ${e.result}: ${e.summary.replace(/\|/g, "\\|").slice(0, 160)} |`);
+  for (const { row: e, current } of evidenceLog(r)) {
+    const where = `${e.where}${typeof e.durationMs === "number" ? `, ${fmtDuration(e.durationMs)}` : ""}`;
+    const ran = e.ran === e.summary ? `(${where})` : `${e.ran.replace(/\|/g, "\\|").slice(0, 120)} (${where})`;
+    const result = `${e.result}: ${e.summary.replace(/\|/g, "\\|").slice(0, 160)}`;
+    out.push(`| \`${e.id}\` | \`${e.check}\` | ${e.component ?? "repo"} | ${ran} | ${current ? result : `superseded by \`${e.supersededBy}\`; was ${result}`} |`);
   }
+  const reruns = r.details.evidence.filter((e) => e.repro && !e.supersededBy);
+  if (reruns.length) out.push("", `Rerun a step from a clean checkout of \`${r.audit.commit}\`:`, "", ...reruns.map((e) => `- \`${e.id}\`: \`${e.repro!.replace(/`/g, "'")}\``));
   out.push("", "</details>", "", "Evidence strength, weakest to strongest: stated in docs, read from files, ran on host, ran in a clean container, confirmed by outcomes. A check passes only at its required strength.", "");
 
   out.push("## About this report", "", `Audited ${fmtDate(r.audit.date)} at ${r.audit.commit}. ${aboutLines(r).join(" ")}`, "");
