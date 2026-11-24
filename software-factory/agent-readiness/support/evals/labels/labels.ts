@@ -35,12 +35,12 @@ export const PASS_AT = 0.6;
 export const FAIL_AT = 0.4;
 
 const GOOD = {
-  healthy: "healthy-node installs, builds and passes its tests from a clean checkout, and its tests caught every planted bug. Nothing here blocks agents: start delegating work to them.",
+  healthy: "healthy-node installs, builds and passes its tests from a clean checkout, and its tests caught every planted bug. Nothing here blocks agents: start giving them work here.",
   hidden: "hidden-service's tests need a Postgres database that the setup doesn't start, so agents can't pass them from a clean checkout. It already installs, builds and passes lint.",
   tautological: "tautological-tests installs, builds and passes its tests from a clean checkout, but its tests caught none of the planted bugs, so they can't yet tell an agent when a change is wrong.",
   monorepo: "api's tests need a Postgres database the setup doesn't start, and 56% of recent changes land there. worker and shared already install and pass their tests, and shared's tests caught every planted bug.",
   nested: "admin-web installs, builds and passes its tests, but its tests caught none of the planted bugs, and 18% of recent changes land there. buyer-web is already ready for agents.",
-  slugify: "slugify installs and passes its tests from a clean checkout, and its tests caught every planted bug. Nothing here blocks agents: start delegating work to them.",
+  slugify: "slugify installs and passes its tests from a clean checkout, and its tests caught every planted bug. Nothing here blocks agents: start giving them work here.",
 };
 
 export const LABELS: Label[] = [

@@ -86,6 +86,9 @@ export interface ReleaseVerdict {
   lift: { gates: { mean: number | null; low: number | null }; judge: { mean: number | null; low: number | null } } | null;
 }
 
+// How many of the cases that pull the headline judge lift down the release check names.
+export const LIFT_DRAG_SHOWN = 8;
+
 const counts = (s: string) => s.split("/").map(Number) as [number, number];
 const signed = (x: number | null) => (x === null ? "n/a" : `${x >= 0 ? "+" : ""}${x}`);
 const ci = (x: { mean: number | null; low: number | null; high: number | null }) => `${signed(x.mean)} (95% CI ${x.low ?? "n/a"} to ${x.high ?? "n/a"})`;
@@ -161,6 +164,9 @@ export function releaseVerdict(b: Baseline, ctx: ReleaseContext = {}): ReleaseVe
     if (!RELEASE_POLICY.narrationLift) lines.push(`REPORT ${hl} (narration is outside the gate)`);
     else if (h.low !== null && h.low > 0) ok(`${hl} (lower bound needs to be above 0)`);
     else fail(`${hl} (lower bound needs to be above 0)`);
+    const drag = (control.lift.judgeByCase ?? []).filter((d) => d.diff < 0).slice(0, LIFT_DRAG_SHOWN);
+    if (drag.length) lines.push(`REPORT headline judge lift by case, most negative first: ${drag.map((d) => `${d.id} ${d.diff} (agent ${d.agent}, ${RELEASE_POLICY.liftOver} ${d.control})`).join("; ")}`);
+    else if (!control.lift.judgeByCase) lines.push(`REPORT headline judge lift by case: not recorded in this run; re-summarize it with this harness`);
     lines.push(`REPORT page judge lift over the ${RELEASE_POLICY.liftOver} run ${ci(control.lift.page)} (not a release criterion)`);
   }
   // Judges.

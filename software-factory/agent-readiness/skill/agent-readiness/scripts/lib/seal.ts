@@ -10,7 +10,8 @@ import type { LevelResult } from "./levels.ts";
 import { activeComponents, capAt, componentLevel, level3Run, outcomeLevel, partialCoverage, previousAtLevel3, recheckStates, repoLevel, scenariosFor, statesOf } from "./levels.ts";
 import { emptyStats } from "./outcomes.ts";
 import { budgetFloors, makeExecutors, newBudget, registryValuesOf, revealMutants, runContracts } from "./replay.ts";
-import { allowedNumbers, buildReport, danglingEvidence, renderMarkdown, validatePart1 } from "./render.ts";
+import { HOST_YES_FILE } from "./guard.ts";
+import { allowedNumbers, buildReport, danglingEvidence, narrationClaimErrors, renderMarkdown, validatePart1 } from "./render.ts";
 import { renderHtml } from "./render-html.ts";
 import { updateRoadmap } from "./roadmap.ts";
 import type { Rubric } from "./rubric.ts";
@@ -258,6 +259,7 @@ export function seal(audit: Audit, local: LocalInfo, p: Paths, log: (s: string) 
     ...danglingEvidence(report, audit).map((id) => `the report cites ${id}, which isn't in the audit`),
     ...explanationGaps(report, audit),
     ...validatePart1(report, rubric, audit.narration ? allowedNumbers(report) : null),
+    ...narrationClaimErrors(report, audit),
     ...validateAgainst("report", report).map((e) => `report.json ${e}`),
     ...validateAgainst("roadmap", roadmap).map((e) => `roadmap.json ${e}`),
   ];
@@ -277,6 +279,8 @@ export function seal(audit: Audit, local: LocalInfo, p: Paths, log: (s: string) 
   clearCurrent(p);
   rmSync(join(p.work, audit.id), { recursive: true, force: true });
   rmSync(join(local.tree, ".."), { recursive: true, force: true });
+  // A yes to host mode is for one audit (SKILL.md rule 2): the next one asks again.
+  rmSync(join(p.repo, HOST_YES_FILE), { force: true });
   log(`Sealed ${audit.id}: ${report.executive.heading}.`);
   return { report, markdown: md, dir };
 }

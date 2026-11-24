@@ -79,7 +79,10 @@ git clone --depth 1 https://github.com/cursor/cookbook /tmp/cookbook
 git -C /tmp/cookbook rev-parse HEAD    # the commit you copied: note it, it's your pin
 mkdir -p .cursor/skills
 cp -R /tmp/cookbook/software-factory/agent-readiness/skill/agent-readiness .cursor/skills/
+node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scripts/readiness.ts guard install
 ```
+
+`guard install` adds a shell hook to `.cursor/hooks.json` and keeps that file out of git, so an audit never counts it as one of the repo's agent assets. Until the user's yes is recorded with `readiness allow-host`, the hook refuses the repo's own install, build and test commands on this machine, and it refuses them while an audit is open. A `.cursor/hooks.json` the repo already commits is left alone, and the command prints the hook to add. New agent sessions load it.
 
 `.cursor/skills/agent-readiness` is the usual place, and any skills folder your agent reads works. The skill carries its own `package.json`, so it runs whatever module type the repo's `package.json` sets. Copy the whole folder: the seal checks a digest of the scripts, rubric and `package.json`. Commit the copy with the commit hash `rev-parse` printed in the message, and use that same hash as `SA_ACCELERATOR_REF` in the [example CI workflows](support/examples/github-workflows/), so CI runs and verifies the release you copied. No release tag exists yet; until one does, pin that commit rather than a branch.
 

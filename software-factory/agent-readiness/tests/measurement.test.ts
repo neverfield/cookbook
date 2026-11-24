@@ -11,7 +11,9 @@ import type { Baseline } from "../support/evals/lib/baseline.ts";
 import { scriptedArgs, scriptedAudit, tierOf } from "../support/evals/lib/controls.ts";
 import { expectedProblems } from "../support/evals/lib/expected.ts";
 import { DEFAULT_GATES, actionsGate, conditionsWithoutAction, expectedJsonGate, narrationGate } from "../support/evals/lib/grade.ts";
-import { JUDGE_CANDIDATES, chooseJudge, family, headlinePrompt, judgePromptDigest, pagePrompt, parseJudge } from "../support/evals/lib/judge.ts";
+import { narrationClaimErrors } from "../skill/agent-readiness/scripts/lib/render.ts";
+import type { Audit } from "../skill/agent-readiness/scripts/lib/types.ts";
+import { JUDGE_CANDIDATES, chooseJudge, evidenceBlock, family, headlinePrompt, judgePromptDigest, pagePrompt, parseJudge } from "../support/evals/lib/judge.ts";
 import { ISOLATION, isolateHome, userAgentDirs } from "../support/evals/lib/isolation.ts";
 import { releaseVerdict } from "../support/evals/lib/release.ts";
 import { currentBinding } from "../support/evals/lib/binding.ts";
@@ -182,6 +184,20 @@ describe("narration and action checks", () => {
     assert.equal(narrationCheck(["shared (6% of changes) is next."], r, null).problems.length, 1);
   });
 
+  test("the rubric's kill rate in a sentence about changes isn't read as a change share", () => {
+    const r = loadBase("tautological-tests");
+    const id = r.components.included[0].id;
+    for (const text of [
+      `${id} sets the level: its tests caught 0 of 5 planted faults, below the 60% required, so they can't yet catch wrong changes.`,
+      `${id}'s tests can't catch wrong changes: they caught 0 of 5 planted bugs, below the required 60%.`,
+      `${id} can't catch wrong changes yet; the rubric requires 60% of planted faults caught.`,
+    ])
+      assert.deepEqual(narrationCheck([text], r, null).problems, [], text);
+    assert.deepEqual(narrationCheck([`${id} (60% of changes) can't catch wrong changes.`], r, null).problems, [`says 60% of changes next to ${id}, but ${id} has 100%`]);
+    const m = loadBase("monorepo-mixed");
+    assert.deepEqual(narrationCheck(["worker misses planted faults and api has 40% of recent changes."], m, null).problems, ["says 40% of changes next to api, but api has 56%"]);
+  });
+
   test("a share next to a list of components may be their sum", () => {
     const r = loadBase("monorepo-mixed");
     assert.deepEqual(narrationCheck(["api and worker hold 83% of recent changes."], r, null).problems, []);
@@ -328,6 +344,70 @@ describe("labels", () => {
   });
 });
 
+describe("the judges see what `readiness status` shows the narrator", () => {
+  test("check results and the record lines on how the audit ran are evidence; ids and digests aren't", () => {
+    const r = loadBase("monorepo-mixed");
+    r.details.record.push({ label: "Registry variables", value: "NPM_TOKEN, passed to the setup steps by name; their values are never recorded" });
+    const block = evidenceBlock(r).join("\n");
+    const instructions = r.details.checks.find((c) => c.id === "context.instructions_verified")!;
+    assert.ok(block.includes(`Check result, ${instructions.name}: ${instructions.result}.`), block);
+    assert.match(block, /Recorded replay environment: /);
+    assert.match(block, /Recorded registry variables: NPM_TOKEN, passed to the setup steps by name/);
+    assert.doesNotMatch(block, /Recorded (audit|commit|skill digest|seal|stored in):/i);
+  });
+
+  test("the headline judge sees the computed numbers, the measured outcomes, and a skipped component's toolchain and manifest", () => {
+    const r = loadBase("nested-apps-dotnet");
+    const excluded = r.components.excluded[0];
+    const block = evidenceBlock(r).join("\n");
+    assert.ok(block.includes(`Not assessed ${excluded.id}: `) && block.includes(`${excluded.toolchain}, from ${excluded.manifest}; ${excluded.reason}.`), block);
+    for (const n of r.executive.numbers) assert.ok(block.includes(`Computed number, ${n.label}: ${n.value}. ${n.comparison}.`), n.label);
+    const rate = (count: number, n: number) => ({ count, n, rate: n ? count / n : null, window: "the last 30 days" });
+    r.details.outcomes = { window: "2026-10-24 to 2026-11-23", filter: "head branch starts with cursor/", source: "file", series: [{ label: "Agent PRs", opened: 20, merged: rate(18, 20), firstTimeCi: rate(16, 20), changesRequested: rate(2, 20), medianDaysToMerge: 1 }], byComponent: [], multiComponentNote: "", matchedPrs: [], caveat: "" };
+    assert.match(headlinePrompt(r), /Outcomes, Agent PRs \(2026-10-24 to 2026-11-23\): 20 opened; merged 18 of 20; passed CI the first time 16 of 20; changes requested on 2 of 20\./);
+  });
+});
+
+describe("round 3: what backs a remediation headline", () => {
+  test("the judge sees the roadmap items this audit closed and each safety finding", () => {
+    const r = loadBase("monorepo-mixed");
+    r.roadmap.items[0] = { ...r.roadmap.items[0], status: "done", title: "Remove the install hook that pipes a download into a shell" };
+    r.explanations = [...(r.explanations ?? []), { kind: "safety", subject: "test/payments.test.js:3", result: "blocks Level 2", ran: "the secret and script scan", where: "read from files", happened: "tests read PAYMENTS_KEY, a production credential", rule: "x" } as never];
+    const block = evidenceBlock(r).join("\n");
+    assert.match(block, /Roadmap item done, its checks pass in this audit: Remove the install hook that pipes a download into a shell\./);
+    assert.match(block, /Safety finding, test\/payments\.test\.js:3 \(blocks Level 2\): tests read PAYMENTS_KEY, a production credential\./);
+  });
+
+  test("the seal refuses \"its instructions check out\" when some were wrong or didn't run, and takes the count", () => {
+    const r = loadBase("monorepo-mixed");
+    const audit = (headline: string) => ({ narration: { headline }, evidence: [] }) as unknown as Audit;
+    const says = (headline: string) => narrationClaimErrors(r, audit(headline)).filter((e) => /instructions check out/.test(e));
+    assert.match(says("api sets the level; its instructions check out and shared is ready for agents.")[0], /the audit found 4 of 7 instruction items check out, 3 wrong; give that count instead/);
+    assert.deepEqual(says("api sets the level; 4 of 7 instruction items check out."), []);
+    const all = loadBase("monorepo-mixed");
+    all.details.checks = all.details.checks.map((c) => (c.id === "context.instructions_verified" ? { ...c, result: "7 of 7 instruction items check out" } : c));
+    assert.deepEqual(narrationClaimErrors(all, audit("api sets the level; its instructions check out.")).filter((e) => /instructions/.test(e)), []);
+  });
+});
+
+describe("the headline judge lift names the cases behind it", () => {
+  test("per-case means of both arms are kept, most negative first, and the release check lists the ones that pull it down", () => {
+    const agent = [run("a", 1, { sealed: true }, 0.9), run("a", 2, { sealed: true }, 1), run("b", 1, { sealed: true }, 0.3), run("b", 2, { sealed: true }, 0.4), run("c", 1, { sealed: true }, 1)];
+    const scripted = [run("a", 1, { sealed: false }, 0.8, 0.7, { arm: "scripted" }), run("b", 1, { sealed: false }, 0.9, 0.7, { arm: "scripted" }), run("c", 1, { sealed: false }, 1, 0.7, { arm: "scripted" })];
+    const b = withControls(summarize(agent, { ...O, repeats: 5 }), agent, { scripted });
+    assert.deepEqual(b.controls!.scripted!.lift.judgeByCase, [
+      { id: "b", agent: 0.35, control: 0.9, diff: -0.55 },
+      { id: "c", agent: 1, control: 1, diff: 0 },
+      { id: "a", agent: 0.95, control: 0.8, diff: 0.15 },
+    ]);
+    const line = releaseVerdict(b, {}).lines.find((l) => l.startsWith("REPORT headline judge lift by case"));
+    assert.equal(line, "REPORT headline judge lift by case, most negative first: b -0.55 (agent 0.35, scripted 0.9)");
+    const old = structuredClone(b);
+    delete old.controls!.scripted!.lift.judgeByCase;
+    assert.ok(releaseVerdict(old, {}).lines.includes("REPORT headline judge lift by case: not recorded in this run; re-summarize it with this harness"));
+  });
+});
+
 describe("control arms and holdouts", () => {
   test("three fixtures are held out and none is in the smoke set", () => {
     const held = fixtureCases.filter((c) => c.tags.includes("holdout")).map((c) => c.id).sort();
@@ -371,7 +451,7 @@ describe("control arms and holdouts", () => {
     step(["init", "--tier", "local-exec", "--force"]);
     step(["scan"]);
     step(["replay"]);
-    step(["narrate", "--headline", "hidden-service's tests need a Redis cache that the setup doesn't start, so agents can't pass them from a clean checkout.", "--ask", "Decision needed: approve committing the setup files."]);
+    step(["narrate", "--headline", "hidden-service's tests need a Redis cache that the setup doesn't start, so agents can't pass them from a clean checkout. A rerun with Docker can prove it.", "--ask", "Decision needed: approve committing the setup files."]);
     step(["seal"]);
     const g = narrationGate(ws, t, c);
     assert.equal(g.pass, false);

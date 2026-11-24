@@ -22,17 +22,17 @@ export interface Actor {
 
 export function actor(ws: Workspace, c: EvalCase): Actor {
   const started = Date.now();
-  const t: Trajectory = { driver: "scripted", toolCalls: [], snapshots: [{ call: "start", phase: "after", digest: protectedDigest(ws.dir) }], text: "", durationMs: 0, tokens: null, error: null };
+  const t: Trajectory = { driver: "scripted", toolCalls: [], snapshots: [{ call: "start", phase: "after", digest: protectedDigest(ws.dir), at: Date.now() }], text: "", durationMs: 0, tokens: null, error: null };
   const env = { ...process.env, ...caseEnv(c) };
   let n = 0;
   const call = <T>(name: string, args: Record<string, unknown>, fn: () => T): T => {
     const id = `call-${++n}`;
     t.toolCalls.push({ id, name, status: "completed", args });
-    t.snapshots!.push({ call: id, phase: "before", digest: protectedDigest(ws.dir) });
+    t.snapshots!.push({ call: id, phase: "before", digest: protectedDigest(ws.dir), at: Date.now() });
     try {
       return fn();
     } finally {
-      t.snapshots!.push({ call: id, phase: "after", digest: protectedDigest(ws.dir) });
+      t.snapshots!.push({ call: id, phase: "after", digest: protectedDigest(ws.dir), at: Date.now() });
       t.durationMs = Date.now() - started;
     }
   };

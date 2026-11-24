@@ -5,6 +5,7 @@ import { addContractCommand, checkComponent, discoverContract } from "./lib/cont
 import { compareAudits, weakeningFlags } from "./lib/diff.ts";
 import { addEvidence, recordObservation } from "./lib/evidence.ts";
 import { ghAvailable, ghJson } from "./lib/gh.ts";
+import { HOOKS_FILE, installGuard, recordHostYes } from "./lib/guard.ts";
 import { auditIds, loadSealedAudit, pushHistory, readHistory, readRoadmap, writeRoadmap } from "./lib/history.ts";
 import { MAX_PRS, computeOutcomes, fetchPrs, loadPrsFile } from "./lib/outcomes.ts";
 import { PREVIEW } from "./lib/preview.ts";
@@ -424,9 +425,22 @@ function cmdSeal(a: Args): void {
   if (PREVIEW) log(PREVIEW);
 }
 
+// When the audited commit's tree differs from HEAD's outside .agent-readiness/, the sealed report
+// describes an older tree: a level read from it isn't HEAD's.
+function staleAuditNote(repo: string, audit: Audit): string | null {
+  const head = git(["rev-parse", "HEAD"], repo).stdout.trim();
+  if (!head || head === audit.repo.commit) return null;
+  const same = git(["diff", "--quiet", "--no-ext-diff", "--no-textconv", audit.repo.commit, head, "--", ".", ":(exclude).agent-readiness"], repo).ok;
+  if (same) return null;
+  const n = Number(git(["rev-list", "--count", `${audit.repo.commit}..${head}`], repo).stdout.trim()) || 0;
+  return `NOTE: ${audit.id} audited ${audit.repo.commit.slice(0, 7)}; HEAD (${head.slice(0, 7)}) is ${n ? `${n} commit${n === 1 ? "" : "s"} later and ` : ""}different code, so this report doesn't describe HEAD. Run a new audit, or \`readiness recheck\` to rerun its commands on HEAD in a clean container.`;
+}
+
 function cmdVerify(a: Args): void {
   const p = paths(repoOf(a));
   const { audit } = loadSealedAudit(p, a.positional[1] ?? "latest");
+  const stale = staleAuditNote(p.repo, audit);
+  if (stale) log(stale);
   const r = verifySeal(p, audit.id, { releaseRepo: opt(a, "release-repo"), releaseRef: opt(a, "release-ref"), tierExternal: opt(a, "tier") === "external-systems" || audit.tier === "external-systems", allowUnkeyed: Boolean(a.flags["allow-unkeyed"]) });
   for (const l of r.lines) log(l);
   if (!r.ok) fail("Seal verification failed.", 2);
@@ -446,6 +460,8 @@ function cmdDiff(a: Args): void {
   const to = loadSealedAudit(p, a.positional[2] ?? "latest").audit;
   const history = readHistory(p);
   const d = compareAudits(p.repo, from, to, history.find((h) => h.id === from.id), history.find((h) => h.id === to.id));
+  const stale = a.flags.json ? null : staleAuditNote(p.repo, to);
+  if (stale) log(stale);
   if (a.flags.json) log(JSON.stringify(d, null, 2));
   else {
     log(`${d.from} -> ${d.to}${d.rubricChanged ? ` (rubric ${d.rubricChanged.from} -> ${d.rubricChanged.to})` : ""}`);
@@ -583,6 +599,22 @@ function cmdFeedback(a: Args): void {
   log(`Wrote ${f}. It holds the rubric version, check, evidence digests and your note, and no source code. Send it to the account team.`);
 }
 
+function cmdGuard(a: Args): void {
+  const repo = repoOf(a);
+  if (a.positional[1] !== "install") fail("Use `readiness guard install`.");
+  const r = installGuard(repo);
+  if (r.status === "tracked") log(`${HOOKS_FILE} is committed in this repo, so it was left alone. To refuse the repo's own commands on this machine until the user says yes, add this command as a beforeShellExecution and a beforeReadFile hook: node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scripts/guard.ts`);
+  else log(`${r.status === "installed" ? "Added" : "Already in place:"} the readiness guard in ${HOOKS_FILE}, kept out of git. Until the user's yes is recorded with \`readiness allow-host\`, it refuses the repo's own install, build and test commands on this machine. New agent sessions load it.`);
+}
+
+function cmdAllowHost(a: Args): void {
+  const repo = repoOf(a);
+  const note = opt(a, "note");
+  if (!note) fail("Pass --note with the user's words, for example --note \"yes, run npm test here\". Record a yes only after the user gives it.");
+  const file = recordHostYes(repo, note, nowIso());
+  log(`Recorded the user's yes to running repo commands on this machine (${file.replace(repo + "/", "")}). The seal clears it, so the next audit asks again.`);
+}
+
 function cmdVersion(a: Args): void {
   const m = releaseManifest();
   log(`agent-readiness skill ${m?.version ?? "unreleased"} (${m?.tag ?? "no release manifest"}), rubric ${latestRubricVersion()}`);
@@ -657,14 +689,20 @@ After an audit
   feedback <check-id> --note "..." [--component C]
   version [--upstream owner/repo --tier external-systems]
   validate <file> [--kind audit|report|roadmap]
+  guard install                       add the shell hook that refuses the repo's own commands on this machine until the user says yes
+  allow-host --note "..."             record the user's yes to running repo commands on this machine, until the next seal
 `;
+
+// When this invocation began. With `at`, its end, a reader can tell which records it wrote while a
+// shell that moved it to the background ran other commands.
+const STARTED_AT = nowIso();
 
 function logInvocation(argv: string[], code: number): void {
   try {
     const repo = resolveRepo(process.cwd());
     const p = paths(repo);
     if (!exists(p.records)) return;
-    appendFileSync(join(p.records, "cli.log"), JSON.stringify({ at: nowIso(), argv: argv.map((x) => redact(x)), code }) + "\n");
+    appendFileSync(join(p.records, "cli.log"), JSON.stringify({ started: STARTED_AT, at: nowIso(), argv: argv.map((x) => redact(x)), code }) + "\n");
   } catch {
     return;
   }
@@ -712,6 +750,8 @@ async function main(): Promise<void> {
     "draft-env": cmdDraftEnv,
     assets: cmdAssets,
     feedback: cmdFeedback,
+    guard: cmdGuard,
+    "allow-host": cmdAllowHost,
     version: cmdVersion,
     validate: cmdValidate,
     audit: cmdAudit,

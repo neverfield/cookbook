@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { ContainerSession, HOME_DIR, NETWORK_ENV, buildImage, detectRuntime, hostUser, probeLimits } from "./container.ts";
 import { hooked, imagePlan, toolchainCopies, toolSetup } from "./contract.ts";
+import { ALLOW_HOST_ENV } from "./guard.ts";
 import { BUNDLE_GAP, diagnose, rootError, testCounts } from "./diagnose.ts";
 import { addEvidence } from "./evidence.ts";
 import { digestOf } from "./images.ts";
@@ -77,13 +78,21 @@ export function registryValuesOf(audit: Audit): string[] {
 
 // Host mode: the repo's commands run on this machine instead of in a container. Only on the user's
 // explicit yes (`--allow-host`, which sets this variable), never as a fallback.
-export const ALLOW_HOST_ENV = "SA_READINESS_ALLOW_HOST";
+export { ALLOW_HOST_ENV };
 
 export function hostAllowed(explicit?: boolean): boolean {
   return explicit ?? process.env[ALLOW_HOST_ENV] === "1";
 }
 
 export const HOST_NOT_ALLOWED = `host mode wasn't allowed (--allow-host), so no repo command ran outside a container`;
+
+// Why no runtime was found. With --runtime none (or SA_READINESS_RUNTIME=none) a runtime may well be
+// installed, so the reason says the audit turned it off: an agent that sees `docker info` succeed
+// then has no contradiction to probe with a container of its own.
+export function noRuntimeReason(preference: string): string {
+  if (preference === "none") return "no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none)";
+  return `no container runtime on this machine: ${preference === "auto" ? "neither docker info nor podman info answered" : `${preference} info didn't answer`}`;
+}
 export const HOST_MODE_NOTE = "host mode was allowed: the repo's commands ran on this machine as this user, outside a container, with a throwaway home and no account credentials, but they could read this user's local files; it isn't a sandbox, and Level 1 can't be proved there";
 
 // Linux, macOS and cloud agents. The audit drives its container through bash on the host and its
@@ -947,7 +956,7 @@ export function makeExecutors(audit: Audit, copyDir: string, runtimePref: string
   // and its error rather than a missing runtime.
   audit.environment.containerRuntime = notStarted && runtime ? runtime.bin : null;
   audit.environment.image = notStarted ? image : null;
-  const reason = notStarted ? `${notStarted}, and ${HOST_NOT_ALLOWED}` : HOST_NOT_ALLOWED;
+  const reason = `${notStarted ?? noRuntimeReason(runtimePref)}, and ${HOST_NOT_ALLOWED}`;
   audit.environment.notRun = reason;
   log(`${notStarted ? "No container" : "No container runtime"}: nothing runs outside a container without the user's yes, so Level 1 is unproven on this machine (${reason}).`);
   return executorSet([{ ex: unavailableExecutor(copyDir, reason), components: allIds, repoWide: true }], profile);

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, copyFileSync, cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { installGuard } from "../../../skill/agent-readiness/scripts/lib/guard.ts";
 import { skillDigest } from "../../../skill/agent-readiness/scripts/lib/workspace.ts";
 import { SKILL, commitAll, materialize, materializePrs } from "../../tools/fixture.ts";
 import type { EvalCase, Turn, Workspace } from "./types.ts";
@@ -21,6 +22,8 @@ export function prepare(c: EvalCase, opts: { skill?: boolean } = {}): Workspace 
   if (opts.skill !== false) {
     cpSync(SKILL, join(dir, ".cursor/skills/agent-readiness"), { recursive: true });
     commitAll(dir, "Add the agent readiness skill", 0, now);
+    // As `readiness guard install` does for a user: local to this clone, never in the audited tree.
+    installGuard(dir, join(dir, ".cursor/skills/agent-readiness/scripts/guard.ts"));
   }
   const ws: Workspace = { dir, fixture: c.fixture, now, skillDigestBefore: skillDigest(), headBefore: "" };
   if (c.setup) {

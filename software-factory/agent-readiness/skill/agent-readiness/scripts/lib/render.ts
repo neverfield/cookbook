@@ -219,11 +219,16 @@ export function startFailureCause(blocked: string): string | null {
   return `the audit's container (${image}) didn't start`;
 }
 
+// The replay's no-runtime reason (replay.ts noRuntimeReason) in the headline's shorter words.
+function noRuntimeCause(blocked: string): string {
+  return blocked.replace(/^no container runtime on this machine: [^,]*(?:answered|didn't answer)/, "this machine has no container runtime").replace(/^no container runtime: this audit was run with container runtimes turned off \([^)]*\)/, "container runtimes were turned off for this audit");
+}
+
 // Only the steps a level depends on: a refused start command doesn't explain a missing Level 1. With
 // components given, only their own steps and the repo's.
 function blockedCauses(input: RenderInput, comps: string[] | null = null): string[] {
   const mine = (c?: string) => !comps || !c || c === "*" || comps.includes(c);
-  return [...new Set(input.audit.evidence.filter((e) => e.kind !== "start" && e.kind !== "doctor" && mine(e.component)).map(blockedBy).filter((b): b is string => Boolean(b) && b !== "the install was blocked on this machine").map((b) => startFailureCause(b) ?? b.replace(/, though the repo's declared image .*$/, "")))];
+  return [...new Set(input.audit.evidence.filter((e) => e.kind !== "start" && e.kind !== "doctor" && mine(e.component)).map(blockedBy).filter((b): b is string => Boolean(b) && b !== "the install was blocked on this machine").map((b) => startFailureCause(b) ?? noRuntimeCause(b).replace(/, though the repo's declared image .*$/, "")))];
 }
 
 // Each is a clause that follows "it" in the headline.
@@ -285,12 +290,13 @@ function headlineFor(input: RenderInput, ready: string[], setByShare: number): s
     const where = held.length <= 3 ? list(held) : `all ${held.length} ${held.length === active.length ? "active " : ""}components`;
     const readOnly = input.audit.tier === "read-only";
     const causes = blockedCauses(input, held);
-    const why = readOnly ? "the read-only tier runs no repo code" : !input.audit.environment.containerRuntime ? list(["this machine has no container runtime", ...causes]) : causes.length ? list(causes) : "a check that decides it couldn't run here";
+    const why = readOnly ? "the read-only tier runs no repo code" : !input.audit.environment.containerRuntime ? list(causes.some((c) => /container runtime/.test(c)) ? causes : ["this machine has no container runtime", ...causes]) : causes.length ? list(causes) : "a check that decides it couldn't run here";
     const rerun = rerunAdvice(input, causes, "prove it");
     const tail = rerun ? ` ${rerun}` : "";
     const other = notMachineCause(input);
     if (other) return fit(`Level ${rollup.level + 1} couldn't be proved for ${where}: ${other}.`, `Level ${rollup.level + 1} couldn't be proved for ${where}.`);
-    return fit(`Level ${rollup.level + 1} couldn't be proved for ${where} because ${why}.${tail}`, `Level ${rollup.level + 1} couldn't be proved for ${where} on this machine.${tail}`);
+    const shortWhy = why.replace(/, and host mode wasn't allowed \(--allow-host\), so no repo command ran outside a container/g, "");
+    return fit(`Level ${rollup.level + 1} couldn't be proved for ${where} because ${why}.${tail}`, `Level ${rollup.level + 1} couldn't be proved for ${where} because ${shortWhy}.${tail}`, `Level ${rollup.level + 1} couldn't be proved for ${where} on this machine.${tail}`);
   }
   if (rollup.level >= 2 && (top.length === 0 || top.every((t) => t.kind !== "fix"))) {
     if (rollup.level >= 3) return "Agent PRs meet your Level 3 targets. Keep the weekly recheck running and widen the work agents take.";
@@ -299,7 +305,7 @@ function headlineFor(input: RenderInput, ready: string[], setByShare: number): s
     // "builds" only when every active component has a build step that passed; many have none.
     const built = active.every((id) => input.audit.contract.some((c) => c.kind === "build" && (c.component === id || c.component === "*") && input.audit.evidence.some((e) => e.contractId === c.id && e.result === "pass")));
     const does = one ? (built ? "it installs, builds and passes its" : "it installs and passes its") : built ? "they install, build and pass their" : "they install and pass their";
-    return `Nothing blocks agents in ${where}: from a clean checkout ${does} tests, and ${one ? "its" : "their"} tests caught the planted bugs. Start delegating work to agents.`;
+    return `Nothing blocks agents in ${where}: from a clean checkout ${does} tests, and ${one ? "its" : "their"} tests caught the planted bugs. Start giving agents work there.`;
   }
   const names = list(rollup.setBy);
   const share = active.length > 1 ? `, and ${pct(setByShare, 1)}% of recent changes land there` : "";
@@ -912,6 +918,7 @@ export function buildReport(input: RenderInput): ReportJson {
                 ? "fresh copy on the host (no container runtime)"
                 : `none: no repo command ran${noneAssessed(input) ? ", because no component could be assessed" : ""}`,
         },
+        ...(audit.environment.registryEnv.length ? [{ label: "Registry variables", value: `${audit.environment.registryEnv.join(", ")}, passed to the setup steps by name; their values are never recorded` }] : []),
         { label: "Stored in", value: input.storedAt },
       ],
     },
@@ -1178,6 +1185,38 @@ export function headlineCauseErrors(report: ReportJson): string[] {
   }
   const ready = text.match(/Nothing blocks agents in (.+?):/);
   if (ready) for (const id of named(ready[1])) if ((byId.get(id)!.level ?? 0) < 2) errors.push(`the headline says nothing blocks ${id}, but it is below Level 2`);
+  return errors;
+}
+
+const NO_RESULT = /\bno (?:check|checks)\b[^.;:]{0,30}?\b(?:results?|ran|could run|was run|were run)\b|\bnothing (?:produced|gave) (?:a |any )?(?:real )?results?\b/i;
+const CLEAN_CONTAINER = /\b(?:clean|fresh) container\b/i;
+const INSTRUCTIONS_OK = /\binstructions?\b[^.;:]{0,30}?\b(?:check(?:s|ed)? out|are (?:accurate|correct|right|up to date)|all pass(?:ed)?)\b/i;
+const RERUN = /\b(?:re-?runs?|run (?:it |them |this |the audit |the checks )?again|re-?audits?|another machine|a machine (?:with|that|where)|where (?:docker|podman|the network|network|the image|it|they|these)|in CI|open network|with (?:docker|podman|network))\b/i;
+
+// Narrated claims the audit's own records contradict, which a reader can't check from the text:
+// that no check gave a result when one did, that commands ran in a clean container when none
+// did, and a level unproven or blocked on this machine with no word on where a rerun can prove it.
+// Only for narration: the scripts' default wording is built from these records.
+export function narrationClaimErrors(report: ReportJson, audit: Audit): string[] {
+  const n = audit.narration;
+  if (!n) return [];
+  const texts = ([["headline", n.headline ?? ""], ["ask", n.ask ?? ""], ...Object.values(n.gaps ?? {}).map((g) => ["gap", g])] as [string, string][]).filter(([, t]) => t.trim());
+  const errors: string[] = [];
+  const gave = report.details.checks.filter((c) => c.counts.passed + c.counts.failed > 0);
+  const instructions = report.details.checks.find((c) => c.id === "context.instructions_verified");
+  const counted = instructions ? /^(\d+) of (\d+) /.exec(instructions.result) : null;
+  const partial = instructions && (/\b(wrong|not run)\b/.test(instructions.result) || (counted !== null && counted[1] !== counted[2])) ? instructions.result : null;
+  for (const [name, t] of texts) {
+    if (partial && INSTRUCTIONS_OK.test(t) && !/\b\d+ of \d+ instruction/i.test(t)) errors.push(`the ${name} says the instructions check out, but the audit found ${partial}; give that count instead`);
+    if (gave.length && NO_RESULT.test(t)) errors.push(`the ${name} says no check gave a result, but ${list(gave.map((c) => c.name.toLowerCase()))} did (${gave[0].result}); say which repo commands couldn't run instead`);
+    if (CLEAN_CONTAINER.test(t) && !audit.evidence.some((e) => e.where === "container" && e.result !== "not_run")) errors.push(`the ${name} says something ran in a clean container, but no command ran in one in this audit`);
+    // Delegable is Level 3's name, so "delegate" below it reads as a claim of Level 3.
+    if (report.maturity.level < 3 && /\bdelegat\w*/i.test(t)) errors.push(`the ${name} says "delegate", but Delegable is Level 3's name and the repo is at Level ${report.maturity.level}; say "give agents work there" instead`);
+  }
+  const m = report.maturity;
+  // As in rerunAdvice: a block only support for the stack can lift needs no rerun advice.
+  const unsupported = audit.evidence.some((e) => NOT_SUPPORTED.test(blockedBy(e) ?? ""));
+  if (n.headline && (m.unproven || m.outcome === "blocked") && !unsupported && !RERUN.test(n.headline)) errors.push("the level is unproven or blocked on this machine, so the headline must say where a rerun can prove it, for example on a machine with Docker, with open network access, or in CI");
   return errors;
 }
 

@@ -10,7 +10,7 @@ import { IMAGE_DIGESTS, pinnedRef } from "../skill/agent-readiness/scripts/lib/i
 import { componentLevel, repoLevel } from "../skill/agent-readiness/scripts/lib/levels.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { EXAMPLE_KEYS, proxyPasswords, redact, scanText } from "../skill/agent-readiness/scripts/lib/redact.ts";
-import { ALLOW_HOST_ENV, HOST_NOT_ALLOWED, assertPlatformSupported, copyWorkTree, failingComponents, hostExecutor, newBudget, runContract, unavailableExecutor } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { ALLOW_HOST_ENV, HOST_NOT_ALLOWED, assertPlatformSupported, noRuntimeReason, copyWorkTree, failingComponents, hostExecutor, newBudget, runContract, unavailableExecutor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { ACCOUNT_CREDENTIAL, scrubbedEnv } from "../skill/agent-readiness/scripts/lib/run.ts";
@@ -60,8 +60,13 @@ describe("no silent host fallback: without a container nothing runs, and the res
     assert.deepEqual(audit.evidence.filter((e: { where: string }) => e.where === "host" || e.where === "fresh_copy"), [], "nothing ran on the host");
     assert.ok(audit.evidence.every((e: { exitCode?: number | null }) => e.exitCode === undefined || e.exitCode === null), "no command has an exit code");
     const install = audit.evidence.find((e: { kind?: string }) => e.kind === "install");
-    assert.deepEqual([install.result, install.blocked], ["not_run", HOST_NOT_ALLOWED]);
-    assert.equal(audit.environment.notRun, HOST_NOT_ALLOWED);
+    const reason = `${noRuntimeReason("none")}, and ${HOST_NOT_ALLOWED}`;
+    assert.deepEqual([install.result, install.blocked], ["not_run", reason]);
+    assert.equal(audit.environment.notRun, reason);
+    // The record, the evidence and the headline all name the missing runtime, not only the host-mode rule.
+    assert.match(report.details.record.find((x: { label: string }) => x.label === "Replay environment").value, /^none: no container runtime: this audit was run with container runtimes turned off/);
+    assert.match(report.details.evidence.find((e: { summary: string }) => /^install /.test(e.summary)).summary, /no container runtime/);
+    assert.equal(report.executive.headline.match(/container runtime/g)?.length, 1, report.executive.headline);
     assert.equal(audit.environment.hostMode, undefined);
     assert.equal(report.maturity.unproven, true);
     assert.notEqual(report.maturity.outcome, "not_assessed", "unproven is not the same as not assessed");
@@ -70,6 +75,32 @@ describe("no silent host fallback: without a container nothing runs, and the res
     assert.ok(report.components.included.every((c: { unproven: boolean }) => c.unproven));
     assert.ok(report.maturity.capReasons.length > 0 && report.maturity.capReasons.every((c: { state: string; reason: string }) => c.state === "blocked" && c.reason.length > 0), "every cap names its reason");
     assert.ok(report.maturity.capReasons.some((c: { reason: string }) => c.reason.includes(HOST_NOT_ALLOWED)));
+  });
+
+  test("the seal refuses narration the audit's records contradict, and accepts it once it matches them", () => {
+    const repo = materialize("healthy-node");
+    for (const step of [["init", "--tier", "local-exec"], ["scan"], ["replay", "--runtime", "none"]]) assert.equal(readiness(repo, step).code, 0, step.join(" "));
+    const sealWith = (headline: string) => {
+      assert.equal(readiness(repo, ["narrate", "--headline", headline, "--ask", "Approve running this audit in CI, where Docker is available."]).code, 0);
+      return readiness(repo, ["seal"]);
+    };
+    const noResult = sealWith("healthy-node sets the level: no check produced a real result here, because this machine has no container runtime. A rerun with Docker can prove it.");
+    assert.notEqual(noResult.code, 0);
+    assert.match(noResult.out, /the headline says no check gave a result, but .*normal work needs no production access/i);
+    const container = sealWith("healthy-node sets the level: its install and tests couldn't run in a clean container on this machine. A rerun with Docker can prove it.");
+    assert.match(container.out, /the headline says something ran in a clean container, but no command ran in one/);
+    const noRerun = sealWith("healthy-node sets the level: Level 1 couldn't be proved, because this machine has no container runtime and its install and tests didn't run.");
+    assert.match(noRerun.out, /must say where a rerun can prove it/);
+    const delegate = sealWith("healthy-node sets the level: Level 1 couldn't be proved, because this machine has no container runtime. A rerun with Docker can prove it, and then you can delegate work.");
+    assert.match(delegate.out, /says "delegate", but Delegable is Level 3's name and the repo is at Level 0/);
+    const ok = sealWith("healthy-node sets the level: Level 1 couldn't be proved, because this machine has no container runtime. A rerun where Docker is available, such as CI, can prove it.");
+    assert.equal(ok.code, 0, ok.out);
+  });
+
+  test("a runtime that is missing, rather than turned off, is named as missing", () => {
+    assert.equal(noRuntimeReason("auto"), "no container runtime on this machine: neither docker info nor podman info answered");
+    assert.equal(noRuntimeReason("podman"), "no container runtime on this machine: podman info didn't answer");
+    assert.match(noRuntimeReason("none"), /turned off/);
   });
 
   test("a container that doesn't start is unproven with the runtime's error, never a host run", { skip: runtime ? false : "no container runtime" }, () => {

@@ -70,6 +70,18 @@ export function setupLine(r: ReportJson): string[] {
   return [`Setup the audit ran before the tests: ${steps.map((e) => `${step(e)} ${e.result}${e.ran && e.ran !== e.summary ? ` (\`${e.ran.slice(0, 80)}\`)` : ""}`).join(", ") || "none"}${started ? "" : "; no start step, so the setup starts no service"}.`];
 }
 
+// The record lines that say how this audit ran; the rest (ids, digests, where it's stored) back no claim.
+const RECORD_LINES = ["Permission tier", "Planted faults", "Replay environment", "Registry variables"];
+
+const rateOf = (v: { count: number; n: number }) => `${v.count} of ${v.n}`;
+
+// The pull requests the audit measured, per series (agent PRs, other PRs), as the outcomes table gives them.
+export function outcomeLines(r: ReportJson): string[] {
+  const o = r.details.outcomes;
+  if (!o) return [];
+  return o.series.map((x) => `Outcomes, ${x.label} (${o.window}): ${x.opened} opened; merged ${rateOf(x.merged)}; passed CI the first time ${rateOf(x.firstTimeCi)}; changes requested on ${rateOf(x.changesRequested)}.`);
+}
+
 // What the scripts computed, for checking the narration's claims. Never written by the agent.
 export function evidenceBlock(r: ReportJson): string[] {
   const comps = r.components.included;
@@ -78,9 +90,16 @@ export function evidenceBlock(r: ReportJson): string[] {
     `Repo level: ${r.maturity.level} (${r.maturity.outcome}); set by ${r.maturity.setBy.join(", ") || "none"}.`,
     `What is unproven: ${unprovenFacts(r).join("; ") || "nothing; every component was assessed and every check that decides the level ran"}.`,
     ...comps.map((c) => `Component ${c.id}: ${c.level === null ? "not assessed" : `Level ${c.level}`}${c.couldBe !== null ? `, could be ${c.couldBe}` : ""}; ${pctOf(c.changeShare)} of recent changes; ${c.toolchain}.`),
-    ...r.components.excluded.map((c) => `Not assessed ${c.id}: ${pctOf(c.changeShare)} of recent changes; ${c.reason}.`),
+    ...r.components.excluded.map((c) => `Not assessed ${c.id}: ${pctOf(c.changeShare)} of recent changes; ${c.toolchain}${c.manifest ? `, from ${c.manifest}` : ""}; ${c.reason}.`),
     ...comps.flatMap((c) => c.capReasons.map((x) => `${c.level !== null && c.level >= 2 ? `Level ${c.level + 1} (beyond what agents need to start) for ${c.id} needs` : `Holds ${c.id} at Level ${c.level ?? 0}`}: ${x.label}: ${x.state.replace("_", " ")}: ${x.reason}`)),
     ...setupLine(r),
+    // `readiness status` shows the agent these, so a narrated claim taken from them is backed.
+    ...r.details.checks.filter((c) => c.result).map((c) => `Check result, ${c.name}: ${c.result}.`),
+    ...r.executive.numbers.map((n) => `Computed number, ${n.label}: ${n.value}. ${n.comparison}.`),
+    ...outcomeLines(r),
+    ...r.roadmap.items.filter((i) => i.status === "done").map((i) => `Roadmap item done, its checks pass in this audit: ${i.title}.`),
+    ...(r.explanations ?? []).filter((x) => x.kind === "safety").map((x) => `Safety finding, ${x.subject} (${x.result}): ${x.happened}.`),
+    ...r.details.record.filter((x) => RECORD_LINES.includes(x.label)).map((x) => `Recorded ${x.label.toLowerCase()}: ${x.value}.`),
   ];
   const evidence = r.details.evidence.map((e) => `Evidence ${e.check}${e.component ? ` ${e.component}` : ""}, ${e.where}: ${e.result}: ${e.summary.slice(0, 240)}${e.ran && e.ran !== e.summary ? ` (ran \`${e.ran.slice(0, 160)}\`)` : ""}`);
   return [...lines, ...evidence];
@@ -135,7 +154,7 @@ export const PROMPTS: Record<JudgeKind, (r: ReportJson) => string> = { headline:
 
 // Changes whenever what the judge is told changes, so compare() can refuse a baseline judged differently.
 export function judgePromptDigest(): string {
-  const src = [REPLY, OPEN, CLOSE, TRUST, BARE_LEVEL, TRUTH, UNPROVEN_HEADLINE, UNPROVEN_PAGE, SCALE, untrusted, unprovenFacts, setupLine, evidenceBlock, headlinePrompt, pagePrompt].map(String).join("\n");
+  const src = [REPLY, OPEN, CLOSE, TRUST, BARE_LEVEL, TRUTH, UNPROVEN_HEADLINE, UNPROVEN_PAGE, SCALE, RECORD_LINES.join("|"), rateOf, outcomeLines, untrusted, unprovenFacts, setupLine, evidenceBlock, headlinePrompt, pagePrompt].map(String).join("\n");
   return createHash("sha256").update(src).digest("hex").slice(0, 12);
 }
 

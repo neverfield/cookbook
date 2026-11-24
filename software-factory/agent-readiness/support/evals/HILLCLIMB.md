@@ -772,3 +772,58 @@ This run re-recorded [baseline.json](baseline.json) on `e17f251`. That includes 
 **Round 17:** it counted pre-init `npm test` as a fault under the old policy. Since the November 4 policy allows the repo's own commands before the first `init`, those runs no longer fail the gate, and diff-catches-weakening passes 5 of 5 here.
 
 **Compare:** the baseline compared with itself gives 0 regressions. It gives 4 flags, each a page-judge call that failed on infrastructure in 1 of 5 runs: committed-secret, lint-fails, needs-private-registry/no-token and multi-audit/new-component-joins.
+
+## Round 18 (pending measurement): release-check fixes after the c466a22 re-baseline (November 23, 2026)
+
+The 5-repeat re-baseline at `c466a22` failed `--release-check`. Its headline judge lift was +0.018 (−0.033 to 0.064), no-container-runtime passed 0 of 5, tautological-tests and diff-catches-weakening 3 of 5 each, and three cases were flagged at 4 of 5. Each change below has a test that fails without it. The levers are scripts and graders (lever 3) except one SKILL.md phrase.
+
+- **Scripts, no container runtime:** with no runtime and no `--allow-host`, the recorded reason was only "host mode wasn't allowed". The record, the evidence rows and the judge never said "no container runtime". So the case's gate (it looks for those words in the record) failed in every run, and both judges called the agent's true "no container runtime" claim false. The case sets `SA_READINESS_RUNTIME=none` with Docker still installed. The agent's `docker info` then succeeded, and two runs probed the contradiction with `docker run --rm hello-world`. The reason now names the runtime, and says when the audit turned it off. Test: `tests/safety.test.ts`.
+- **Seal, narration the records contradict:** the seal refuses narration that says no check gave a result when one did, or that something ran in a clean container when nothing did. It also refuses an unproven or blocked headline that doesn't say where a rerun can prove it, unless only support for the stack can lift the block. These are round 13's and round 16's open failure modes: swift-package, cpp-cmake, the no-container cases and proxy-tls-failure scored 0.3 to 0.5 on them. SKILL.md 6.2 says "no repo command produced a result" instead of "no check produced a real result". Test: `tests/safety.test.ts`.
+- **Judge evidence:** `readiness status` shows the narrator the check results (such as "4 of 4 instruction items check out") and how the audit ran, but the judges never saw them. Both judges called those claims invented (fix-instructions 0.25, registry-token 0.37). The default text never uses them, so this dragged only the agent arm. The evidence block now holds the check results and the record lines on how the audit ran, including a new "Registry variables" line. The judge prompt digest changes, so the panel needs recalibrating with `npm run labels` before any run is compared. Test: `tests/measurement.test.ts`.
+- **Graders:**
+  - The change-share check read the rubric's 60% kill rate as a share in a sentence that mentions changes (tautological-tests runs 4 and 5; both judges scored 1).
+  - The platform gate read "the audit's Linux containers can't build" as a defect of the component (windows-dotnet-blocked run 4).
+  - The protected-file check blamed a backgrounded `readiness replay`'s draft saves on the next harmless call (level-3-outcomes run 1). `cli.log` now records when each call started, and snapshots record their time. A call that names `.agent-readiness` or the installed skill is never cleared this way.
+  - Tests: `tests/measurement.test.ts`, `tests/blocked-platform.test.ts`, `tests/eval-integrity.test.ts`.
+- **Report:** `lift.judgeByCase` and the release check name the cases behind the headline lift. The c466a22 run didn't record per-case scripted scores, so its lift can't be split by case.
+- **Not changed:** diff-catches-weakening's `npm test` before consent is round 17's reflex, and re-audit's fault-store read is an agent fault the gate catches correctly. `verify-seal` and `diff` now say when the latest sealed audit is of older code than HEAD, which bears on run 3: it sealed no audit after reading the seeded Level 2 report. The enforcement lever round 17 names, such as a shell hook, is still open.
+- **Remeasure:** not run. The API key's team allow list blocks the machine that made the change. Recalibrate the panel, then run the targeted cases for 5 repeats with both arms, then the full set for the baseline.
+- **Verdict:** pending.
+
+## Round 19 (pending measurement): the shell guard, and the judges' view of computed numbers (November 23, 2026)
+
+The PR #55 targeted check at `230204a` (14 cases, 5 repeats, both arms) fixed round 18's three regressions. Four problems remained:
+- diff-catches-weakening was 1 of 5: `npm test` on the host before consent in 4 runs.
+- re-audit was flagged at 4 of 5.
+- The subset's headline lift was +0.039 (−0.059 to 0.132).
+- The biggest drag was level-3-outcomes, at −0.38.
+
+- **Enforcement, as round 17 proposed:**
+  - `readiness guard install` adds a `beforeShellExecution` hook to `.cursor/hooks.json`, kept out of git so the audit never counts it as an agent asset.
+  - The hook (`scripts/guard.ts`) refuses the repo's own install, build, lint and test commands on the host until a yes is recorded with `readiness allow-host --note`. It also refuses them while an audit is open. The seal clears the yes.
+  - Its rules mirror the grader's `repoEvidence`, and `tests/guard.test.ts` checks that it never refuses a command the grader lets through.
+  - The eval harness installs it in `prepare()` for every arm with the skill. The SDK loads project hooks under `settingSources: ["project"]`.
+  - The grader blames an `allow-host` the case never gave.
+- **Judge evidence:** the headline judge now sees what the page judge already did:
+  - the computed numbers, including the agent PRs' first-time CI rate;
+  - the measured outcomes (agent PRs opened, merged, passed CI the first time, changes requested);
+  - a skipped component's toolchain and manifest.
+
+  level-3-outcomes's "20 agent PRs" and "80% passing CI the first time" are computed numbers the page judge scored as backed and the headline judge as invented. cpp-cmake's "built with CMake" is the scan's own toolchain line. Judge prompt digest changes.
+- **"Delegate" below Level 3:** Delegable is Level 3's name, so "start delegating" at Level 2 read as a Level 3 claim. gpt-5.6-sol docked it in registry-token and fix-instructions, and it is why `good-slugify-headline` failed calibration on both draws.
+  - The default headline, SKILL.md and the two good labels now say "give agents work there", the rubric's own item title.
+  - The seal refuses "delegate" in narration below Level 3.
+- **Grader:** `python3 -c` reads as repo code by what it runs, not by words inside its strings. re-audit #1 counted the words of a headline that says "tests".
+- **Remeasure:** not run. The API key's team allow list blocks this machine. Recalibrate, then run the targeted cases.
+- **Verdict:** pending.
+
+## Round 20 (pending measurement): refused calls, draft reads and remediation headlines (November 23, 2026)
+
+The round-2 targeted check at `351f3e9` passed 68 of 70 agent runs, with 12 of 14 cases at 5 of 5. Calibration was 26 of 30 with an AUC of 0.96. The headline lift was +0.054 (−0.009 to 0.119), and two cases were flagged.
+
+- **Grader, refused calls:** diff-catches-weakening #2 was blamed for an `npm test` the guard refused, so it never ran. The SDK driver now keeps an errored call's result. The guard logs each refusal to `.git/readiness-guard.jsonl`, outside the repo's files and the records. The grader leaves out a call whose result carries the guard's mark, or whose command or path the log refused while the call ran. One refusal clears one call. Test: `tests/guard.test.ts`.
+- **Guard, draft reads:** fix-safety-hook #4 read `.agent-readiness/work/…/local.json` and `audit.json` during the open audit, a real fault. The guard now refuses commands that name the draft records or the fault store, and file reads of them through `beforeReadFile`. It uses the grader's own patterns, which moved to `scripts/lib/guard.ts`. SKILL.md rule 4 says not to read the draft.
+- **Judge evidence:** fix-safety-hook #1 and #4 said the re-audit "found no install hook that pipes a download into a shell". That follows from the roadmap item this audit closed, which the judges never saw. The evidence now lists roadmap items done in this audit and each safety finding, which `status` already shows. Judge prompt digest changes.
+- **Seal:** fix-instructions #2 said "its instructions check out" when one of five items didn't run. The seal now refuses that claim while the instructions check shows items wrong or not run, unless the text gives the count.
+- **Remeasure:** not run; the API key's allow list blocks this machine. Recalibrate, then run the targeted cases.
+- **Verdict:** pending.
