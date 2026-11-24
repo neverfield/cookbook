@@ -11,6 +11,9 @@ import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
 import type { Audit, Component, InstructionItem } from "../skill/agent-readiness/scripts/lib/types.ts";
+import { estimateTable } from "../support/tools/kill-rate.ts";
+import type { EstimateRow, Tally } from "../support/tools/kill-rate.ts";
+import { SUPPORT } from "../support/tools/fixture.ts";
 import { makeAudit } from "./helpers.ts";
 
 const next = loadRubric("2026-12-beta");
@@ -273,5 +276,26 @@ describe("instruction severities", () => {
   test("a README command that couldn't be replayed doesn't leave the condition open", () => {
     const pending: InstructionItem = { ...item("README.md", "command", "make docs"), result: "not_run", reason: "waiting for replay" };
     assert.equal(componentStates(makeAudit({ components: [{ id: "app", share: 1 }], instructions: [pending] }), next, "app").instructions.state, "met");
+  });
+});
+
+describe("kill-rate calibration rerun under the estimate", () => {
+  const file = join(SUPPORT, "evals", "calibration", "kill-rate.json");
+  const cal = JSON.parse(readFileSync(file, "utf8")) as { rubric: string; minForPass: number; rows: Tally[] };
+
+  test("the recorded replay is current", () => {
+    const recorded = JSON.parse(readFileSync(join(SUPPORT, "evals", "calibration", "fault-estimate.json"), "utf8")) as { rule: EstimateRule; table: EstimateRow[] };
+    assert.deepEqual(recorded.rule, rule);
+    assert.deepEqual(recorded.table, estimateTable(cal.rows, rule, minForPass, beta.mutation.killRate!));
+  });
+
+  test("on the calibration draws, the estimate gives one verdict from every starting draw more often than the kill rate, and fails no more suites", () => {
+    const table = estimateTable(cal.rows, rule, minForPass, beta.mutation.killRate!);
+    const stable = (vs: string[]) => new Set(vs.filter((v) => v !== "inconclusive" && v !== "not_run")).size <= 1;
+    const estimateStable = table.filter((r) => stable(r.verdicts)).length;
+    const killRateStable = table.filter((r) => stable(r.killRate)).length;
+    assert.ok(estimateStable > killRateStable, `${estimateStable} vs ${killRateStable} of ${table.length}`);
+    const fails = (vs: string[]) => vs.filter((v) => v === "weak" || v === "fail").length;
+    assert.ok(table.reduce((s, r) => s + fails(r.verdicts), 0) <= table.reduce((s, r) => s + fails(r.killRate), 0));
   });
 });
