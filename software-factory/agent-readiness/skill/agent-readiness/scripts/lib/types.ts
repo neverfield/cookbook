@@ -139,6 +139,8 @@ export interface Evidence {
   // A type-check canary: the known type error planted in `file`. exempt: the component's tests import
   // no file of a language with a canary, so its type-check counts on its exit code alone.
   canary?: { kind: "typecheck"; file: string | null; line?: string; exempt?: boolean };
+  // The planted-fault estimate behind a faults result, from 2026-12-beta.
+  estimate?: FaultEstimate;
   at: string;
 }
 
@@ -221,6 +223,20 @@ export interface WaiverRecord {
 
 // Where a fault was planted stays outside the repository until the seal: the draft holds only
 // each fault's result, so nothing in the working tree says which lines the tests were checked on.
+// The planted-fault estimate (mutate.ts faultEstimate): low and high are the rule's one-sided Wilson
+// bounds on the share of faults the tests catch.
+export interface FaultEstimate {
+  planted: number;
+  decided: number;
+  caught: number;
+  rate: number;
+  low: number;
+  high: number;
+  verdict: "strong" | "weak" | "inconclusive";
+  // Faults an earlier sealed audit planted that this one planted again.
+  carried: number;
+}
+
 export interface Mutant {
   id: string;
   component: string;
@@ -231,6 +247,8 @@ export interface Mutant {
   after?: string;
   result: "caught" | "survived" | "discarded" | "not_run";
   exitCodes: number[];
+  // mutate.ts faultId(): kept with the site details, so it is revealed only at the seal.
+  faultId?: string;
 }
 
 export interface Asset {

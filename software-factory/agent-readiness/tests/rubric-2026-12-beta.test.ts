@@ -38,7 +38,7 @@ function gitRepo(files: Record<string, string>): string {
 describe("rubric 2026-12-beta", () => {
   test("is the rubric new audits use, and lists what changed", () => {
     assert.equal(latestRubricVersion(), "2026-12-beta");
-    assert.equal((next.changes ?? []).length, 5);
+    assert.equal((next.changes ?? []).length, 8);
   });
 
   test("is written as JSON.stringify(rubric, null, 2), so a reformat never moves its digest", () => {
@@ -46,15 +46,19 @@ describe("rubric 2026-12-beta", () => {
     assert.equal(JSON.stringify(JSON.parse(text), null, 2) + "\n", text);
   });
 
-  test("changes only the type-check canary, the revert window, two templates, one check's why, the not-assessed list and where a pass proves Level 1", () => {
+  test("changes only the type-check canary, the revert window, where a pass proves Level 1, the fault estimate, secret classes, instruction severities, three templates, one check's why and the not-assessed list", () => {
     const strip = (r: typeof next) => {
       const c = structuredClone(r) as Partial<typeof next> & Record<string, unknown>;
       delete c.version;
       delete c.changes;
       delete c.canary;
       delete c.proof;
+      delete c.safety;
+      delete c.severities;
+      const { killRate: _k, estimate: _e, caughtRuns: _r, scoped: _s, identity: _i, ...mutation } = r.mutation;
+      c.mutation = mutation as typeof r.mutation;
       c.outcomes = { ...r.outcomes, revertDays: undefined, metrics: r.outcomes.metrics.filter((m) => m !== "reverted_within_days") };
-      const { "commands:canary": _c, drive: _d, ...templates } = r.templates;
+      const { "commands:canary": _c, drive: _d, "safety:secret": _s2, ...templates } = r.templates;
       c.templates = templates;
       c.checks = r.checks.map((k) => (k.id === "verify.canonical_interface" ? { ...k, why: "" } : k));
       c.notAssessed = r.notAssessed.filter((n) => n !== "Whether the lint command catches anything");
@@ -63,6 +67,9 @@ describe("rubric 2026-12-beta", () => {
     assert.deepEqual(strip(next), strip(beta));
     assert.deepEqual([next.canary?.typecheck, next.outcomes.revertDays, beta.canary, beta.outcomes.revertDays], [true, 14, undefined, undefined]);
     assert.deepEqual([next.proof?.environments, beta.proof], [["container", "disposable_vm"], undefined]);
+    assert.deepEqual([next.mutation.killRate, beta.mutation.killRate, next.mutation.caughtRuns, next.mutation.scoped, next.mutation.identity, next.severities?.instructions], [undefined, 0.6, 1, true, "fault", "agent_commands"]);
+    assert.deepEqual(next.safety?.blockingSecretClasses, ["provider_token", "private_key", "url_credential"]);
+    assert.deepEqual(next.templates["safety:secret"].steps.map((s) => s.title), ["Rotate first", "Move the values out", "Prove it"]);
     assert.equal(Object.keys(next.templates).indexOf("drive"), Object.keys(next.templates).indexOf("delegate") + 1, "the drive step comes right after giving agents work");
   });
 });

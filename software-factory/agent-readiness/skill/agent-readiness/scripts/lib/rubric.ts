@@ -1,4 +1,5 @@
 import { readdirSync } from "node:fs";
+import type { EstimateRule } from "./mutate.ts";
 import { join } from "node:path";
 import type { ProofKind } from "./proofenv.ts";
 import type { CondId, Effort, Level, ScenarioId, SecretClass, Strength } from "./types.ts";
@@ -49,11 +50,18 @@ export interface Rubric {
   // killRate (from 2026-11-beta): the share of faults with a clear result the tests must catch;
   // without it, every one. seedFrom "code" (from 2026-11-beta): faults come from the code, so they
   // and the level stay fixed until the code changes; without it, a fresh seed each audit.
-  mutation: { perComponent: number; minForPass: number; killRate?: number; seedFrom?: "audit" | "code"; languages: string[]; operators: string[]; runTimeoutSec: number; flakeRuns: number; targeting: string };
+  // From 2026-12-beta: estimate replaces killRate with the sequential estimate in mutate.ts;
+  // caughtRuns is how often a caught fault runs (flakeRuns otherwise); scoped runs each fault against
+  // only the tests that reach its file, where the runner takes paths; identity "fault" ranks each
+  // fault by its own identity and replants the last sealed audit's faults first.
+  mutation: { perComponent: number; minForPass: number; killRate?: number; seedFrom?: "audit" | "code"; languages: string[]; operators: string[]; runTimeoutSec: number; flakeRuns: number; targeting: string; estimate?: EstimateRule; caughtRuns?: number; scoped?: boolean; identity?: "fault" };
   budgets: { commandTimeoutSec: number; componentMinutes: number; totalMinutes: number };
   // blockingSecretClasses (from 2026-12-beta): the secret classes in secrets.ts that block Level 2
   // when found in shipped code; the others are listed for review. Without it, every class blocks.
   safety?: { blockingSecretClasses?: SecretClass[] };
+  // instructions "agent_commands" (from 2026-12-beta): only a wrong command in a file written for
+  // agents holds Level 2; README and CONTRIBUTING items and paths are listed. Without it, every item gates.
+  severities?: { instructions?: "agent_commands" };
   // typecheck (from 2026-12-beta): a passing type-check meets the commands condition only once it
   // failed on a type error the audit planted. Without it, exit 0 is enough.
   canary?: { typecheck?: boolean };

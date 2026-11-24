@@ -2,7 +2,7 @@ import { statSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { inComponent } from "./languages/coverage.ts";
 import { languageOf } from "./languages/index.ts";
-import type { Component, Language } from "./types.ts";
+import type { Component, FaultEstimate, Language } from "./types.ts";
 import { exists, lastChanged, listFiles, readText, sha256 } from "./util.ts";
 
 export interface Site {
@@ -418,6 +418,80 @@ export function targetFiles(tree: string, comp: Component): string[] {
   return [...targets].sort();
 }
 
+// Files every test loads without importing them: pytest's conftest.py and the setup files Jest and
+// Vitest name in their config. A fault reached through one can be caught by any test.
+const SHARED_SETUP = /(^|\/)conftest\.py$|(^|\/)(jest|vitest)\.(setup|config)\.[mc]?[jt]s$|(^|\/)setup(Tests|-tests)?\.[mc]?[jt]s$/;
+
+// The test files that import `file`, directly or through other files of the component, or null when
+// the run can't be narrowed: a shared setup file reaches it, a language this file doesn't read, or
+// no test does.
+export function testsReaching(tree: string, comp: Component, file: string): string[] | null {
+  const lang = comp.language;
+  if (hooksFor(lang) || (lang !== "py" && lang !== "ts" && lang !== "js")) return null;
+  const aliases = lang === "py" ? { aliases: [], baseUrl: null } : jsAliases(tree, comp);
+  const tests = new Set(testFiles(tree, comp));
+  const roots = [...tests, ...inComponent(listFiles(tree), comp.path).filter((f) => SHARED_SETUP.test(f))];
+  const importedBy = new Map<string, Set<string>>();
+  const seen = new Set<string>(roots);
+  const queue = [...roots];
+  for (let i = 0; i < queue.length && i < 5000; i++) {
+    const from = queue[i];
+    const text = readText(join(tree, from));
+    const specs = lang === "py" ? [...text.matchAll(PY_IMPORT)].map((m) => resolvePy(tree, comp, from, m[1] ?? m[2])) : [...text.matchAll(JS_IMPORT)].map((m) => (m[1].startsWith(".") ? resolveJs(tree, from, m[1]) : resolveAlias(tree, m[1], aliases)));
+    for (const to of specs) {
+      if (!to || to.includes("node_modules")) continue;
+      if (!importedBy.has(to)) importedBy.set(to, new Set());
+      importedBy.get(to)!.add(from);
+      if (!seen.has(to)) {
+        seen.add(to);
+        queue.push(to);
+      }
+    }
+  }
+  const reached = new Set<string>([file]);
+  const back = [file];
+  for (let i = 0; i < back.length; i++) {
+    for (const from of importedBy.get(back[i]) ?? []) {
+      if (reached.has(from)) continue;
+      reached.add(from);
+      back.push(from);
+    }
+  }
+  if ([...reached].some((f) => SHARED_SETUP.test(f))) return null;
+  const out = [...reached].filter((f) => tests.has(f)).sort();
+  return out.length ? out : null;
+}
+
+// pytest and `node --test` options that take the next word as their value.
+const RUNNER_VALUE_FLAGS = new Set(["-k", "-m", "-c", "-p", "-n", "-o", "-W", "-r", "--rootdir", "--config-file", "--deselect", "--ignore", "--ignore-glob", "--junitxml", "--cov", "--cov-report", "--import-mode", "--maxfail", "--tb", "--dist", "--test-reporter", "--test-reporter-destination", "--test-name-pattern", "--test-concurrency", "--import", "--require", "-r"]);
+
+// The test command narrowed to the given test files, or null when it can't be done safely: only a
+// direct pytest or `node --test` run that names no paths of its own, and test files inside the
+// folder it runs in.
+export function scopedCommand(command: string, cwd: string, tests: string[]): string | null {
+  const words = command.trim().split(/\s+/);
+  if (words.some((w) => /[|&;<>()$`"'\\*?]/.test(w))) return null;
+  let at = -1;
+  for (let i = 0; i < words.length && at < 0; i++) {
+    if (/(^|\/)pytest$/.test(words[i])) at = i;
+    else if (/(^|\/)python3?$/.test(words[i]) && words[i + 1] === "-m" && words[i + 2] === "pytest") at = i + 2;
+  }
+  if (at < 0 && /(^|\/)node$/.test(words[0] ?? "") && words.includes("--test")) at = 0;
+  if (at < 0) return null;
+  for (let i = at + 1; i < words.length; i++) {
+    const w = words[i];
+    if (w === "--test" || w.startsWith("-")) {
+      if (RUNNER_VALUE_FLAGS.has(w)) i++;
+      continue;
+    }
+    return null;
+  }
+  const base = normalize(cwd).replace(/\/$/, "");
+  const rel = tests.map((t) => (base === "." ? t : t.startsWith(base + "/") ? t.slice(base.length + 1) : null));
+  if (rel.some((r) => r === null || !/^[\w./@+-]+$/.test(r))) return null;
+  return `${command.trim()} ${rel.join(" ")}`;
+}
+
 // What the planted faults are chosen from: the files the tests import, and the tests. The same code
 // gives the same faults, so a fault result changes only when the code does. Line endings don't count.
 export function codeDigest(tree: string, files: string[]): string {
@@ -519,20 +593,45 @@ export function allSites(tree: string, files: string[], lang: Language): Site[] 
   return sites;
 }
 
+// A fault's identity: its file, its line with whitespace normalised, and its operator. The line's
+// number isn't part of it, so a fault keeps its identity when code above it moves.
+export function faultId(site: Pick<Site, "file" | "before" | "operator">): string {
+  return sha256(`${site.file}\n${site.before.trim().replace(/\s+/g, " ")}\n${site.operator}`).slice(0, 16);
+}
+
+export interface PickOptions {
+  // "fault" (from 2026-12-beta): each fault is ranked by its own identity, so editing a test, or code
+  // in another file, never redraws it. Without it, the whole pick is keyed on every file's digest.
+  identity?: "fault";
+  // Fault ids an earlier sealed audit planted, replanted first where the same fault still exists.
+  prior?: string[];
+}
+
 // The pick depends on the component's code and on `seed`. An empty seed leaves the code alone to
 // decide, so the same code always gets the same faults; an eval or a grader passes its own seed to
 // get faults the code's own pick didn't plant.
-export function chooseSites(repo: string, tree: string, comp: Component, seed: string, count: number, commit = "HEAD"): Site[] {
+export function chooseSites(repo: string, tree: string, comp: Component, seed: string, count: number, commit = "HEAD", opts: PickOptions = {}): Site[] {
   const files = targetFiles(tree, comp);
   const sites = allSites(tree, files, comp.language);
   if (sites.length === 0) return [];
   const recency = lastChanged(repo, files, { commit });
   const sortedFiles = [...files].sort((a, b) => (recency.get(b) ?? "").localeCompare(recency.get(a) ?? "") || a.localeCompare(b));
   const recentTier = new Set(sortedFiles.slice(0, Math.max(1, Math.ceil(sortedFiles.length / 2))));
-  const code = codeDigest(tree, [...files, ...testFiles(tree, comp)]);
-  const rand = seededRandom(seed ? `${code}:${seed}` : code, comp.id);
-  const shuffled = sites.map((s) => ({ s, k: rand() })).sort((a, b) => a.k - b.k).map((x) => x.s);
+  let shuffled: Site[];
+  if (opts.identity === "fault") {
+    const rank = (s: Site) => sha256(`${seed}:${comp.id}:${faultId(s)}`);
+    shuffled = sites.map((s) => ({ s, k: rank(s) })).sort((a, b) => a.k.localeCompare(b.k) || a.s.line - b.s.line).map((x) => x.s);
+  } else {
+    const code = codeDigest(tree, [...files, ...testFiles(tree, comp)]);
+    const rand = seededRandom(seed ? `${code}:${seed}` : code, comp.id);
+    shuffled = sites.map((s) => ({ s, k: rand() })).sort((a, b) => a.k - b.k).map((x) => x.s);
+  }
   const tiered = [...shuffled.filter((s) => recentTier.has(s.file)), ...shuffled.filter((s) => !recentTier.has(s.file))];
+  if (opts.prior?.length) {
+    const order = new Map(opts.prior.map((id, i) => [id, i]));
+    const again = tiered.filter((s) => order.has(faultId(s))).sort((a, b) => order.get(faultId(a))! - order.get(faultId(b))!);
+    tiered.splice(0, tiered.length, ...again, ...tiered.filter((s) => !order.has(faultId(s))));
+  }
   const picked: Site[] = [];
   const usedLines = new Set<string>();
   for (const s of tiered) {
@@ -588,6 +687,73 @@ export const DEFAULT_KILL_RATE = 1;
 export function killRateOf(mutation: { minForPass?: number; killRate?: number }): number {
   const k = mutation.killRate;
   return typeof k === "number" && k > 0 && k <= 1 ? k : DEFAULT_KILL_RATE;
+}
+
+// The sequential estimate (from 2026-12-beta). Faults are planted in batches until the share caught is
+// decided either way, or a cap is reached:
+// strong: the one-sided `strongConfidence` Wilson lower bound is at least `strongLow`, and the share
+//   caught at least `strongRate`;
+// weak: the one-sided `weakConfidence` Wilson upper bound is below `weakHigh`;
+// inconclusive otherwise, which leaves the faults condition undetermined, never not met.
+export interface EstimateRule {
+  batch: number;
+  maxDecided: number;
+  maxPlanted: number;
+  strongConfidence: number;
+  strongLow: number;
+  strongRate: number;
+  weakConfidence: number;
+  weakHigh: number;
+}
+
+export function estimateRule(mutation: { estimate?: EstimateRule }): EstimateRule | null {
+  return mutation.estimate ?? null;
+}
+
+// The standard normal quantile (Acklam's rational approximation, relative error below 1.2e-9).
+export function normalQuantile(p: number): number {
+  const a = [-39.69683028665376, 220.9460984245205, -275.928510446969, 138.357751867269, -30.66479806614716, 2.506628277459239];
+  const b = [-54.47609879822406, 161.5858368580409, -155.6989798598866, 66.80131188771972, -13.28068155288572];
+  const c = [-0.007784894002430293, -0.3223964580411365, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
+  const d = [0.007784695709041462, 0.3224671290700398, 2.445134137142996, 3.754408661907416];
+  const lo = 0.02425;
+  if (p < lo) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+  if (p > 1 - lo) return -normalQuantile(1 - p);
+  const q = p - 0.5;
+  const r = q * q;
+  return ((((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q) / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+}
+
+// One side of the Wilson score interval for k successes in n, at a one-sided confidence.
+export function wilsonBound(k: number, n: number, confidence: number, side: "low" | "high"): number {
+  if (n === 0) return side === "low" ? 0 : 1;
+  const z = normalQuantile(confidence);
+  const p = k / n;
+  const centre = p + (z * z) / (2 * n);
+  const half = z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n));
+  const bound = (side === "low" ? centre - half : centre + half) / (1 + (z * z) / n);
+  return Math.min(1, Math.max(0, bound));
+}
+
+export function faultEstimate(caught: number, decided: number, rule: EstimateRule, minForPass: number, planted = decided, carried = 0): FaultEstimate {
+  const low = wilsonBound(caught, decided, rule.strongConfidence, "low");
+  const high = wilsonBound(caught, decided, rule.weakConfidence, "high");
+  const rate = decided ? caught / decided : 0;
+  const verdict = decided < minForPass ? "inconclusive" : low >= rule.strongLow - 1e-12 && rate >= rule.strongRate - 1e-12 ? "strong" : high < rule.weakHigh ? "weak" : "inconclusive";
+  return { planted, decided, caught, rate, low, high, verdict, carried };
+}
+
+// Whether to plant another batch: the estimate is still open and neither cap is reached.
+export function keepPlanting(est: FaultEstimate, rule: EstimateRule): boolean {
+  return est.verdict === "inconclusive" && est.decided < rule.maxDecided && est.planted < rule.maxPlanted;
+}
+
+// The looks fall at whole batches of decided faults, the points the rule's error rates were set at.
+export function atLook(decided: number, rule: EstimateRule): boolean {
+  return decided > 0 && decided % rule.batch === 0;
 }
 
 // The fault check's result from its counts: not_run when too few faults gave a clear result.

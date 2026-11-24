@@ -2,7 +2,7 @@ import { componentLevel } from "./levels.ts";
 import { describeRate, rate, windowLabel } from "./outcomes.ts";
 import type { Rubric, RubricTemplate } from "./rubric.ts";
 import type { CompStates } from "./score.ts";
-import { commandsFor } from "./score.ts";
+import { commandsFor, gatingInstruction } from "./score.ts";
 import { removalAdvice } from "./secrets.ts";
 import type { Audit, CondId, CondState, Component, Effort, Fix, Level, OutcomeStats, OutcomesSnapshot, Roadmap, RoadmapItem, SafetyFinding, Watch } from "./types.ts";
 import { fill, nowIso } from "./util.ts";
@@ -149,7 +149,7 @@ export function candidates(ctx: RoadmapContext): Candidate[] {
     }
   }
   if (anyRepo?.instructions.state === "not_met") {
-    const failed = audit.instructions.filter((i) => i.result === "fail");
+    const failed = audit.instructions.filter((i) => i.result === "fail" && gatingInstruction(rubric, i));
     const files = [...new Set(failed.map((i) => i.source))];
     const itemList = failed.map((i) => `\`${i.source}:${i.line}\` \`${i.text}\`: ${i.reason ?? i.staticReason ?? "fails"}`).join("; ");
     const diag = failed.slice(0, 2).map((i) => `${i.text} (${i.reason ?? i.staticReason})`).join(", ");
