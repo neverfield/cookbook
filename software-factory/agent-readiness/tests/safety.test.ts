@@ -17,7 +17,10 @@ import { ACCOUNT_CREDENTIAL, scrubbedEnv } from "../skill/agent-readiness/script
 import { componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
 import type { ContractCommand } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { commitAll, materialize, readiness } from "../support/tools/fixture.ts";
+import { guards } from "../support/tools/known-failures.ts";
 import { makeAudit } from "./helpers.ts";
+
+const guard = guards(import.meta.url);
 
 const rubric = loadRubric();
 const HOST = { [ALLOW_HOST_ENV]: "1" };
@@ -87,14 +90,31 @@ describe("no silent host fallback: without a container nothing runs, and the res
     const noResult = sealWith("healthy-node sets the level: no check produced a real result here, because this machine has no container runtime. A rerun with Docker can prove it.");
     assert.notEqual(noResult.code, 0);
     assert.match(noResult.out, /the headline says no check gave a result, but .*normal work needs no production access/i);
-    const container = sealWith("healthy-node sets the level: its install and tests couldn't run in a clean container on this machine. A rerun with Docker can prove it.");
-    assert.match(container.out, /the headline says something ran in a clean container, but no command ran in one/);
     const noRerun = sealWith("healthy-node sets the level: Level 1 couldn't be proved, because this machine has no container runtime and its install and tests didn't run.");
     assert.match(noRerun.out, /must say where a rerun can prove it/);
     const delegate = sealWith("healthy-node sets the level: Level 1 couldn't be proved, because this machine has no container runtime. A rerun with Docker can prove it, and then you can delegate work.");
     assert.match(delegate.out, /says "delegate", but Delegable is Level 3's name and the repo is at Level 0/);
     const ok = sealWith("healthy-node sets the level: Level 1 couldn't be proved, because this machine has no container runtime. A rerun where Docker is available, such as CI, can prove it.");
     assert.equal(ok.code, 0, ok.out);
+  });
+
+  // This used to assert that the first sentence below must be refused, which locked in the misfire
+  // the Nov 24 sims hit: a sentence that says nothing ran in a clean container is true here.
+  guard("the seal accepts negated, modal and future container wording", () => {
+    const refused: string[] = [];
+    for (const headline of [
+      "healthy-node sets the level: its install and tests couldn't run in a clean container on this machine. A rerun where Docker is available, such as CI, can prove it.",
+      "healthy-node sets the level: Level 1 couldn't be proved, because nothing ran in a clean container here. A rerun where Docker is available, such as CI, can prove it.",
+      "healthy-node sets the level: this machine has no container runtime, so it isn't a clean container. A rerun where Docker is available, such as CI, can prove it.",
+      "healthy-node sets the level: Level 1 couldn't be proved here. A rerun in a clean container, such as CI with Docker, can prove it.",
+    ]) {
+      const repo = materialize("healthy-node");
+      for (const step of [["init", "--tier", "local-exec"], ["scan"], ["replay", "--runtime", "none"]]) assert.equal(readiness(repo, step).code, 0, step.join(" "));
+      assert.equal(readiness(repo, ["narrate", "--headline", headline, "--ask", "Approve running this audit in CI, where Docker is available."]).code, 0);
+      const r = readiness(repo, ["seal"]);
+      if (r.code !== 0) refused.push(`${headline} -> ${r.out.trim().split("\n").pop()}`);
+    }
+    assert.deepEqual(refused, []);
   });
 
   test("a runtime that is missing, rather than turned off, is named as missing", () => {
