@@ -146,12 +146,12 @@ Effort against impact (impact is the share of recent changes an action unblocks)
 | Components and where changes land (`scope.profile`) | Levels follow the work, so the audit finds each package and its share of recent changes. | 4 components found, 3 assessed |  |
 | Agent assets in the repo (`scope.agent_assets`) | Shows what agent setup already exists and who maintains it. Not scored. | 5 assets, 3 authors |  |
 | Setup works from a clean checkout (`bootstrap.cold_replay`) | Every agent starts from a clean checkout, so setup that only works on a prepared machine breaks every agent run. In the BootstrapAgent study, a reusable, verified setup cut later agents' token use by 25.9% and build time by 22.3%. Measured on the study's benchmark repositories. ([source](https://arxiv.org/abs/2605.15815)) | passed: api, shared and worker | `ev-002`, `ev-003`, `ev-004`, `ev-008`, `ev-009`, `ev-010` and 2 more |
-| Build, lint, type-check and test commands pass (`verify.canonical_interface`) | Agents need one known way to check their own work. | passed: api, shared and worker | `ev-005`, `ev-006`, `ev-007`, `ev-009`, `ev-010`, `ev-011` |
+| Build, lint, type-check and test commands pass (`verify.canonical_interface`) | Agents need one known way to check their own work, and a type-check counts only once the audit has seen it fail on a type error it planted. | passed: api, shared and worker | `ev-005`, `ev-006`, `ev-007`, `ev-009`, `ev-010`, `ev-011` |
 | Tests catch planted faults (`verify.behavioral_oracle`) | Green tests aren't proof that a change is right. OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. ([source](https://openai.com/index/separating-signal-from-noise-coding-evaluations)) | api: caught 5 of 5 planted faults; shared: caught 5 of 5 planted faults; worker: caught 0 of 5 planted faults, below the 60% the rubric requires | `ev-013`, `ev-014`, `ev-015` |
 | Agent instructions are accurate (`context.instructions_verified`) | Agents follow AGENTS.md, rules and skills literally, so a stale command costs more than a missing one. No outcome study yet measures how much these files help. | 7 of 7 instruction items check out | `ev-016`, `ev-017`, `ev-018`, `ev-019`, `ev-020` |
 | Normal work needs no production access (`safety.execution_boundary`) | Agents run with whatever access setup gives them, so normal work must never need production credentials. | passed; 2 items listed for review | `ev-001` |
 
-Not assessed by this rubric version, which is different from unknown: whether CI matches the local commands, flaky tests, the quality of error messages, how easily code can be found and outcome checks on held-out tasks.
+Not assessed by this rubric version, which is different from unknown: whether CI matches the local commands, flaky tests, the quality of error messages, how easily code can be found, outcome checks on held-out tasks and whether the lint command catches anything.
 
 ### Levels by component
 
@@ -187,6 +187,7 @@ Oct 31 to Nov 30, 2026. Agent PRs are matched by head branch starting with curso
 | Passed CI the first time | 65% (11 of 17) | 71% (27 of 38) | 33% (3 of 9) |
 | Reviewer requested changes | 24% (4 of 17) | 16% (6 of 38) | 44% (4 of 9) |
 | Median days to merge | 1 | 2 | 2 |
+| Reverted within 14 days | 8% (1 of 13) | 3% (1 of 33) | 14% (1 of 7) |
 
 | Component | Agent PRs | Passed CI the first time | Changes requested |
 |---|---|---|---|
@@ -197,6 +198,8 @@ Oct 31 to Nov 30, 2026. Agent PRs are matched by head branch starting with curso
 1 agent PR touched more than one component, so the component rows can add up to more than the total. A trend, not attribution. Model updates or a different mix of tasks could account for part of the change.
 
 Matched PRs: #500, #501, #502, #503, #504, #505, #506, #507, #508, #509, #510, #511, #512, #513, #514, #515, #516.
+
+Reverted within 14 days counts merged PRs whose first revert landed within 14 days of the merge. A revert is a merged PR whose body says "Reverts #123" or whose title is Revert "<the PR's title>", or a commit on the default branch that says "This reverts commit <the merge commit>"; a revert squashed without that line isn't seen, so these are detected reverts. 4 of the merged agent PRs merged less than 14 days before the window ended, so they had less time to be reverted. Reported only: no level or target uses it yet. Reverted agent PRs: #512 (by #912).
 
 ### Agent assets already in the repo
 
@@ -219,8 +222,9 @@ Missing: hooks.
 | Sample env file | n/a | the code reads no environment variables of its own |
 | Worktree and port isolation | yes | no fixed ports or machine-specific absolute paths in the setup and scripts |
 | AGENTS.md length | yes | 35 words |
+| A scripted way to drive the app | n/a | no app to drive: no component has a start, dev, serve or preview script, a start command or a web framework |
 
-These don't set a level or add a roadmap step.
+These don't set a level. Only the drive-the-app signal can add a roadmap step: a later one, for a component already at Level 2.
 
 ### How each result was reached
 
@@ -243,7 +247,7 @@ Every level, every unproven or not-assessed result and every finding, with what 
 | api: installs from the lockfile in a clean container | met | `bash scripts/agent-install.sh` (pass) | in a clean docker container (node:22-bookworm) | install passed | Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
 | api: builds in a clean container | met | `bash scripts/agent-install.sh` (pass) | in a clean docker container (node:22-bookworm) | no build step; follows the install | Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
 | api: passes every test in a clean container | met | `npm run test` (pass) | in a clean docker container (node:22-bookworm) | test passed (1 of 1 tests) | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails. |
-| api: build, lint, type-check and test commands pass | met | `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | 2 commands pass | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. |
+| api: build, lint, type-check and test commands pass | met | `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | 2 commands pass | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone. |
 | api: tests catch planted faults | met | caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) | in a clean docker container (node:22-bookworm) | caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) | Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails. |
 | repo: agent instructions are accurate | met | `npm run lint -w api` (pass), `npm run test -w shared` (pass), `npm test` (pass) `node --version && npm --version` (pass), and 1 more | in a clean docker container (node:22-bookworm) | 7 instruction items check out | Level 2 needs it: agent instructions are accurate (Agent instructions are accurate). Met means it ran at the strength the check requires and passed. |
 | repo: normal work needs no production access | met | nothing ran for it | read from the audited commit's files, nothing ran | no blocking safety findings | Level 2 needs it: normal work needs no production access (Normal work needs no production access). Met means it ran at the strength the check requires and passed. |
@@ -252,12 +256,12 @@ Every level, every unproven or not-assessed result and every finding, with what 
 | shared: installs from the lockfile in a clean container | met | `bash scripts/agent-install.sh` (pass) | in a clean docker container (node:22-bookworm) | install passed | Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
 | shared: builds in a clean container | met | `bash scripts/agent-install.sh` (pass) | in a clean docker container (node:22-bookworm) | no build step; follows the install | Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
 | shared: passes every test in a clean container | met | `npm run test` (pass) | in a clean docker container (node:22-bookworm) | test passed (3 of 3 tests) | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails. |
-| shared: build, lint, type-check and test commands pass | met | `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | 2 commands pass | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. |
+| shared: build, lint, type-check and test commands pass | met | `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | 2 commands pass | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone. |
 | shared: tests catch planted faults | met | caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) | in a clean docker container (node:22-bookworm) | caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) | Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails. |
 | worker: installs from the lockfile in a clean container | met | `bash scripts/agent-install.sh` (pass) | in a clean docker container (node:22-bookworm) | install passed | Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
 | worker: builds in a clean container | met | `bash scripts/agent-install.sh` (pass) | in a clean docker container (node:22-bookworm) | no build step; follows the install | Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
 | worker: passes every test in a clean container | met | `npm run test` (pass) | in a clean docker container (node:22-bookworm) | test passed (2 of 2 tests) | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails. |
-| worker: build, lint, type-check and test commands pass | met | `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | 2 commands pass | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. |
+| worker: build, lint, type-check and test commands pass | met | `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | 2 commands pass | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone. |
 | worker: tests catch planted faults | not met | caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12 | in a clean docker container (node:22-bookworm) | caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12 | Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails. |
 
 #### Agent instructions
@@ -320,10 +324,10 @@ Audited Nov 30, 2026 at 9a2c092. Eval run with a pinned seed; not a production r
 
 - **Audit:** aud-2026-11-30-9a2c092-ae7a
 - **Commit:** 9a2c092 (clean tree)
-- **Rubric:** 2026-11-beta
+- **Rubric:** 2026-12-beta
 - **Permission tier:** local-exec
 - **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
-- **Skill digest:** 8081444c7126
+- **Skill digest:** 2f1479f65399
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here
 - **Stored in:** .agent-readiness/history/audits/aud-2026-11-30-9a2c092-ae7a
