@@ -1,0 +1,101 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "mockito/mockito-kotlin",
+  "commit": "5969d27280ea670520003c75776057b20f7f3dfb",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/mockito/mockito-kotlin/commits/5969d27280ea670520003c75776057b20f7f3dfb/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/mockito/mockito-kotlin/commits/5969d27280ea670520003c75776057b20f7f3dfb/status ('verify' and 'build (2.1.20)' succeeded; 'release' skipped)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "jvm",
+      "placement": "component",
+      "changeShare": 1.0,
+      "hasTests": true,
+      "install": [],
+      "test": [
+        "./gradlew build -PtestKotlinVersion=2.1.20",
+        "./gradlew build",
+        "./gradlew test",
+        "./gradlew check"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Root Gradle build; its test task depends on the included builds tests and no-coroutine-tests."
+    },
+    {
+      "path": "mockito-kotlin",
+      "ecosystem": "jvm",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "The published library subproject, tested by the root build."
+    },
+    {
+      "path": "tests",
+      "ecosystem": "jvm",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Included build holding the main test suite, run by the root test task."
+    },
+    {
+      "path": "no-coroutine-tests",
+      "ecosystem": "jvm",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Included build with regression tests run by the root test task."
+    },
+    {
+      "path": "benchmarks",
+      "ecosystem": "jvm",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Included build of benchmarks; CI does not run its test task."
+    },
+    {
+      "path": "build-logic",
+      "ecosystem": "jvm",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Gradle convention plugins."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md explaining the composite Gradle build, where tests live, and the spotlessCheck plus ./gradlew build commands CI runs."
+  },
+  "dropped": 0
+}

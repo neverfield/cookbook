@@ -1,0 +1,37 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "spring-projects/spring-petclinic",
+  "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/spring-projects/spring-petclinic/commits/500158f732419217507c7656904b8e6aa1bcc0d6/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/spring-projects/spring-petclinic/commits/500158f732419217507c7656904b8e6aa1bcc0d6/status (both 'build (17)' runs (Maven and Gradle workflows) succeeded)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "jvm",
+      "placement": "component",
+      "changeShare": 1.0,
+      "hasTests": true,
+      "install": [],
+      "test": [
+        "./mvnw -B verify",
+        "./mvnw verify",
+        "./mvnw test",
+        "./gradlew build",
+        "./gradlew test"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "MySQL and Postgres integration tests use Testcontainers/Docker Compose and are skipped without Docker; other tests use in-memory H2."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md that names the Maven/Gradle wrapper test commands and the Docker requirement of the MySQL and Postgres integration tests."
+  },
+  "dropped": 0
+}

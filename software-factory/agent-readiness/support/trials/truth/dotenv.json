@@ -1,0 +1,62 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "motdotla/dotenv",
+  "commit": "4c5450405612e4368e0d46d44da01942cf22a707",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/motdotla/dotenv/commits/4c5450405612e4368e0d46d44da01942cf22a707/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv' and gh api repos/motdotla/dotenv/commits/4c5450405612e4368e0d46d44da01942cf22a707/status"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 1.0,
+      "hasTests": true,
+      "install": [
+        "npm install",
+        "npm ci"
+      ],
+      "test": [
+        "npm test",
+        "npm run test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "npm test runs build, standard lint, dts-check and tap; CI also runs npm run test:perf, a timing comparison."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "scripts/parse-perf.js",
+      "line": 16,
+      "real": false,
+      "why": "placeholder URL in perf sample data"
+    },
+    {
+      "file": "scripts/parse-perf.js",
+      "line": 17,
+      "real": false,
+      "why": "placeholder URL in perf sample data"
+    },
+    {
+      "file": "scripts/parse-perf.js",
+      "line": 22,
+      "real": false,
+      "why": "fake ghp_ token in perf sample data"
+    },
+    {
+      "file": "scripts/parse-perf.js",
+      "line": 25,
+      "real": false,
+      "why": "AWS documented example key AKIAIOSFODNN7EXAMPLE"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md naming npm install, npm test and the perf check CI runs."
+  },
+  "dropped": 0
+}

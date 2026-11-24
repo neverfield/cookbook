@@ -8,17 +8,9 @@
       "commit": "4ff48cec099f0514c3e9bbca18706c9c21122bfb",
       "runtime": "docker",
       "review": "customer-trial-opus.md",
-      "truth": "Tiny pnpm TypeScript library. Builds, type-checks and passes all 167 tests. The README's npm install, yarn add, npm link and npm test lines are for the package's users, not wrong agent instructions. One real untested boundary: the tests use one year plus 1 ms.",
+      "notes": "Tiny pnpm TypeScript library. Builds, type-checks and passes all 167 tests. The README's npm install, yarn add, npm link and npm test lines are for the package's users, not wrong agent instructions. One real untested boundary: the tests use one year plus 1 ms.",
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "outcome": "proven",
-        "minLevel": 1,
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "any": {
           "exit": 0,
@@ -46,17 +38,9 @@
       "commit": "9fed2eb2f3af672da9f7bf694b996df3831fc207",
       "runtime": "docker",
       "review": "customer-trial-opus.md",
-      "truth": "Medium pnpm TypeScript library with \"type\": \"commonjs\" and engines.node >=12.20.0. Installs, builds, type-checks and passes its tests, on the host too. The review hit a crash on the commonjs type, a silent host fallback because node:12-bookworm doesn't exist, and with --image a false Level 0 because the audit's pnpm store sat in the work tree and prettier parsed it. Run from the copied skill, the audit currently exits before sealing with \"Cannot use import statement outside a module\".",
+      "notes": "Medium pnpm TypeScript library with \"type\": \"commonjs\" and engines.node >=12.20.0. Installs, builds, type-checks and passes its tests, on the host too. The review hit a crash on the commonjs type, a silent host fallback because node:12-bookworm doesn't exist, and with --image a false Level 0 because the audit's pnpm store sat in the work tree and prettier parsed it. Run from the copied skill, the audit currently exits before sealing with \"Cannot use import statement outside a module\".",
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "outcome": "proven",
-        "minLevel": 1,
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "any": {
           "exit": 0,
@@ -84,15 +68,9 @@
       "commit": "9a035ec36045aeb6141dd0bbac9ab9e3c69ac0bc",
       "runtime": "docker",
       "review": "customer-trial-opus.md",
-      "truth": "pnpm monorepo of 21 packages. The root vitest runs 818 tests, and cli alone has 17 test files, so no package lacks tests. 8 git-tag tests fail in a container only because git has no user identity there, which CI sets.",
+      "notes": "pnpm monorepo of 21 packages. The root vitest runs 818 tests, and cli alone has 17 test files, so no package lacks tests. 8 git-tag tests fail in a container only because git has no user identity there, which CI sets.",
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "any": {
           "exit": 0,
@@ -172,17 +150,9 @@
       "commit": "4c5450405612e4368e0d46d44da01942cf22a707",
       "runtime": "docker",
       "review": "customer-trial-grok.md",
-      "truth": "Small npm JavaScript library. Install, lint, build, npm test and npm run test:perf pass. The README's yarn add, pnpm add, prose path and npx dotenv examples are consumer documentation, not wrong agent instructions. scripts/parse-perf.js:25 holds the AWS documentation key AKIAIOSFODNN7EXAMPLE, not a committed secret. engines.node >=12 maps to node:12-bookworm, which doesn't exist, so even with Docker the audit falls back to the host without saying why (the same defect as zustand).",
+      "notes": "Small npm JavaScript library. Install, lint, build, npm test and npm run test:perf pass. The README's yarn add, pnpm add, prose path and npx dotenv examples are consumer documentation, not wrong agent instructions. scripts/parse-perf.js:25 holds the AWS documentation key AKIAIOSFODNN7EXAMPLE, not a committed secret. engines.node >=12 maps to node:12-bookworm, which doesn't exist, so even with Docker the audit falls back to the host without saying why (the same defect as zustand).",
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "outcome": "proven",
-        "minLevel": 1,
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "any": {
           "exit": 0,
@@ -210,17 +180,9 @@
       "commit": "a5a7dc084d4d2b7932e85ca049c5204e50a2c721",
       "runtime": "docker",
       "review": "customer-trial-carbon.md",
-      "truth": "Single npm JavaScript package. npm ci and all 1,430 node --test and tsd tests pass, and 5 of 5 planted faults were caught. All 7 README instruction findings were false: consumer CLI examples and commands quoted in prose such as node --eval. In a container 2 of 1,430 tests fail because tests/fixtures/pmlink, a committed symlink, is missing from the audit's clean copy: an audit defect, not the repo's. Host runs passed.",
+      "notes": "Single npm JavaScript package. npm ci and all 1,430 node --test and tsd tests pass, and 5 of 5 planted faults were caught. All 7 README instruction findings were false: consumer CLI examples and commands quoted in prose such as node --eval. In a container 2 of 1,430 tests fail because tests/fixtures/pmlink, a committed symlink, is missing from the audit's clean copy: an audit defect, not the repo's. Host runs passed.",
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "outcome": "proven",
-        "minLevel": 1,
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "any": {
           "exit": 0,
@@ -248,17 +210,11 @@
       "commit": "e1dc4b18dbb948921da37f3d4224a628730b43b0",
       "runtime": "docker",
       "review": "customer-trial-carbon.md",
-      "truth": "Monorepo of 4 TypeScript npm workspaces and 2 uv Python servers. The TypeScript workspaces install, build and pass 1,747 vitest tests. All 17 instruction findings were false: trailing semicolons kept on script names, a deleted file named in a never-re-add rule, package-relative paths checked from the root, and an example worktree path. 3 of the 6 missed planted faults were genuine gaps; the rest were equivalent mutants or a stale dist/. Each Python server runs in the uv image, so with PyPI reachable it installs and tests on its own; where PyPI is blocked it is unproven on that machine. On an open network the whole instruction replay runs (40 findings at 214d349), and each is explained on its merits. Real: .claude/skills/release/SKILL.md:566 gives `npm run release:notes` with no arguments, and the script exits with \"--milestone, --merge-sha, --merge-branch and --ledger-url are all required\"; the docs point at the script's header instead of giving them. Environment, blocked with the reason: local:gate, verify:dco, interface-diff and changeset need origin/v2/main, which the one-commit clean copy has no remote for; skills:eval needs the claude CLI; coverage:py runs uv from the Node image. Needs the network: uv --directory src/<server> run and uvx --from download a Python while the replay is offline. Needs access: npm whoami. Skipped as written: the `cd src/<server>` block and `uv run pytest` in `src/<server>` (a folder left to the reader), uv lock in \"that server\" (one of src/fetch, src/git, src/time, unnamed), a bare `uv run` in prose, `<lower branch>`, ../servers-release outside the repo, the loop's $s, and `node --test` in the table's Runner column. validate, validate:guards and test:scripts pass now that the container reaps orphaned processes (--init); without it two gate-lease tests saw zombies as a live process tree.",
+      "notes": "Monorepo of 4 TypeScript npm workspaces and 2 uv Python servers. The TypeScript workspaces install, build and pass 1,747 vitest tests. All 17 instruction findings were false: trailing semicolons kept on script names, a deleted file named in a never-re-add rule, package-relative paths checked from the root, and an example worktree path. 3 of the 6 missed planted faults were genuine gaps; the rest were equivalent mutants or a stale dist/. Each Python server runs in the uv image, so with PyPI reachable it installs and tests on its own; where PyPI is blocked it is unproven on that machine. On an open network the whole instruction replay runs (40 findings at 214d349), and each is explained on its merits. Real: .claude/skills/release/SKILL.md:566 gives `npm run release:notes` with no arguments, and the script exits with \"--milestone, --merge-sha, --merge-branch and --ledger-url are all required\"; the docs point at the script's header instead of giving them. Environment, blocked with the reason: local:gate, verify:dco, interface-diff and changeset need origin/v2/main, which the one-commit clean copy has no remote for; skills:eval needs the claude CLI; coverage:py runs uv from the Node image. Needs the network: uv --directory src/<server> run and uvx --from download a Python while the replay is offline. Needs access: npm whoami. Skipped as written: the `cd src/<server>` block and `uv run pytest` in `src/<server>` (a folder left to the reader), uv lock in \"that server\" (one of src/fetch, src/git, src/time, unnamed), a bare `uv run` in prose, `<lower branch>`, ../servers-release outside the repo, the loop's $s, and `node --test` in the table's Runner column. validate, validate:guards and test:scripts pass now that the container reaps orphaned processes (--init); without it two gate-lease tests saw zombies as a live process tree.",
       "realInstructionFindings": [
         ".claude/skills/release/SKILL.md:566"
       ],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "open": {
           "exit": 0,
@@ -358,15 +314,9 @@
       "commit": "7f2773ec234b62d0b80ca47c508397cb3d0da3ea",
       "runtime": "docker",
       "review": "customer-trial-carbon.md",
-      "truth": "Go backend with 90% of changes, now scored in golang:1.27 (its go line), plus a Svelte and Vite ui/ that builds and has no test script, so ui at Level 0 is correct. The backend builds, and 930 of its 931 top-level tests pass offline; TestRecordAuthWithOAuth2 downloads an avatar from pocketbase.io, and the audit runs tests without the network on every machine, so pocketbase at Level 0 is the honest result. Its CI runs go test only, so go vet isn't run (vet would flag a test fixture's deliberately unexported field). Both earlier blocking private-key findings were false: a Go doc comment and a textarea placeholder. The README's Go tutorial and release-binary commands are not instructions for ui. No instruction is wrong, and none is a finding. CONTRIBUTING.md:48 `go test ./...` and :51 `make test` run the test check's command, so they take its result instead of failing twice. :60 `make lint` is blocked, because golangci-lint, which the guide links to install, isn't in the image. :85 `npm run build` runs in ui, the folder its section starts in, and takes the build check's pass.",
+      "notes": "Go backend with 90% of changes, now scored in golang:1.27 (its go line), plus a Svelte and Vite ui/ that builds and has no test script, so ui at Level 0 is correct. The backend builds, and 930 of its 931 top-level tests pass offline; TestRecordAuthWithOAuth2 downloads an avatar from pocketbase.io, and the audit runs tests without the network on every machine, so pocketbase at Level 0 is the honest result. Its CI runs go test only, so go vet isn't run (vet would flag a test fixture's deliberately unexported field). Both earlier blocking private-key findings were false: a Go doc comment and a textarea placeholder. The README's Go tutorial and release-binary commands are not instructions for ui. No instruction is wrong, and none is a finding. CONTRIBUTING.md:48 `go test ./...` and :51 `make test` run the test check's command, so they take its result instead of failing twice. :60 `make lint` is blocked, because golangci-lint, which the guide links to install, isn't in the image. :85 `npm run build` runs in ui, the folder its section starts in, and takes the build check's pass.",
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "any": {
           "exit": 0,
@@ -400,7 +350,7 @@
       "commit": "0695c7896dca31d95adfca8aeecaebcf98b59265",
       "runtime": "none",
       "review": "broad-readiness-opus.md",
-      "truth": "Run with no container runtime. agent-readiness installs, type-checks and passes its tests (435 of 436, 1 skipped without Docker), yet the review's audit sealed Level 0, not bootable. With no container the honest result is unproven on this machine. The test fixtures' tokens and the tool's own tests needing credentials are not blocking safety findings. README.md:15 links to cloud-agent, which doesn't exist (the folder is self-hosted-cloud-agent); that one instruction finding is real, and upstream main has the same broken link.",
+      "notes": "Run with no container runtime. agent-readiness installs, type-checks and passes its tests (435 of 436, 1 skipped without Docker), yet the review's audit sealed Level 0, not bootable. With no container the honest result is unproven on this machine. The test fixtures' tokens and the tool's own tests needing credentials are not blocking safety findings. README.md:15 links to cloud-agent, which doesn't exist (the folder is self-hosted-cloud-agent); that one instruction finding is real, and upstream main has the same broken link.",
       "egress": [
         "pypi.org",
         "files.pythonhosted.org"
@@ -409,13 +359,6 @@
         "README.md:15"
       ],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": null,
-        "unproven": true,
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "open": {
           "exit": 0,
@@ -529,14 +472,6 @@
       "review": "lang-php-ruby-handoff.md",
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "outcome": "proven",
-        "minLevel": 1,
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "open": {
           "exit": 0,
@@ -575,7 +510,7 @@
           "blockingSafety": []
         }
       },
-      "truth": "Symfony 8 demo app on PHP >=8.4 (composer:2.11, PHP 8.5), with a committed composer.lock, PHPUnit, PHP CS Fixer and PHPStan. With Packagist reachable it installs frozen (its post-install scripts also fetch importmap assets and the Sass binary), passes its PHPUnit suite, and PHPStan reports 1 error, which holds the commands check. 3 of 5 planted faults are caught. config/packages/framework.yaml:3 and security.yaml:46 are Symfony parameter references (%env(APP_SECRET)%, %kernel.secret%) and aren't flagged; .env.local.demo:3 commits APP_SECRET=not-a-secret--read-the-doc! under a demo-only comment, a value that says it isn't a secret, so it isn't flagged. Where Packagist is blocked the install is blocked and the component is unproven on that machine.",
+      "notes": "Symfony 8 demo app on PHP >=8.4 (composer:2.11, PHP 8.5), with a committed composer.lock, PHPUnit, PHP CS Fixer and PHPStan. With Packagist reachable it installs frozen (its post-install scripts also fetch importmap assets and the Sass binary), passes its PHPUnit suite, and PHPStan reports 1 error, which holds the commands check. 3 of 5 planted faults are caught. config/packages/framework.yaml:3 and security.yaml:46 are Symfony parameter references (%env(APP_SECRET)%, %kernel.secret%) and aren't flagged; .env.local.demo:3 commits APP_SECRET=not-a-secret--read-the-doc! under a demo-only comment, a value that says it isn't a secret, so it isn't flagged. Where Packagist is blocked the install is blocked and the component is unproven on that machine.",
       "egress": [
         "repo.packagist.org"
       ]
@@ -588,14 +523,6 @@
       "review": "lang-php-ruby-handoff.md",
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "outcome": "proven",
-        "minLevel": 1,
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "open": {
           "exit": 0,
@@ -634,7 +561,7 @@
           "blockingSafety": []
         }
       },
-      "truth": "Pure-Ruby gem on Ruby 4.0 (.ruby-version 4.0.3) with a committed Gemfile.lock bundled with Bundler 2.4.8, which Bundler installs and switches to during the frozen install. Rake's test task passes 239 minitest runs, RuboCop and Sorbet (srb tc) pass, and all 5 planted faults are caught. Gemfile.lock lists both x86_64-linux and aarch64-linux, so amd64 and arm64 machines resolve the same gems. Where RubyGems is blocked the install is blocked and the component is unproven on that machine.",
+      "notes": "Pure-Ruby gem on Ruby 4.0 (.ruby-version 4.0.3) with a committed Gemfile.lock bundled with Bundler 2.4.8, which Bundler installs and switches to during the frozen install. Rake's test task passes 239 minitest runs, RuboCop and Sorbet (srb tc) pass, and all 5 planted faults are caught. Gemfile.lock lists both x86_64-linux and aarch64-linux, so amd64 and arm64 machines resolve the same gems. Where RubyGems is blocked the install is blocked and the component is unproven on that machine.",
       "egress": [
         "rubygems.org",
         "index.rubygems.org"
@@ -646,17 +573,9 @@
       "commit": "2d3c2a9cc518326daf99a383f07c4d3c44317e4d",
       "runtime": "docker",
       "review": "agent-readiness-hardening-plan.md",
-      "truth": "Go module with no dependencies and no go line, so it runs in the newest pinned Go (golang:1.27) and the toolchain condition reports the missing go line. Its CI runs go test only, so there is no lint. It builds and passes its 45 top-level tests offline, and its tests catch at least 3 of 5 planted faults, so Level 2 is correct.",
+      "notes": "Go module with no dependencies and no go line, so it runs in the newest pinned Go (golang:1.27) and the toolchain condition reports the missing go line. Its CI runs go test only, so there is no lint. It builds and passes its 45 top-level tests offline, and its tests catch at least 3 of 5 planted faults, so Level 2 is correct.",
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "outcome": "proven",
-        "minLevel": 2,
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "any": {
           "exit": 0,
@@ -684,17 +603,9 @@
       "commit": "91f5d22ef48bde459d90a8c7dbeab416e97d0f2b",
       "runtime": "docker",
       "review": "agent-readiness-hardening-plan.md",
-      "truth": "A Cargo workspace whose root is also the ripgrep package, with nine member crates under crates/ and a committed Cargo.lock. One component covers the workspace and runs cargo build, cargo test with --workspace in rust:1.97, the newest pinned Rust (no toolchain file). Its CI doesn't run clippy, so there is no lint. All 1242 tests pass offline and the tests catch at least 3 of 5 faults planted in member crates, so Level 2 is correct.",
+      "notes": "A Cargo workspace whose root is also the ripgrep package, with nine member crates under crates/ and a committed Cargo.lock. One component covers the workspace and runs cargo build, cargo test with --workspace in rust:1.97, the newest pinned Rust (no toolchain file). Its CI doesn't run clippy, so there is no lint. All 1242 tests pass offline and the tests catch at least 3 of 5 faults planted in member crates, so Level 2 is correct.",
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "outcome": "proven",
-        "minLevel": 2,
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "any": {
           "exit": 0,
@@ -725,18 +636,12 @@
       "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
       "runtime": "docker",
       "review": "lang-jvm-dotnet",
-      "truth": "Spring Boot 4 sample on Java 17 with a committed Maven Wrapper. With Maven Central reachable it installs, builds and passes its tests offline in eclipse-temurin:17-jdk (the MySQL and Postgres Testcontainers tests skip without Docker), and all 5 planted faults are caught: Level 2. Where Maven Central is blocked the wrapper can't fetch Maven, so it is unproven on that machine.",
+      "notes": "Spring Boot 4 sample on Java 17 with a committed Maven Wrapper. With Maven Central reachable it installs, builds and passes its tests offline in eclipse-temurin:17-jdk (the MySQL and Postgres Testcontainers tests skip without Docker), and all 5 planted faults are caught: Level 2. Where Maven Central is blocked the wrapper can't fetch Maven, so it is unproven on that machine.",
       "egress": [
         "repo.maven.apache.org"
       ],
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "open": {
           "exit": 0,
@@ -782,7 +687,7 @@
       "commit": "5969d27280ea670520003c75776057b20f7f3dfb",
       "runtime": "docker",
       "review": "lang-jvm-dotnet",
-      "truth": "JVM-only Kotlin library, a Gradle 9.4 composite build (tests live in included builds) with a JDK 11 toolchain. Gradle 9 needs Java 17 to run, so it runs in eclipse-temurin:17-jdk and the foojay resolver provisions JDK 11 during the build. With the Gradle services and Maven Central reachable it installs, builds and tests offline, and 3 of the 4 planted faults that compiled are caught (one survives, one didn't compile): Level 2. Where they are blocked it is unproven on that machine.",
+      "notes": "JVM-only Kotlin library, a Gradle 9.4 composite build (tests live in included builds) with a JDK 11 toolchain. Gradle 9 needs Java 17 to run, so it runs in eclipse-temurin:17-jdk and the foojay resolver provisions JDK 11 during the build. With the Gradle services and Maven Central reachable it installs, builds and tests offline, and 3 of the 4 planted faults that compiled are caught (one survives, one didn't compile): Level 2. Where they are blocked it is unproven on that machine.",
       "egress": [
         "services.gradle.org",
         "plugins.gradle.org",
@@ -790,12 +695,6 @@
       ],
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "open": {
           "exit": 0,
@@ -845,7 +744,7 @@
       "commit": "6d3b02a6b026abe253e942fe0d84d1244b8fbeb1",
       "runtime": "docker",
       "review": "lang-jvm-dotnet",
-      "truth": "C# algorithms collection on net8.0 with NUnit, no global.json and no packages.lock.json. With NuGet and mcr.microsoft.com reachable it restores, builds and passes its tests offline in the .NET 8 SDK image: Level 1. Level 2 is held back by four README links that are genuinely broken at this commit (AutokeyEncoder.cs is missing, Floor.cs and CollaborativeFiltering moved, LinqShuffler.cs is LINQShuffler.cs); the lockfile and toolchain conditions also fail. Where mcr.microsoft.com is blocked the image can't be pulled, so it is unproven on that machine.",
+      "notes": "C# algorithms collection on net8.0 with NUnit, no global.json and no packages.lock.json. With NuGet and mcr.microsoft.com reachable it restores, builds and passes its tests offline in the .NET 8 SDK image: Level 1. Level 2 is held back by four README links that are genuinely broken at this commit (AutokeyEncoder.cs is missing, Floor.cs and CollaborativeFiltering moved, LinqShuffler.cs is LINQShuffler.cs); the lockfile and toolchain conditions also fail. Where mcr.microsoft.com is blocked the image can't be pulled, so it is unproven on that machine.",
       "egress": [
         "mcr.microsoft.com",
         "api.nuget.org"
@@ -857,12 +756,6 @@
         "README.md:156"
       ],
       "falseInstructionFindings": 0,
-      "target": {
-        "sealed": true,
-        "runtime": "docker",
-        "falseInstructionFindings": 0,
-        "blockingSafety": 0
-      },
       "recorded": {
         "open": {
           "exit": 0,
@@ -909,6 +802,117 @@
             "README.md:156"
           ],
           "blockingSafety": []
+        }
+      }
+    },
+    {
+      "id": "umami",
+      "repo": "umami-software/umami",
+      "commit": "dbb8d606fbd4e99220fb83bcb4abad3e0f97f42a",
+      "runtime": "docker",
+      "review": "first-run-sims.md",
+      "now": "2026-11-24T12:00:00Z",
+      "notes": "pnpm workspace whose root package.json is the Next.js app (most of the changes), with packages under packages/. The Nov 24 Node sim found the root app neither scored nor listed, shares that ignore it, and a lockfile shown as none.",
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 0,
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "api-client": {
+              "level": 0,
+              "unproven": false
+            },
+            "mcp": {
+              "level": 0,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": [],
+          "headline": "api-client and mcp don't install from a clean checkout, so agents can't build or test them yet."
+        }
+      }
+    },
+    {
+      "id": "zap",
+      "repo": "uber-go/zap",
+      "commit": "4892335e05f14bce8a98a69a577fcf3844a42623",
+      "runtime": "docker",
+      "review": "first-run-sims.md",
+      "now": "2026-11-24T12:00:00Z",
+      "notes": "Go library with five go.mod modules (root, exp, benchmarks, internal tooling, assets). The Nov 24 Go sim found only the root module, with benchmarks recorded as a satellite whose manifest is a test file.",
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 0,
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 1,
+          "outcome": "blocked",
+          "unproven": false,
+          "couldBe": 2,
+          "components": {
+            "zap": {
+              "level": 1,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "benchmarks"
+          ],
+          "instructionFailures": [],
+          "blockingSafety": [],
+          "headline": "Level 2 couldn't be proved for zap because a check that decides it couldn't run here. A rerun where these checks can run can prove it."
+        }
+      }
+    },
+    {
+      "id": "flexget",
+      "repo": "Flexget/Flexget",
+      "commit": "881fc079ba0f47eaa67ab7a34ec44477278c9bb9",
+      "runtime": "docker",
+      "review": "first-run-sims.md",
+      "now": "2026-11-24T12:00:00Z",
+      "egress": [
+        "pypi.org",
+        "files.pythonhosted.org"
+      ],
+      "notes": "uv Python app with a slow test suite. The Nov 24 Python sim's only finding and next move was rotating four secrets that are an FTP URL f-string and three public API client keys, with advice to gitignore shipped source files.",
+      "realInstructionFindings": [],
+      "falseInstructionFindings": 0,
+      "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 1,
+          "outcome": "blocked",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "flexget": {
+              "level": 1,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": [
+            "secret flexget/components/ftp/ftp_list.py:89",
+            "secret flexget/components/thetvdb/api_tvdb.py:27",
+            "secret flexget/components/tmdb/api_tmdb.py:29",
+            "secret flexget/plugins/internal/api_rottentomatoes.py:31"
+          ],
+          "headline": "Agents can build and test flexget, but a secret is committed to the repo; planted faults couldn't run on this machine."
         }
       }
     }

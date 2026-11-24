@@ -1,0 +1,34 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "google/uuid",
+  "commit": "2d3c2a9cc518326daf99a383f07c4d3c44317e4d",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "none",
+    "source": "gh api repos/google/uuid/commits/2d3c2a9cc518326daf99a383f07c4d3c44317e4d/check-runs (total_count 0) and /status (0 statuses); workflows run only on pull_request, and the parent 0e97ed3 also has no runs"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "go",
+      "placement": "component",
+      "changeShare": null,
+      "hasTests": true,
+      "install": [],
+      "test": [
+        "go test -v ./...",
+        "go test ./..."
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "No CI on the commit; go test ./... passed locally in golang:1.21."
+    }
+  ],
+  "unownedShare": null,
+  "secrets": [],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md stating the supported Go versions and go test ./..., since the repo has no agent instructions and its tests pass."
+  },
+  "dropped": 0
+}

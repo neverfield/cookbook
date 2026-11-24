@@ -1,0 +1,63 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "pmndrs/zustand",
+  "commit": "9fed2eb2f3af672da9f7bf694b996df3831fc207",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/pmndrs/zustand/commits/9fed2eb2f3af672da9f7bf694b996df3831fc207/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv' and gh api repos/pmndrs/zustand/commits/9fed2eb2f3af672da9f7bf694b996df3831fc207/status"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 1.0,
+      "hasTests": true,
+      "install": [
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm run test:spec",
+        "pnpm run test",
+        "pnpm test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "CI runs test:format, test:types, test:lint and test:spec separately; vitest uses jsdom."
+    },
+    {
+      "path": "examples/demo",
+      "ecosystem": "node",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Standalone Vite example, not a pnpm workspace member and never installed by CI."
+    },
+    {
+      "path": "examples/starter",
+      "ecosystem": "node",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Standalone Vite example, not a pnpm workspace member and never installed by CI."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md that names pnpm install and the test:format/test:types/test:lint/test:spec scripts CI runs."
+  },
+  "dropped": 0
+}

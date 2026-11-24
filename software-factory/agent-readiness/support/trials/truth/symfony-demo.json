@@ -1,0 +1,67 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "symfony/demo",
+  "commit": "f42980c690b4bf335fa41bbafdb075bb67b719c2",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/symfony/demo/commits/f42980c690b4bf335fa41bbafdb075bb67b719c2/check-runs --paginate: Tests ubuntu-latest / PHP 8.4 and 8.5, macos and windows all success; Linters (8.4) failed only at its composer audit step and PHPStan failed, neither runs the tests"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "php",
+      "placement": "component",
+      "changeShare": 1.0,
+      "hasTests": true,
+      "install": [
+        "composer install --ansi --no-interaction --no-progress",
+        "composer install"
+      ],
+      "test": [
+        "vendor/bin/phpunit"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Tests use a committed SQLite file (data/database_test.sqlite); PHPStan and composer audit fail in the lint workflow at this commit."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": ".env",
+      "line": 28,
+      "real": false,
+      "why": "commented template DSN with !ChangeMe! password"
+    },
+    {
+      "file": ".env",
+      "line": 29,
+      "real": false,
+      "why": "commented template DSN with !ChangeMe! password"
+    },
+    {
+      "file": ".env",
+      "line": 30,
+      "real": false,
+      "why": "commented template DSN with !ChangeMe! password"
+    },
+    {
+      "file": "config/packages/framework.yaml",
+      "line": 3,
+      "real": false,
+      "why": "reference to %env(APP_SECRET)%"
+    },
+    {
+      "file": "config/packages/security.yaml",
+      "line": 46,
+      "real": false,
+      "why": "reference to %kernel.secret%"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md giving the composer install, vendor/bin/phpunit and vendor/bin/phpstan commands and noting PHPStan currently fails, since the repo has no agent instructions and its tests pass."
+  },
+  "dropped": 0
+}

@@ -1,0 +1,116 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "TheAlgorithms/C-Sharp",
+  "commit": "6d3b02a6b026abe253e942fe0d84d1244b8fbeb1",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/TheAlgorithms/C-Sharp/commits/6d3b02a6b026abe253e942fe0d84d1244b8fbeb1/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/TheAlgorithms/C-Sharp/commits/6d3b02a6b026abe253e942fe0d84d1244b8fbeb1/status ('build' succeeded; codecov statuses success)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "dotnet",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [
+        "dotnet restore"
+      ],
+      "test": [
+        "dotnet test --no-restore --collect \"XPlat Code Coverage\"",
+        "dotnet test --no-restore",
+        "dotnet test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "C-Sharp.sln builds and tests all six projects."
+    },
+    {
+      "path": "Algorithms",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "Algorithms.Tests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "DataStructures",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.5,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "DataStructures.Tests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.5,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "Utilities",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "Utilities.Tests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "Algorithms.Tests/Encoders/BlowfishEncoderTests.cs",
+      "line": 9,
+      "real": false,
+      "why": "test cipher key constant (only hit; matches only case-insensitively)"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md with the dotnet restore/build/test commands and the StyleCop conventions contributors must follow."
+  },
+  "dropped": 0
+}

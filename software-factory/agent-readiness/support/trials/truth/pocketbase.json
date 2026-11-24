@@ -1,0 +1,68 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "pocketbase/pocketbase",
+  "commit": "7f2773ec234b62d0b80ca47c508397cb3d0da3ea",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/pocketbase/pocketbase/commits/7f2773ec234b62d0b80ca47c508397cb3d0da3ea/check-runs --paginate (only goreleaser, cancelled after 10s); parent 9d281ccaba65f2686eb7b0b614ccda72d1116a1b run 'basebuild' succeeded (gh run list -R pocketbase/pocketbase -b master) and the only change between them is README.md"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "go",
+      "placement": "component",
+      "changeShare": 0.494,
+      "hasTests": true,
+      "install": [],
+      "test": [
+        "go test ./..."
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "CI runs go test ./... in the basebuild job; passed on the parent commit, which differs only in README.md."
+    },
+    {
+      "path": "ui",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.506,
+      "hasTests": false,
+      "install": [
+        "npm ci",
+        "npm install"
+      ],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Superuser UI embedded into the Go binary via ui/embed.go; CI only builds it (npm --prefix=./ui ci && npm --prefix=./ui run build); ui/dist is generated output."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "forms/apple_client_secret_create.go",
+      "line": 13,
+      "real": false,
+      "why": "regex matching a PEM header"
+    },
+    {
+      "file": "ui/src/collections/oauth2/appleOptions.js",
+      "line": 201,
+      "real": false,
+      "why": "input placeholder text"
+    },
+    {
+      "file": "tools/auth/google.go",
+      "line": 38,
+      "real": false,
+      "why": "public OAuth token endpoint URL"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md that states the Go and Node versions and the go test ./... and ui build commands, since the repo has no agent instructions and its build is otherwise healthy."
+  },
+  "dropped": 0
+}
