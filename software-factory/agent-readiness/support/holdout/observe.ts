@@ -79,6 +79,8 @@ function environmentOf(audit: Json | null): Observation["environment"] {
   return audit?.environment?.containerRuntime ? "container" : "none";
 }
 
+const NO_TESTS = /no test command|has no tests|no tests were found/i;
+
 function componentsOf(report: Json, audit: Json): ObservedComponent[] {
   const contract = (audit.contract ?? []) as Json[];
   const testOf = (id: string) => contract.find((k) => k.kind === "test" && k.component === id && !k.fallbackFor) ?? contract.find((k) => k.kind === "test" && k.component === "*" && !k.fallbackFor) ?? null;
@@ -86,7 +88,9 @@ function componentsOf(report: Json, audit: Json): ObservedComponent[] {
   const included: ObservedComponent[] = (report.components?.included ?? []).map((c: Json) => {
     const t = testOf(c.id);
     const status: ObservedComponent["status"] = c.status ?? (noLevel || c.level === null ? "not_assessed" : c.unproven ? "unproven" : "proven");
-    return { path: c.path, placement: c.placement ?? "component", level: c.unproven ? null : c.level, status, noTests: !t, testCommand: t ? (t.declared ?? t.command) : null };
+    // A claim, not an absence: the report says there are no tests, rather than that it couldn't tell.
+    const noTests = !t && status !== "undetermined" && (c.level === 0 || NO_TESTS.test(JSON.stringify(c.capReasons ?? [])));
+    return { path: c.path, placement: c.placement ?? "component", level: c.unproven ? null : c.level, status, noTests, testCommand: t ? (t.declared ?? t.command) : null };
   });
   const excluded: ObservedComponent[] = (report.components?.excluded ?? []).map((c: Json) => ({
     path: c.path,
