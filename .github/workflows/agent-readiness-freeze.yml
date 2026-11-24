@@ -1,0 +1,37 @@
+name: agent-readiness instrument freeze
+
+# A pull request may change the accelerator's scripts or the instrument that measures them, not both
+# (support/tools/instrument-freeze.ts). Its own workflow, so editing the description to add an
+# exception reruns this check alone.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    paths: ["software-factory/agent-readiness/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-readiness-freeze-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  freeze:
+    name: Scripts and instrument don't change together
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+        working-directory: software-factory/agent-readiness
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: software-factory/agent-readiness/.nvmrc
+      - name: Instrument freeze
+        env:
+          SA_PR_BODY: ${{ github.event.pull_request.body }}
+        run: node --experimental-strip-types --no-warnings support/tools/instrument-freeze.ts --base "origin/${{ github.base_ref }}" --head HEAD
