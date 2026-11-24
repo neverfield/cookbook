@@ -1,6 +1,7 @@
 {
   "schema": "agent-readiness/report@1",
   "repo": "monorepo-mixed",
+  "preview": "Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.",
   "audit": {
     "id": "aud-2026-11-30-9a2c092-ae7a",
     "date": "2026-11-30",
@@ -8,7 +9,7 @@
     "dirtyTree": false,
     "rubric": "2026-11-beta",
     "tier": "local-exec",
-    "scriptsDigest": "3931ccf0600aa0220d5d98fa66d98edec71ee3f4566610590c565d684bd998f9",
+    "scriptsDigest": "8081444c7126a094ef71b3e7e3a73c6ebd4e93ce36a45d56b6932ea6bf553fb5",
     "seedPinned": true,
     "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
@@ -231,7 +232,7 @@
       }
     ],
     "ask": "Decision needed: what the untested behavior in packages/worker/src/retry.js should be.",
-    "coverage": "The level covers 3 components and ignores infra (0% of changes, Terraform isn't supported yet). Listed for review, not blocking: runs sudo; the audit runs it only inside a container, never on the host (scripts/agent-install.sh); runs sudo; the audit runs it only inside a container, never on the host (scripts/agent-start.sh). Agent PRs are matched by head branch starting with cursor/.",
+    "coverage": "The level covers 3 components and ignores infra (0% of changes, Terraform isn't supported yet). Tests and planted faults ran in a clean container with the network switched off, so a test that needs the internet fails here. Listed for review, not blocking: runs sudo; the audit runs it only inside a container, never on the host (scripts/agent-install.sh); runs sudo; the audit runs it only inside a container, never on the host (scripts/agent-start.sh). Agent PRs are matched by head branch starting with cursor/.",
     "noBlocker": false,
     "unassessed": {
       "share": 0,
@@ -1108,7 +1109,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "3931ccf0600a"
+        "value": "8081444c7126"
       },
       {
         "label": "Planted faults",
@@ -1116,7 +1117,7 @@
       },
       {
         "label": "Replay environment",
-        "value": "docker container, node:22-bookworm"
+        "value": "docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here"
       },
       {
         "label": "Stored in",
@@ -1197,7 +1198,7 @@
       "ran": "`npm run test` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "test passed (1 of 1 tests)",
-      "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+      "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
     },
     {
       "kind": "condition",
@@ -1215,7 +1216,7 @@
       "ran": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)",
-      "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed."
+      "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
     },
     {
       "kind": "condition",
@@ -1278,7 +1279,7 @@
       "ran": "`npm run test` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "test passed (3 of 3 tests)",
-      "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+      "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
     },
     {
       "kind": "condition",
@@ -1296,7 +1297,7 @@
       "ran": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)",
-      "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed."
+      "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
     },
     {
       "kind": "condition",
@@ -1323,7 +1324,7 @@
       "ran": "`npm run test` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "test passed (2 of 2 tests)",
-      "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+      "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
     },
     {
       "kind": "condition",
@@ -1341,7 +1342,7 @@
       "ran": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12",
-      "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not met means it ran and failed, or the repo lacks what it needs."
+      "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails."
     },
     {
       "kind": "instruction",

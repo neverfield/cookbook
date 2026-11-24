@@ -1,5 +1,7 @@
 # Agent readiness: monorepo-mixed
 
+> Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.
+
 ## 1. Where am I now
 
 **Level 0 of 4, not bootable.**
@@ -54,6 +56,7 @@ Next: Level 1, bootable. Met: installs from the lockfile in a clean container. N
 - **How it moves the needle:** Takes shared to Level 2, covering 15% of recent changes. Agents stop following stale steps, such as running pnpm in a repo that doesn't use it.
 - **Why it matters:** 3 instructions agents would follow are wrong: pnpm test (uses pnpm, but the repo uses npm), docs/architecture.md (docs/architecture.md doesn't exist).
 - **Effort and owner:** Small: 2 instruction files. Repo maintainer.
+- **False positives:** If a finding is a false positive, waive it in `.agent-readiness/waivers.json` instead of changing the repo; part 5 says how.
 - **Evidence:** `ev-001`, `ev-002`, `ev-003`
 
 ### Step 5: Make worker's tests catch wrong behavior (then)
@@ -108,7 +111,7 @@ Confidence: high (every check that decides the level ran).
 - **Agent PRs that pass CI the first time:** 33% (3 of 9). Other PRs: 71% (29 of 41), Sep 27 to Oct 27, 2026.
 - **Recent changes in components below Level 2:** 98%. Level 2 needs 0%, counting the last 90 days.
 
-The level covers 3 components and ignores infra (2% of changes, Terraform isn't supported yet). Agent PRs are matched by head branch starting with cursor/.
+The level covers 3 components and ignores infra (2% of changes, Terraform isn't supported yet). Tests and planted faults ran in a clean container with the network switched off, so a test that needs the internet fails here. Agent PRs are matched by head branch starting with cursor/.
 
 Effort against impact (impact is the share of recent changes an action unblocks): 1. Set up the service the tests expect on port 5432 for agents in api (Do first: effort small, 56%); 2. Fix the stale agent instructions (Quick fills: effort small, 15%); 3. Make worker's tests catch wrong behavior (Do first: effort medium, 0%).
 
@@ -130,6 +133,7 @@ Effort against impact (impact is the share of recent changes an action unblocks)
 
 1. **Fix each listed item.** `AGENTS.md:7` `pnpm test`: uses pnpm, but the repo uses npm; `AGENTS.md:8` `docs/architecture.md`: docs/architecture.md doesn't exist; `.cursor/skills/release-notes/SKILL.md:8` `npm run changelog`: no "changelog" script in package.json
 2. **Prove it.** `readiness run --instructions` replays every command and checks every path.
+3. **Waive a finding that is a false positive.** If a finding is wrong, don't change the repo to satisfy it: commit an entry to .agent-readiness/waivers.json with "check": "context.instructions_verified", "match" (the file or file:line), "reason" (why it is a false positive) and "by" (who reviewed it). The next audit reads the file from its commit and lists each waiver in part 5. A waiver can't cover a Level 1 check.
 
 ### Steps for Make worker's tests catch wrong behavior (step 5)
 
@@ -238,7 +242,7 @@ Every level, every unproven or not-assessed result and every finding, with what 
 |---|---|---|---|---|---|
 | api: installs from the lockfile in a clean container | met | `npm ci` (pass) | in a clean docker container (node:22-bookworm) | install passed | Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
 | api: builds in a clean container | met | `npm ci` (pass) | in a clean docker container (node:22-bookworm) | no build step; follows the install | Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
-| api: passes every test in a clean container | not met | `npm run test` (fail) | in a clean docker container (node:22-bookworm) | test failed: connection refused on port 5432 (1 of 1 tests failed) | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Not met means it ran and failed, or the repo lacks what it needs. |
+| api: passes every test in a clean container | not met | `npm run test` (fail) | in a clean docker container (node:22-bookworm) | test failed: connection refused on port 5432 (1 of 1 tests failed) | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails. |
 | api: build, lint, type-check and test commands pass | not met | `npm run lint` (pass) and `npm run test` (fail) | in a clean docker container (node:22-bookworm) | test failed: connection refused on port 5432 (1 of 1 tests failed) | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Not met means it ran and failed, or the repo lacks what it needs. |
 | api: tests catch planted faults | not proven | tests must pass before faults can be planted | not run | tests must pass before faults can be planted | Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not proven means it didn't run, or ran below the strength the check requires. |
 | repo: agent instructions are accurate | not met | AGENTS.md:7 `pnpm test`: uses pnpm, but the repo uses npm, AGENTS.md:8 `docs/architecture.md`: docs/architecture.md doesn't exist, .cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no "changelog" script in package.json `npm run lint -w api` (pass), and 1 more | read from the audited commit's files, nothing ran and in a clean docker container (node:22-bookworm) | 3 of 7 instruction items are wrong | Level 2 needs it: agent instructions are accurate (Agent instructions are accurate). Not met means it ran and failed, or the repo lacks what it needs. |
@@ -247,14 +251,14 @@ Every level, every unproven or not-assessed result and every finding, with what 
 | repo: a frozen install reproduces the lockfile | met | frozen install reproduced the lockfile | in a clean docker container (node:22-bookworm) | frozen install reproduced the lockfile | Reported with Level 1; no level waits on it alone: a frozen install reproduces the lockfile (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
 | shared: installs from the lockfile in a clean container | met | `npm ci` (pass) | in a clean docker container (node:22-bookworm) | install passed | Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
 | shared: builds in a clean container | met | `npm ci` (pass) | in a clean docker container (node:22-bookworm) | no build step; follows the install | Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
-| shared: passes every test in a clean container | met | `npm run test` (pass) | in a clean docker container (node:22-bookworm) | test passed (3 of 3 tests) | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
+| shared: passes every test in a clean container | met | `npm run test` (pass) | in a clean docker container (node:22-bookworm) | test passed (3 of 3 tests) | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails. |
 | shared: build, lint, type-check and test commands pass | met | `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | 2 commands pass | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. |
-| shared: tests catch planted faults | met | caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) | in a clean docker container (node:22-bookworm) | caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) | Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed. |
+| shared: tests catch planted faults | met | caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) | in a clean docker container (node:22-bookworm) | caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition) | Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails. |
 | worker: installs from the lockfile in a clean container | met | `npm ci` (pass) | in a clean docker container (node:22-bookworm) | install passed | Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
 | worker: builds in a clean container | met | `npm ci` (pass) | in a clean docker container (node:22-bookworm) | no build step; follows the install | Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
-| worker: passes every test in a clean container | met | `npm run test` (pass) | in a clean docker container (node:22-bookworm) | test passed (2 of 2 tests) | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
+| worker: passes every test in a clean container | met | `npm run test` (pass) | in a clean docker container (node:22-bookworm) | test passed (2 of 2 tests) | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails. |
 | worker: build, lint, type-check and test commands pass | met | `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | 2 commands pass | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. |
-| worker: tests catch planted faults | not met | caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12 | in a clean docker container (node:22-bookworm) | caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12 | Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not met means it ran and failed, or the repo lacks what it needs. |
+| worker: tests catch planted faults | not met | caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12 | in a clean docker container (node:22-bookworm) | caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12 | Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails. |
 
 #### Agent instructions
 
@@ -311,9 +315,9 @@ Audited Oct 27, 2026 at 7070f44. Eval run with a pinned seed; not a production r
 - **Rubric:** 2026-11-beta
 - **Permission tier:** local-exec
 - **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
-- **Skill digest:** 3931ccf0600a
+- **Skill digest:** 8081444c7126
 - **Planted faults:** seed pinned (eval run; not a production result)
-- **Replay environment:** docker container, node:22-bookworm
+- **Replay environment:** docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here
 - **Stored in:** .agent-readiness/history/audits/aud-2026-10-27-7070f44-e101
 
 ---
