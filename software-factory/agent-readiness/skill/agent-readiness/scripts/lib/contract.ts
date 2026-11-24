@@ -2,7 +2,7 @@ import { isAbsolute, join, normalize } from "node:path";
 import { DEFAULT_NODE, NODE_MAJORS } from "./images.ts";
 import { ecosystemOf, languageOf } from "./languages/index.ts";
 import type { ToolchainCopy, ToolSetup } from "./languages/language.ts";
-import { POETRY_ENV, VENV, poetryVersion, pyproject, testGroups } from "./languages/python.ts";
+import { POETRY_ENV, VENV, poetryVersion, pyproject, testGroups, toxRuns } from "./languages/python.ts";
 import type { Rubric } from "./rubric.ts";
 import { readPackageJson } from "./languages/node.ts";
 import type { CommandKind, Component, ContractCommand, Profile, SafetyFinding } from "./types.ts";
@@ -48,6 +48,7 @@ function pythonTest(tree: string, path: string, pm: Profile["packageManager"], w
   const dirs = workspaceMember ? [dir, tree] : [dir];
   const reqs = dirs.flatMap((d) => ["requirements.txt", "requirements-dev.txt", "pyproject.toml"].map((f) => (exists(join(d, f)) ? readText(join(d, f)) : ""))).join("\n");
   if (/pytest/.test(reqs) || dirs.some((d) => exists(join(d, "pytest.ini")) || exists(join(d, "conftest.py")))) return `${python} -m pytest -q`;
+  if (pm === "pip" && toxRuns(dir)) return `${python} -m tox`;
   if (exists(join(dir, "tests"))) return `${python} -m unittest discover -s tests -t .`;
   return null;
 }
@@ -258,6 +259,13 @@ export function discoverContract(profile: Profile, tree: string, rubric: Rubric,
       const cmd: ContractCommand = { id: `cmd-${c.id}-${kind}`, kind, component: c.id, cwd: c.path, command: runScript(c.packageManager ?? pm, script), source: `${c.manifest} scripts.${script}`, reason: `discovered ${kind} script`, timeoutSec: timeout };
       cmds.push(checkOnlyCommand(cmd, c.scripts, c.packageManager ?? pm));
     }
+    // No test script, but a Make target that runs the tests, such as `make test` calling a test:unit
+    // script: the repo's own entry point is the test command.
+    if (!cmds.some((k) => k.component === c.id && k.kind === "test")) {
+      const makefile = c.path === "." ? "Makefile" : `${c.path}/Makefile`;
+      const make = makeTestTarget(exists(join(tree, makefile)) ? readText(join(tree, makefile)) : null);
+      if (make) cmds.push({ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: c.path, command: `make ${make.target}`, source: `${makefile}:${make.line}`, reason: `the Makefile's ${make.target} target runs the tests`, timeoutSec: timeout });
+    }
   }
   // A workspace whose tests run from the root (`"test": "vitest"`) has packages with no test script
   // of their own. Each package that has test files gets the root run scoped to its folder, so it is
@@ -315,6 +323,36 @@ export function makeTargets(text: string | null): string[] {
   return text ? [...text.matchAll(/^([\w.%-]+)\s*:(?!=)/gm)].map((m) => m[1]) : [];
 }
 
+const TEST_RUN = /\b(npm|pnpm|yarn|bun)\s+(run\s+)?test[\w:.-]*|\b(pytest|vitest|jest|mocha|tox|nox|phpunit|rspec)\b|\b(go|cargo|dotnet|mix)\s+test\b|\bnode\s+--test\b|\bpython3?\s+-m\s+(pytest|unittest)\b/;
+const MAKE_CALL = /(?:\$\(MAKE\)|\$\{MAKE\}|\bmake)\s+(?:-\S+\s+)*([\w.-]+)/g;
+
+// The Make target that runs the tests, as `make test` does when its recipe, or a target it depends on
+// or calls with $(MAKE), runs a test runner. With the line of the target, for the contract's source.
+export function makeTestTarget(text: string | null): { target: string; line: number } | null {
+  if (!text) return null;
+  const lines = text.split("\n");
+  const rules = new Map<string, { line: number; deps: string[]; recipe: string[] }>();
+  let current: { line: number; deps: string[]; recipe: string[] } | null = null;
+  lines.forEach((l, i) => {
+    const head = l.match(/^([\w.-]+(?:\s+[\w.-]+)*)\s*:(?!=)(.*)$/);
+    if (head) {
+      current = { line: i + 1, deps: head[2].replace(/[|;].*$/, "").trim().split(/\s+/).filter(Boolean), recipe: head[2].includes(";") ? [head[2].split(";").slice(1).join(";")] : [] };
+      for (const t of head[1].split(/\s+/)) if (!rules.has(t)) rules.set(t, current);
+    } else if (current && l.startsWith("\t")) current.recipe.push(l.trim().replace(/^[@+-]+/, ""));
+    else if (l.trim() && !l.startsWith("#")) current = null;
+  });
+  const runs = (target: string, seen: Set<string>): boolean => {
+    const rule = rules.get(target);
+    if (!rule || seen.has(target)) return false;
+    seen.add(target);
+    if (rule.recipe.some((r) => TEST_RUN.test(r))) return true;
+    const called = rule.recipe.flatMap((r) => [...r.matchAll(MAKE_CALL)].map((m) => m[1]));
+    return [...rule.deps, ...called].some((t) => runs(t, seen));
+  };
+  for (const target of ["test", "tests", "check"]) if (runs(target, new Set())) return { target, line: rules.get(target)!.line };
+  return null;
+}
+
 // Whether `make name` has a rule: a target of that name, or a pattern rule whose % matches a non-empty stem.
 export function makeRuleFor(targets: string[], name: string): string | undefined {
   return targets.find((t) => t === name) ?? targets.find((t) => t.includes("%") && new RegExp(`^${t.split("%", 2).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".+")}$`).test(name));
@@ -329,7 +367,10 @@ const CHAINED = /\|\||&&|;|\||`|\$\(|\n/;
 function commandsOn(line: string): string[] {
   const spans = [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1].trim());
   const run = line.match(/^\s*-?\s*run:\s*(.+)$/)?.[1]?.trim();
-  const whole = [...spans, ...(run ? [run] : []), line.trim().replace(/^[-*]\s+/, "").replace(/^\$\s+/, "")];
+  // A manifest's script entry, such as `"test": "node --test test/",` in package.json.
+  const entry = line.match(/^\s*"[\w:.-]+"\s*:\s*("(?:[^"\\]|\\.)*")\s*,?\s*$/)?.[1];
+  const script = entry ? (JSON.parse(entry) as string).trim() : null;
+  const whole = [...spans, ...(run ? [run] : []), ...(script ? [script] : []), line.trim().replace(/^[-*]\s+/, "").replace(/^\$\s+/, "")];
   return [...whole, ...whole.flatMap((c) => c.split(/\s*(?:&&|;)\s*/)).filter((c) => !/^cd\s/.test(c))].map((c) => c.trim()).filter(Boolean);
 }
 

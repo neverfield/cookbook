@@ -85,7 +85,9 @@
             }
           }
         },
-        "excluded": { "type": "array", "items": { "type": "object", "required": ["id", "path", "toolchain", "manifest", "lockfile", "changeShare", "reason"] } }
+        "excluded": { "type": "array", "items": { "type": "object", "required": ["id", "path", "toolchain", "manifest", "lockfile", "changeShare", "reason"], "properties": { "placement": { "enum": ["component", "satellite", "unplaced"] } } } },
+        "unownedShare": { "type": "number", "minimum": 0, "maximum": 1 },
+        "unownedTop": { "type": "array", "items": { "type": "string" } }
       }
     },
     "executive": {

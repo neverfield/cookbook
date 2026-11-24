@@ -76,7 +76,7 @@ for (const name of truthFixtureNames()) {
         const repo = materialize(name, { now: NOW });
         assert.equal(readiness(repo, ["init", "--tier", "local-exec"]).code, 0);
         assert.equal(readiness(repo, ["scan"]).code, 0);
-        const r = readiness(repo, ["contract", "add", "--kind", "test", "--component", root.id, "--cmd", "node --test test/", "--reason", "the root app's tests", "--source", "package.json:3"]);
+        const r = readiness(repo, ["contract", "add", "--kind", "test", "--component", root.id, "--cmd", "node --test test/", "--reason", "the root app's tests", "--source", "package.json:6"]);
         assert.equal(r.code, 0, r.out);
       });
     }

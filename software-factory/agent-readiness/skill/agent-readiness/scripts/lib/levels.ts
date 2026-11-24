@@ -1,6 +1,6 @@
 import type { Rubric } from "./rubric.ts";
 import type { CompStates } from "./score.ts";
-import type { CondId, CondState, Component, HistoryLine, Level, OutcomeStats, ScenarioId, ScenarioSpec, Targets } from "./types.ts";
+import type { CondId, CondState, Component, HistoryLine, Level, OutcomeStats, Profile, ScenarioId, ScenarioSpec, Targets } from "./types.ts";
 
 export interface LevelResult {
   level: Level;
@@ -82,8 +82,10 @@ export function repoLevel(levels: Map<string, LevelResult>, active: Set<string>)
   return { level: min, couldBe, setBy, ...(unproven ? { unproven } : {}) };
 }
 
-export function partialCoverage(rubric: Rubric, components: Component[]): { partial: boolean; unassessedShare: number } {
-  const unassessedShare = components.filter((c) => !c.assessed).reduce((s, c) => s + c.changeShare, 0);
+// Under a rubric that counts them, changes no component holds aren't assessed either.
+export function partialCoverage(rubric: Rubric, components: Component[], ownership?: Profile["ownership"]): { partial: boolean; unassessedShare: number } {
+  const unowned = rubric.components.unowned === "counted" && ownership?.counted ? ownership.unownedShare : 0;
+  const unassessedShare = components.filter((c) => !c.assessed).reduce((s, c) => s + c.changeShare, 0) + unowned;
   return { partial: unassessedShare > rubric.repoLevel.partialCoverageShare, unassessedShare };
 }
 

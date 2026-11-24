@@ -1064,6 +1064,7 @@ function componentsOf(input: RenderInput): ReportJson["components"] {
   const none = notAssessed(input);
   const row = (c: Component) => ({ id: c.id, path: c.path, toolchain: c.toolchain ?? toolchainOf(c), manifest: c.manifest, lockfile: c.lockfile ?? null, changeShare: c.changeShare });
   const sampled = comps.some((c) => c.notAssessedReason?.startsWith("outside the "));
+  const ownership = input.audit.profile?.ownership;
   return {
     shape: sampled ? "sampled_monorepo" : input.audit.profile?.repoType === "monorepo" ? "monorepo" : "single",
     included: comps
@@ -1075,12 +1076,14 @@ function componentsOf(input: RenderInput): ReportJson["components"] {
         const couldBe = none || !l ? null : l.couldBe;
         const unproven = unprovenLevel1(level, couldBe, caps);
         const scenarios = [...(input.scenarioLevels.get(c.id) ?? new Map<ScenarioId, LevelResult>()).entries()].map(([sid, s]) => ({ id: sid, label: input.rubric.scenarios.find((x) => x.id === sid)!.label, level: none ? null : s.level, couldBe: none ? null : s.couldBe, unproven: unproven && s.level === 0 && s.couldBe === 1 }));
-        return { ...row(c), active: input.active.has(c.id), level, couldBe, unproven, capReasons: caps, scenarios };
+        return { ...row(c), placement: "component" as const, active: input.active.has(c.id), level, couldBe, unproven, capReasons: caps, scenarios };
       }),
     excluded: [
-      ...comps.filter((c) => !c.assessed).map((c) => ({ ...row(c), reason: c.notAssessedReason ?? "not assessed" })),
-      ...(input.audit.profile?.satellites ?? []).map((s) => ({ id: s.path.split("/").pop()!, path: s.path, toolchain: s.toolchain, manifest: s.manifest, lockfile: null, changeShare: 0, reason: `not a component: ${s.reason}` })),
+      ...comps.filter((c) => !c.assessed).map((c) => ({ ...row(c), placement: "component" as const, reason: c.notAssessedReason ?? "not assessed" })),
+      ...(input.audit.profile?.satellites ?? []).map((s) => ({ id: s.path.split("/").pop() || s.path, path: s.path, toolchain: s.toolchain, manifest: s.manifest, lockfile: null, changeShare: s.changeShare ?? 0, placement: "satellite" as const, reason: `not a component: ${s.reason}` })),
+      ...(input.audit.profile?.units ?? []).filter((u) => u.placement === "unplaced").map((u) => ({ id: u.path.split("/").pop() || u.path, path: u.path, toolchain: "unknown", manifest: u.manifest, lockfile: null, changeShare: 0, placement: "unplaced" as const, reason: `not placed: ${u.reason}` })),
     ],
+    ...(ownership ? { unownedShare: ownership.unownedShare, unownedTop: ownership.unownedTop } : {}),
   };
 }
 

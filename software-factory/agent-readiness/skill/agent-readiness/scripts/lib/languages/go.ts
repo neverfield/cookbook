@@ -228,6 +228,8 @@ export const go: LanguageDef = {
     rootApp: { names: ["go.mod"], stack: "go", toolchain: "Go", suffix: "go", rank: 30 },
     lockfiles: ["go.sum"],
     projectName: (_tree, manifest, text) => (manifest === "go.mod" ? text.match(/^module\s+(\S+)/m)?.[1]?.split("/").pop() : undefined),
+    // `go test ./...` stops at a nested go.mod: that folder is another module, built and tested apart.
+    ownUnit: () => true,
   },
   ecosystems: [goModules],
   replay: {

@@ -72,10 +72,29 @@ export interface Profile {
   environmentJson: { path: string; install?: string; start?: string; build?: { dockerfile: string; context?: string } } | null;
   components: Component[];
   // Nested manifests deferred as tests, samples or tooling; never components while the repo has others.
-  satellites: { path: string; manifest: string; toolchain: string; reason: string }[];
+  // changeShare is the satellite's own share, of changes no component holds.
+  satellites: { path: string; manifest: string | null; toolchain: string; reason: string; changeShare?: number }[];
+  // Workspace members built and tested only through another component's commands, such as packages
+  // with no test script of their own that the workspace root's test runner covers.
+  members?: { path: string; manifest: string; of: string; reason: string }[];
+  // Every folder that holds a manifest, and where it was placed, so nothing found is dropped.
+  units?: Unit[];
+  // Every counted change in the window, and the share no component or satellite holds.
+  ownership?: { changes: number; unowned: number; unownedShare: number; unownedTop: string[]; counted: boolean };
   historyDays: number;
   totalChanges: number;
   scope?: ScanScope;
+}
+
+export interface Unit {
+  path: string;
+  manifest: string;
+  placement: "component" | "member" | "satellite" | "excluded" | "unplaced";
+  // For a member or satellite, the component it belongs to, when it has one.
+  of?: string;
+  // What placed it: the repo's workspace declaration, the manifest itself, or a folder-name hint.
+  source: "workspace" | "manifest" | "hint";
+  reason: string;
 }
 
 // What the scan read. On a large repo the listing stops at a file cap, and the secret scan and the
@@ -545,7 +564,12 @@ export interface ReportJson {
     // sampled_monorepo: some supported components were left out because only the most active are assessed.
     shape: "single" | "monorepo" | "sampled_monorepo";
     included: ComponentLevel[];
-    excluded: { id: string; path: string; toolchain: string; manifest: string | null; lockfile: string | null; changeShare: number; reason: string }[];
+    // placement: a component this audit doesn't assess, a satellite of one, or a manifest the scan
+    // couldn't place.
+    excluded: { id: string; path: string; toolchain: string; manifest: string | null; lockfile: string | null; changeShare: number; placement?: "component" | "satellite" | "unplaced"; reason: string }[];
+    // The share of recent changes that lie in no component or satellite, and the folders holding most.
+    unownedShare?: number;
+    unownedTop?: string[];
   };
   executive: {
     heading: string;
@@ -608,6 +632,7 @@ export interface ComponentLevel {
   manifest: string | null;
   lockfile: string | null;
   changeShare: number;
+  placement?: "component";
   active: boolean;
   level: Level | null;
   couldBe: Level | null;

@@ -162,7 +162,7 @@ export function buildSealedReport(audit: Audit, rubric: Rubric, history: History
     sealStatus: sealStatusFor(audit.skill.scriptsDigest),
     staleCopy: null,
     storedAt,
-    partial: partialCoverage(rubric, audit.profile.components),
+    partial: partialCoverage(rubric, audit.profile.components, audit.profile.ownership),
     noResults,
     supportDoc: supportDocIn(repo),
     previousReport,
