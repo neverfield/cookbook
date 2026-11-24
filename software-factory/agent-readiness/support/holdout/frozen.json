@@ -7,8 +7,8 @@
     "record.schema.json": "422ff395d5f8777f936eb54ba4960b49f6c538b03dd89f2e6492d25ca16bb884",
     "score.ts": "741a787cdef7cf269b310406b3b5db5e93c8db991262a29a78a3dea404c95bf8",
     "thresholds.json": "2017d49cdf6cf43866950afe7a21d1b0b16bb468248e504c5cdb6770b4fb583c",
-    "truth.schema.json": "2269628e877229bfa4bbf3f1bb4f3253665abb6cca67dd5d6527f7e8001f1849"
+    "truth.schema.json": "cb4c08dd9929148e7105d21a4e0db8ca2444672bb37d3b629276e15771de394d"
   },
-  "protocol": "60615c9cffacf4d0f1b83b322f226c1235fc1f855be8394061eeed278b168f76",
+  "protocol": "83a26e58f4613920a44257a8baab518b0881d2a2a7a9545bae2b446f17811869",
   "amendments": []
 }

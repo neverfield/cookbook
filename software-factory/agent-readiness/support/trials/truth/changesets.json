@@ -31,7 +31,8 @@
     {
       "path": "packages/apply-release-plan",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.035,
       "hasTests": true,
       "install": [],
@@ -43,7 +44,8 @@
     {
       "path": "packages/assemble-release-plan",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.004,
       "hasTests": true,
       "install": [],
@@ -67,7 +69,8 @@
     {
       "path": "packages/changelog-github",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.004,
       "hasTests": true,
       "install": [],
@@ -79,7 +82,8 @@
     {
       "path": "packages/cli",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.091,
       "hasTests": true,
       "install": [],
@@ -104,7 +108,8 @@
     {
       "path": "packages/config",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.022,
       "hasTests": true,
       "install": [],
@@ -116,7 +121,8 @@
     {
       "path": "packages/errors",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.0,
       "hasTests": true,
       "install": [],
@@ -128,7 +134,8 @@
     {
       "path": "packages/get-dependents-graph",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.0,
       "hasTests": true,
       "install": [],
@@ -140,7 +147,8 @@
     {
       "path": "packages/get-github-info",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.017,
       "hasTests": true,
       "install": [],
@@ -164,7 +172,8 @@
     {
       "path": "packages/get-version-range-type",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.0,
       "hasTests": true,
       "install": [],
@@ -176,7 +185,8 @@
     {
       "path": "packages/git",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.009,
       "hasTests": true,
       "install": [],
@@ -188,7 +198,8 @@
     {
       "path": "packages/logger",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.004,
       "hasTests": true,
       "install": [],
@@ -200,7 +211,8 @@
     {
       "path": "packages/parse",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.0,
       "hasTests": true,
       "install": [],
@@ -212,7 +224,8 @@
     {
       "path": "packages/pre",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.0,
       "hasTests": true,
       "install": [],
@@ -224,7 +237,8 @@
     {
       "path": "packages/read",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.0,
       "hasTests": true,
       "install": [],
@@ -236,7 +250,8 @@
     {
       "path": "packages/release-utils",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.0,
       "hasTests": true,
       "install": [],
@@ -272,7 +287,8 @@
     {
       "path": "packages/write",
       "ecosystem": "node",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.009,
       "hasTests": true,
       "install": [],

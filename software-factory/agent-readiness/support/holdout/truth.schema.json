@@ -30,7 +30,7 @@
         "properties": {
           "path": { "type": "string", "pattern": "^(\\.|[^/].*[^/]|[^/])$", "description": "POSIX path from the repository root; . is the root" },
           "ecosystem": { "enum": ["node", "python", "go", "rust", "jvm", "dotnet", "php", "ruby", "swift", "dart", "elixir", "terraform", "cpp", "android", "xcode", "other"] },
-          "placement": { "enum": ["component", "member", "satellite", "excluded"], "description": "component: a product unit in its own right. member: built and tested as part of the component named by of. satellite: examples, benchmarks, tooling or docs that support a component. excluded: vendored, generated or test data" },
+          "placement": { "enum": ["component", "member", "satellite", "excluded"], "description": "component: a unit CI builds or tests through its own commands, such as an app, a service or a module tested on its own. member: built and tested only through the commands of the component named by of, such as a workspace member CI tests from the workspace root, whether or not it is also published on its own. satellite: examples, benchmarks, tooling or docs that support a component. excluded: vendored, generated or test data" },
           "of": { "type": "string", "description": "For a member or satellite, the path of the component it belongs to" },
           "changeShare": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Share of the files changed in the 90 days before the commit that lie under this path and no deeper listed path; null when not measured" },
           "hasTests": { "type": "boolean", "description": "The unit has test files its own test command runs" },

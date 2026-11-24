@@ -30,7 +30,8 @@
     {
       "path": "crates/cli",
       "ecosystem": "rust",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.018,
       "hasTests": true,
       "install": [],
@@ -42,7 +43,8 @@
     {
       "path": "crates/globset",
       "ecosystem": "rust",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.088,
       "hasTests": true,
       "install": [],
@@ -54,7 +56,8 @@
     {
       "path": "crates/grep",
       "ecosystem": "rust",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.018,
       "hasTests": true,
       "install": [],
@@ -66,7 +69,8 @@
     {
       "path": "crates/ignore",
       "ecosystem": "rust",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.228,
       "hasTests": true,
       "install": [],
@@ -78,7 +82,8 @@
     {
       "path": "crates/matcher",
       "ecosystem": "rust",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.018,
       "hasTests": true,
       "install": [],
@@ -90,7 +95,8 @@
     {
       "path": "crates/pcre2",
       "ecosystem": "rust",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.018,
       "hasTests": true,
       "install": [],
@@ -102,7 +108,8 @@
     {
       "path": "crates/printer",
       "ecosystem": "rust",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.018,
       "hasTests": true,
       "install": [],
@@ -114,7 +121,8 @@
     {
       "path": "crates/regex",
       "ecosystem": "rust",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.018,
       "hasTests": true,
       "install": [],
@@ -126,7 +134,8 @@
     {
       "path": "crates/searcher",
       "ecosystem": "rust",
-      "placement": "component",
+      "placement": "member",
+      "of": ".",
       "changeShare": 0.018,
       "hasTests": true,
       "install": [],
