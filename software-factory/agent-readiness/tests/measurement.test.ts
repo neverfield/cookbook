@@ -557,10 +557,13 @@ describe("the release policy", () => {
     const dir = mkdtempSync(join(tmpdir(), "release-"));
     const cal = join(dir, "calibration.json");
     writeFileSync(cal, JSON.stringify(CTX.calibration));
+    // A release also needs an empty known-failures list; this checks the rest of the gate.
+    const noKnown = join(dir, "known-failures.json");
+    writeFileSync(noKnown, JSON.stringify({ failures: [] }));
     const runCheck = (s: Baseline, record?: string) => {
       const f = join(dir, `${Math.random()}.json`);
       writeFileSync(f, JSON.stringify({ summary: { ...s, binding: { ...currentBinding(), dirty: false } } }));
-      const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", join(LABELS_DIR, "..", "run.ts"), "--release-check", f, "--calibration", cal, ...(record ? ["--release-record", record] : [])], { encoding: "utf8" });
+      const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", join(LABELS_DIR, "..", "run.ts"), "--release-check", f, "--calibration", cal, ...(record ? ["--release-record", record] : [])], { encoding: "utf8", env: { ...process.env, SA_KNOWN_FAILURES_FILE: noKnown } });
       return { code: r.status, last: r.stdout.trim().split("\n").at(-1), out: r.stdout };
     };
     const record = join(dir, "record.json");

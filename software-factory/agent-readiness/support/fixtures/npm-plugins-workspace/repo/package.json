@@ -1,0 +1,12 @@
+{
+  "name": "plugin-host",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "npm test --workspaces"
+  },
+  "workspaces": [
+    "packages/*",
+    "plugins/*"
+  ]
+}

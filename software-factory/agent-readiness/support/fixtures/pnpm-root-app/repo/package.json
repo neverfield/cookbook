@@ -1,0 +1,14 @@
+{
+  "name": "web-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/",
+    "build": "node -e \"process.exit(0)\""
+  },
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  }
+}

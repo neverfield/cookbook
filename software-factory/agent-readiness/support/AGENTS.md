@@ -27,6 +27,14 @@ Rules for agents that change the Agent Readiness accelerator. To run an audit on
 4. Rerun the full eval set and commit the new `support/evals/baseline.json`.
 5. Never change an `expected.json` to make a run pass without a written reason in the PR description.
 
+## Guards, truth and the holdout
+
+- Write each guard before its fix and show it failing on the base commit. Until the fix lands, list it in `../tests/known-failures.json` with the finding and the PR that fixes it, and write it with `guard()` from `tools/known-failures.ts`. Never mark a test `todo` or `skip`: CI's no-skips check fails on both. The fixing PR removes the entry; a listed guard that passes fails its test.
+- A fixture or trial that carries truth has it in the holdout's schema (`holdout/truth.schema.json`): `fixtures/<name>/truth.json` and `trials/truth/<id>.json`, written from the repo and its CI, never from the tool's output.
+- `holdout/PROTOCOL.md`, the two schemas, `score.ts` and `thresholds.json` are frozen by digest in `holdout/frozen.json`. Don't change them; the protocol allows one thresholds amendment, after the validation look.
+- Add every public repository you run the tool on to `holdout/collision-log.json` in the same PR. Nothing in this repository may name a holdout repository, and nobody on the implementing side asks for one.
+- A PR changes the scripts or the instrument (the eval harness and cases, each fixture's `expected.json` and `truth.json`, `holdout/`, the trials' truth and runner), not both. `tools/instrument-freeze.ts` fails one that changes both unless its description has a line `Instrument-freeze exception: <reason>`.
+
 ## Changing SKILL.md, the references or the report wording
 
 These change what the agent does or what the reader sees, so they follow the hill-climb rule in [evals/METHOD.md](evals/METHOD.md): one failure mode and one lever per change, a case or test that would have failed before it, and before/after numbers on the same cases recorded in the PR description. Keep a change only if its target improves and no hard gate drops.

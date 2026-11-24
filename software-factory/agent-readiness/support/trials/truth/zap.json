@@ -1,0 +1,97 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "uber-go/zap",
+  "commit": "4892335e05f14bce8a98a69a577fcf3844a42623",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/uber-go/zap/commits/4892335e05f14bce8a98a69a577fcf3844a42623/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/uber-go/zap/commits/4892335e05f14bce8a98a69a577fcf3844a42623/status ('build (1.26.x)', 'build (1.27.x)' and 'Lint' succeeded)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "go",
+      "placement": "component",
+      "changeShare": 0.75,
+      "hasTests": true,
+      "install": [
+        "go mod download"
+      ],
+      "test": [
+        "make cover",
+        "go test -race -coverprofile=cover.out -coverpkg=./... ./...",
+        "go test -race ./...",
+        "go test ./..."
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "make cover tests the root and exp modules."
+    },
+    {
+      "path": "exp",
+      "ecosystem": "go",
+      "placement": "component",
+      "changeShare": 0.167,
+      "hasTests": true,
+      "install": [],
+      "test": [
+        "go test -race -coverprofile=cover.out -coverpkg=./... ./...",
+        "go test -race ./...",
+        "go test ./..."
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Separately versioned go.uber.org/zap/exp module; tested by make cover from the root."
+    },
+    {
+      "path": "benchmarks",
+      "ecosystem": "go",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [
+        "go mod download"
+      ],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Only Benchmark functions; CI downloads its deps but does not run it; go test -race ./... passed locally in golang:1.27."
+    },
+    {
+      "path": "zapgrpc/internal/test",
+      "ecosystem": "go",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.083,
+      "hasTests": true,
+      "install": [
+        "go mod download"
+      ],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Test-helper module for zapgrpc; CI does not test it; go test -race ./... passed locally in golang:1.27."
+    },
+    {
+      "path": "assets",
+      "ecosystem": "go",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "go.mod holding only the logo and README, no Go code."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md listing the four Go modules and that make cover only tests the root and exp, while make test covers all modules."
+  },
+  "dropped": 0
+}

@@ -1,0 +1,180 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "Flexget/Flexget",
+  "commit": "881fc079ba0f47eaa67ab7a34ec44477278c9bb9",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/Flexget/Flexget/commits/881fc079ba0f47eaa67ab7a34ec44477278c9bb9/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/Flexget/Flexget/commits/881fc079ba0f47eaa67ab7a34ec44477278c9bb9/status (all py3.11-3.15 jobs on ubuntu, macos and windows, 'scripts', and docker build succeeded)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.953,
+      "hasTests": true,
+      "install": [
+        "uv sync",
+        "uv sync --group test"
+      ],
+      "test": [
+        "uv run pytest -m 'not require_optional_deps' -n logical --allow-hosts ::1,127.0.0.1 --cov --cov-report=xml --dist loadgroup --junit-xml core_test_results.xml",
+        "uv run --group test pytest -m 'require_optional_deps' -n logical --allow-hosts ::1,127.0.0.1 --cov --cov-append --cov-report=xml --dist loadgroup --junit-xml optional_test_results.xml",
+        "uv run pytest -m 'not require_optional_deps' -n logical --allow-hosts ::1,127.0.0.1",
+        "uv run --group test pytest -m 'require_optional_deps' -n logical --allow-hosts ::1,127.0.0.1",
+        "uv run pytest"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "VCR cassettes replay HTTP (VCR_RECORD_MODE=none) and pytest-socket allows only localhost."
+    },
+    {
+      "path": "flexget/ui/v1",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "service",
+      "cleanPasses": "undetermined",
+      "notes": "Legacy Angular web UI with Karma specs; CI neither builds nor tests it."
+    },
+    {
+      "path": "scripts",
+      "ecosystem": "python",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.033,
+      "hasTests": true,
+      "install": [],
+      "test": [
+        "uv run --isolated --no-project --with pytest --with vcrpy --with-requirements bundle_webui.py -m pytest --override-ini filterwarnings=error tests/test_bundle_webui.py",
+        "uv run --isolated --no-project --with pytest --with vcrpy --with-requirements dev_tools.py -m pytest --override-ini filterwarnings=error tests/test_dev_tools.py",
+        "uv run --isolated --no-project --with pytest --with vcrpy --with-requirements update_changelog.py -m pytest --override-ini filterwarnings=error tests/test_update_changelog.py"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Maintainer scripts with inline dependencies; CI runs the same commands from the root with a scripts/ prefix on the paths."
+    },
+    {
+      "path": "docs",
+      "ecosystem": "python",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.014,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Sphinx docs site built on Read the Docs; no manifest, not built in CI."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "flexget/components/trakt/db.py",
+      "line": 30,
+      "real": false,
+      "why": "Trakt OAuth client secret FlexGet ships on purpose for its app"
+    },
+    {
+      "file": "flexget/components/trakt/db.py",
+      "line": 29,
+      "real": false,
+      "why": "Trakt client ID shipped on purpose"
+    },
+    {
+      "file": "flexget/components/tmdb/api_tmdb.py",
+      "line": 29,
+      "real": false,
+      "why": "TMDB API key the app ships on purpose"
+    },
+    {
+      "file": "flexget/components/thetvdb/api_tvdb.py",
+      "line": 27,
+      "real": false,
+      "why": "TheTVDB API key the app ships on purpose"
+    },
+    {
+      "file": "flexget/plugins/internal/api_rottentomatoes.py",
+      "line": 31,
+      "real": false,
+      "why": "Rotten Tomatoes API key the app ships on purpose"
+    },
+    {
+      "file": "flexget/utils/waf/crypto.py",
+      "line": 6,
+      "real": false,
+      "why": "static AES key emulating a site's public WAF challenge"
+    },
+    {
+      "file": "flexget/components/ftp/ftp_list.py",
+      "line": 89,
+      "real": false,
+      "why": "f-string URL template"
+    },
+    {
+      "file": "flexget/components/ftp/ftp_download.py",
+      "line": 19,
+      "real": false,
+      "why": "placeholder URL template in docstring"
+    },
+    {
+      "file": "flexget/components/ftp/ftp_download.py",
+      "line": 20,
+      "real": false,
+      "why": "documented anonymous FTP example"
+    },
+    {
+      "file": "flexget/plugins/clients/nzbget.py",
+      "line": 15,
+      "real": false,
+      "why": "documented config example"
+    },
+    {
+      "file": "flexget/plugins/input/regexp_parse.py",
+      "line": 44,
+      "real": false,
+      "why": "documented config example"
+    },
+    {
+      "file": "flexget/components/notify/notifiers/telegram.py",
+      "line": 117,
+      "real": false,
+      "why": "documented proxy example"
+    },
+    {
+      "file": "flexget/components/sites/sites/rutracker.py",
+      "line": 136,
+      "real": false,
+      "why": "placeholder password in docs"
+    },
+    {
+      "file": "flexget/components/sites/sites/wordpress.py",
+      "line": 57,
+      "real": false,
+      "why": "placeholder password in docs"
+    },
+    {
+      "file": "flexget/plugins/input/next_sonarr_episodes.py",
+      "line": 43,
+      "real": false,
+      "why": "template variable"
+    },
+    {
+      "file": "flexget/plugins/input/next_sonarr_episodes.py",
+      "line": 57,
+      "real": false,
+      "why": "template variable"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md giving the uv run pytest commands with their markers and explaining the VCR cassette and localhost-only network rules."
+  },
+  "dropped": 0
+}

@@ -1,0 +1,57 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "Shopify/packwerk",
+  "commit": "31e534283f93a225b520cddab3c2d735557c76de",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/Shopify/packwerk/commits/31e534283f93a225b520cddab3c2d735557c76de/check-runs --paginate: Tests and Loading Tests on Ruby 3.3/3.4/4.0, Lint, Type Checking and Build (matrix) all success"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "ruby",
+      "placement": "component",
+      "changeShare": 1.0,
+      "hasTests": true,
+      "install": [
+        "bundle install"
+      ],
+      "test": [
+        "bin/rake test",
+        "bundle exec rake test",
+        "bin/rake test:loading",
+        "bundle exec rake test:loading"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "CI deletes Gemfile.lock before bundle install; sorbet/rbi holds generated RBI files."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "sorbet/rbi/gems/actionview@7.2.3.1.rbi",
+      "line": 7371,
+      "real": false,
+      "why": "generated RBI doc comment example"
+    },
+    {
+      "file": "sorbet/rbi/gems/rack-session@2.1.2.rbi",
+      "line": 386,
+      "real": false,
+      "why": "generated RBI doc comment example"
+    },
+    {
+      "file": "sorbet/rbi/gems/railties@7.2.3.1.rbi",
+      "line": 428,
+      "real": false,
+      "why": "generated RBI doc comment example"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md describing bin/rake test, bin/rake test:loading, bin/rubocop and bin/srb tc, since the repo has no agent instructions and CI is green."
+  },
+  "dropped": 0
+}

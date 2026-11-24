@@ -1,0 +1,147 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "umami-software/umami",
+  "commit": "dbb8d606fbd4e99220fb83bcb4abad3e0f97f42a",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/umami-software/umami/commits/dbb8d606fbd4e99220fb83bcb4abad3e0f97f42a/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/umami-software/umami/commits/dbb8d606fbd4e99220fb83bcb4abad3e0f97f42a/status ('build' (Node.js CI) succeeded; the only failure is the 'Dependabot' check, which runs no tests)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.944,
+      "hasTests": true,
+      "install": [
+        "pnpm install",
+        "pnpm i"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test",
+        "pnpm test:packages"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Vitest unit tests with a dummy DATABASE_URL and SKIP_DB_CHECK; Playwright e2e/API tests need Docker services and are not run in CI."
+    },
+    {
+      "path": "packages/api-client",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.026,
+      "hasTests": true,
+      "install": [
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test",
+        "vitest run"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published @umami/api-client; CI runs its tests via pnpm test:packages from the root."
+    },
+    {
+      "path": "packages/mcp",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.03,
+      "hasTests": true,
+      "install": [
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test",
+        "vitest run"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published @umami/mcp; needs pnpm build:packages first because it imports the built api-client."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": ".github/workflows/ci.yml",
+      "line": 9,
+      "real": false,
+      "why": "CI dummy APP_SECRET, labeled not for production"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "line": 10,
+      "real": false,
+      "why": "dummy localhost database URL for CI"
+    },
+    {
+      "file": "Dockerfile",
+      "line": 40,
+      "real": false,
+      "why": "dummy localhost database URL for build step"
+    },
+    {
+      "file": "docker-compose.yml",
+      "line": 8,
+      "real": false,
+      "why": "default local compose database credentials"
+    },
+    {
+      "file": "docker-compose.yml",
+      "line": 12,
+      "real": false,
+      "why": "replace-me placeholder"
+    },
+    {
+      "file": "docker-compose.test.yml",
+      "line": 34,
+      "real": false,
+      "why": "test compose database credentials"
+    },
+    {
+      "file": "docker-compose.test.yml",
+      "line": 103,
+      "real": false,
+      "why": "test compose ClickHouse credentials"
+    },
+    {
+      "file": "podman/env.sample",
+      "line": 5,
+      "real": false,
+      "why": "replace-me placeholder in sample env"
+    },
+    {
+      "file": "podman/env.sample",
+      "line": 11,
+      "real": false,
+      "why": "replace-me placeholder in sample env"
+    },
+    {
+      "file": "podman/env.sample",
+      "line": 21,
+      "real": false,
+      "why": "replace-me placeholder in sample env"
+    },
+    {
+      "file": "scripts/seed/index.ts",
+      "line": 278,
+      "real": false,
+      "why": "example URL in help message"
+    },
+    {
+      "file": "scripts/seed/index.ts",
+      "line": 289,
+      "real": false,
+      "why": "format template in error message"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md giving the CI step order (pnpm install, build:packages, pnpm test, test:packages) and the dummy env vars unit tests need."
+  },
+  "dropped": 0
+}

@@ -1,0 +1,33 @@
+{
+  "schema": "agent-readiness/holdout-thresholds@1",
+  "sets": { "validation": 12, "test": 24, "reserve": 12 },
+  "looks": {
+    "validation": "once, after PR E; the set is then spent and joins the trials",
+    "testSpentAtFail": 2,
+    "amendments": 1,
+    "amendmentWindow": "after the validation look, before the first test attempt"
+  },
+  "infraRetries": 2,
+  "agentArmRepos": 8,
+  "supportedEcosystems": ["node", "python", "go", "rust", "jvm", "dotnet", "php", "ruby"],
+  "componentShareFloor": 0.1,
+  "unownedTolerance": 0.05,
+  "critical": {
+    "K1": "Level 0 or no tests on a supported component whose upstream CI is green, that has tests, and whose tests need no service or network",
+    "K2": "A level above the truth: Level 1 or more on a component whose clean install or tests fail at the commit",
+    "K3": "A blocking finding the truth doesn't list as real, or advice that would break the repo",
+    "K4": "A crash, a hang past the budget, or no sealed report",
+    "K5": "After the audit, the repo's own test command is refused, the tree differs outside .agent-readiness/, or containers or temp trees remain",
+    "K6": "One fact rendered with two values",
+    "K7": "In the agent arm: a contract command the repo doesn't define, or repo code run outside the scripts"
+  },
+  "rates": {
+    "R1": { "bar": 0.875, "unit": "repo", "what": "Every component with at least the share floor of changes is present and placed as the truth says" },
+    "R2": { "bar": 0.8, "unit": "component", "what": "Green-CI supported components with tests whose test command is one CI runs" },
+    "R3": { "bar": 0.7, "unit": "component", "what": "Green-CI supported components with tests that pass cleanly, given a proven level in the container run" },
+    "R4": { "bar": 0.8, "unit": "repo", "what": "Repos whose next action both steward judges accept against the truth" },
+    "R5": { "bar": 0.9, "unit": "repo", "what": "Repos whose container and disposable-VM runs agree on every level, or whose report states the differing fact" },
+    "R6": { "bar": 0.9, "unit": "repo", "what": "Repos whose unowned share is within the tolerance of the truth" }
+  },
+  "interval": { "method": "wilson", "confidence": 0.95, "published": true, "decides": false }
+}

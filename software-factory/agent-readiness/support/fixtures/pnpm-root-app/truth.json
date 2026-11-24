@@ -1,0 +1,71 @@
+{
+  "purpose": "A pnpm workspace whose root package.json is the app itself, with most of the changes, beside two packages under packages/ (the shape of the Nov 24 Node sim). The root must be a scored component, and shares are over every change.",
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "fixtures/pnpm-root-app",
+  "commit": "0000000000000000000000000000000000000000",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "the fixture's dot_github/workflows/ci.yml, which these commands pass"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.889,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test",
+        "node --test test/"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "packages/api-client",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.056,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test",
+        "node --test test/"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "packages/mcp",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.056,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test",
+        "node --test test/"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md that names the install and test commands."
+  },
+  "dropped": 0
+}

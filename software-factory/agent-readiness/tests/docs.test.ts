@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, test } from "node:test";
 import { LANGUAGES } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
+import { guards } from "../support/tools/known-failures.ts";
 
 const SKILL = join(import.meta.dirname, "..", "skill/agent-readiness");
 const read = (rel: string) => readFileSync(join(SKILL, rel), "utf8");
@@ -37,5 +38,17 @@ describe("the skill's docs agree with the code", () => {
     assert.ok(example, "levels.md has no example of a component the audit can't assess");
     const supported = LANGUAGES.flatMap((l) => l.stacks).filter((s) => s.tier === "supported").map((s) => s.label);
     for (const label of supported.filter((l) => !/\s/.test(l))) assert.ok(!example.includes(label), `levels.md says ${label} can't be assessed`);
+  });
+});
+
+const guard = guards(import.meta.url);
+
+describe("the README Quickstart agrees with the release", () => {
+  guard("the Quickstart clones the release RELEASE.json names, and never says no tag exists", () => {
+    const readme = readFileSync(join(import.meta.dirname, "..", "README.md"), "utf8");
+    const release = JSON.parse(read("RELEASE.json")) as { tag: string };
+    const clone = readme.split("\n").find((l) => /^git clone .*cursor\/cookbook/.test(l)) ?? "";
+    assert.ok(clone.includes(`--branch ${release.tag}`) || /\b[0-9a-f]{40}\b/.test(clone), `the Quickstart clones an unpinned ref: ${clone}`);
+    assert.doesNotMatch(readme, /No release tag exists yet/, `README says no release tag exists, but RELEASE.json names ${release.tag}`);
   });
 });

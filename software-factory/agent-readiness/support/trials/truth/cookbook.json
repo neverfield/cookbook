@@ -1,0 +1,184 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "neverfield/cookbook",
+  "commit": "0695c7896dca31d95adfca8aeecaebcf98b59265",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "none",
+    "source": "gh api repos/neverfield/cookbook/commits/0695c7896dca31d95adfca8aeecaebcf98b59265/check-runs and gh api repos/cursor/cookbook/commits/0695c7896dca31d95adfca8aeecaebcf98b59265/check-runs (0 runs, status pending with 0 statuses on both); the repo has no .github/workflows"
+  },
+  "components": [
+    {
+      "path": "software-factory/agent-readiness",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.062,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "No CI; npm ci && npm test (node --test) passed 435/436 with 1 skip in node:22.14.0 run locally from a git checkout."
+    },
+    {
+      "path": "software-factory/agent-readiness/fixtures",
+      "ecosystem": "node",
+      "placement": "excluded",
+      "of": "software-factory/agent-readiness",
+      "changeShare": 0.16,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Test fixture repositories (many package.json, go.mod, pyproject.toml) used as data by the agent-readiness tests; listed as one excluded path."
+    },
+    {
+      "path": "sdk/agent-kanban",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Next.js sample app with no test script and no CI."
+    },
+    {
+      "path": "sdk/app-builder",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Next.js sample app with no test script and no CI."
+    },
+    {
+      "path": "sdk/coding-agent-cli",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Bun/TypeScript CLI sample with only typecheck/build scripts and no CI."
+    },
+    {
+      "path": "sdk/dag-task-runner",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "TypeScript sample with only typecheck/build scripts and no CI."
+    },
+    {
+      "path": "sdk/quickstart",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "TypeScript quickstart with only typecheck/build scripts and no CI."
+    },
+    {
+      "path": "sdk/grok-coding-agent-cli",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.002,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "No CI; pip install -e . pytest && pytest passed (8 tests) locally in python:3.12."
+    },
+    {
+      "path": "voice-agents/grok-patient-intake",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.003,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "No CI; pip install -e .[dev] && pytest passed (13 tests) locally in python:3.12."
+    },
+    {
+      "path": ".cursor/skills/dag-task-runner/scripts",
+      "ecosystem": "node",
+      "placement": "satellite",
+      "of": "sdk/dag-task-runner",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Cursor skill runtime copy of the DAG task runner; no tests."
+    },
+    {
+      "path": "self-hosted-cloud-agent",
+      "ecosystem": "other",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Dockerfile, Makefile and deployment recipes for a self-hosted worker; no tests."
+    },
+    {
+      "path": "self-hosted-cloud-agent/ec2/terraform",
+      "ecosystem": "terraform",
+      "placement": "member",
+      "of": "self-hosted-cloud-agent",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined"
+    },
+    {
+      "path": "self-hosted-cloud-agent/ecs/terraform",
+      "ecosystem": "terraform",
+      "placement": "member",
+      "of": "self-hosted-cloud-agent",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined"
+    }
+  ],
+  "unownedShare": 0.773,
+  "secrets": [
+    {
+      "file": "self-hosted-cloud-agent/ec2/terraform/main.tf",
+      "line": 31,
+      "real": false,
+      "why": "name of an environment variable, not a value"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add a root AGENTS.md (and ideally CI) that lists each recipe's install and test commands, since only software-factory/agent-readiness has agent instructions and nothing runs the tests automatically."
+  },
+  "dropped": 0
+}

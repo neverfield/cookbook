@@ -1,0 +1,170 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "BurntSushi/ripgrep",
+  "commit": "91f5d22ef48bde459d90a8c7dbeab416e97d0f2b",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/BurntSushi/ripgrep/commits/91f5d22ef48bde459d90a8c7dbeab416e97d0f2b/check-runs --paginate: every test matrix job, rustfmt, docs, wasm, benchmarks and fuzz compile success"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "rust",
+      "placement": "component",
+      "changeShare": 0.561,
+      "hasTests": true,
+      "install": [
+        "cargo build --verbose --workspace",
+        "cargo build --workspace"
+      ],
+      "test": [
+        "cargo test --verbose --workspace --features pcre2",
+        "cargo test --verbose --workspace",
+        "cargo test --workspace"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Root binary rg plus workspace; CI test jobs pass on Linux, macOS and Windows."
+    },
+    {
+      "path": "crates/cli",
+      "ecosystem": "rust",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.018,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published crate with its own releases; CI tests it from the root with cargo test --workspace."
+    },
+    {
+      "path": "crates/globset",
+      "ecosystem": "rust",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.088,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published crate with its own releases; CI tests it from the root with cargo test --workspace."
+    },
+    {
+      "path": "crates/grep",
+      "ecosystem": "rust",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.018,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published crate with its own releases; CI tests it from the root with cargo test --workspace."
+    },
+    {
+      "path": "crates/ignore",
+      "ecosystem": "rust",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.228,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published crate with its own releases; CI tests it from the root with cargo test --workspace."
+    },
+    {
+      "path": "crates/matcher",
+      "ecosystem": "rust",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.018,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published crate with its own releases; CI tests it from the root with cargo test --workspace."
+    },
+    {
+      "path": "crates/pcre2",
+      "ecosystem": "rust",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.018,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published crate with its own releases; CI tests it from the root with cargo test --workspace."
+    },
+    {
+      "path": "crates/printer",
+      "ecosystem": "rust",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.018,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published crate with its own releases; CI tests it from the root with cargo test --workspace."
+    },
+    {
+      "path": "crates/regex",
+      "ecosystem": "rust",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.018,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published crate with its own releases; CI tests it from the root with cargo test --workspace."
+    },
+    {
+      "path": "crates/searcher",
+      "ecosystem": "rust",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.018,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published crate with its own releases; CI tests it from the root with cargo test --workspace."
+    },
+    {
+      "path": "fuzz",
+      "ecosystem": "rust",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [
+        "cargo install cargo-fuzz"
+      ],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Fuzz targets outside the workspace; CI only runs cargo check here."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md giving cargo test --workspace (with --features pcre2) and cargo fmt --check, since the repo has AI_POLICY.md but no agent instructions and CI is green."
+  },
+  "dropped": 0
+}

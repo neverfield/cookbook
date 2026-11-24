@@ -1,0 +1,50 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "tj/commander.js",
+  "commit": "a5a7dc084d4d2b7932e85ca049c5204e50a2c721",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/tj/commander.js/commits/a5a7dc084d4d2b7932e85ca049c5204e50a2c721/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv' and gh api repos/tj/commander.js/commits/a5a7dc084d4d2b7932e85ca049c5204e50a2c721/status"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 1.0,
+      "hasTests": true,
+      "install": [
+        "npm ci",
+        "npm install"
+      ],
+      "test": [
+        "npm test",
+        "npm run test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "npm test runs node --test plus the TypeScript type checks; CI also runs npm run check (lint, format, types)."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "Readme.md",
+      "line": 580,
+      "real": false,
+      "why": "docs console.log, not a credential; only hits"
+    },
+    {
+      "file": "Readme_zh-CN.md",
+      "line": 544,
+      "real": false,
+      "why": "docs console.log, not a credential; only hits"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md naming npm ci, npm test and npm run check; AI_POLICY.md covers contribution policy, not commands."
+  },
+  "dropped": 0
+}

@@ -1,0 +1,87 @@
+{
+  "purpose": "A Go repo with five go.mod modules, as in the Nov 24 Go sim: the root, exp/ (its own released module), and benchmarks/, internal/test/ and assets/ (supporting modules). Every go.mod is placed, and each unit's manifest is its go.mod.",
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "fixtures/go-multi-module",
+  "commit": "0000000000000000000000000000000000000000",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "the fixture's dot_github/workflows/ci.yml, which these commands pass"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "go",
+      "placement": "component",
+      "changeShare": 0.643,
+      "hasTests": true,
+      "install": [
+        "go mod download"
+      ],
+      "test": [
+        "go test ./...",
+        "make test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "exp",
+      "ecosystem": "go",
+      "placement": "component",
+      "changeShare": 0.214,
+      "hasTests": true,
+      "install": [
+        "go mod download"
+      ],
+      "test": [
+        "go test ./..."
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "benchmarks",
+      "ecosystem": "go",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.071,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "internal/test",
+      "ecosystem": "go",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.071,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "assets",
+      "ecosystem": "go",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md that names the install and test commands."
+  },
+  "dropped": 0
+}

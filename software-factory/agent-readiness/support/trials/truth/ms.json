@@ -1,0 +1,38 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "vercel/ms",
+  "commit": "4ff48cec099f0514c3e9bbca18706c9c21122bfb",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/vercel/ms/commits/4ff48cec099f0514c3e9bbca18706c9c21122bfb/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv' and gh api repos/vercel/ms/commits/4ff48cec099f0514c3e9bbca18706c9c21122bfb/status; all test:nodejs/test:edge jobs on Node 20/22/24 succeeded; only the publish-only 'Canary Release' job (build + npm publish, no tests) failed"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": null,
+      "hasTests": true,
+      "install": [
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm run test:nodejs",
+        "pnpm run test:edge",
+        "pnpm test",
+        "pnpm run test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "No commits fall in the window (last commit 2026-05-20), so shares are null."
+    }
+  ],
+  "unownedShare": null,
+  "secrets": [],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md describing the pnpm install, test:nodejs/test:edge, lint, format and typecheck commands; the build and tests are otherwise healthy."
+  },
+  "dropped": 0
+}

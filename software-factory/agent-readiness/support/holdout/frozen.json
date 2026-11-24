@@ -1,0 +1,14 @@
+{
+  "schema": "agent-readiness/holdout-frozen@1",
+  "frozenAt": "2026-11-24",
+  "about": "SHA-256 of each protocol file (LF line endings) and of the protocol as a whole, frozen before the first look. tests/holdout.test.ts fails when a file changes; PROTOCOL.md section 7 allows one amendment to thresholds.json, recorded under amendments.",
+  "files": {
+    "PROTOCOL.md": "8c3b9f8cbb453dd9c4f40e2e970e4c211593852eb47ac3aca279eb67e6cd2596",
+    "record.schema.json": "422ff395d5f8777f936eb54ba4960b49f6c538b03dd89f2e6492d25ca16bb884",
+    "score.ts": "741a787cdef7cf269b310406b3b5db5e93c8db991262a29a78a3dea404c95bf8",
+    "thresholds.json": "2017d49cdf6cf43866950afe7a21d1b0b16bb468248e504c5cdb6770b4fb583c",
+    "truth.schema.json": "cb4c08dd9929148e7105d21a4e0db8ca2444672bb37d3b629276e15771de394d"
+  },
+  "protocol": "83a26e58f4613920a44257a8baab518b0881d2a2a7a9545bae2b446f17811869",
+  "amendments": []
+}

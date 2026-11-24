@@ -25,6 +25,7 @@ import { runWithSdk } from "./lib/sdk.ts";
 import type { Arm, CaseRun, EvalCase, Trajectory } from "./lib/types.ts";
 import { exitWhenFlushed, supervise, writeResult } from "./lib/worker-exit.ts";
 import { applyTurnHook, externalPreamble, fillPrompt, loadWorkspace, prepare, skillPreamble } from "./lib/workspace.ts";
+import { knownFailures } from "../tools/known-failures.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_MODEL = process.env.SA_READINESS_EVAL_MODEL ?? "composer-2";
@@ -232,7 +233,7 @@ function report(runs: CaseRun[], flags: Record<string, string | true>, o: Report
     if (runs.some((r) => !r.infra?.lost && !r.grade.gates.every((g) => g.pass))) code = code || 2;
   } else if (arm === "agent") {
     // The release policy (release.ts): k of n per case; one run short is a flag, two a regression.
-    const verdict = releaseVerdict(summary, { binding: currentBinding(), calibration: loadCalibration() });
+    const verdict = releaseVerdict(summary, { binding: currentBinding(), calibration: loadCalibration(), knownFailures: knownFailures().length });
     for (const line of verdict.lines) process.stdout.write(`${line}\n`);
     if (verdict.cases.some((c) => c.verdict === "regression")) code = code || 2;
     if (flags.release && !verdict.pass) code = code || 1;
@@ -282,7 +283,7 @@ async function main(): Promise<void> {
   if (typeof flags["release-check"] === "string") {
     const saved = JSON.parse(readFileSync(resolve(flags["release-check"]), "utf8")) as { summary?: Baseline } & Baseline;
     const b = saved.summary ?? saved;
-    const verdict = releaseVerdict(b, { binding: currentBinding(), calibration: loadCalibration(typeof flags.calibration === "string" ? resolve(flags.calibration) : undefined) });
+    const verdict = releaseVerdict(b, { binding: currentBinding(), calibration: loadCalibration(typeof flags.calibration === "string" ? resolve(flags.calibration) : undefined), knownFailures: knownFailures().length });
     for (const line of verdict.lines) process.stdout.write(`${line}\n`);
     if (typeof flags["release-record"] === "string") {
       mkdirSync(dirname(resolve(flags["release-record"])), { recursive: true });

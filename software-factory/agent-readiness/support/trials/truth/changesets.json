@@ -1,0 +1,360 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "changesets/changesets",
+  "commit": "9a035ec36045aeb6141dd0bbac9ab9e3c69ac0bc",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/changesets/changesets/commits/9a035ec36045aeb6141dd0bbac9ab9e3c69ac0bc/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv' and gh api repos/changesets/changesets/commits/9a035ec36045aeb6141dd0bbac9ab9e3c69ac0bc/status; Build, Test (Node 22/24/26 ubuntu, macOS, Windows), E2E tests, Typecheck, Lint and CI OK all succeeded"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.407,
+      "hasTests": true,
+      "install": [
+        "pnpm run bootstrap",
+        "pnpm install --filter=!@changesets/e2e",
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test",
+        "pnpm test --coverage"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Workspace root; one root vitest run covers every packages/* test."
+    },
+    {
+      "path": "packages/apply-release-plan",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.035,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/assemble-release-plan",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.004,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/changelog-git",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package with no test files."
+    },
+    {
+      "path": "packages/changelog-github",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.004,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/cli",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.091,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/color",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Private internal package used by cli, logger and get-dependents-graph."
+    },
+    {
+      "path": "packages/config",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.022,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/errors",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/get-dependents-graph",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/get-github-info",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.017,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/get-release-plan",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package with no test files."
+    },
+    {
+      "path": "packages/get-version-range-type",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/git",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.009,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/logger",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.004,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/parse",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/pre",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/read",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/release-utils",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "packages/should-skip-package",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package with no test files."
+    },
+    {
+      "path": "packages/types",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.004,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package with no test files."
+    },
+    {
+      "path": "packages/write",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.009,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published package; its tests run from the root vitest command."
+    },
+    {
+      "path": "scripts/e2e",
+      "ecosystem": "node",
+      "placement": "satellite",
+      "of": "packages/cli",
+      "changeShare": 0.082,
+      "hasTests": true,
+      "install": [
+        "pnpm install --filter=@changesets/e2e...",
+        "pnpm run bootstrap:e2e"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "E2E suite against built dist; publish tests start a local pnpr registry on 127.0.0.1."
+    },
+    {
+      "path": "scripts/test-utils",
+      "ecosystem": "node",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Private test helpers used by the root vitest suite."
+    },
+    {
+      "path": "docs",
+      "ecosystem": "node",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.312,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "VitePress docs site; CI builds or tests nothing here."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "scripts/e2e/publish.test.ts",
+      "line": 379,
+      "real": false,
+      "why": "seed password for a local test registry; only hit"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md explaining pnpm run bootstrap, pnpm test, the separate e2e install and the changeset requirement for PRs."
+  },
+  "dropped": 0
+}

@@ -1,0 +1,80 @@
+{
+  "purpose": "A Python app that ships public API client keys and builds FTP URLs from templates, as in the Nov 24 Python sim, beside one provider-shaped access key. Only the access key blocks; the rest are listed for review at most, and no advice tells the reader to ignore shipped source files.",
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "fixtures/python-public-client-keys",
+  "commit": "0000000000000000000000000000000000000000",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "the fixture's dot_github/workflows/ci.yml, which these commands pass"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 1.0,
+      "hasTests": true,
+      "install": [
+        "pip install -e .[test]",
+        "pip install -e '.[test]'"
+      ],
+      "test": [
+        "pytest",
+        "python -m pytest"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "src/mediabot/settings.py",
+      "line": 4,
+      "real": true,
+      "why": "provider-shaped access key committed by mistake (the fixture's control)"
+    },
+    {
+      "file": "src/mediabot/clients/movies.py",
+      "line": 2,
+      "real": false,
+      "why": "public client key the app ships on purpose"
+    },
+    {
+      "file": "src/mediabot/clients/shows.py",
+      "line": 1,
+      "real": false,
+      "why": "public client id the app ships on purpose"
+    },
+    {
+      "file": "src/mediabot/clients/shows.py",
+      "line": 2,
+      "real": false,
+      "why": "public client secret the app ships on purpose"
+    },
+    {
+      "file": "src/mediabot/ftp.py",
+      "line": 8,
+      "real": false,
+      "why": "f-string URL template"
+    },
+    {
+      "file": "src/mediabot/ftp.py",
+      "line": 11,
+      "real": false,
+      "why": "%-format URL template"
+    },
+    {
+      "file": "src/mediabot/ftp.py",
+      "line": 12,
+      "real": false,
+      "why": "str.format URL template"
+    }
+  ],
+  "nextAction": {
+    "kind": "remove_secret",
+    "text": "Remove the committed access key from settings.py and rotate it."
+  },
+  "dropped": 0
+}

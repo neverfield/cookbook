@@ -1,0 +1,485 @@
+{
+  "about": "Guards written before their fix, each failing at ad5a0f9. While a guard fails, its test passes and says why; when it passes, its test fails until its entry is removed. The fixing PR removes its entries. A release needs this list empty. SA_KNOWN_FAILURES=strict runs every guard as an ordinary test.",
+  "failures": [
+    {
+      "file": "tests/holdout.test.ts",
+      "test": "the steward's commitment to the holdout manifest is committed",
+      "finding": "proposal section 4: the commitment hash lands before PR B merges",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "changesets truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "commander truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "cookbook truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "csharp-algorithms truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "dotenv truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "mcp-servers truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "mockito-kotlin truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "ms truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "packwerk truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "pocketbase truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "ripgrep truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "spring-petclinic truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "symfony-demo truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "umami truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "uuid truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "zap truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "zustand truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "cargo-nested truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "go-multi-module truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "lerna-no-workspaces truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "npm-plugins-workspace truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "pnpm-root-app truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "pytest-optional-deps truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "python-public-client-keys truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "services-build truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/report-consistency.test.ts",
+      "test": "a command a limit of this machine blocked never reads as failed",
+      "finding": "sims 4: zap's blocked lint shows fail in one table",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/report-consistency.test.ts",
+      "test": "an instruction listed as skipped isn't also counted as not run",
+      "finding": "sims 4: umami's 7 not run counts 2 skipped",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/report-consistency.test.ts",
+      "test": "the heading's count of blocked checks is the count the components hold",
+      "finding": "sims 4: umami's 3 blocked should be 6",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/report-consistency.test.ts",
+      "test": "the level the heading names is the level both ladders mark",
+      "finding": "sims 4: zap's heading against the ladder",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/journey.test.ts",
+      "test": "after the seal, the repo's own test command runs",
+      "finding": "review issue 4: the guard refuses the repo's test command after the seal",
+      "fixedBy": "C"
+    },
+    {
+      "file": "tests/journey.test.ts",
+      "test": "before any audit, the repo's own test command runs",
+      "finding": "review issue 4: the guard refuses the repo's test command before any audit",
+      "fixedBy": "C"
+    },
+    {
+      "file": "tests/journey.test.ts",
+      "test": "guard install works in a git worktree",
+      "finding": "review issue 4: guard install crashes in a worktree",
+      "fixedBy": "C"
+    },
+    {
+      "file": "tests/journey.test.ts",
+      "test": "guard uninstall puts .cursor/hooks.json and the exclude file back as they were",
+      "finding": "review issue 4: no guard uninstall",
+      "fixedBy": "C"
+    },
+    {
+      "file": "tests/journey.test.ts",
+      "test": "init --force leaves no abandoned draft or temp tree behind",
+      "finding": "proposal section 1: init --force leaks the abandoned draft",
+      "fixedBy": "C"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "changesets truth R1",
+      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
+      "fixedBy": "D"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "cookbook truth R6",
+      "finding": "R6: the share of changes outside every component isn't reported (review issue 2)",
+      "fixedBy": "D"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "mcp-servers truth R1",
+      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
+      "fixedBy": "D"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "umami truth R1",
+      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
+      "fixedBy": "D"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "zap truth R1",
+      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
+      "fixedBy": "D"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "cargo-nested truth R1",
+      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
+      "fixedBy": "D"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "go-multi-module truth R1",
+      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
+      "fixedBy": "D"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "go-multi-module: every unit's manifest is a manifest file",
+      "finding": "sims 1: a satellite's manifest is a source file",
+      "fixedBy": "D"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "lerna-no-workspaces truth R1",
+      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
+      "fixedBy": "D"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "npm-plugins-workspace truth R1",
+      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
+      "fixedBy": "D"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "pnpm-root-app truth R1",
+      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
+      "fixedBy": "D"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "pnpm-root-app: contract add can target the root app",
+      "finding": "sims 1: contract add can't target the root",
+      "fixedBy": "D"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "pnpm-root-app: workspace members report the root lockfile",
+      "finding": "sims 5: lockfile none despite the root pnpm-lock.yaml",
+      "fixedBy": "D"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "services-build truth R1",
+      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
+      "fixedBy": "D"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "changesets truth R2",
+      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "changesets truth R3",
+      "finding": "R3: no proven level on a green, tested component in a container",
+      "fixedBy": "E"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "mcp-servers truth K1",
+      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "mcp-servers truth R2",
+      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "mcp-servers truth R3",
+      "finding": "R3: no proven level on a green, tested component in a container",
+      "fixedBy": "E"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "pocketbase truth K1",
+      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "pocketbase truth R3",
+      "finding": "R3: no proven level on a green, tested component in a container",
+      "fixedBy": "E"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "umami truth K1",
+      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "umami truth R2",
+      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "umami truth R3",
+      "finding": "R3: no proven level on a green, tested component in a container",
+      "fixedBy": "E"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "zap truth R2",
+      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "zap truth R3",
+      "finding": "R3: no proven level on a green, tested component in a container",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/abstention.test.ts",
+      "test": "make-test-unit: tests a task runner runs are never \"no tests\" or Level 0",
+      "finding": "review issue 1: a test:unit script behind make test is Level 0",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/abstention.test.ts",
+      "test": "tests that fail because the audit's install left out the test runner are undetermined, not Level 0",
+      "finding": "review issue 1: pytest under optional dependencies is Level 0",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/abstention.test.ts",
+      "test": "tox-test-dir: tests a task runner runs are never \"no tests\" or Level 0",
+      "finding": "review issue 1: tox with test/ is Level 0",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/abstention.test.ts",
+      "test": "with nothing run, no component is Level 0",
+      "finding": "proposal section 1: noRealResults returns early on a missing test command",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "cargo-nested truth R2",
+      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "go-multi-module truth R2",
+      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "lerna-no-workspaces truth R2",
+      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "make-test-unit truth K1",
+      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "make-test-unit truth R2",
+      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "npm-plugins-workspace truth R2",
+      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "pnpm-root-app truth R2",
+      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "pytest-optional-deps: the install includes the extra that declares pytest",
+      "finding": "review issue 1: the install leaves out the test extra",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "services-build truth R2",
+      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "tox-test-dir truth K1",
+      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "tox-test-dir truth R2",
+      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "fixedBy": "E"
+    },
+    {
+      "file": "support/trials/trials.test.ts",
+      "test": "flexget truth K3",
+      "finding": "K3: a pattern-only secret blocks, or advice would break the repo (sims 2, review issue 7)",
+      "fixedBy": "F"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
+      "test": "python-public-client-keys truth K3",
+      "finding": "K3: a pattern-only secret blocks, or advice would break the repo (sims 2, review issue 7)",
+      "fixedBy": "F"
+    },
+    {
+      "file": "tests/docs.test.ts",
+      "test": "the Quickstart clones the release RELEASE.json names, and never says no tag exists",
+      "finding": "sims 8: the Quickstart contradicts RELEASE.json",
+      "fixedBy": "G"
+    },
+    {
+      "file": "tests/safety.test.ts",
+      "test": "the seal accepts negated, modal and future container wording",
+      "finding": "sims 3: the seal refuses negated and future container wording",
+      "fixedBy": "G"
+    }
+  ]
+}

@@ -1,0 +1,196 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "modelcontextprotocol/servers",
+  "commit": "e1dc4b18dbb948921da37f3d4224a628730b43b0",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/modelcontextprotocol/servers/commits/e1dc4b18dbb948921da37f3d4224a628730b43b0/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv' and gh api repos/modelcontextprotocol/servers/commits/e1dc4b18dbb948921da37f3d4224a628730b43b0/status; TypeScript (Root guards, Validate, Coverage, Boot smoke) and Python (Test, Coverage, Build) jobs all succeeded; dispatch-status jobs skipped"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.375,
+      "hasTests": true,
+      "install": [
+        "npm ci",
+        "npm install"
+      ],
+      "test": [
+        "npm run validate:guards",
+        "npm run test:scripts"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "npm workspace root (src/*) holding repo tooling scripts with node --test unit tests."
+    },
+    {
+      "path": "src/everything",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.174,
+      "hasTests": true,
+      "install": [
+        "npm ci --workspace src/everything --include-workspace-root",
+        "npm ci"
+      ],
+      "test": [
+        "npm test",
+        "npm run test",
+        "npm run validate"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "CI installs from the root with --workspace and runs validate (format, lint, typecheck, build, vitest) in the package."
+    },
+    {
+      "path": "src/fetch",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.076,
+      "hasTests": true,
+      "install": [
+        "uv sync --locked --all-extras --dev",
+        "uv sync"
+      ],
+      "test": [
+        "uv run --frozen pytest",
+        "uv run pytest"
+      ],
+      "testsNeed": "network",
+      "cleanPasses": "yes",
+      "notes": "node_readability tests run the real Readability.js path, which npm-installs readabilipy's JS dependencies on first use."
+    },
+    {
+      "path": "src/filesystem",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.173,
+      "hasTests": true,
+      "install": [
+        "npm ci --workspace src/filesystem --include-workspace-root",
+        "npm ci"
+      ],
+      "test": [
+        "npm test",
+        "npm run test",
+        "npm run validate"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "CI installs from the root with --workspace and runs validate (format, lint, typecheck, build, vitest) in the package."
+    },
+    {
+      "path": "src/git",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.073,
+      "hasTests": true,
+      "install": [
+        "uv sync --locked --all-extras --dev",
+        "uv sync"
+      ],
+      "test": [
+        "uv run --frozen pytest",
+        "uv run pytest"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/memory",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.061,
+      "hasTests": true,
+      "install": [
+        "npm ci --workspace src/memory --include-workspace-root",
+        "npm ci"
+      ],
+      "test": [
+        "npm test",
+        "npm run test",
+        "npm run validate"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "CI installs from the root with --workspace and runs validate (format, lint, typecheck, build, vitest) in the package."
+    },
+    {
+      "path": "src/sequentialthinking",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.036,
+      "hasTests": true,
+      "install": [
+        "npm ci --workspace src/sequentialthinking --include-workspace-root",
+        "npm ci"
+      ],
+      "test": [
+        "npm test",
+        "npm run test",
+        "npm run validate"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "CI installs from the root with --workspace and runs validate (format, lint, typecheck, build, vitest) in the package."
+    },
+    {
+      "path": "src/time",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.032,
+      "hasTests": true,
+      "install": [
+        "uv sync --locked --all-extras --dev",
+        "uv sync"
+      ],
+      "test": [
+        "uv run --frozen pytest",
+        "uv run pytest"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "scripts/sdk-watch.mjs",
+      "line": 117,
+      "real": false,
+      "why": "config key name, not a secret"
+    },
+    {
+      "file": "scripts/sdk-watch.mjs",
+      "line": 129,
+      "real": false,
+      "why": "config key name, not a secret"
+    },
+    {
+      "file": "scripts/sdk-watch.mjs",
+      "line": 136,
+      "real": false,
+      "why": "config key name, not a secret"
+    },
+    {
+      "file": "src/git/src/mcp_server_git/server.py",
+      "line": 908,
+      "real": false,
+      "why": "comment showing a URL template"
+    },
+    {
+      "file": "src/git/src/mcp_server_git/server.py",
+      "line": 931,
+      "real": false,
+      "why": "docstring showing a URL template"
+    }
+  ],
+  "nextAction": {
+    "kind": "make_tests_hermetic",
+    "text": "Vendor or pre-install readabilipy's Readability.js dependencies so the fetch server's pytest suite does not npm-install from the registry at test time."
+  },
+  "dropped": 0
+}
