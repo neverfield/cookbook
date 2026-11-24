@@ -22,6 +22,7 @@ import { PANEL_SIZE, family } from "./judge.ts";
 //   calibrated on the label set with the same judge prompt.
 // - Binding: the run names its commit, started from a clean tree, and its code digests match the
 //   code checked out at the release check.
+// - Known failures: tests/known-failures.json is empty.
 export const RELEASE_POLICY = {
   repeats: 5,
   judgeMean: 0.8,
@@ -63,6 +64,8 @@ export interface ReleaseContext {
   // The code checked out now; null when it can't be read, which fails the release.
   binding?: Binding | null;
   calibration?: Calibration | null;
+  // How many guards tests/known-failures.json still lists; a release needs none.
+  knownFailures?: number;
 }
 
 export interface CaseVerdict {
@@ -180,6 +183,10 @@ export function releaseVerdict(b: Baseline, ctx: ReleaseContext = {}): ReleaseVe
   if (p.mean !== null && p.mean > RELEASE_POLICY.pageAbove) ok(pageLine);
   else fail(p.n === 0 ? "the page judge scored no run" : pageLine);
   judgeLines(b, ctx, fail, ok);
+  if (ctx.knownFailures !== undefined) {
+    if (ctx.knownFailures > 0) fail(`tests/known-failures.json lists ${ctx.knownFailures} guard${ctx.knownFailures === 1 ? "" : "s"} the tool doesn't meet yet; a release needs none`);
+    else ok("no known failures: every guard in tests/ and the trials passes");
+  }
   for (const [arm, v] of Object.entries(b.controls ?? {})) if (arm !== RELEASE_POLICY.liftOver) lines.push(`REPORT ${arm} arm: pooled ${v!.totals.pooled.passed}/${v!.totals.pooled.runs} runs pass every gate; headline judge ${v!.totals.judge.mean ?? "n/a"} (not a release criterion)`);
   const strictN = cases.filter((c) => c.usable > 0 && c.short === 0).length;
   const strict = `${strictN}/${cases.length}`;
