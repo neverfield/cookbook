@@ -1,0 +1,36 @@
+{
+  "purpose": "A package whose only test script is test:unit, run by `make test`, which is what CI runs. The audit must find a test command, and must never call the package untested or not bootable.",
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "fixtures/make-test-unit",
+  "commit": "0000000000000000000000000000000000000000",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "the fixture's dot_github/workflows/ci.yml, which these commands pass"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 1.0,
+      "hasTests": true,
+      "install": [
+        "npm ci"
+      ],
+      "test": [
+        "make test",
+        "npm run test:unit"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md that names the install and test commands."
+  },
+  "dropped": 0
+}

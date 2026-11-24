@@ -186,8 +186,15 @@ export function auditFixture(fixture: string, run: ExpectedRun, opts: { seed?: s
   return { repo, code: r.code, out: r.out, report, markdown: existsSync(md) ? readFileSync(md, "utf8") : "", roadmap: read(".agent-readiness/roadmap.json"), audit: report.audit ? read(`.agent-readiness/history/audits/${report.audit.id}/audit.json`) : {} };
 }
 
+// Fixtures with an expected.json: conformance fixtures, each also an eval case.
 export function fixtureNames(): string[] {
-  return readdirSync(FIXTURES).filter((n) => existsSync(join(FIXTURES, n, "repo"))).sort();
+  return readdirSync(FIXTURES).filter((n) => existsSync(join(FIXTURES, n, "repo")) && existsSync(join(FIXTURES, n, "expected.json"))).sort();
+}
+
+// Fixtures with a truth.json in the holdout's truth schema (support/holdout/truth.schema.json),
+// scored as the holdout is. A guard fixture has only truth until the fix it guards lands.
+export function truthFixtureNames(): string[] {
+  return readdirSync(FIXTURES).filter((n) => existsSync(join(FIXTURES, n, "repo")) && existsSync(join(FIXTURES, n, "truth.json"))).sort();
 }
 
 export function commitAll(repo: string, message: string, daysAgo = 0, now?: string): void {

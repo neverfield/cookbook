@@ -1,0 +1,112 @@
+{
+  "commits": [
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 80,
+      "paths": [
+        "packages/core/src/notes/f0.md"
+      ],
+      "message": "Update packages"
+    },
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 75,
+      "paths": [
+        "packages/core/src/notes/f1.md"
+      ],
+      "message": "Update packages"
+    },
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 70,
+      "paths": [
+        "packages/core/src/notes/f2.md"
+      ],
+      "message": "Update packages"
+    },
+    {
+      "author": "Contributor B",
+      "email": "b@example.com",
+      "daysAgo": 70,
+      "paths": [
+        "plugins/auth/src/notes/f0.md"
+      ],
+      "message": "Update plugins"
+    },
+    {
+      "author": "Contributor B",
+      "email": "b@example.com",
+      "daysAgo": 66,
+      "paths": [
+        "plugins/auth/src/notes/f1.md"
+      ],
+      "message": "Update plugins"
+    },
+    {
+      "author": "Contributor B",
+      "email": "b@example.com",
+      "daysAgo": 62,
+      "paths": [
+        "plugins/auth/src/notes/f2.md"
+      ],
+      "message": "Update plugins"
+    },
+    {
+      "author": "Contributor C",
+      "email": "c@example.com",
+      "daysAgo": 70,
+      "paths": [
+        "plugins/cache/src/notes/f0.md"
+      ],
+      "message": "Update plugins"
+    },
+    {
+      "author": "Contributor C",
+      "email": "c@example.com",
+      "daysAgo": 66,
+      "paths": [
+        "plugins/cache/src/notes/f1.md"
+      ],
+      "message": "Update plugins"
+    },
+    {
+      "author": "Contributor C",
+      "email": "c@example.com",
+      "daysAgo": 62,
+      "paths": [
+        "plugins/cache/src/notes/f2.md"
+      ],
+      "message": "Update plugins"
+    },
+    {
+      "author": "Contributor D",
+      "email": "d@example.com",
+      "daysAgo": 70,
+      "paths": [
+        "plugins/metrics/src/notes/f0.md"
+      ],
+      "message": "Update plugins"
+    },
+    {
+      "author": "Contributor D",
+      "email": "d@example.com",
+      "daysAgo": 66,
+      "paths": [
+        "plugins/metrics/src/notes/f1.md"
+      ],
+      "message": "Update plugins"
+    },
+    {
+      "author": "Contributor D",
+      "email": "d@example.com",
+      "daysAgo": 62,
+      "paths": [
+        "plugins/metrics/src/notes/f2.md"
+      ],
+      "message": "Update plugins"
+    }
+  ]
+}

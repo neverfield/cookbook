@@ -1,0 +1,37 @@
+{
+  "purpose": "A Python package that declares pytest in its test extra under [project.optional-dependencies]. The audit's install must include that extra, so the tests can run.",
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "fixtures/pytest-optional-deps",
+  "commit": "0000000000000000000000000000000000000000",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "the fixture's dot_github/workflows/ci.yml, which these commands pass"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 1.0,
+      "hasTests": true,
+      "install": [
+        "pip install -e .[test]",
+        "pip install -e '.[test]'"
+      ],
+      "test": [
+        "pytest",
+        "python -m pytest"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md that names the install and test commands."
+  },
+  "dropped": 0
+}

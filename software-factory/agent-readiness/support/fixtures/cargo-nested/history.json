@@ -1,0 +1,112 @@
+{
+  "commits": [
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 80,
+      "paths": [
+        "src/notes/rule0.md"
+      ],
+      "message": "Update src"
+    },
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 73,
+      "paths": [
+        "src/notes/rule1.md"
+      ],
+      "message": "Update src"
+    },
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 66,
+      "paths": [
+        "src/notes/rule2.md"
+      ],
+      "message": "Update src"
+    },
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 59,
+      "paths": [
+        "src/notes/rule3.md"
+      ],
+      "message": "Update src"
+    },
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 52,
+      "paths": [
+        "src/notes/rule4.md"
+      ],
+      "message": "Update src"
+    },
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 45,
+      "paths": [
+        "src/notes/rule5.md"
+      ],
+      "message": "Update src"
+    },
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 38,
+      "paths": [
+        "src/notes/rule6.md"
+      ],
+      "message": "Update src"
+    },
+    {
+      "author": "Contributor A",
+      "email": "a@example.com",
+      "daysAgo": 31,
+      "paths": [
+        "src/notes/rule7.md"
+      ],
+      "message": "Update src"
+    },
+    {
+      "author": "Contributor B",
+      "email": "b@example.com",
+      "daysAgo": 35,
+      "paths": [
+        "exp/src/notes/rule0.md"
+      ],
+      "message": "Update exp"
+    },
+    {
+      "author": "Contributor B",
+      "email": "b@example.com",
+      "daysAgo": 29,
+      "paths": [
+        "exp/src/notes/rule1.md"
+      ],
+      "message": "Update exp"
+    },
+    {
+      "author": "Contributor B",
+      "email": "b@example.com",
+      "daysAgo": 23,
+      "paths": [
+        "exp/src/notes/rule2.md"
+      ],
+      "message": "Update exp"
+    },
+    {
+      "author": "Contributor B",
+      "email": "b@example.com",
+      "daysAgo": 17,
+      "paths": [
+        "exp/src/notes/rule3.md"
+      ],
+      "message": "Update exp"
+    }
+  ]
+}

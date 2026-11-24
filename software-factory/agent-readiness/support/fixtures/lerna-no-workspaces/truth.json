@@ -1,0 +1,54 @@
+{
+  "purpose": "A Lerna monorepo whose root package.json has no workspaces field: lerna.json lists packages/*, and the packages carry no lockfiles of their own. Each package is a component.",
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "fixtures/lerna-no-workspaces",
+  "commit": "0000000000000000000000000000000000000000",
+  "writtenAt": "2026-11-24",
+  "ci": {
+    "conclusion": "success",
+    "source": "the fixture's dot_github/workflows/ci.yml, which these commands pass"
+  },
+  "components": [
+    {
+      "path": "packages/orders",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.5,
+      "hasTests": true,
+      "install": [
+        "npm install"
+      ],
+      "test": [
+        "npm test",
+        "npm run test",
+        "node --test test/"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "packages/billing",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.5,
+      "hasTests": true,
+      "install": [
+        "npm install"
+      ],
+      "test": [
+        "npm test",
+        "npm run test",
+        "node --test test/"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md that names the install and test commands."
+  },
+  "dropped": 0
+}
