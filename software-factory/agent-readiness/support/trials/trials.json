@@ -848,18 +848,18 @@
       "runtime": "docker",
       "review": "first-run-sims.md",
       "now": "2026-11-24T12:00:00Z",
-      "notes": "Go library with five go.mod modules (root, exp, benchmarks, internal tooling, assets). The Nov 24 Go sim found only the root module, with benchmarks recorded as a satellite whose manifest is a test file.",
+      "notes": "Go library with five go.mod modules (root, exp, benchmarks, internal tooling, assets). The Nov 24 Go sim found only the root module, with benchmarks recorded as a satellite whose manifest is a test file. CONTRIBUTING.md's `make test` walks every module; with the network cut, the modules beyond the root can't fetch their dependencies, and the audit records that as a failure in two runs of three and as blocked in the third (blame by output regex). Recorded as the failure; the ceiling of 1 false instruction finding is that item.",
       "realInstructionFindings": [],
-      "falseInstructionFindings": 0,
+      "falseInstructionFindings": 1,
       "recorded": {
         "any": {
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
           "level": 1,
-          "outcome": "blocked",
+          "outcome": "proven",
           "unproven": false,
-          "couldBe": 2,
+          "couldBe": null,
           "components": {
             "zap": {
               "level": 1,
@@ -869,9 +869,11 @@
           "notAssessed": [
             "benchmarks"
           ],
-          "instructionFailures": [],
+          "instructionFailures": [
+            "CONTRIBUTING.md:31"
+          ],
           "blockingSafety": [],
-          "headline": "Level 2 couldn't be proved for zap because a check that decides it couldn't run here. A rerun where these checks can run can prove it."
+          "headline": "Agents can build and test zap, but its agent instructions don't match the repo."
         }
       }
     },
