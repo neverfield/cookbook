@@ -12,8 +12,8 @@ const beta = loadRubric("2026-11-beta");
 const alpha = loadRubric("2026-11-alpha");
 
 describe("rubric 2026-11-beta", () => {
-  test("is the rubric new audits use, and lists what changed", () => {
-    assert.equal(latestRubricVersion(), "2026-11-beta");
+  test("was the rubric new audits used until 2026-12-beta, and lists what changed", () => {
+    assert.notEqual(latestRubricVersion(), "2026-11-beta");
     assert.ok((beta.changes ?? []).length >= 3);
   });
 

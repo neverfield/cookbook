@@ -1,0 +1,21 @@
+{
+  "purpose": "The honest twin of typecheck-misses-src. The type-check script checks src/ and types/, so it fails on the type error the audit plants in src/pricing.ts and passes once it is removed. The commands condition is met and the component reaches Level 2. Its checker is a small stand-in for tsc, so the fixture installs nothing from a registry.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "typecheck-covers": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:typecheck-covers",
+      "noBlocker": true,
+      "safety": "pass",
+      "signals": {
+        "drive_app": null
+      }
+    }
+  ]
+}

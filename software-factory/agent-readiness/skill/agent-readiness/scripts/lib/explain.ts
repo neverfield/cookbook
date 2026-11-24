@@ -16,6 +16,8 @@ const STATIC_PLACE = "read from the audited commit's files, nothing ran";
 
 const OFFLINE_RULE = "Tests run with the container's network switched off, so a test that needs the internet fails.";
 
+const CANARY_RULE = "A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone.";
+
 function list(items: string[], max = 4): string {
   const shown = items.slice(0, max);
   const more = items.length > max ? `, and ${items.length - max} more` : "";
@@ -125,7 +127,8 @@ function conditions(input: RenderInput): Explanation[] {
       if (repo) repoDone.add(c);
       const evs = evidenceFor(audit, d.evidence);
       const offline = (c === "clean.test" || c === "faults") && evs.some((e) => e.where === "container" && e.result !== "not_run") ? ` ${OFFLINE_RULE}` : "";
-      out.push({ kind: "condition", subject: repo ? `repo: ${rubric.conditions[c].label}` : `${comp.id}: ${rubric.conditions[c].label}`, result: STATE_WORD[d.state], ran: ranOf(evs), where: evs.length ? places(audit, evs) : repo ? STATIC_PLACE : "not run", happened: d.reason, rule: conditionRule(input, c, d.state) + offline });
+      const canary = c === "commands" && rubric.canary?.typecheck ? ` ${CANARY_RULE}` : "";
+      out.push({ kind: "condition", subject: repo ? `repo: ${rubric.conditions[c].label}` : `${comp.id}: ${rubric.conditions[c].label}`, result: STATE_WORD[d.state], ran: ranOf(evs), where: evs.length ? places(audit, evs) : repo ? STATIC_PLACE : "not run", happened: d.reason, rule: conditionRule(input, c, d.state) + offline + canary });
     }
   }
   return out;

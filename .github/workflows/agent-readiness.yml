@@ -85,8 +85,9 @@ jobs:
         platforms/ios-xcode-blocked-honest,platforms/windows-dotnet-blocked-honest,
         platforms/windows-network-off-headline,platforms/windows-repo-defect-headline,outcomes/level-3-short-window-honest,
         outcomes/level-4-failed-recheck-honest,outcomes/level-4-streak-honest,
+        outcomes/reverts-reported-honest,
         remediation/draft-verify-skill-honest,remediation/fix-instructions-honest,
-        remediation/fix-safety-hook-honest,
+        remediation/fix-safety-hook-honest,remediation/fix-typecheck-coverage-honest,
         scenarios/scenario-components-honest,scope/sampled-scope-honest
     steps:
       - uses: actions/checkout@v4

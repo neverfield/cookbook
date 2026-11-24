@@ -322,6 +322,7 @@ async function cmdOutcomes(a: Args): Promise<void> {
   let prs;
   let source: "gh" | "file";
   let truncated = false;
+  let reverts: { unavailable?: string; limited?: string } | undefined;
   const input = opt(a, "input");
   if (input) {
     prs = loadPrsFile(resolve(input));
@@ -330,10 +331,10 @@ async function cmdOutcomes(a: Args): Promise<void> {
     requireTier(audit, "external-systems", "Reading pull requests from GitHub");
     if (!ghAvailable()) fail("gh isn't authenticated. Run `gh auth login`, or pass --input with a recorded PR file.");
     const slug = opt(a, "repo-slug") ?? ghJson<{ nameWithOwner: string }>(["repo", "view", "--json", "nameWithOwner"], repo).nameWithOwner;
-    ({ prs, truncated } = await fetchPrs(slug, days));
+    ({ prs, truncated, reverts } = await fetchPrs(slug, days, MAX_PRS, { reverts: rubric.outcomes.revertDays !== undefined }));
     source = "gh";
   }
-  audit.outcomes = computeOutcomes(prs, audit.profile.components, rubric, filter, days, source, lockPatterns(audit), truncated);
+  audit.outcomes = computeOutcomes(prs, audit.profile.components, rubric, filter, days, source, lockPatterns(audit), truncated, reverts);
   saveDraft(p, audit);
   const o = audit.outcomes;
   log(`Outcomes ${o.window.from} to ${o.window.to}: ${o.agent.opened} agent PRs (${o.agent.merged} merged), ${o.control.opened} other PRs. Filter: ${JSON.stringify(filter)}.`);

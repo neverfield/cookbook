@@ -1,8 +1,8 @@
-# The checks (rubric 2026-11-beta)
+# The checks (rubric 2026-12-beta)
 
 > Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.
 
-Six checks, plus an informational inventory of agent assets. The checks are the same under 2026-10-alpha; 2026-11-alpha changed Levels 3 and 4, the repo rollup and the action matrix, which [levels.md](levels.md) describes, and 2026-11-beta changed how planted faults are chosen and how many must be caught, and assesses up to 10 components instead of 6. What the audit supports, stack by stack, is in [supported.md](supported.md). Each check lists what it runs, when it passes, the evidence strength it needs, why it matters, and the usual fixes.
+Six checks, plus an informational inventory of agent assets. The checks are the same under 2026-10-alpha; 2026-11-alpha changed Levels 3 and 4, the repo rollup and the action matrix, which [levels.md](levels.md) describes, 2026-11-beta changed how planted faults are chosen and how many must be caught, and assesses up to 10 components instead of 6, and 2026-12-beta requires a passing type-check to fail on a planted type error. What the audit supports, stack by stack, is in [supported.md](supported.md). Each check lists what it runs, when it passes, the evidence strength it needs, why it matters, and the usual fixes.
 
 Evidence strength, weakest to strongest: stated in docs (`asserted`), read from files (`static`), ran on host (`executed`), ran in a clean container (`clean_replay`), confirmed by outcomes (`outcome_validated`). A check passes only at its required strength. A pass below it reads "not proven", never "passed".
 
@@ -18,7 +18,7 @@ Each component's share counts changed files over 90 days. Bot authors, lockfile-
 
 ## `scope.agent_assets`: agent assets in the repo
 
-Informational and never scored. Lists AGENTS.md and CLAUDE.md, skills (`.cursor/skills`, `.claude/skills`, `.agents/skills`), rules, hooks, environment config, MCP config and Copilot instructions, with git authors, the last change and whether their commands replay. Skill frontmatter must have a `name` and a `description`. It shows who in the repo already builds agent setup; it is never a reason for a recommendation by itself.
+Informational and never scored. Lists AGENTS.md and CLAUDE.md, skills (`.cursor/skills`, `.claude/skills`, `.agents/skills`), rules, hooks, environment config, MCP config and Copilot instructions, with git authors, the last change and whether their commands replay. Skill frontmatter must have a `name` and a `description`. A skill named `verify-<app>` is marked as a verify skill, with the number of features in its feature map (the Markdown files in its `features/` folder), or with no feature map. It shows who in the repo already builds agent setup; it is never a reason for a recommendation by itself.
 
 ## `bootstrap.cold_replay`: setup works from a clean checkout
 
@@ -34,9 +34,10 @@ Informational and never scored. Lists AGENTS.md and CLAUDE.md, skills (`.cursor/
 
 - **Runs:** every discovered or documented build, lint, type-check and test command at `HEAD`. Lint runs before the build, so it never reads build output; one that fails there runs again after a build that passed. Lint and type-check run check-only: write flags such as `--write`, `--fix` and `--unsafe` are removed, `prettier`, `ruff format`, `black` and `isort` run in their check mode, and the report shows the command that ran next to the one the repo declares. The supported tools are listed in [supported.md](supported.md).
 - **Passes:** all of them exit 0, and a test command exists. Stale documented commands count as failed, not missing. A lint or type-check that still changes the repo's files fails, and the files are put back before faults are planted.
+- **The type-check must be able to fail (from 2026-12-beta):** once a component's type-check passes, the audit adds one line with a known type error, `const __readinessTypeCanary: number = "agent-readiness";` for TypeScript or `__readiness_type_canary: int = "agent-readiness"` for Python, to the end of the most recently changed TypeScript or Python file the component's tests import, in the throwaway copy. The type-check must fail with the line there and pass again once it is removed. If it passes with the line there, it doesn't check that file, so the condition isn't met and the roadmap step says which file to cover. If it fails again without the line, the result is unproven, not failed. A component whose tests import no TypeScript or Python file is exempt and counts on the exit code alone, as are JavaScript (whose type-check often checks only `.d.ts` files) and the other languages, and the report says so. Every checker of the two languages reports the line at any strictness, so it can't fail a type-check that really covers the file. Lint has no planted error yet, so whether the lint command catches anything is listed as not assessed.
 - **Needs:** ran on host or stronger.
-- **Why:** agents need one known way to check their own work before they push.
-- **Usual fixes:** fix the failing command on the main branch; add a missing test or lint script.
+- **Why:** agents need one known way to check their own work before they push, and a check that has never been seen to fail proves nothing. That rule comes from practitioners' verification tooling ([pstack](https://github.com/cursor/plugins/tree/main/pstack): "a check that you have never seen fail proves nothing"). Caveat: it is a working rule, not a measured result. A `typecheck` script that only loads the code (`node --experimental-strip-types`), a tsconfig that doesn't include the source, or a checker pointed at another folder all exit 0 and check nothing agents change.
+- **Usual fixes:** fix the failing command on the main branch; add a missing test or lint script; point the type-check at the source the tests import.
 
 ## `verify.behavioral_oracle`: tests catch planted faults
 
@@ -69,13 +70,14 @@ Informational and never scored. Lists AGENTS.md and CLAUDE.md, skills (`.cursor/
 
 ## Other signals (informational)
 
-Part 5 lists five signals read from files. None of them sets a level, adds a roadmap step or appears in part 1.
+Part 5 lists six signals read from files. None of them sets a level or appears in part 1, and only the last can add a roadmap step.
 
 - **CI config:** a GitHub Actions, GitLab CI, CircleCI or Buildkite config, and whether it runs tests.
 - **A way to run one test file:** whether each assessed component's test runner takes a file or a name filter (`node --test`, vitest, jest, mocha, pytest), so an agent can rerun only the tests near its change.
 - **Sample env file:** when the code reads environment variables of its own, whether a `.env.example` or similar names them.
 - **Worktree and port isolation:** fixed ports and machine-specific absolute paths in package scripts, the environment setup, Makefiles, shell scripts and compose files, which collide when two agents work in separate worktrees.
 - **AGENTS.md length:** the root AGENTS.md's word count, marked long over 900 words, since agents load all of it on every task.
+- **A scripted way to drive the app (from 2026-12-beta):** whether an agent can start each assessed app and use it as a user would, not only run its tests. It counts Playwright, Cypress or WebdriverIO configs, a dependency on Playwright, Cypress, WebdriverIO, Puppeteer or a terminal harness (`node-pty`, `pexpect`), an `e2e` or `smoke` script, a smoke script under `scripts/`, and a `verify-<app>` skill with a Drive section or a feature map. A component counts as an app when it has a `start`, `dev`, `serve` or `preview` script, a start command, or a web framework dependency (Next.js, Vite, Express, Fastify, FastAPI, Flask, Django and similar). A harness inside a component counts for it, and one outside every component counts for all of them. The audit's own drafted skill (`.cursor/skills/verify/`) only runs commands, so it doesn't count. It reads n/a when no component is an app. When a component at Level 2 is an app with nothing to drive it, the roadmap adds a later step, "Give agents a way to drive" it, after "Give agents work in" it. That step changes no level, never appears in part 1, and closes once the signal finds a harness. The audit doesn't launch or drive the app itself.
 
 An environment setup whose install or start uses `sudo` is listed in the agent assets as not a working setup, and `draft-skill` never puts a sudo command into agent setup.
 
@@ -93,4 +95,4 @@ The session that audits may later remediate. Factory's GDAL result reports 89.8%
 
 ## Not assessed by this rubric
 
-Whether CI matches the local commands, flaky tests, the quality of error messages, how easily code can be found, and outcome checks on held-out tasks. The report names these as "not assessed", which is different from unknown.
+Whether CI matches the local commands, flaky tests, the quality of error messages, how easily code can be found, outcome checks on held-out tasks, and (from 2026-12-beta) whether the lint command catches anything. The report names these as "not assessed", which is different from unknown.

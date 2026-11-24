@@ -102,6 +102,17 @@ function fromEvidence(rubric: Rubric, ev: Evidence | undefined, check: string, m
   return { state: "met", reason: ev.summary, evidence: [ev.id] };
 }
 
+export const CANARY_MISSING = "the type-check hasn't been seen to fail on a planted type error";
+
+// From 2026-12-beta a passing type-check must also fail on the type error the replay plants. A
+// component with no file to plant it in is exempt; one where planting didn't finish is unproven.
+function canaryPart(rubric: Rubric, evs: Evidence[], componentId: string): CondDetail & { exempt?: boolean } {
+  const ev = latest(evs.filter((e) => e.canary?.kind === "typecheck" && e.component === componentId));
+  if (!ev) return { state: "unknown", reason: CANARY_MISSING, evidence: [] };
+  if (ev.canary!.exempt) return { state: "met", reason: ev.summary, evidence: [ev.id], exempt: true };
+  return fromEvidence(rubric, ev, "verify.canonical_interface", CANARY_MISSING);
+}
+
 export function componentStates(audit: Audit, rubric: Rubric, componentId: string): CompStates {
   const evs = audit.evidence;
   const contract = audit.contract;
@@ -129,7 +140,11 @@ export function componentStates(audit: Audit, rubric: Rubric, componentId: strin
     states.commands = { state: "not_met", reason: "no test command was found", evidence: [] };
   } else {
     const parts = discovered.map((c) => fromEvidence(rubric, commandEvidence(evs, c.id, false), "verify.canonical_interface", `${c.kind} hasn't run`, componentId));
-    states.commands = allPass(parts, `${discovered.length} commands pass`, true);
+    // The canary is asked of a type-check only once it passed; a failing or blocked one decides alone.
+    const typechecksMet = parts.filter((_, i) => discovered[i].kind === "typecheck");
+    const canary = rubric.canary?.typecheck && typechecksMet.length && typechecksMet.every((p) => p.state === "met") ? canaryPart(rubric, evs, componentId) : null;
+    const caught = canary?.state === "met" ? (canary.exempt ? `; ${canary.reason}` : ", and the type-check failed on a planted type error") : "";
+    states.commands = allPass(canary ? [...parts, canary] : parts, `${discovered.length} commands pass${caught}`, true);
   }
   const faults = latest(evs.filter((e) => e.condition === "faults" && e.component === componentId));
   states.faults = fromEvidence(rubric, faults, "verify.behavioral_oracle", "faults haven't been planted");

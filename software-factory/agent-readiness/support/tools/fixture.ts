@@ -77,10 +77,21 @@ export function readiness(repo: string, args: string[], env: Record<string, stri
   }
 }
 
+// reverts: the recorded PRs say whether each was reverted, as `readiness outcomes` does when it
+// looks for reverts on GitHub. revertedAfter is the days between a PR's merge and its revert;
+// reverted counts the merged PRs of a group, the last ones, reverted a day after merging.
 interface PrTemplate {
-  agent?: { number: number; head: string; labels: string[]; created: number; merged: number | null; files: string[]; firstCheck: "success" | "failure"; changesRequested: boolean }[];
-  agentGroups?: { files: string[]; count: number; firstPass: number; merged: number; changesRequested: number; labels: string[] }[];
-  other: { count: number; startNumber: number; firstPass: number; merged: number; changesRequested: number };
+  reverts?: boolean;
+  agent?: { number: number; head: string; labels: string[]; created: number; merged: number | null; files: string[]; firstCheck: "success" | "failure"; changesRequested: boolean; revertedAfter?: number; revertedBy?: string }[];
+  agentGroups?: { files: string[]; count: number; firstPass: number; merged: number; changesRequested: number; labels: string[]; reverted?: number }[];
+  other: { count: number; startNumber: number; firstPass: number; merged: number; changesRequested: number; reverted?: number };
+}
+
+// A revert `afterDays` past the merge at mergedDaysAgo, or null when it wasn't reverted.
+function revertFields(t: PrTemplate, now: string, mergedDaysAgo: number | null, afterDays: number | undefined, by: string): Record<string, string | null> {
+  if (!t.reverts) return {};
+  if (mergedDaysAgo === null || afterDays === undefined) return { revertedAt: null };
+  return { revertedAt: at(now, mergedDaysAgo - afterDays), revertedBy: by };
 }
 
 const OTHER_FILES = [["packages/api/src/orders.js"], ["packages/worker/src/retry.js"], ["packages/shared/src/money.js"], ["infra/main.tf"]];
@@ -89,19 +100,23 @@ export function materializePrs(fixture: string, now: string, file = "prs.templat
   const t = JSON.parse(readFileSync(join(FIXTURES, fixture, file), "utf8")) as PrTemplate;
   const prs: unknown[] = [];
   for (const a of t.agent ?? []) {
-    prs.push({ number: a.number, headRefName: a.head, author: "agent-bot", labels: a.labels, createdAt: at(now, a.created), mergedAt: a.merged === null ? null : at(now, a.merged), state: a.merged === null ? "OPEN" : "MERGED", files: a.files, firstCheck: a.firstCheck, changesRequested: a.changesRequested });
+    prs.push({ number: a.number, headRefName: a.head, author: "agent-bot", labels: a.labels, createdAt: at(now, a.created), mergedAt: a.merged === null ? null : at(now, a.merged), state: a.merged === null ? "OPEN" : "MERGED", files: a.files, firstCheck: a.firstCheck, changesRequested: a.changesRequested, ...revertFields(t, now, a.merged, a.revertedAfter, a.revertedBy ?? "a revert") });
   }
   let n = 500;
   for (const g of t.agentGroups ?? []) {
     for (let i = 0; i < g.count; i++) {
       const created = 2 + ((n * 7) % 26);
-      prs.push({ number: n++, headRefName: `cursor/task-${n}`, author: "agent-bot", labels: g.labels, createdAt: at(now, created), mergedAt: i < g.merged ? at(now, created - 1) : null, state: i < g.merged ? "MERGED" : "OPEN", files: g.files, firstCheck: i < g.firstPass ? "success" : "failure", changesRequested: i >= g.count - g.changesRequested });
+      const reverted = i < g.merged && i >= g.merged - (g.reverted ?? 0);
+      const number = n++;
+      prs.push({ number, headRefName: `cursor/task-${n}`, author: "agent-bot", labels: g.labels, createdAt: at(now, created), mergedAt: i < g.merged ? at(now, created - 1) : null, state: i < g.merged ? "MERGED" : "OPEN", files: g.files, firstCheck: i < g.firstPass ? "success" : "failure", changesRequested: i >= g.count - g.changesRequested, ...revertFields(t, now, i < g.merged ? created - 1 : null, reverted ? 1 : undefined, `#${number + 400}`) });
     }
   }
   const o = t.other;
   for (let i = 0; i < o.count; i++) {
     const created = 1 + ((i * 11) % 28);
-    prs.push({ number: o.startNumber + i, headRefName: `feature/change-${i}`, author: `contributor-${String.fromCharCode(97 + (i % 4))}`, labels: i % 3 === 0 ? ["bug"] : i % 3 === 1 ? ["feature"] : [], createdAt: at(now, created), mergedAt: i < o.merged ? at(now, Math.max(0, created - 2)) : null, state: i < o.merged ? "MERGED" : "OPEN", files: OTHER_FILES[i % OTHER_FILES.length], firstCheck: i < o.firstPass ? "success" : "failure", changesRequested: i >= o.count - o.changesRequested });
+    const merged = i < o.merged ? Math.max(0, created - 2) : null;
+    const reverted = merged !== null && merged >= 1 && i >= o.merged - (o.reverted ?? 0);
+    prs.push({ number: o.startNumber + i, headRefName: `feature/change-${i}`, author: `contributor-${String.fromCharCode(97 + (i % 4))}`, labels: i % 3 === 0 ? ["bug"] : i % 3 === 1 ? ["feature"] : [], createdAt: at(now, created), mergedAt: merged === null ? null : at(now, merged), state: i < o.merged ? "MERGED" : "OPEN", files: OTHER_FILES[i % OTHER_FILES.length], firstCheck: i < o.firstPass ? "success" : "failure", changesRequested: i >= o.count - o.changesRequested, ...revertFields(t, now, merged, reverted ? 1 : undefined, `#${950 + i}`) });
   }
   const out = join(mkdtempSync(join(tmpdir(), "prs-")), "prs.json");
   writeFileSync(out, JSON.stringify(prs, null, 2));

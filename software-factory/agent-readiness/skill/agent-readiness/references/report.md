@@ -80,6 +80,7 @@ The headline says what holds the repo level and where. It doesn't list everythin
 - A closed step's observed value comes from its own watch metric and scope, in the window after it closed. When several steps closed in one audit, each keeps its own value, and the report says they share the window, so the change can't be credited to one of them. A repo-wide number is never credited to one step.
 - The trend caveat sits next to the numbers: a trend, not attribution. Model updates or a different mix of tasks could account for part of a change.
 - A PR that touches several components counts in each, and the component table says its rows can add up to more than the total.
+- From rubric 2026-12-beta the table has a "Reverted within 14 days" row for agent and other PRs. The note under it says how reverts were found and that a revert squashed without its "This reverts commit" line isn't seen, so the numbers are detected reverts. It also says how many agent PRs merged too recently to have had the full 14 days, names each reverted agent PR and what reverted it, and says nothing gates on the row yet. When no PR record says whether it was reverted (an older recorded PR file, or a failed search), the row reads "not measured" with the reason; it never reads 0%.
 
 ## The header
 

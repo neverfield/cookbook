@@ -1,5 +1,5 @@
 import { describeRate } from "./outcomes.ts";
-import { EXPERIMENTAL_NOTE, changeMove, groupedSteps, nowLevelText, isExperimental, levelDefinition, markedLevel, nextMove, pageNumbers, shortReason, stepOf, waiverHint } from "./render.ts";
+import { EXPERIMENTAL_NOTE, changeMove, groupedSteps, nowLevelText, isExperimental, levelDefinition, markedLevel, nextMove, pageNumbers, shortReason, signalsNote, stepOf, waiverHint } from "./render.ts";
 import type { Level, ReportJson } from "./types.ts";
 import { fmtDate, fmtShortDate } from "./util.ts";
 
@@ -432,13 +432,16 @@ function details(r: ReportJson): string {
     out.push(`<tr><td>Merged</td>${oc.series.map((s) => `<td class="num">${rate(s.merged)}</td>`).join("")}</tr>`);
     out.push(`<tr><td>Passed CI the first time</td>${oc.series.map((s) => `<td class="num">${rate(s.firstTimeCi)}</td>`).join("")}</tr>`);
     out.push(`<tr><td>Reviewer requested changes</td>${oc.series.map((s) => `<td class="num">${rate(s.changesRequested)}</td>`).join("")}</tr>`);
-    out.push(`<tr><td>Median days to merge</td>${oc.series.map((s) => `<td class="num">${s.medianDaysToMerge ?? "n/a"}</td>`).join("")}</tr></tbody></table>`);
+    out.push(`<tr><td>Median days to merge</td>${oc.series.map((s) => `<td class="num">${s.medianDaysToMerge ?? "n/a"}</td>`).join("")}</tr>`);
+    if (oc.reverts) out.push(`<tr><td>Reverted within ${oc.reverts.days} days</td>${oc.series.map((s) => `<td class="num">${s.reverted ? rate(s.reverted) : "not measured"}</td>`).join("")}</tr>`);
+    out.push(`</tbody></table>`);
     out.push(`<p class="small muted">${esc(oc.multiComponentNote)} ${esc(oc.caveat)} Matched PRs: ${esc(oc.matchedPrs.map((n) => `#${n}`).join(", ") || "none")}.</p>`);
+    if (oc.reverts) out.push(`<p class="small muted">${esc(oc.reverts.note)}${oc.reverts.agent.length ? ` Reverted agent PRs: ${esc(oc.reverts.agent.map((x) => `#${x.number} (by ${x.by})`).join(", "))}.` : ""}</p>`);
   } else out.push(`<p class="small muted">Not measured: give the audit read access to pull requests (the external-systems tier) and run <code>readiness outcomes</code>.</p>`);
   out.push(`<h3>Agent assets already in the repo</h3>`);
   if (r.details.assets.length) out.push(`<table><thead><tr><th style="width:110px">Asset</th><th>Path</th><th>Authors</th><th style="width:90px">Last changed</th><th>Status</th></tr></thead><tbody>${r.details.assets.map((a) => `<tr><td>${esc(a.kind)}</td><td><code>${esc(a.path)}</code></td><td>${esc(a.authors.join(", ") || "unknown")}</td><td>${esc(a.lastChanged ? fmtShortDate(a.lastChanged) : "n/a")}</td><td>${esc(a.status)}</td></tr>`).join("")}</tbody></table>`);
   if (r.details.missingAssets.length) out.push(`<p class="small">Missing: ${esc(list(r.details.missingAssets))}.</p>`);
-  if (r.details.signals.length) out.push(`<h3>Other signals (informational, not scored)</h3><table><thead><tr><th>Signal</th><th style="width:70px">Found</th><th>Detail</th></tr></thead><tbody>${r.details.signals.map((s) => `<tr><td>${esc(s.label)}</td><td>${s.found === null ? "n/a" : s.found ? "yes" : "no"}</td><td>${esc(s.detail)}</td></tr>`).join("")}</tbody></table><p class="small muted">These don't set a level or add a roadmap step.</p>`);
+  if (r.details.signals.length) out.push(`<h3>Other signals (informational, not scored)</h3><table><thead><tr><th>Signal</th><th style="width:70px">Found</th><th>Detail</th></tr></thead><tbody>${r.details.signals.map((s) => `<tr><td>${esc(s.label)}</td><td>${s.found === null ? "n/a" : s.found ? "yes" : "no"}</td><td>${esc(s.detail)}</td></tr>`).join("")}</tbody></table><p class="small muted">${esc(signalsNote(r))}</p>`);
   out.push(explanationsHtml(r));
   out.push(`<h3>Evidence log</h3><table><thead><tr><th style="width:64px">ID</th><th style="width:24%">Check</th><th style="width:12%">Component</th><th style="width:24%">What ran</th><th>Result</th></tr></thead><tbody>`);
   for (const e of r.details.evidence) {

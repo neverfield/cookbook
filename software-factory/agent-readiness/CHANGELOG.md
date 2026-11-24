@@ -1,0 +1,11 @@
+# Changelog
+
+## 0.2.1 (unreleased)
+
+New audits use rubric `2026-12-beta`. Audits sealed under earlier rubrics are never rescored, and their reports render as before.
+
+- **A type-check must be seen to fail.** When a component's type-check passes, the audit adds one known type error to the most recently changed TypeScript or Python file the component's tests import, in its throwaway copy. The type-check must fail on it and pass again once it is removed before the commands condition counts at Level 2. A type-check that passes with the error in place doesn't check that file, so the component stays at Level 1, and a new roadmap step, "Make `<component>`'s type-check cover `<file>`", names the file and the line. Components whose tests import no TypeScript or Python file are exempt and count on the exit code alone, and the report says so. See [checks.md](skill/agent-readiness/references/checks.md#verifycanonical_interface-build-lint-type-check-and-test-commands-pass).
+- **Revert rate in the outcomes (reported only).** Part 3's outcome table has a "Reverted within 14 days" row for agent and other PRs. `readiness outcomes` finds reverts from merged revert PRs ("Reverts #123" in the body, or a `Revert "<title>"` title) and from "This reverts commit" lines on the default branch, and the report names each reverted agent PR. No level, target or Level 4 rule reads it yet. Recorded PR files can carry `revertedAt` and `revertedBy`; without them the row reads "not measured".
+- **A scripted way to drive the app (informational).** A new signal in part 5 looks for Playwright, Cypress or WebdriverIO specs, a `verify-<app>` skill with a Drive section or a feature map, a smoke script or a terminal harness, for each component that is an app. It is never scored. When a component at Level 2 is an app with none of these, the roadmap adds a later step, "Give agents a way to drive `<component>`", after "Give agents work in" it. The agent assets list marks `verify-<app>` skills and the size of their feature maps.
+
+Later work, not in this release: a planted lint error (lint configs differ too much between repos to plant one error every config flags, so "whether the lint command catches anything" is listed as not assessed), a revert-rate target, a review-capacity guard for Level 4, and scoring the drive-the-app signal.

@@ -78,6 +78,18 @@ export const outcomesShown: Gate = (ws) => {
   return { name, pass: bad.length === 0 && control, detail: `${o.series.map((s) => `${s.label}: ${s.opened} opened`).join("; ")}, window ${o.window}${bad.length ? `; ${bad.length} rates without n or window` : ""}${control ? "" : "; no control group"}` };
 };
 
+// Part 4's revert row (rubric 2026-12-beta): a rate with n and window for agent and other PRs, the
+// reverted agent PRs named, and the note that says how they were found and that nothing gates on it.
+export const revertsShown: Gate = (ws) => {
+  const name = "reverts shown for agent and other PRs, reported only";
+  const o = latestReport(ws)?.details.outcomes;
+  if (!o?.reverts) return { name, pass: false, detail: o ? "the outcomes have no revert row" : "the report has no outcomes" };
+  const rows = o.series.slice(0, 2).map((s) => s.reverted);
+  const bad = rows.filter((x) => !x || !x.window || !(x.n > 0));
+  const pass = rows.length === 2 && bad.length === 0 && o.reverts.agent.length > 0 && /detected reverts/.test(o.reverts.note) && /Reported only/.test(o.reverts.note);
+  return { name, pass, detail: `${rows.map((x) => (x ? `${x.count} of ${x.n}` : "not measured")).join(" vs ")}; reverted agent PRs ${o.reverts.agent.map((x) => `#${x.number}`).join(", ") || "none"}` };
+};
+
 export function capReasonIncludes(text: string): Gate {
   return (ws) => {
     const r = latestReport(ws);

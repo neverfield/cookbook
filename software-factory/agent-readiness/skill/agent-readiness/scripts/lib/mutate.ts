@@ -549,6 +549,31 @@ export function chooseSites(repo: string, tree: string, comp: Component, seed: s
   return picked;
 }
 
+// A type error every checker of the language reports at any strictness: a string assigned to a
+// variable annotated as a number, appended at the end of a file the component's tests import.
+// Languages without a line here get no canary, so their type-check counts on its exit code alone.
+export const TYPE_CANARIES: { label: string; ext: RegExp; line: string }[] = [
+  { label: "TypeScript", ext: /\.(tsx?|mts|cts)$/, line: 'const __readinessTypeCanary: number = "agent-readiness";' },
+  { label: "Python", ext: /\.py$/, line: '__readiness_type_canary: int = "agent-readiness"' },
+];
+
+// The most recently changed file the tests import that a canary line can go in, so the error lands
+// in code agents change. The same commit always gets the same file.
+export function typeCanarySite(repo: string, tree: string, comp: Component, commit = "HEAD"): { file: string; line: string } | null {
+  const lineFor = (f: string) => (/\.d\.[mc]?ts$/.test(f) ? undefined : TYPE_CANARIES.find((c) => c.ext.test(f))?.line);
+  const files = targetFiles(tree, comp).filter((f) => lineFor(f));
+  if (files.length === 0) return null;
+  const recency = lastChanged(repo, files, { commit });
+  const file = [...files].sort((a, b) => (recency.get(b) ?? "").localeCompare(recency.get(a) ?? "") || a.localeCompare(b))[0];
+  return { file, line: lineFor(file)! };
+}
+
+// Keeps the file's own line endings, so a CRLF checkout on Windows gets a CRLF line.
+export function withCanary(text: string, line: string): string {
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  return `${text}${text === "" || text.endsWith("\n") ? "" : eol}${line}${eol}`;
+}
+
 export function applySite(text: string, site: Site): string {
   const lines = text.split("\n");
   if (lines[site.line - 1] !== site.before) throw new Error(`Line ${site.line} of ${site.file} changed since the site was chosen`);

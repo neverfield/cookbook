@@ -134,6 +134,9 @@ export interface Evidence {
   // For a repo-wide command that failed, the components every failing file belongs to, when the
   // output names them all. The other components aren't failed by it.
   failedIn?: string[];
+  // A type-check canary: the known type error planted in `file`. exempt: the component's tests import
+  // no file of a language with a canary, so its type-check counts on its exit code alone.
+  canary?: { kind: "typecheck"; file: string | null; line?: string; exempt?: boolean };
   at: string;
 }
 
@@ -236,6 +239,8 @@ export interface Asset {
   frontmatterOk?: boolean;
   // Set when an environment config needs sudo, which a clean container setup must not.
   elevated?: string;
+  // Set for a verify-<app> skill: how many features its feature map lists.
+  features?: number;
 }
 
 export interface PrRecord {
@@ -252,6 +257,11 @@ export interface PrRecord {
   coAuthors?: string[];
   // GitHub listed more changed files than it returns, so the PR isn't attributed to components.
   filesIncomplete?: boolean;
+  title?: string;
+  // When the first revert of this PR landed, null when none was found, and absent when reverts
+  // weren't looked for. revertedBy names it: "#245" or "commit 1a2b3c4".
+  revertedAt?: string | null;
+  revertedBy?: string;
 }
 
 export interface OutcomeStats {
@@ -263,6 +273,22 @@ export interface OutcomeStats {
   medianDaysToMerge: number | null;
   addingPaths: Record<string, number>;
   mergedByActivity: Record<string, number>;
+  // Merged PRs reverted within the rubric's revertDays, out of the merged PRs reverts were looked for
+  // in. Absent under rubrics without revertDays, and in history lines written before them.
+  reverted?: number;
+  revertKnown?: number;
+}
+
+export interface RevertsSnapshot {
+  days: number;
+  // The merged agent PRs reverted within `days`, and what reverted each.
+  agent: { number: number; by: string }[];
+  // Merged agent PRs younger than `days` at the end of the window, which had less time to be reverted.
+  mergedRecently: number;
+  // Why reverts couldn't be looked for, when they couldn't.
+  unavailable?: string;
+  // What the search stopped short of, when it read only part of the revert PRs or commits.
+  limited?: string;
 }
 
 export interface OutcomesSnapshot {
@@ -278,6 +304,7 @@ export interface OutcomesSnapshot {
   truncated?: boolean;
   // Agent PRs left out of byComponent because their file list was incomplete.
   filesIncomplete?: number;
+  reverts?: RevertsSnapshot;
 }
 
 export interface AuditSkillInfo {
@@ -344,10 +371,13 @@ export interface Audit {
 
 // found is null when the signal doesn't apply, for example no AGENTS.md to measure.
 export interface Signal {
-  id: "ci" | "targeted_tests" | "env_sample" | "isolation" | "agents_md_length";
+  id: "ci" | "targeted_tests" | "env_sample" | "isolation" | "agents_md_length" | "drive_app";
   label: string;
   found: boolean | null;
   detail: string;
+  // drive_app: the assessed components with an app to run and no way found to drive it, and what
+  // says there is an app. The roadmap's drive step reads it.
+  undriven?: { id: string; surface: string }[];
 }
 
 export interface Narration {
@@ -623,11 +653,14 @@ export interface ReportDetails {
     window: string;
     filter: string;
     source: string;
-    series: { label: string; opened: number; merged: RateValue; firstTimeCi: RateValue; changesRequested: RateValue; medianDaysToMerge: number | null }[];
+    // reverted is absent under rubrics that don't report reverts, and null for a window measured without them.
+    series: { label: string; opened: number; merged: RateValue; firstTimeCi: RateValue; changesRequested: RateValue; medianDaysToMerge: number | null; reverted?: RateValue | null }[];
     byComponent: { component: string; prs: number; firstTimeCi: RateValue; changesRequested: RateValue }[];
     multiComponentNote: string;
     matchedPrs: number[];
     caveat: string;
+    // How reverts were found and which agent PRs were reverted; absent under rubrics that don't report them.
+    reverts?: { days: number; note: string; agent: { number: number; by: string }[] };
   } | null;
   assets: { kind: string; path: string; authors: string[]; lastChanged: string | null; status: string; ok: boolean }[];
   missingAssets: string[];
