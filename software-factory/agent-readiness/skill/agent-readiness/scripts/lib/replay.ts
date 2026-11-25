@@ -8,10 +8,12 @@ import { BUNDLE_GAP, diagnose, rootError, testCounts } from "./diagnose.ts";
 import { addEvidence } from "./evidence.ts";
 import { attribute, networkVerdict, rerunsOnline } from "./attribute.ts";
 import type { AttributionInput } from "./attribute.ts";
+import { fmtDuration } from "./format.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
 import { ecosystemOf } from "./languages/index.ts";
 import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary } from "./mutate.ts";
+import { Progress, budgetSummary } from "./progress.ts";
 import { proxyPasswords, redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { SUDO_SHIM_MARK, runCommand, scrubbedEnv } from "./run.ts";
@@ -1316,8 +1318,11 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
   if (opts.component && components.size === 0) fail(`No assessed component named ${opts.component}`);
   const exs = await checkExecutors(audit, makeExecutors(audit, copyDir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost, audit.contract.some((c) => c.component === "*"), opts.vm), profile, opts.log);
   const ex = exs.repo;
+  const progress = new Progress(opts.log);
+  for (const g of exs.groups) progress.watch(g.ex);
   const registryValues = registryValuesOf(audit);
   const budget = newBudget(opts.budgetComponentMinutes, opts.budgetTotalMinutes, budgetFloors(profile));
+  const firstRow = audit.evidence.length;
   try {
     const results = await runContracts(exs, audit.contract, {
       components,
@@ -1327,7 +1332,7 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
       tree,
       profile,
       workspacePackages: workspacePackages(copyDir, profile),
-      onResult: (r) => opts.log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.blocked ? "blocked" : r.status}${r.blocked ? ` (${r.blocked})` : r.diagnosis ? ` (${r.diagnosis.detail})` : r.note ? ` (${r.note})` : ""}`),
+      onResult: (r) => opts.log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.blocked ? "blocked" : r.status}${r.outcome ? ` in ${fmtDuration(r.outcome.durationMs)}` : ""}${r.blocked ? ` (${r.blocked})` : r.diagnosis ? ` (${r.diagnosis.detail})` : r.note ? ` (${r.note})` : ""}`),
     });
     recordNetwork(audit, exs);
     for (const r of results) {
@@ -1438,6 +1443,9 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
       const blocked = installs.find((r) => r.blocked)?.blocked;
       await replayInstructions(audit, (cwd, command) => instructionExecutor(exs, profile, copyDir, cwd, command), copyDir, budget, registryValues, installed ? null : { blocked });
     }
+    const totalOut = Date.now() - budget.startedAt > budget.totalMs;
+    const cut = [...new Set(audit.evidence.slice(firstRow).filter((e) => e.blocked === BUDGET_OUT).map((e) => e.component ?? "*"))];
+    for (const line of budgetSummary(budget, opts.budgetComponentMinutes, { components: totalOut ? [] : cut, total: totalOut })) opts.log(line);
   } finally {
     exs.close();
     rmSync(dirname(copyDir), { recursive: true, force: true });

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { computeOutcomes, describeRate, rate } from "../skill/agent-readiness/scripts/lib/outcomes.ts";
-import { allowedNumbers, danglingEvidence, renderMarkdown, scaleLine, unprovenHeading, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { allowedNumbers, danglingEvidence } from "../skill/agent-readiness/scripts/lib/claims.ts";
+import { unprovenHeading } from "../skill/agent-readiness/scripts/lib/model.ts";
+import { renderMarkdown, scaleLine, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { consistencyErrors, sealStatusFor } from "../skill/agent-readiness/scripts/lib/seal.ts";
 import { skillDigest } from "../skill/agent-readiness/scripts/lib/workspace.ts";
@@ -212,8 +214,8 @@ describe("part 1 rules", () => {
 
   test("the heading is true in every state: unproven, blocked, a missing test script, nothing assessed", () => {
     // Every remaining Level 1 condition blocked: a blocked step may have run, so none "passed".
-    assert.equal(unprovenHeading([{ condition: "clean.install", state: "blocked" }, { condition: "clean.build", state: "blocked" }, { condition: "clean.test", state: "blocked" }, { condition: "clean.test", state: "blocked" }]), "Level 1 unproven on this machine: no Level 1 check failed, and 3 were blocked here");
-    assert.equal(unprovenHeading([{ condition: "clean.build", state: "blocked" }]), "Level 1 unproven on this machine: no Level 1 check failed, and 1 was blocked here", "a build the network cut off");
+    assert.equal(unprovenHeading(3), "Unproven on this machine: no Level 1 check failed, and 3 were blocked here");
+    assert.equal(unprovenHeading(1), "Unproven on this machine: no Level 1 check failed, and 1 was blocked here", "a build the network cut off");
     // No test script: by the rubric's definition a clean checkout that can't pass its tests is Level 0.
     const noTests = reportFor(makeAudit({ components: [{ id: "app", share: 1, test: "missing", faults: "not_run", testFiles: 0 }] }));
     assert.equal(noTests.executive.heading, "Level 0 of 4, not bootable");
@@ -234,9 +236,9 @@ describe("part 1 rules", () => {
     const r = reportFor(audit);
     const ex = r.executive;
     assert.equal(r.maturity.outcome, "blocked");
-    assert.match(ex.heading, /^Level 1 unproven on this machine: no Level 1 check failed, and [1-9]\d* (was|were) blocked here$/, "an app that boots is never called not bootable");
-    const blocked = r.maturity.capReasons.filter((c) => c.state === "blocked");
-    assert.equal(ex.heading, unprovenHeading(blocked));
+    assert.match(ex.heading, /^Unproven on this machine: no Level 1 check failed, and [1-9]\d* (was|were) blocked here$/, "an app that boots is never called not bootable");
+    const blocked = r.components.included.flatMap((c) => c.capReasons).filter((c) => c.state === "blocked");
+    assert.equal(ex.heading, unprovenHeading(blocked.length), "the count is the blocked checks the components hold");
     assert.equal(r.maturity.unproven, true);
     assert.equal(r.components.included[0].unproven, true);
     assert.doesNotMatch(scaleLine(r), /\[/, "the scale marks no level it couldn't prove");
@@ -246,8 +248,8 @@ describe("part 1 rules", () => {
     assert.ok(r.maturity.capReasons.some((c) => c.component === "app" && c.condition === "clean.test" && c.state === "blocked"), JSON.stringify(r.maturity.capReasons));
     const md = renderMarkdown(r, rubric);
     assert.match(md, /What keeps Level 1 unproven on this machine:\n\n- `app`: [^\n]+, blocked on this machine \(passed in host mode, which ran on this machine and could read its local files, so it isn't a sandbox; Level 1 needs a clean container/);
-    assert.match(md, /\| `app` \|[^\n]*\| Level 1 unproven on this machine \(could be 1\) \|/);
-    assert.match(md, /Repo level: Level 1 unproven on this machine \(could be 1\)\./);
+    assert.match(md, /\| `app` \|[^\n]*\| Unproven on this machine \(could be 1\) \|/);
+    assert.match(md, /Repo level: Unproven on this machine \(could be 1\)\./);
     assert.doesNotMatch(md, /Not bootable \(could be/);
     assert.match(md, /No actions are open: nothing in the repo blocks Level 1\./);
     assert.equal(ex.noBlocker, false);
@@ -311,7 +313,7 @@ describe("part 1 rules", () => {
     const r = reportFor(audit);
     const ex = r.executive;
     assert.deepEqual([r.maturity.outcome, r.maturity.unproven], ["blocked", true]);
-    assert.equal(ex.heading, "Level 1 unproven on this machine: no Level 1 check failed, and 3 were blocked here");
+    assert.equal(ex.heading, "Unproven on this machine: no Level 1 check failed, and 3 were blocked here");
     assert.equal(ex.headline, "Level 1 couldn't be proved for buyer-web because this machine has no container runtime and dotnet is not installed on this machine. A rerun where Docker or Podman is available, such as CI, can prove it.");
     assert.deepEqual([r.actions.length, ex.gaps.length, ex.noBlocker], [0, 0, false]);
     assert.match(ex.ask, /^Decision needed: where to rerun this audit so it can prove Level 1/);
@@ -321,8 +323,8 @@ describe("part 1 rules", () => {
     const md = renderMarkdown(r, rubric);
     assert.match(md, /No actions are open: nothing in the repo blocks Level 1\. Proving it needs a rerun/);
     assert.deepEqual(r.components.included.map((c) => [c.level, c.unproven]), [[0, true]]);
-    assert.match(md, /\| `buyer-web` \| `buyer-web` \|[^\n]*\| Level 1 unproven on this machine \(could be 1\) \|/);
-    assert.match(md, /Repo level: Level 1 unproven on this machine \(could be 1\)\./);
+    assert.match(md, /\| `buyer-web` \| `buyer-web` \|[^\n]*\| Unproven on this machine \(could be 1\) \|/);
+    assert.match(md, /Repo level: Unproven on this machine \(could be 1\)\./);
     assert.doesNotMatch(md, /\| 0 Not bootable/);
     assert.deepEqual(r.roadmap.items.map((i) => i.id), ["owner", "targets"], "the owner step stays, so the ask to name one has a step behind it");
     assert.match(ex.ask, /Also name an owner for agent readiness\.$/);

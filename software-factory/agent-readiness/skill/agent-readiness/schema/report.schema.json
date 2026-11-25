@@ -98,7 +98,7 @@
       "type": "object",
       "required": ["heading", "headline", "numbers", "nextLine", "gaps", "ask", "coverage", "noBlocker"],
       "properties": {
-        "heading": { "type": "string", "pattern": "^(Level [0-4] of 4, |Level 1 unproven on this machine: |Undetermined: |Not assessed: )" },
+        "heading": { "type": "string", "pattern": "^(Level [0-4] of 4, |Unproven on this machine: |Undetermined: |Not assessed: )" },
         "headline": { "type": "string", "minLength": 1, "maxLength": 400 },
         "numbers": {
           "type": "array",

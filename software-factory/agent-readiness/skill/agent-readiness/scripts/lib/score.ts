@@ -1,4 +1,5 @@
 import { attributes, attributionOf } from "./attribute.ts";
+import { currentEvidence } from "./evidence.ts";
 import type { Rubric } from "./rubric.ts";
 import { strengthRank } from "./rubric.ts";
 import { agentFacing } from "./profile.ts";
@@ -74,7 +75,7 @@ export function noRealResults(audit: Audit, states: Map<string, CompStates>): st
   const assessed = audit.profile?.components.filter((c) => c.assessed) ?? [];
   if (assessed.length === 0) return "no component could be assessed";
   const ids = new Set(assessed.map((c) => c.id));
-  const ran = audit.evidence.some((e) => (e.kind === "install" || e.kind === "build" || e.kind === "test") && (e.component === "*" || ids.has(e.component ?? "")) && (e.result === "pass" || (e.result === "fail" && !blockedBy(e))));
+  const ran = currentEvidence(audit).some((e) => (e.kind === "install" || e.kind === "build" || e.kind === "test") && (e.component === "*" || ids.has(e.component ?? "")) && (e.result === "pass" || (e.result === "fail" && !blockedBy(e))));
   const noTests = assessed.some((c) => states.get(c.id)?.["clean.test"].state === "not_met");
   if (ran || noTests) return null;
   if (audit.tier === "read-only") return "the read-only tier runs no repo code";
@@ -137,7 +138,7 @@ function canaryPart(rubric: Rubric, evs: Evidence[], componentId: string): CondD
 }
 
 export function componentStates(audit: Audit, rubric: Rubric, componentId: string): CompStates {
-  const evs = audit.evidence;
+  const evs = currentEvidence(audit);
   const contract = audit.contract;
   const states = {} as CompStates;
   const preferReplay = (list: Evidence[]) => latest(list.filter(replayed)) ?? latest(list);
@@ -227,7 +228,7 @@ export function repoStates(audit: Audit, rubric: Rubric): Record<"instructions" 
   const safety: CondDetail = blocking.length > 0 ? { state: "not_met", reason: blocking.map((b) => b.detail).join("; "), evidence: [] } : { state: "met", reason: safetyCoverage(audit), evidence: [] };
   const tc = audit.profile?.toolchain;
   const toolchain: CondDetail = !tc ? { state: "unknown", reason: "not scanned", evidence: [] } : tc.pinned ? { state: "met", reason: `pinned in ${tc.files.join(", ")}`, evidence: [] } : { state: "not_met", reason: `missing ${tc.missing.join(" and ")}`, evidence: [] };
-  const lockfile = fromEvidence(rubric, latest(audit.evidence.filter((e) => e.condition === "lockfile")), "bootstrap.cold_replay", "the frozen install hasn't run");
+  const lockfile = fromEvidence(rubric, latest(currentEvidence(audit).filter((e) => e.condition === "lockfile")), "bootstrap.cold_replay", "the frozen install hasn't run");
   return { instructions, safety, toolchain, lockfile };
 }
 
@@ -235,19 +236,23 @@ export interface CheckCounts {
   passed: number;
   failed: number;
   notRun: number;
+  // Instruction items skipped on purpose (vendored-skill, placeholder, interactive or package-adding
+  // commands); never also counted as not run.
+  skipped?: number;
 }
 
 export function checkCounts(audit: Audit, checkId: string): CheckCounts {
   if (checkId === "context.instructions_verified") {
     const items = audit.instructions;
-    return { passed: items.filter((i) => i.result === "pass").length, failed: items.filter((i) => i.result === "fail").length, notRun: items.filter((i) => i.result === "not_run").length };
+    const skipped = items.filter((i) => i.result === "not_run" && i.category === "skipped").length;
+    return { passed: items.filter((i) => i.result === "pass").length, failed: items.filter((i) => i.result === "fail").length, notRun: items.filter((i) => i.result === "not_run").length - skipped, skipped };
   }
   if (checkId === "safety.execution_boundary") {
     const blocking = audit.safety.filter((s) => s.blocking).length;
     return { passed: blocking === 0 ? 1 : 0, failed: blocking, notRun: 0 };
   }
   const latestByKey = new Map<string, Evidence>();
-  for (const e of audit.evidence.filter((x) => x.checkId === checkId)) latestByKey.set(`${e.contractId ?? e.condition ?? e.id}:${e.component ?? ""}`, e);
+  for (const e of currentEvidence(audit).filter((x) => x.checkId === checkId)) latestByKey.set(`${e.contractId ?? e.condition ?? e.id}:${e.component ?? ""}`, e);
   const evs = [...latestByKey.values()];
   return { passed: evs.filter((e) => e.result === "pass").length, failed: evs.filter((e) => e.result === "fail").length, notRun: evs.filter((e) => e.result === "not_run").length };
 }

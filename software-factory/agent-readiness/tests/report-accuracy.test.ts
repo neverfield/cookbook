@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { blocksText, headlineCauseErrors, renderMarkdown, startFailureCause, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { blocksText, startFailureCause } from "../skill/agent-readiness/scripts/lib/model.ts";
+import { headlineCauseErrors, renderMarkdown, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { renderHtml } from "../skill/agent-readiness/scripts/lib/render-html.ts";
 import { latestRubricVersion, loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import type { Audit, HistoryLine, ReportJson, RoadmapItem } from "../skill/agent-readiness/scripts/lib/types.ts";
@@ -45,7 +46,7 @@ describe("an unproven re-audit is never compared as Level 0", () => {
     const md = renderMarkdown(r, rubric);
     assert.doesNotMatch(md, /Down from Level 2|Level 2 to Level 0|to Level 0/);
     assert.match(md, /Level 2 at the audit on Oct 27; this audit couldn't prove a level on this machine, so it isn't a change in the repo/);
-    assert.match(md, /- \*\*Repo level:\*\* Level 2 to Level 1 unproven on this machine \(no level, so not a drop\)\./);
+    assert.match(md, /- \*\*Repo level:\*\* Level 2 to unproven on this machine \(no level, so not a drop\)\./);
     const html = renderHtml(r);
     assert.doesNotMatch(html, /Changed since|Down from/);
     assert.match(html, /couldn&#39;t prove a level on this machine|couldn't prove a level on this machine/);

@@ -1,7 +1,5 @@
-import { describeRate } from "./outcomes.ts";
-import { EXPERIMENTAL_NOTE, changeMove, groupedSteps, nowLevelText, isExperimental, levelDefinition, markedLevel, nextMove, pageNumbers, shortReason, signalsNote, stepOf, waiverHint } from "./render.ts";
+import { EXPERIMENTAL_NOTE, assumptionLines, evidenceLog, fmtDuration, levelResult, levelShort, changeMove, describeRate, fmtDate, fmtShortDate, groupedSteps, isExperimental, levelDefinition, levelText, list, markedLevel, nextMove, nowLevelText, pageNumbers, shortReason, signalsNote, stepOf, waiverHint } from "./format.ts";
 import type { Level, ReportJson } from "./types.ts";
-import { fmtDate, fmtShortDate } from "./util.ts";
 
 // report.html: the same sealed report.json as report.md, as one self-contained page. Inline CSS and
 // SVG only, no scripts and nothing fetched, so it opens offline, prints, and follows the reader's
@@ -15,13 +13,7 @@ const inline = (s: string) =>
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/https?:\/\/[^\s<)]+[^\s<).,;]/g, (u) => `<a href="${u}">${u}</a>`);
 
-const levelText = (l: Level | null | undefined) => (l === null || l === undefined ? "no level" : `Level ${l}`);
-
 const anchor = (itemId: string) => `step-${itemId.replace(/[^a-z0-9-]/gi, "-")}`;
-
-function list(items: string[]): string {
-  return items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
-}
 
 // Tokens. One accent carries links, reached levels and the next move; status hues appear only next to
 // a word that says the same thing. Every text pair meets WCAG AA and every mark 3:1, in both modes.
@@ -257,7 +249,7 @@ function summary(r: ReportJson): string {
     const trend = history.length > 1;
     out.push(`<table class="comps"><thead><tr><th>Component</th><th>Level</th><th class="num">Share of changes</th>${trend ? '<th class="hide-narrow">Trend</th>' : ""}<th>What holds it</th></tr></thead><tbody>`);
     for (const c of rows) {
-      const level = c.unproven ? "Level 1 unproven here" : levelText(c.level);
+      const level = levelShort(c);
       out.push(`<tr><td class="name">${esc(c.id)}${c.active ? "" : ' <span class="muted small">(under 10%)</span>'}</td><td>${miniLadderSvg(c.unproven ? null : c.level)} ${esc(level)}</td><td class="num"><span class="share" aria-hidden="true"><i style="width:${Math.round(c.changeShare * 100)}%"></i></span>${Math.round(c.changeShare * 100)}%</td>${trend ? `<td class="hide-narrow">${sparkSvg(history.map((h) => h.levels[c.id]))}</td>` : ""}<td>${holds(r, c)}</td></tr>`);
     }
     for (const c of listed) {
@@ -266,6 +258,8 @@ function summary(r: ReportJson): string {
     }
     out.push(`</tbody></table><p class="legend">Share of changes: the component's share of changed files over the last 90 days.</p>`);
   } else if (ex.unassessed) out.push(`<p class="note"><strong>Not assessed:</strong> ${esc(ex.unassessed.text)}.${supportHref(ex.unassessed.supportDoc)}</p>`);
+  const assumed = assumptionLines(r);
+  if (assumed) out.push(`<details class="note"><summary>What this audit assumed</summary><dl class="facts">${assumed.map((a) => `<dt>${esc(a.label)}</dt><dd>${inline(a.text)}</dd>`).join("")}</dl></details>`);
   if (history.length > 2) out.push(`<div style="margin-top:var(--s-5)">${trendSvg(history.map((h) => ({ date: h.date, level: h.repoLevel, kind: h.kind, result: h.result })))}<p class="legend">Repo level at each audit and recheck, ${esc(fmtShortDate(history[0].date))} to ${esc(fmtShortDate(history[history.length - 1].date))}. A cross marks a failed recheck.</p></div>`);
   out.push(`</section>`);
   return out.join("");
@@ -404,7 +398,7 @@ function details(r: ReportJson): string {
   out.push(`<h3>Everything we checked, and why</h3><table><thead><tr><th style="width:24%">Check</th><th style="width:38%">Why we check it</th><th style="width:24%">Result</th><th>Evidence</th></tr></thead><tbody>`);
   for (const c of r.details.checks) {
     // A pass over zero items is nothing to check, not a green result.
-    const empty = c.counts.passed + c.counts.failed + c.counts.notRun === 0 && /\b0 of 0\b/.test(c.result);
+    const empty = c.counts.passed + c.counts.failed + c.counts.notRun + (c.counts.skipped ?? 0) === 0 && /\b0 of 0\b/.test(c.result);
     const cls = empty ? "none" : c.ok === true ? "ok" : c.ok === false ? "bad" : "warn";
     const word = empty ? "nothing to check" : c.ok === true ? "passed" : c.ok === false ? "failed" : "not proven";
     const src = c.sources.map((s) => ` ${esc(s.claim)} ${esc(s.caveat)} (<a href="${esc(s.url)}">source</a>)`).join("");
@@ -412,15 +406,15 @@ function details(r: ReportJson): string {
   }
   out.push(`</tbody></table><p class="small muted">Not assessed by this rubric version, which is different from unknown: ${esc(list(r.details.notAssessed.map((n) => n.charAt(0).toLowerCase() + n.slice(1))))}.</p>`);
   const comps = r.components;
-  const cellLevel = (level: Level | null, couldBe: Level | null, unproven = false) => (level === null ? "not assessed" : unproven ? "Level 1 unproven on this machine (could be 1)" : `${level} ${r.scale[level].name}${couldBe !== null ? ` (could be ${couldBe})` : ""}`);
+  const cellLevel = (level: Level | null, couldBe: Level | null, unproven = false, status?: string) => levelResult({ level, couldBe, unproven, status }, (l) => `${l} ${r.scale[l].name}`);
   out.push(`<h3>Levels by component</h3><p class="small">Repo shape: ${esc(comps.shape === "sampled_monorepo" ? "monorepo, sampled (only the most active supported components are assessed)" : comps.shape)}.</p><table><thead><tr><th>Component</th><th>Path</th><th>Toolchain</th><th class="num" style="width:70px">Share</th><th>Level</th></tr></thead><tbody>`);
   for (const c of comps.included) {
-    out.push(`<tr><td><code>${esc(c.id)}</code>${c.active ? "" : " (under 10%)"}</td><td><code>${esc(c.path)}</code></td><td>${esc(c.toolchain)}</td><td class="num">${Math.round(c.changeShare * 100)}%</td><td>${esc(cellLevel(c.level, c.couldBe, c.unproven))}</td></tr>`);
+    out.push(`<tr><td><code>${esc(c.id)}</code>${c.active ? "" : " (under 10%)"}</td><td><code>${esc(c.path)}</code></td><td>${esc(c.toolchain)}</td><td class="num">${Math.round(c.changeShare * 100)}%</td><td>${esc(cellLevel(c.level, c.couldBe, c.unproven, c.status))}</td></tr>`);
     for (const s of c.scenarios) out.push(`<tr><td><code>${esc(c.id)}</code> › ${esc(s.label)}</td><td></td><td></td><td></td><td>${esc(cellLevel(s.level, s.couldBe, s.unproven))}</td></tr>`);
   }
   for (const c of comps.excluded) out.push(`<tr><td><code>${esc(c.id)}</code></td><td><code>${esc(c.path)}</code></td><td>${esc(c.toolchain)}</td><td class="num">${c.reason.startsWith("not a component") ? "n/a" : `${Math.round(c.changeShare * 100)}%`}</td><td>not assessed: ${esc(c.reason)}</td></tr>`);
   const noResults = r.maturity.outcome === "not_assessed";
-  out.push(`</tbody></table><p class="small">Repo level: ${esc(noResults ? "not assessed" : r.maturity.unproven ? "Level 1 unproven on this machine (could be 1)" : `${r.maturity.level} ${r.scale[r.maturity.level].name}`)}. ${esc(r.maturity.rule)}</p>`);
+  out.push(`</tbody></table><p class="small">Repo level: ${esc(levelResult({ level: noResults ? null : r.maturity.level, couldBe: null, unproven: r.maturity.unproven, status: r.maturity.status }, (l) => `${l} ${r.scale[l].name}`))}. ${esc(r.maturity.rule)}</p>`);
   if (r.maturity.capReasons.length) out.push(`<p class="small">${esc(r.maturity.unproven ? "What keeps Level 1 unproven on this machine:" : `What holds the repo at Level ${r.maturity.level}:`)}</p><ul class="small">${r.maturity.capReasons.map((c) => `<li>${c.component === "*" ? "Repo" : `<code>${esc(c.component)}</code>`}: ${esc(c.label)}, ${esc(c.state === "blocked" ? "blocked on this machine" : c.state === "unknown" ? "not proven" : "not met")} (${esc(c.reason)}).</li>`).join("")}</ul>`);
   out.push(`<p class="small"><strong>Standard level:</strong> ${esc(r.details.levelRules.level1)}. ${esc(r.details.levelRules.level2)}.${r.details.levelRules.scenarios.map((s) => ` <strong>${esc(s.label)} scenario:</strong> ${esc(s.bar)}.`).join("")}</p>`);
   const oc = r.details.outcomes;
@@ -444,10 +438,13 @@ function details(r: ReportJson): string {
   if (r.details.signals.length) out.push(`<h3>Other signals (informational, not scored)</h3><table><thead><tr><th>Signal</th><th style="width:70px">Found</th><th>Detail</th></tr></thead><tbody>${r.details.signals.map((s) => `<tr><td>${esc(s.label)}</td><td>${s.found === null ? "n/a" : s.found ? "yes" : "no"}</td><td>${esc(s.detail)}</td></tr>`).join("")}</tbody></table><p class="small muted">${esc(signalsNote(r))}</p>`);
   out.push(explanationsHtml(r));
   out.push(`<h3>Evidence log</h3><table><thead><tr><th style="width:64px">ID</th><th style="width:24%">Check</th><th style="width:12%">Component</th><th style="width:24%">What ran</th><th>Result</th></tr></thead><tbody>`);
-  for (const e of r.details.evidence) {
-    const cls = e.result === "pass" ? "ok" : e.result === "fail" ? "bad" : "warn";
-    const ran = e.ran === e.summary ? `<span class="muted">${esc(e.where)}</span>` : `<code>${esc(e.ran)}</code><br><span class="small muted">${esc(e.where)}</span>`;
-    out.push(`<tr id="${esc(e.id)}"><td><code class="id">${esc(e.id)}</code></td><td><code class="id">${esc(e.check)}</code></td><td>${esc(e.component ?? "repo")}</td><td>${ran}</td><td><span class="${cls}"><strong>${esc(e.result)}</strong></span>: ${esc(e.summary)}</td></tr>`);
+  for (const { row: e, current } of evidenceLog(r)) {
+    const cls = !current ? "none" : e.result === "pass" ? "ok" : e.result === "fail" ? "bad" : "warn";
+    const where = `${e.where}${typeof e.durationMs === "number" ? `, ${fmtDuration(e.durationMs)}` : ""}`;
+    const rerun = e.repro && current ? `<details class="small"><summary>Rerun it</summary><code>${esc(e.repro)}</code></details>` : "";
+    const ran = e.ran === e.summary ? `<span class="muted">${esc(where)}</span>` : `<code>${esc(e.ran)}</code><br><span class="small muted">${esc(where)}</span>${rerun}`;
+    const result = `<span class="${cls}"><strong>${esc(e.result)}</strong></span>: ${esc(e.summary)}`;
+    out.push(`<tr id="${esc(e.id)}"${current ? "" : ' class="muted"'}><td><code class="id">${esc(e.id)}</code></td><td><code class="id">${esc(e.check)}</code></td><td>${esc(e.component ?? "repo")}</td><td>${ran}</td><td>${current ? result : `superseded by <a href="#${esc(e.supersededBy!)}"><code class="id">${esc(e.supersededBy!)}</code></a>; was ${result}`}</td></tr>`);
   }
   out.push(`</tbody></table><p class="small muted">Evidence strength, weakest to strongest: stated in docs, read from files, ran on host, ran in a clean container, confirmed by outcomes. A check passes only at its required strength.</p></section>`);
   return out.join("");

@@ -11,7 +11,7 @@ import type { Baseline } from "../support/evals/lib/baseline.ts";
 import { scriptedArgs, scriptedAudit, tierOf } from "../support/evals/lib/controls.ts";
 import { expectedProblems } from "../support/evals/lib/expected.ts";
 import { DEFAULT_GATES, actionsGate, conditionsWithoutAction, expectedJsonGate, narrationGate } from "../support/evals/lib/grade.ts";
-import { narrationClaimErrors } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { narrationClaimErrors } from "../skill/agent-readiness/scripts/lib/claims.ts";
 import type { Audit } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { JUDGE_CANDIDATES, chooseJudge, evidenceBlock, family, headlinePrompt, judgePromptDigest, pagePrompt, parseJudge } from "../support/evals/lib/judge.ts";
 import { ISOLATION, isolateHome, userAgentDirs } from "../support/evals/lib/isolation.ts";

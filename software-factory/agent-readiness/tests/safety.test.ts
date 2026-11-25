@@ -74,7 +74,7 @@ describe("no silent host fallback: without a container nothing runs, and the res
     assert.equal(audit.environment.hostMode, undefined);
     assert.equal(report.maturity.unproven, true);
     assert.notEqual(report.maturity.outcome, "not_assessed", "unproven is not the same as not assessed");
-    assert.match(report.executive.heading, /^Level 1 unproven on this machine/);
+    assert.match(report.executive.heading, /^Unproven on this machine/);
     assert.match(report.executive.headline, /A rerun where Docker or Podman is available, such as CI, can prove it\./);
     assert.ok(report.components.included.every((c: { unproven: boolean }) => c.unproven));
     assert.ok(report.maturity.capReasons.length > 0 && report.maturity.capReasons.every((c: { state: string; reason: string }) => c.state === "blocked" && c.reason.length > 0), "every cap names its reason");
