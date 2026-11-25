@@ -9,7 +9,7 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "0cf9f6535268c349176fc525e849accd0abcedd4e03c94bdaaa9bfcd1aac9921",
+    "scriptsDigest": "b4ecdb1c3dcc1169bba7d2a1b8d779711940631738e407d9b2e1d6586a7db45d",
     "seedPinned": true,
     "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
@@ -85,7 +85,7 @@
         "condition": "faults",
         "label": "tests catch planted faults",
         "state": "not_met",
-        "reason": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12"
+        "reason": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2"
       }
     ],
     "unproven": false,
@@ -176,7 +176,7 @@
             "condition": "faults",
             "label": "tests catch planted faults",
             "state": "not_met",
-            "reason": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12"
+            "reason": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2"
           }
         ],
         "scenarios": [
@@ -246,7 +246,7 @@
       "itemId": "faults:worker",
       "title": "Make worker's tests catch wrong behavior",
       "startNow": false,
-      "why": "The audit planted 5 faults in worker in a throwaway copy, and the tests caught 0.",
+      "why": "The audit planted 11 faults in worker in a throwaway copy, and the tests caught 0.",
       "movesTheNeedle": "Takes worker to Level 2, covering 25% of recent changes. Changes in worker get a real pass-or-fail signal, so reviewers catch less by hand.",
       "watch": "Share of agent PRs touching worker where a reviewer requested changes. Baseline: 2 of 3 (too few for a rate), Sep 27 to Oct 27, 2026. Now: 50% (3 of 6), Oct 31 to Nov 30, 2026.",
       "research": "OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. https://openai.com/index/separating-signal-from-noise-coding-evaluations",
@@ -599,7 +599,7 @@
             "url": "https://openai.com/index/separating-signal-from-noise-coding-evaluations"
           }
         ],
-        "result": "api: caught 5 of 5 planted faults; shared: caught 5 of 5 planted faults; worker: caught 0 of 5 planted faults, below the 60% the rubric requires",
+        "result": "api: caught 5 of 5 planted faults; shared: caught 7 of 7 planted faults; worker: caught 0 of 11 planted faults",
         "ok": false,
         "counts": {
           "passed": 2,
@@ -1052,28 +1052,28 @@
         "id": "ev-013",
         "check": "verify.behavioral_oracle",
         "component": "api",
-        "ran": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)",
+        "ran": "caught 5 of 5 planted faults (100%), 5 of them planted again from the last audit: strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip)",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)"
+        "summary": "caught 5 of 5 planted faults (100%), 5 of them planted again from the last audit: strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip)"
       },
       {
         "id": "ev-014",
         "check": "verify.behavioral_oracle",
         "component": "shared",
-        "ran": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)",
+        "ran": "caught 7 of 7 planted faults (100%), 7 of them planted again from the last audit: strong, at least 65% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)"
+        "summary": "caught 7 of 7 planted faults (100%), 7 of them planted again from the last audit: strong, at least 65% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)"
       },
       {
         "id": "ev-015",
         "check": "verify.behavioral_oracle",
         "component": "worker",
-        "ran": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12",
+        "ran": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2",
         "where": "ran in a clean container",
         "result": "fail",
-        "summary": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12"
+        "summary": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2"
       },
       {
         "id": "ev-016",
@@ -1144,7 +1144,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "0cf9f6535268"
+        "value": "b4ecdb1c3dcc"
       },
       {
         "label": "Planted faults",
@@ -1173,7 +1173,7 @@
       "result": "Level 1",
       "ran": "the level rules over the active components, api, shared and worker",
       "where": "in a clean docker container (node:22-bookworm)",
-      "happened": "Set by worker, held by worker: tests catch planted faults, not met (caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12).",
+      "happened": "Set by worker, held by worker: tests catch planted faults, not met (caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2).",
       "rule": "The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it."
     },
     {
@@ -1200,7 +1200,7 @@
       "result": "Level 1",
       "ran": "`node --version && npm --version` (pass), `bash scripts/agent-install.sh` (pass), `npm ci` (not run), `bash scripts/agent-start.sh` (pass), `npm run lint` (pass) and `npm run test` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
-      "happened": "Held at Level 1 by tests catch planted faults: not met (caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12)",
+      "happened": "Held at Level 1 by tests catch planted faults: not met (caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2)",
       "rule": "Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
     },
     {
@@ -1252,9 +1252,9 @@
       "kind": "condition",
       "subject": "api: tests catch planted faults",
       "result": "met",
-      "ran": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)",
+      "ran": "caught 5 of 5 planted faults (100%), 5 of them planted again from the last audit: strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip)",
       "where": "in a clean docker container (node:22-bookworm)",
-      "happened": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)",
+      "happened": "caught 5 of 5 planted faults (100%), 5 of them planted again from the last audit: strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip)",
       "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
     },
     {
@@ -1272,7 +1272,7 @@
       "result": "met",
       "ran": "nothing ran for it",
       "where": "read from the audited commit's files, nothing ran",
-      "happened": "no blocking safety findings",
+      "happened": "no blocking safety findings from 12 secret patterns over 38 files; 2 items listed for review",
       "rule": "Level 2 needs it: normal work needs no production access (Normal work needs no production access). Met means it ran at the strength the check requires and passed."
     },
     {
@@ -1333,9 +1333,9 @@
       "kind": "condition",
       "subject": "shared: tests catch planted faults",
       "result": "met",
-      "ran": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)",
+      "ran": "caught 7 of 7 planted faults (100%), 7 of them planted again from the last audit: strong, at least 65% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
       "where": "in a clean docker container (node:22-bookworm)",
-      "happened": "caught 5 of 5 planted faults (tried: boundary_flip, drop_throw_or_return, change_constant, negate_condition)",
+      "happened": "caught 7 of 7 planted faults (100%), 7 of them planted again from the last audit: strong, at least 65% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
       "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
     },
     {
@@ -1378,9 +1378,9 @@
       "kind": "condition",
       "subject": "worker: tests catch planted faults",
       "result": "not met",
-      "ran": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12",
+      "ran": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2",
       "where": "in a clean docker container (node:22-bookworm)",
-      "happened": "caught 0 of 5 planted faults, below the 60% the rubric requires; missed: change_constant at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:3, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:5, change_constant at packages/worker/src/retry.js:12",
+      "happened": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2",
       "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails."
     },
     {
