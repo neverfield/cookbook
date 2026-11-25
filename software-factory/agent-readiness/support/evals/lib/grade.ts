@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { validatePart1 } from "../../../skill/agent-readiness/scripts/lib/render.ts";
+import { validatePart1 } from "./part1.ts";
 import { loadRubric } from "../../../skill/agent-readiness/scripts/lib/rubric.ts";
 import { validateAgainst } from "../../../skill/agent-readiness/scripts/lib/schema.ts";
 import { compute } from "../../../skill/agent-readiness/scripts/lib/seal.ts";
@@ -145,7 +145,7 @@ export const reportGate: Gate = (ws) => {
   const r = latestReport(ws);
   const audit = sealedAudits(ws).at(-1);
   if (!r || !audit) return { name, pass: false, detail: "no report" };
-  const errors = [...validateAgainst("report", r), ...validatePart1(r, rubric, null), ...claimsNotInTree(r, audit as unknown as Audit, ws.dir)];
+  const errors = [...validateAgainst("report", r), ...validatePart1(r, rubric), ...claimsNotInTree(r, audit as unknown as Audit, ws.dir)];
   return { name, pass: errors.length === 0, detail: errors.slice(0, 3).join("; ") || "valid" };
 };
 

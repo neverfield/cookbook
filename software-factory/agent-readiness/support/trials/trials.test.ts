@@ -9,7 +9,7 @@ import { CRITICAL, scoreRepo } from "../holdout/score.ts";
 import type { RepoScore, Truth } from "../holdout/score.ts";
 import { guards } from "../tools/known-failures.ts";
 import { detectRuntime } from "../../skill/agent-readiness/scripts/lib/container.ts";
-import { headlineCauseErrors } from "../../skill/agent-readiness/scripts/lib/render.ts";
+import { headlineCauseErrors } from "../evals/lib/part1.ts";
 import type { ReportJson } from "../../skill/agent-readiness/scripts/lib/types.ts";
 import { readiness, SKILL, SUPPORT } from "../tools/fixture.ts";
 
