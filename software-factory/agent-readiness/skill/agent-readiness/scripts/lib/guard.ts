@@ -1,26 +1,28 @@
-import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { grantRecorded, lease } from "./session.ts";
 
-// A shell hook (Cursor's beforeShellExecution) that refuses the repo's own install, build, lint and
-// test commands on the host until the user's yes to host mode is recorded, and while an audit is
-// open. With beforeReadFile it also refuses reads of the draft records and the planted-fault store. SKILL.md rule 2 asks for that yes; this makes the rule hold before the agent has read any
-// output of the scripts. It only refuses: the scripts never depend on it, and an input it can't
-// read is let through.
+// An opt-in shell hook (Cursor's beforeShellExecution) that, while an audit's session is open,
+// refuses the repo's own install, build, lint and test commands on the host: until the user's yes
+// to host mode is recorded, and at any time once the draft is open. With beforeReadFile it also
+// refuses reads of the draft records and the planted-fault store. SKILL.md rule 2 asks for that
+// yes; this makes the rule hold before the agent has read any output of the scripts. Outside a
+// session it lets the repo's commands run, so the repo works as before once the audit is sealed. It
+// only refuses: the scripts never depend on it, and an input it can't read is let through.
 
 // Host mode's opt-in variable (`--allow-host` sets it). Defined here so the hook loads no more
-// than this file.
+// than this file and session.ts.
 export const ALLOW_HOST_ENV = "SA_READINESS_ALLOW_HOST";
 export const HOOKS_FILE = ".cursor/hooks.json";
 export const GUARD_SCRIPT = join(dirname(dirname(fileURLToPath(import.meta.url))), "guard.ts");
-// The user's yes to running repo commands on this machine, recorded by `readiness allow-host`.
-export const HOST_YES_FILE = ".agent-readiness/work/host-yes.json";
-const CURRENT_FILE = ".agent-readiness/work/CURRENT";
-// Each refusal, one JSON line, in the clone's own .git folder: outside the repo's files and the
-// audit's records, so writing it changes neither. The eval grader reads it to tell a refused call
-// from one that ran.
+// Each refusal, one JSON line, in the clone's own git folder (`.git/` in a plain clone, the
+// worktree's own folder in a worktree): outside the repo's files and the audit's records, so
+// writing it changes neither. The eval grader reads it to tell a refused call from one that ran.
 export const GUARD_LOG = ".git/readiness-guard.jsonl";
+// What `guard install` changed, so `guard uninstall` can put it back. In the same git folder.
+const GUARD_STATE = "readiness-guard-install.json";
 // How every refusal message starts, so a tool result shows the guard refused the call.
 export const GUARD_MARK = "readiness guard: not run.";
 
@@ -232,12 +234,26 @@ export interface GuardDecision {
 }
 
 export function hostYesRecorded(repo: string, env: NodeJS.ProcessEnv = process.env): boolean {
-  return env[ALLOW_HOST_ENV] === "1" || existsSync(join(repo, HOST_YES_FILE));
+  return env[ALLOW_HOST_ENV] === "1" || grantRecorded(repo);
+}
+
+// A path inside this checkout's git folder. A worktree's `.git` is a file naming its folder, so
+// git resolves the path there; `info/exclude` resolves to the shared one, which git reads.
+export function gitPath(repo: string, rel: string): string | null {
+  const dotGit = join(repo, ".git");
+  try {
+    if (statSync(dotGit).isDirectory()) return join(dotGit, rel);
+  } catch {
+    return null;
+  }
+  const r = spawnSync("git", ["rev-parse", "--git-path", rel], { cwd: repo, encoding: "utf8" });
+  return r.status === 0 && r.stdout.trim() ? resolve(repo, r.stdout.trim()) : null;
 }
 
 function logRefusal(repo: string, kind: "shell" | "read", target: string): void {
   try {
-    if (existsSync(join(repo, ".git", "HEAD"))) appendFileSync(join(repo, GUARD_LOG), JSON.stringify({ at: Date.now(), kind, target }) + "\n");
+    const log = gitPath(repo, basename(GUARD_LOG));
+    if (log && existsSync(dirname(log))) appendFileSync(log, JSON.stringify({ at: Date.now(), kind, target }) + "\n");
   } catch {
     return;
   }
@@ -260,12 +276,14 @@ export function guardDecision(input: GuardInput, env: NodeJS.ProcessEnv = proces
   if (read) return refuse(repo, "shell", input.command ?? "", `This command ${read}.`);
   const found = repoCommands(input.command ?? "", cwd, repo);
   if (!found.length) return { permission: "allow" };
+  const l = lease(repo);
+  if (!l.valid) return { permission: "allow" };
   const shown = found.slice(0, 2).map((c) => `\`${c.length > 80 ? c.slice(0, 77) + "..." : c}\``).join(" and ");
   let why: string;
-  if (existsSync(join(repo, CURRENT_FILE))) {
+  if (l.session?.auditId) {
     why = `${shown} runs the repo's own code outside the readiness scripts while an audit is open. Until it is sealed, only the scripts run repo code: \`readiness replay\` in a clean container, or \`readiness run --component <id> --allow-host\` after the user's yes.`;
   } else if (!hostYesRecorded(repo, env)) {
-    why = `${shown} runs the repo's own code on this machine, outside a container, and the user's yes to that isn't recorded (SKILL.md rule 2). To see what the repo's commands do, run the audit: its scripts run them in a clean container. If the user says yes to running them here, record it with \`readiness allow-host --note "<their words>"\` and run the command again.`;
+    why = `${shown} runs the repo's own code on this machine, outside a container, during an audit's session, and the user's yes to that isn't recorded (SKILL.md rule 2). To see what the repo's commands do, run the audit: its scripts run them in a clean container. If the user says yes to running them here, record it with \`readiness allow-host --note "<their words>"\` and run the command again. \`readiness session end\` ends the session without an audit.`;
   } else return { permission: "allow" };
   return refuse(repo, "shell", input.command ?? "", why);
 }
@@ -291,15 +309,42 @@ interface HooksFile {
   hooks?: Record<string, { command?: string }[]>;
 }
 
-// Adds the guard to the repo's .cursor/hooks.json, kept out of git through .git/info/exclude so
-// the audit, which reads the committed tree, never sees it as an agent asset. A hooks.json the repo
-// commits is left alone: the team decides what goes in it.
+// What install changed: whether it created the file or its folder, which hook lists it added, and
+// the exclude file as it was before the line went in (null when the line was already there).
+interface InstallState {
+  command: string;
+  createdFile: boolean;
+  createdDir: boolean;
+  addedSteps: string[];
+  exclude: string | null;
+  excludeBefore: string | null;
+  excludeCreated?: boolean;
+}
+
+const EXCLUDE_LINE = `/${HOOKS_FILE}`;
+const isGuard = (command: string | undefined) => typeof command === "string" && /agent-readiness[\\/]scripts[\\/]guard\.ts"?$/.test(command);
+
+function readState(repo: string): InstallState | null {
+  const f = gitPath(repo, GUARD_STATE);
+  try {
+    return f && existsSync(f) ? (JSON.parse(readFileSync(f, "utf8")) as InstallState) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Adds the guard to the repo's .cursor/hooks.json, kept out of git through the checkout's
+// info/exclude so the audit, which reads the committed tree, never sees it as an agent asset. A
+// hooks.json the repo commits is left alone: the team decides what goes in it.
 export function installGuard(repo: string, script = GUARD_SCRIPT): { status: "installed" | "present" | "tracked"; file: string } {
   const file = join(repo, HOOKS_FILE);
   if (tracked(repo, HOOKS_FILE)) return { status: "tracked", file };
-  const cfg: HooksFile = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as HooksFile) : { version: 1, hooks: {} };
+  const existed = existsSync(file);
+  const state: InstallState = readState(repo) ?? { command: guardCommand(script), createdFile: !existed, createdDir: !existsSync(dirname(file)), addedSteps: [], exclude: null, excludeBefore: null };
+  const cfg: HooksFile = existed ? (JSON.parse(readFileSync(file, "utf8")) as HooksFile) : { version: 1, hooks: {} };
   const hooks = (cfg.hooks ??= {});
   const command = guardCommand(script);
+  for (const step of GUARD_STEPS) if (!hooks[step] && !state.addedSteps.includes(step)) state.addedSteps.push(step);
   const lists = GUARD_STEPS.map((step) => (hooks[step] ??= []));
   const present = lists.every((list) => list.some((h) => h.command === command));
   if (!present) {
@@ -308,17 +353,65 @@ export function installGuard(repo: string, script = GUARD_SCRIPT): { status: "in
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n");
   }
-  const exclude = join(repo, ".git", "info", "exclude");
-  if (existsSync(join(repo, ".git")) && !(existsSync(exclude) && readFileSync(exclude, "utf8").split("\n").includes(`/${HOOKS_FILE}`))) {
-    mkdirSync(dirname(exclude), { recursive: true });
-    appendFileSync(exclude, `${existsSync(exclude) && !readFileSync(exclude, "utf8").endsWith("\n") ? "\n" : ""}/${HOOKS_FILE}\n`);
+  const exclude = gitPath(repo, "info/exclude");
+  if (exclude) {
+    const existedBefore = existsSync(exclude);
+    const before = existedBefore ? readFileSync(exclude, "utf8") : "";
+    if (!before.split("\n").includes(EXCLUDE_LINE)) {
+      mkdirSync(dirname(exclude), { recursive: true });
+      appendFileSync(exclude, `${before && !before.endsWith("\n") ? "\n" : ""}${EXCLUDE_LINE}\n`);
+      state.exclude = exclude;
+      state.excludeBefore = existedBefore ? before : null;
+      state.excludeCreated = !existedBefore;
+    }
   }
+  const stateFile = gitPath(repo, GUARD_STATE);
+  if (stateFile && existsSync(dirname(stateFile))) writeFileSync(stateFile, JSON.stringify(state, null, 2) + "\n");
   return { status: present ? "present" : "installed", file };
 }
 
-export function recordHostYes(repo: string, note: string, at: string): string {
-  const file = join(repo, HOST_YES_FILE);
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify({ at, note }, null, 2) + "\n");
-  return file;
+// Takes the guard out again: its hook entries, any hook list or file it created, and its exclude
+// line, so .cursor/hooks.json and the exclude file are as they were before install. Without the
+// install record (a guard from an older copy) it removes only what is plainly the guard's.
+export function uninstallGuard(repo: string): { status: "removed" | "absent" | "tracked"; file: string } {
+  const file = join(repo, HOOKS_FILE);
+  if (tracked(repo, HOOKS_FILE)) return { status: "tracked", file };
+  const state = readState(repo);
+  let removed = false;
+  if (existsSync(file)) {
+    const cfg = JSON.parse(readFileSync(file, "utf8")) as HooksFile;
+    for (const [step, list] of Object.entries(cfg.hooks ?? {})) {
+      const kept = list.filter((h) => !isGuard(h.command) && h.command !== state?.command);
+      removed ||= kept.length !== list.length;
+      if (kept.length === 0 && (state ? state.addedSteps.includes(step) : GUARD_STEPS.includes(step))) delete cfg.hooks![step];
+      else cfg.hooks![step] = kept;
+    }
+    const empty = Object.keys(cfg.hooks ?? {}).length === 0 && Object.keys(cfg).every((k) => k === "version" || k === "hooks");
+    if (empty && (state ? state.createdFile : removed)) {
+      rmSync(file);
+      const dir = dirname(file);
+      if ((state ? state.createdDir : false) && existsSync(dir) && readdirSync(dir).length === 0) rmdirSync(dir);
+    } else if (removed) writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n");
+  }
+  const exclude = state?.exclude ?? (removed && !existsSync(file) ? gitPath(repo, "info/exclude") : null);
+  if (exclude && existsSync(exclude)) {
+    const now = readFileSync(exclude, "utf8");
+    const before = state?.excludeBefore;
+    if (state?.excludeCreated && now === `${EXCLUDE_LINE}\n`) rmSync(exclude);
+    else if (typeof before === "string" && now === `${before}${before && !before.endsWith("\n") ? "\n" : ""}${EXCLUDE_LINE}\n`) writeFileSync(exclude, before);
+    else if (now.split("\n").includes(EXCLUDE_LINE)) writeFileSync(exclude, now.split("\n").filter((l) => l !== EXCLUDE_LINE).join("\n"));
+  }
+  const stateFile = gitPath(repo, GUARD_STATE);
+  if (stateFile) rmSync(stateFile, { force: true });
+  return { status: removed || state ? "removed" : "absent", file };
+}
+
+export function guardInstalled(repo: string): boolean {
+  const file = join(repo, HOOKS_FILE);
+  try {
+    const cfg = JSON.parse(readFileSync(file, "utf8")) as HooksFile;
+    return GUARD_STEPS.every((step) => (cfg.hooks?.[step] ?? []).some((h) => isGuard(h.command)));
+  } catch {
+    return false;
+  }
 }

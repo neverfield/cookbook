@@ -9,7 +9,7 @@ const EXTERNAL = new Set([
   "NPM_TOKEN", "PIP_INDEX_URL", "DEBIAN_FRONTEND", "DOCKER_HOST", "CONTAINER_HOST",
   "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE",
 ]);
-const EXTERNAL_PREFIX = /^(GIT_|GITHUB_|RUNNER_|CURSOR_|COREPACK_|NPM_CONFIG_|npm_config_|UV_|PIP_|PYTHON|XDG_|LC_|DOCKER_)/;
+const EXTERNAL_PREFIX = /^(GIT_|GITHUB_|RUNNER_|CURSOR_|CLOUD_AGENT_|COREPACK_|NPM_CONFIG_|npm_config_|UV_|PIP_|PYTHON|XDG_|LC_|DOCKER_)/;
 const ENV_NAME = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/;
 
 // Folders that hold other repos' content as test data, not the accelerator's own variables.

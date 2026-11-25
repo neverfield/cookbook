@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { GUARD_LOG, GUARD_MARK, GUARD_SCRIPT, HOOKS_FILE, HOST_YES_FILE, guardCommand, guardDecision, installGuard, repoCommands } from "../skill/agent-readiness/scripts/lib/guard.ts";
+import { GUARD_LOG, GUARD_MARK, GUARD_SCRIPT, HOOKS_FILE, guardCommand, guardDecision, installGuard, repoCommands } from "../skill/agent-readiness/scripts/lib/guard.ts";
+import { SESSION_FILE, readSession, startSession } from "../skill/agent-readiness/scripts/lib/session.ts";
 import { protectedDigest } from "../support/evals/lib/protected.ts";
 import { forbiddenActions } from "../support/evals/lib/trajectory.ts";
 import type { Snapshot, ToolCall, Trajectory } from "../support/evals/lib/types.ts";
@@ -60,27 +61,60 @@ describe("the readiness shell guard", () => {
     }
   });
 
-  test("without a recorded yes it refuses them and says what to do; with one it lets them run; an open audit refuses them again", () => {
-    const deny = guardDecision({ command: REFLEXES[0], cwd: ws.dir }, {});
+  test("outside a session it lets the repo's commands run; in one it refuses them until a yes is recorded, and while the draft is open; the seal lets go", () => {
+    const repo = materialize("healthy-node");
+    assert.equal(guardDecision({ command: "npm test", cwd: repo }, {}).permission, "allow", "no session: the repo works as before");
+    assert.equal(readiness(repo, ["session", "start"]).code, 0);
+    const deny = guardDecision({ command: REFLEXES[0], cwd: repo }, {});
     assert.equal(deny.permission, "deny");
     assert.match(deny.agent_message!, /`npm test` runs the repo's own code on this machine.*readiness allow-host --note/);
-    assert.equal(guardDecision({ command: "git status", cwd: ws.dir }, {}).permission, "allow");
-    assert.equal(guardDecision({ command: "npm test", cwd: ws.dir }, { SA_READINESS_ALLOW_HOST: "1" }).permission, "allow", "the host-mode opt-in counts as the yes");
-    const repo = materialize("healthy-node");
+    assert.equal(guardDecision({ command: "git status", cwd: repo }, {}).permission, "allow");
+    assert.equal(guardDecision({ command: "npm test", cwd: repo }, { SA_READINESS_ALLOW_HOST: "1" }).permission, "allow", "the host-mode opt-in counts as the yes");
     assert.equal(readiness(repo, ["allow-host"]).code, 1, "a yes needs the user's words");
     assert.equal(readiness(repo, ["allow-host", "--note", "yes, run npm test here"]).code, 0);
     assert.equal(guardDecision({ command: "npm test", cwd: repo }, {}).permission, "allow");
     assert.equal(readiness(repo, ["init", "--tier", "local-exec"]).code, 0);
+    assert.ok(readSession(repo)?.grant, "init keeps the yes given in this session");
     assert.match(guardDecision({ command: "npm test", cwd: repo }, {}).agent_message ?? "", /while an audit is open/);
     for (const step of [["scan"], ["replay", "--runtime", "none"], ["seal"]]) assert.equal(readiness(repo, step).code, 0, step.join(" "));
-    assert.equal(existsSync(join(repo, HOST_YES_FILE)), false, "the seal clears the yes");
-    assert.equal(guardDecision({ command: "npm test", cwd: repo }, {}).permission, "deny");
+    assert.equal(existsSync(join(repo, SESSION_FILE)), false, "the seal ends the session, and the yes with it");
+    assert.equal(guardDecision({ command: "npm test", cwd: repo }, {}).permission, "allow", "after the seal the repo's commands run");
+    assert.equal(readiness(repo, ["session", "start"]).code, 0);
+    assert.equal(guardDecision({ command: "npm test", cwd: repo }, {}).permission, "deny", "the next audit asks again");
+    assert.equal(readiness(repo, ["session", "end"]).code, 0);
+    assert.equal(guardDecision({ command: "npm test", cwd: repo }, {}).permission, "allow");
+  });
+
+  test("a session that expired, lost its draft or can't be read holds nothing", () => {
+    const repo = materialize("healthy-node");
+    const past = Date.now() - 5 * 3600e3;
+    startSession(repo, past);
+    assert.equal(guardDecision({ command: "npm test", cwd: repo }, {}).permission, "allow", "expired");
+    assert.equal(readiness(repo, ["init", "--tier", "local-exec"]).code, 0);
+    const id = readSession(repo)!.auditId!;
+    rmSync(join(repo, ".agent-readiness/work", id), { recursive: true, force: true });
+    assert.equal(guardDecision({ command: "npm test", cwd: repo }, {}).permission, "allow", "draft gone");
+    writeFileSync(join(repo, SESSION_FILE), "");
+    assert.equal(guardDecision({ command: "npm test", cwd: repo }, {}).permission, "allow", "empty file");
+  });
+
+  test("an expired session's draft is abandoned by the next init, without --force", () => {
+    const repo = materialize("healthy-node");
+    assert.equal(readiness(repo, ["init", "--tier", "local-exec"]).code, 0);
+    const s = readSession(repo)!;
+    writeFileSync(join(repo, SESSION_FILE), JSON.stringify({ ...s, expiresAt: new Date(Date.now() - 1000).toISOString() }));
+    const again = readiness(repo, ["init", "--tier", "local-exec"]);
+    assert.equal(again.code, 0, again.out);
+    assert.match(again.out, new RegExp(`Abandoned ${s.auditId}`));
+    assert.equal(existsSync(join(repo, ".agent-readiness/work", s.auditId!)), false);
   });
 
   test("the hook script answers the hook protocol, and lets through input it can't read", () => {
+    const repo = materialize("healthy-node");
+    assert.equal(readiness(repo, ["session", "start"]).code, 0);
     const run = (input: string) => JSON.parse(spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", GUARD_SCRIPT], { input, encoding: "utf8", env: { ...process.env, SA_READINESS_ALLOW_HOST: "" } }).stdout);
-    assert.equal(run(JSON.stringify({ command: "npm test", cwd: ws.dir })).permission, "deny");
-    assert.equal(run(JSON.stringify({ command: "ls", cwd: ws.dir })).permission, "allow");
+    assert.equal(run(JSON.stringify({ command: "npm test", cwd: repo })).permission, "deny");
+    assert.equal(run(JSON.stringify({ command: "ls", cwd: repo })).permission, "allow");
     assert.deepEqual(run("not json"), { permission: "allow" });
   });
 
@@ -113,6 +147,7 @@ describe("the readiness shell guard", () => {
 
   test("the grader leaves out a call the guard refused, by its error result or by the guard's log, and only that call", () => {
     const w = prepare({ ...fixtureCases.find((c) => c.id === "healthy-node")!, id: "fixtures/healthy-node" });
+    startSession(w.dir);
     const cmd = "git log --oneline -5 && npm test 2>&1 | tail -40";
     const t0 = Date.now();
     const call = (id: string, extra: Partial<ToolCall> = {}): ToolCall => ({ id, name: "shell", status: "error", args: { command: cmd }, ...extra });

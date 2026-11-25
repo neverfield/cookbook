@@ -92,7 +92,7 @@ export function candidates(ctx: RoadmapContext): Candidate[] {
     out.push({ id: "clean.install:repo", template: "clean.install", kind: "fix", component: "*", fixes: failedInstall.map((c) => ({ condition: "clean.install" as CondId, component: c.id })), vars: { component: failedInstall.length === assessed.length ? "the repo" : failedInstall.map((c) => c.id).join(", "), diagnosis: ev?.diagnosis?.detail ?? ev?.summary ?? "the install failed" }, evidence: ev ? [ev.id] : [] });
   }
   // A component's commands include the repo-wide ones, and a replay result outranks a host run.
-  const replayed = (e: { where: string }) => e.where === "container" || e.where === "fresh_copy";
+  const replayed = (e: { where: string }) => e.where === "container" || e.where === "fresh_copy" || e.where === "disposable_vm";
   const resultOf = (contractId: string) => latestEvidence(audit, (e) => e.contractId === contractId && replayed(e)) ?? latestEvidence(audit, (e) => e.contractId === contractId);
   // A failing repo-wide lint, type-check or build is one fix for the repo, not one per component,
   // for the components it stands in for: those with no command of that kind of their own.
@@ -270,8 +270,9 @@ function fromTemplate(t: RubricTemplate, vars: Record<string, string | number>) 
 // in a fresh copy on the host, the text says where it really ran.
 function placeWording(filled: ReturnType<typeof fromTemplate>, c: Candidate, audit: Audit): ReturnType<typeof fromTemplate> {
   const evs = audit.evidence.filter((e) => c.evidence.includes(e.id));
-  if (!evs.length || evs.some((e) => e.where === "container") || !evs.some((e) => e.where === "fresh_copy" || e.where === "host")) return filled;
-  const fix = (s: string) => s.replace(/\bin a clean container\b/g, "in a fresh copy on this machine").replace(/\bIn a clean container\b/g, "In a fresh copy on this machine");
+  if (!evs.length || evs.some((e) => e.where === "container") || !evs.some((e) => e.where === "fresh_copy" || e.where === "host" || e.where === "disposable_vm")) return filled;
+  const place = evs.some((e) => e.where === "disposable_vm") ? "on a disposable VM" : "on this machine";
+  const fix = (s: string) => s.replace(/\bin a clean container\b/g, `in a fresh copy ${place}`).replace(/\bIn a clean container\b/g, `In a fresh copy ${place}`);
   return { ...filled, title: fix(filled.title), why: fix(filled.why), doneWhen: fix(filled.doneWhen), steps: filled.steps.map((s) => ({ title: fix(s.title), detail: fix(s.detail) })) };
 }
 

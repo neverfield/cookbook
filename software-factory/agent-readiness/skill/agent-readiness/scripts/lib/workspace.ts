@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { showFromBranch } from "./history.ts";
 import { latestRubricVersion, loadRubric, rubricDigest } from "./rubric.ts";
+import { attachAudit, endSession, lease, renewSession } from "./session.ts";
 import type { Audit, ScenarioSpec, Tier } from "./types.ts";
 import { SKILL_ROOT, ensureDir, exists, fail, git, gitOrThrow, isShallow, nowIso, randomHex, readJson, readText, sha256, stableStringify, today, writeJson, writeText } from "./util.ts";
 
@@ -240,10 +241,33 @@ function priorAudits(p: Paths): number {
   return text.split("\n").filter((l) => l.includes('"kind":"audit"')).length;
 }
 
-export function initAudit(opts: InitOptions): { audit: Audit; local: LocalInfo; paths: Paths } {
+// Removes an abandoned draft: its records under work/ and the temp folder that holds its tree, seed
+// and digest. Only a folder named as the audit's own temp folder is removed.
+export function discardDraft(p: Paths, id: string): void {
+  const f = join(p.work, id, "local.json");
+  if (exists(f)) {
+    const parent = dirname(readJson<LocalInfo>(f).tree);
+    if (basename(parent).startsWith(`readiness-${id}-`)) rmSync(parent, { recursive: true, force: true });
+  }
+  rmSync(join(p.work, id), { recursive: true, force: true });
+}
+
+// Drafts under work/ other than the open one: left by a crash or an older copy of the skill.
+export function strayDrafts(p: Paths): string[] {
+  if (!exists(p.work)) return [];
+  const open = currentDraftId(p);
+  return readdirSync(p.work).filter((n) => /^aud-/.test(n) && n !== open && statSync(join(p.work, n)).isDirectory());
+}
+
+export function initAudit(opts: InitOptions): { audit: Audit; local: LocalInfo; paths: Paths; abandoned: string | null } {
   const p = paths(opts.repo);
   const current = currentDraftId(p);
-  if (current && !opts.force) fail(`A draft audit is already open: ${current}. Seal it, or pass --force to abandon it.`);
+  const l = lease(opts.repo);
+  // A draft whose session expired was abandoned: the lease let go of it, so a new init may too.
+  const expired = Boolean(current && l.session?.auditId === current && !l.valid);
+  if (current && !opts.force && !expired) fail(`A draft audit is already open: ${current}. Seal it, or pass --force to abandon it.`);
+  if (current) discardDraft(p, current);
+  for (const id of strayDrafts(p)) discardDraft(p, id);
   const commit = gitOrThrow(["rev-parse", "HEAD"], opts.repo).trim();
   const seedEnv = process.env.SA_READINESS_EVAL_SEED;
   const id = `aud-${today()}-${commit.slice(0, 7)}-${seedEnv ? sha256(`${seedEnv}:${commit}:${nowIso()}`).slice(0, 4) : randomHex(2)}`;
@@ -292,7 +316,8 @@ export function initAudit(opts: InitOptions): { audit: Audit; local: LocalInfo; 
   writeJson(join(p.work, id, "local.json"), local);
   saveDraft(p, audit);
   writeText(join(p.work, "CURRENT"), id + "\n");
-  return { audit, local, paths: p };
+  attachAudit(opts.repo, id);
+  return { audit, local, paths: p, abandoned: current };
 }
 
 // Rubrics up to 2026-11-alpha promise fresh faults each audit; a rubric that sets
@@ -388,8 +413,11 @@ export function saveDraft(p: Paths, audit: Audit): void {
   writeJson(join(p.work, audit.id, "audit.json"), audit);
   const f = digestFile(p, audit.id);
   if (f && exists(dirname(f))) writeText(f, draftDigest(audit) + "\n");
+  renewSession(p.repo);
 }
 
+// The seal closes the draft and ends the session, so nothing of the audit holds the repo after it.
 export function clearCurrent(p: Paths): void {
   writeText(join(p.work, "CURRENT"), "");
+  endSession(p.repo);
 }

@@ -5,7 +5,7 @@ import { addContractCommand, checkComponent, discoverContract } from "./lib/cont
 import { compareAudits, weakeningFlags } from "./lib/diff.ts";
 import { addEvidence, recordObservation } from "./lib/evidence.ts";
 import { ghAvailable, ghJson } from "./lib/gh.ts";
-import { HOOKS_FILE, installGuard, recordHostYes } from "./lib/guard.ts";
+import { HOOKS_FILE, guardInstalled, installGuard, uninstallGuard } from "./lib/guard.ts";
 import { auditIds, loadSealedAudit, pushHistory, readHistory, readRoadmap, writeRoadmap } from "./lib/history.ts";
 import { MAX_PRS, computeOutcomes, fetchPrs, loadPrsFile } from "./lib/outcomes.ts";
 import { PREVIEW } from "./lib/preview.ts";
@@ -17,15 +17,17 @@ import { SCAN_BOUND_MINUTES, capCutFolders, sampledScope } from "./lib/scope.ts"
 import { validateAgainst } from "./lib/schema.ts";
 import { blockedBy, componentStates } from "./lib/score.ts";
 import { buildSealedReport, recheck, seal, verifySeal } from "./lib/seal.ts";
+import { LEASE_HOURS, endSession, lease, recordGrant, startSession } from "./lib/session.ts";
+import { cleanupLeftovers } from "./lib/cleanup.ts";
 import { composeServices, renderEnvFiles, renderVerifySkill, serviceKey, writeFiles } from "./lib/skill.ts";
 import { staticSignals } from "./lib/signals.ts";
 import { instructionItems, safetyScan } from "./lib/static.ts";
 import type { Audit, CommandKind, Narration, Result, Roadmap, ScanBound, ScenarioId, ScenarioSpec, Strength, Tier } from "./lib/types.ts";
 import { addDays, exists, fail, git, nowIso, randomHex, readJson, readText, sha256, today, writeJson } from "./lib/util.ts";
 import { WAIVER_FILE, applyWaivers, loadWaivers } from "./lib/waivers.ts";
-import { commitReader, currentDraftId, initAudit, loadDraft, paths, refreshTree, releaseManifest, resolveRepo, saveDraft, scratchTree } from "./lib/workspace.ts";
+import { commitReader, currentDraftId, initAudit, loadDraft, paths, refreshTree, releaseManifest, resolveRepo, saveDraft, scratchTree, writeRecordsIgnore } from "./lib/workspace.ts";
 
-const BOOLEAN = new Set(["force", "remediate", "inherit-env", "allow-host", "no-mutants", "no-instructions", "no-outcomes", "json", "push", "allow-eval", "allow-unkeyed", "dockerfile", "instructions", "strict", "help"]);
+const BOOLEAN = new Set(["images", "force", "remediate", "inherit-env", "allow-host", "no-mutants", "no-instructions", "no-outcomes", "json", "push", "allow-eval", "allow-unkeyed", "dockerfile", "instructions", "strict", "help"]);
 
 const MIN_NODE: [number, number] = [22, 14];
 
@@ -112,7 +114,8 @@ function cmdInit(a: Args): void {
   const registryEnv = csv(opt(a, "registry-env"));
   for (const k of registryEnv) if (!/^[A-Z_][A-Z0-9_]*$/.test(k)) fail(`--registry-env takes variable names, not values: ${k}`);
   for (const k of registryEnv) if (k.startsWith("SA_")) fail(`--registry-env can't pass ${k}: the audit's own settings, such as the seal key, never reach the repo's code.`);
-  const { audit, local } = initAudit({ repo: repoOf(a), scenarios, tier, registryEnv, inheritEnv: Boolean(a.flags["inherit-env"]), force: Boolean(a.flags.force) });
+  const { audit, local, abandoned } = initAudit({ repo: repoOf(a), scenarios, tier, registryEnv, inheritEnv: Boolean(a.flags["inherit-env"]), force: Boolean(a.flags.force) });
+  if (abandoned) log(`Abandoned ${abandoned}: its draft and audit tree are removed.`);
   log(`Opened ${audit.id} (${tier}) at ${audit.repo.commit.slice(0, 7)}${scenarios.length ? `, with the ${scenarios.map((s) => s.id).join(" and ")} ${scenarios.length > 1 ? "scenarios" : "scenario"} for every component` : ""}${audit.repo.dirtyTree ? "; uncommitted changes are not audited" : ""}.`);
   log(`Audit tree: ${local.tree}`);
   if (audit.repo.shallow) log("This clone is shallow, so change shares and the active-component rule come only from the commits it has. Run `git fetch --unshallow` (or `--shallow-since`) before the audit for shares over the full window.");
@@ -602,18 +605,55 @@ function cmdFeedback(a: Args): void {
 
 function cmdGuard(a: Args): void {
   const repo = repoOf(a);
-  if (a.positional[1] !== "install") fail("Use `readiness guard install`.");
-  const r = installGuard(repo);
-  if (r.status === "tracked") log(`${HOOKS_FILE} is committed in this repo, so it was left alone. To refuse the repo's own commands on this machine until the user says yes, add this command as a beforeShellExecution and a beforeReadFile hook: node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scripts/guard.ts`);
-  else log(`${r.status === "installed" ? "Added" : "Already in place:"} the readiness guard in ${HOOKS_FILE}, kept out of git. Until the user's yes is recorded with \`readiness allow-host\`, it refuses the repo's own install, build and test commands on this machine. New agent sessions load it.`);
+  const sub = a.positional[1] ?? "status";
+  if (sub === "install") {
+    const r = installGuard(repo);
+    if (r.status === "tracked") log(`${HOOKS_FILE} is committed in this repo, so it was left alone. To refuse the repo's own commands on this machine during an audit, add this command as a beforeShellExecution and a beforeReadFile hook: node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scripts/guard.ts`);
+    else log(`${r.status === "installed" ? "Added" : "Already in place:"} the readiness guard in ${HOOKS_FILE}, kept out of git. While an audit's session is open, it refuses the repo's own install, build and test commands on this machine until the user's yes is recorded with \`readiness allow-host\`, and at any time once the draft is open. Outside a session it lets them run. New agent sessions load it; \`readiness guard uninstall\` takes it out.`);
+    return;
+  }
+  if (sub === "uninstall") {
+    const r = uninstallGuard(repo);
+    if (r.status === "tracked") log(`${HOOKS_FILE} is committed in this repo, so the guard never changed it. Remove its hook entries there if you added them.`);
+    else log(r.status === "removed" ? `Removed the readiness guard: ${HOOKS_FILE} and the exclude file are as they were before \`guard install\`.` : "The readiness guard isn't installed here.");
+    return;
+  }
+  if (sub !== "status") fail("Use `readiness guard install`, `readiness guard uninstall` or `readiness guard status`.");
+  const l = lease(repo);
+  log(`Guard ${guardInstalled(repo) ? `installed in ${HOOKS_FILE}` : "not installed"}. ${l.valid ? `Enforcing: session ${l.session!.id} is open${l.session!.auditId ? ` with draft ${l.session!.auditId}` : ""}, until ${l.session!.expiresAt}.` : `Not enforcing: ${l.why}.`}`);
+}
+
+function cmdSession(a: Args): void {
+  const repo = repoOf(a);
+  const sub = a.positional[1] ?? "status";
+  if (sub === "start") {
+    writeRecordsIgnore(paths(repo));
+    const { session, renewed } = startSession(repo);
+    log(`${renewed ? "Renewed" : "Opened"} session ${session.id} until ${session.expiresAt} (${LEASE_HOURS} hours, renewed by every audit step). The seal, \`readiness session end\` or expiry ends it.`);
+    return;
+  }
+  if (sub === "end") {
+    log(endSession(repo) ? "Ended the session. The guard no longer enforces here; any draft stays until `readiness init --force` or a seal." : "No session was open.");
+    return;
+  }
+  if (sub !== "status") fail("Use `readiness session start`, `readiness session end` or `readiness session status`.");
+  const l = lease(repo);
+  if (a.flags.json) log(JSON.stringify({ valid: l.valid, why: l.why, session: l.session }, null, 2));
+  else log(l.valid ? `Session ${l.session!.id} open until ${l.session!.expiresAt}${l.session!.auditId ? `, draft ${l.session!.auditId}` : ", no draft yet"}${l.session!.grant ? "; the user's yes to host mode is recorded" : ""}.` : `No session: ${l.why}.`);
 }
 
 function cmdAllowHost(a: Args): void {
   const repo = repoOf(a);
   const note = opt(a, "note");
   if (!note) fail("Pass --note with the user's words, for example --note \"yes, run npm test here\". Record a yes only after the user gives it.");
-  const file = recordHostYes(repo, note, nowIso());
-  log(`Recorded the user's yes to running repo commands on this machine (${file.replace(repo + "/", "")}). The seal clears it, so the next audit asks again.`);
+  writeRecordsIgnore(paths(repo));
+  const s = recordGrant(repo, note, nowIso());
+  log(`Recorded the user's yes to running repo commands on this machine in session ${s.id}. The seal ends the session and clears it, so the next audit asks again.`);
+}
+
+function cmdCleanup(a: Args): void {
+  const r = cleanupLeftovers(paths(repoOf(a)), { images: Boolean(a.flags.images) });
+  log(r.length ? `Removed ${r.length} leftover${r.length === 1 ? "" : "s"}:\n  ${r.join("\n  ")}` : "Nothing left behind by earlier audits.");
 }
 
 function cmdVersion(a: Args): void {
@@ -690,8 +730,10 @@ After an audit
   feedback <check-id> --note "..." [--component C]
   version [--upstream owner/repo --tier external-systems]
   validate <file> [--kind audit|report|roadmap]
-  guard install                       add the shell hook that refuses the repo's own commands on this machine until the user says yes
-  allow-host --note "..."             record the user's yes to running repo commands on this machine, until the next seal
+  session [start|end|status]          open the audit's session at preflight, before init; the seal ends it
+  allow-host --note "..."             record the user's yes to running repo commands on this machine, for this session
+  guard [install|uninstall|status]    opt-in shell hook that, during a session, refuses the repo's own commands on this machine until the user says yes
+  cleanup [--images]                  remove abandoned drafts, temp trees and containers earlier audits left; --images also the built environment images
 `;
 
 // When this invocation began. With `at`, its end, a reader can tell which records it wrote while a
@@ -752,6 +794,8 @@ async function main(): Promise<void> {
     assets: cmdAssets,
     feedback: cmdFeedback,
     guard: cmdGuard,
+    session: cmdSession,
+    cleanup: cmdCleanup,
     "allow-host": cmdAllowHost,
     version: cmdVersion,
     validate: cmdValidate,

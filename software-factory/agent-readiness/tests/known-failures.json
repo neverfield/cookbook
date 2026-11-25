@@ -182,36 +182,6 @@
       "fixedBy": "B"
     },
     {
-      "file": "tests/journey.test.ts",
-      "test": "after the seal, the repo's own test command runs",
-      "finding": "review issue 4: the guard refuses the repo's test command after the seal",
-      "fixedBy": "C"
-    },
-    {
-      "file": "tests/journey.test.ts",
-      "test": "before any audit, the repo's own test command runs",
-      "finding": "review issue 4: the guard refuses the repo's test command before any audit",
-      "fixedBy": "C"
-    },
-    {
-      "file": "tests/journey.test.ts",
-      "test": "guard install works in a git worktree",
-      "finding": "review issue 4: guard install crashes in a worktree",
-      "fixedBy": "C"
-    },
-    {
-      "file": "tests/journey.test.ts",
-      "test": "guard uninstall puts .cursor/hooks.json and the exclude file back as they were",
-      "finding": "review issue 4: no guard uninstall",
-      "fixedBy": "C"
-    },
-    {
-      "file": "tests/journey.test.ts",
-      "test": "init --force leaves no abandoned draft or temp tree behind",
-      "finding": "proposal section 1: init --force leaks the abandoned draft",
-      "fixedBy": "C"
-    },
-    {
       "file": "support/trials/trials.test.ts",
       "test": "changesets truth R1",
       "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",

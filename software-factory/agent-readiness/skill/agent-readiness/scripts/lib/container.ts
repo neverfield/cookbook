@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { basename, dirname, isAbsolute } from "node:path";
 import { IDLE_MARK, IDLE_OFFLINE } from "./diagnose.ts";
 import { pinnedRef } from "./images.ts";
+import { normalizedEnv } from "./proofenv.ts";
 import { runCommand } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
 import { fail, randomHex, shellQuote } from "./util.ts";
@@ -24,6 +25,32 @@ export function detectRuntime(preference: string = "auto"): Runtime | null {
     if (r.status === 0) return { bin };
   }
   return null;
+}
+
+// Containers an audit left behind: named for an audit, other than `keep`'s, and older than
+// `olderThanMs`, so another repo's audit running on this machine now keeps its own. Removed, and
+// their names returned.
+export function removeLeftoverContainers(olderThanMs: number, keep: string | null, now = Date.now()): string[] {
+  const runtime = detectRuntime("auto");
+  if (!runtime) return [];
+  const ps = spawnSync(runtime.bin, ["ps", "-a", "--filter", "name=readiness-aud-", "--format", "{{.Names}}"], { encoding: "utf8", timeout: 30000 });
+  const names = ps.status === 0 ? ps.stdout.split("\n").map((n) => n.trim()).filter((n) => n.startsWith("readiness-aud-") && !(keep && n.startsWith(`readiness-${keep}-`))) : [];
+  const removed: string[] = [];
+  for (const name of names) {
+    const created = Date.parse(spawnSync(runtime.bin, ["inspect", "-f", "{{.Created}}", name], { encoding: "utf8", timeout: 30000 }).stdout.trim());
+    if (!(now - created > olderThanMs)) continue;
+    if (spawnSync(runtime.bin, ["rm", "-f", name], { encoding: "utf8", timeout: 60000 }).status === 0) removed.push(`container ${name}`);
+  }
+  return removed;
+}
+
+// The images built from a repo's declared environment, which only speed up the next audit.
+export function removeEnvImages(): string[] {
+  const runtime = detectRuntime("auto");
+  if (!runtime) return [];
+  const ls = spawnSync(runtime.bin, ["images", "--format", "{{.Repository}}:{{.Tag}}", "--filter", "reference=readiness-env-*"], { encoding: "utf8", timeout: 30000 });
+  const refs = ls.status === 0 ? ls.stdout.split("\n").map((n) => n.trim()).filter((n) => n.startsWith("readiness-env-")) : [];
+  return refs.filter((ref) => spawnSync(runtime.bin, ["rmi", ref], { encoding: "utf8", timeout: 60000 }).status === 0).map((ref) => `image ${ref}`);
 }
 
 export function buildImage(runtime: Runtime, contextDir: string, dockerfile: string, tag: string): { ok: boolean; output: string } {
@@ -76,6 +103,7 @@ export function startArgs(name: string, image: string, hostDir: string, limits: 
   // An init as PID 1 reaps orphaned processes. Without it a killed child stays a zombie, and a test
   // that checks its process tree was stopped (kill -0) sees it as still running.
   args.push("--init");
+  for (const [k, v] of Object.entries(normalizedEnv())) args.push("-e", `${k}=${v}`);
   if (limits) {
     if (limits.cpus) args.push("--cpus", String(limits.cpus));
     args.push("--memory", `${limits.memoryMb}m`, "--memory-swap", `${limits.memoryMb}m`, "--pids-limit", String(limits.pids));

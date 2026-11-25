@@ -1,5 +1,6 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import type { ProofKind } from "./proofenv.ts";
 import type { CondId, Effort, Level, ScenarioId, Strength } from "./types.ts";
 import { SKILL_ROOT, readJson, readText, sha256 } from "./util.ts";
 
@@ -53,6 +54,8 @@ export interface Rubric {
   // typecheck (from 2026-12-beta): a passing type-check meets the commands condition only once it
   // failed on a type error the audit planted. Without it, exit 0 is enough.
   canary?: { typecheck?: boolean };
+  // Where a pass proves Level 1 (from 2026-12-beta). Without it, only in a container.
+  proof?: { environments: ProofKind[] };
   outcomes: {
     windowDays: number;
     minRateN: number;

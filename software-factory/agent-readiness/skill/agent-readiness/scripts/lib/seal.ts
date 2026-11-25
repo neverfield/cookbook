@@ -9,8 +9,7 @@ import { HISTORY_BRANCH, appendHistory, loadSealedAudit, readHistory, readRoadma
 import type { LevelResult } from "./levels.ts";
 import { activeComponents, capAt, componentLevel, level3Run, outcomeLevel, partialCoverage, previousAtLevel3, recheckStates, repoLevel, scenariosFor, statesOf } from "./levels.ts";
 import { emptyStats } from "./outcomes.ts";
-import { budgetFloors, makeExecutors, newBudget, registryValuesOf, revealMutants, runContracts } from "./replay.ts";
-import { HOST_YES_FILE } from "./guard.ts";
+import { budgetFloors, checkExecutors, makeExecutors, newBudget, registryValuesOf, revealMutants, runContracts } from "./replay.ts";
 import { allowedNumbers, buildReport, danglingEvidence, narrationClaimErrors, renderMarkdown, validatePart1 } from "./render.ts";
 import { renderHtml } from "./render-html.ts";
 import { updateRoadmap } from "./roadmap.ts";
@@ -276,11 +275,11 @@ export function seal(audit: Audit, local: LocalInfo, p: Paths, log: (s: string) 
   writeLatest(p, report, md, html);
   writeRoadmap(p, roadmap);
   appendHistory(p, line);
+  // Ending the session also drops the user's yes to host mode, which is for one audit (SKILL.md
+  // rule 2): the next one asks again.
   clearCurrent(p);
   rmSync(join(p.work, audit.id), { recursive: true, force: true });
   rmSync(join(local.tree, ".."), { recursive: true, force: true });
-  // A yes to host mode is for one audit (SKILL.md rule 2): the next one asks again.
-  rmSync(join(p.repo, HOST_YES_FILE), { force: true });
   log(`Sealed ${audit.id}: ${report.executive.heading}.`);
   return { report, markdown: md, dir };
 }
@@ -415,7 +414,7 @@ export async function recheck(p: Paths, opts: RecheckOptions): Promise<{ line: H
   const copy = join(root, "work");
   exportTree(p.repo, commit, copy);
   const work: Audit = JSON.parse(JSON.stringify(audit)) as Audit;
-  const exs = makeExecutors(work, copy, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, undefined, audit.contract.some((c) => c.component === "*"));
+  const exs = await checkExecutors(work, makeExecutors(work, copy, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, undefined, audit.contract.some((c) => c.component === "*")), audit.profile!, opts.log);
   const comps = new Set(audit.profile!.components.filter((c) => c.assessed).map((c) => c.id));
   let results;
   try {
@@ -429,7 +428,7 @@ export async function recheck(p: Paths, opts: RecheckOptions): Promise<{ line: H
   // Only a command that ran and failed lowers a level; one cut off or skipped proves nothing. On the
   // host nothing is recorded as a level at all, whatever passed.
   const failed = results.filter((r) => r.status === "fail" && !r.blocked);
-  const onHost = exs.groups.some((g) => g.ex.where !== "container");
+  const onHost = exs.groups.some((g) => g.ex.where !== "container" && !(g.ex.where === "disposable_vm" && g.ex.strength === "clean_replay"));
   const cutOff = results.find((r) => r.status === "not_run" && !r.blocked);
   const blockedBy = onHost ? "no container runtime on this machine" : (results.find((r) => r.blocked)?.blocked ?? (cutOff ? `${cutOff.cmd.command} ${cutOff.note || "didn't run"}` : undefined));
   const unproven = onHost || (failed.length === 0 && Boolean(blockedBy));
