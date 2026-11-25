@@ -58,6 +58,12 @@ describe("nested modules", () => {
     assert.deepEqual(satellites.map((s) => [s.path, s.manifest]), [["benchmarks", "benchmarks/go.mod"]]);
   });
 
+  test("a go.mod with no Go source under it only keeps its folder out of the module, so it is no component", () => {
+    const { components, units } = layout(tree({ "go.mod": "module zap\n\ngo 1.22\n", "zap.go": "package zap\n", "assets/go.mod": "module zap/assets\n", "assets/logo.png": "png" }));
+    assert.deepEqual(components.map((c) => c.path), ["."]);
+    assert.deepEqual(units.find((u) => u.path === "assets")?.placement, "member");
+  });
+
   test("a nested crate outside any workspace is a component; a workspace's members and the crates it excludes are not", () => {
     const lone = layout(tree({ "Cargo.toml": "[package]\nname = \"pricing\"\n", "src/lib.rs": "\n", "exp/Cargo.toml": "[package]\nname = \"exp\"\n", "exp/src/lib.rs": "\n" }));
     assert.deepEqual(lone.components.map((c) => c.path), [".", "exp"]);

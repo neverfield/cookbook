@@ -365,7 +365,7 @@ function placeUnits(files: string[], layout: Omit<Layout, "units">, workspace: {
     if (e.skippedBy) return { ...at, placement: "excluded", source: "hint", reason: `it sits under ${e.skippedBy}/, which holds vendored, generated or test files` };
     if (workspace.excluded.some((d) => within(e.dir, d))) return { ...at, placement: "excluded", source: "workspace", reason: "the workspace leaves it out" };
     const owner = deepest(components, e.dir);
-    if (owner) return { ...at, placement: "member", of: owner.path, source: "manifest", reason: `it sits inside ${owner.path === "." ? "the root project" : owner.path}, whose build covers the folders under it` };
+    if (owner) return { ...at, placement: "member", of: owner.path, source: "manifest", reason: `it sits inside ${owner.path === "." ? "the root project" : owner.path} and isn't a project of its own` };
     const satOwner = deepest(satellites, e.dir);
     if (satOwner) return { ...at, placement: "satellite", source: "hint", reason: `it sits inside ${satOwner.path}, ${satOwner.reason.replace(/^it /, "which ")}` };
     if (e.dir === ".") return { ...at, placement: "satellite", source: "workspace", reason: "the workspace root, which lists the projects under it" };

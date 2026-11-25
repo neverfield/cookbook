@@ -9,12 +9,6 @@
     },
     {
       "file": "support/trials/trials.test.ts",
-      "test": "changesets truth K6",
-      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
-      "fixedBy": "B"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
       "test": "commander truth K6",
       "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
       "fixedBy": "B"
@@ -195,38 +189,8 @@
     },
     {
       "file": "support/trials/trials.test.ts",
-      "test": "changesets truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "cookbook truth R6",
-      "finding": "R6: the share of changes outside every component isn't reported (review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "mcp-servers truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "umami truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "zap truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "changesets truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "test": "changesets truth K1",
+      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
       "fixedBy": "E"
     },
     {
@@ -273,25 +237,7 @@
     },
     {
       "file": "support/trials/trials.test.ts",
-      "test": "umami truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
       "test": "umami truth R3",
-      "finding": "R3: no proven level on a green, tested component in a container",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "zap truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "zap truth R3",
       "finding": "R3: no proven level on a green, tested component in a container",
       "fixedBy": "E"
     },
