@@ -576,7 +576,8 @@ function toolchain(tree: string, files: string[], pm: PackageManager | null, com
   return { pinned: missing.length === 0 && found.length > 0, files: [...new Set(found)], missing };
 }
 
-const INSTRUCTION_PATTERNS: RegExp[] = [
+// Files written for agents: what they say is what an agent will do.
+const AGENT_PATTERNS: RegExp[] = [
   /(^|\/)AGENTS\.md$/,
   /(^|\/)CLAUDE\.md$/,
   /^\.cursorrules$/,
@@ -584,9 +585,13 @@ const INSTRUCTION_PATTERNS: RegExp[] = [
   /^\.github\/copilot-instructions\.md$/,
   /^\.github\/instructions\/.+\.instructions\.md$/,
   /^\.(cursor|claude|agents)\/skills\/[^/]+\/SKILL\.md$/,
-  /^(\.github\/|docs\/)?CONTRIBUTING\.md$/i,
-  /^README\.md$/i,
 ];
+
+const INSTRUCTION_PATTERNS: RegExp[] = [...AGENT_PATTERNS, /^(\.github\/|docs\/)?CONTRIBUTING\.md$/i, /^README\.md$/i];
+
+export function agentFacing(file: string): boolean {
+  return AGENT_PATTERNS.some((p) => p.test(file));
+}
 
 // Agent instructions and contributor guides come first and the README last, so a README command
 // they already give is checked once, where it's written for people working on the repo.

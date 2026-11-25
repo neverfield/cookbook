@@ -1,5 +1,7 @@
 import type { Rubric } from "./rubric.ts";
 import { strengthRank } from "./rubric.ts";
+import { agentFacing } from "./profile.ts";
+import { SECRET_PATTERN_COUNT } from "./secrets.ts";
 import type { Audit, CondId, CondState, Evidence } from "./types.ts";
 
 export interface CondDetail {
@@ -171,21 +173,38 @@ function instructionsMetReason(items: Audit["instructions"]): string {
   return `${checked} of ${items.length} instruction items check out; ${why}`;
 }
 
+// "No findings" says what was looked at, so it never reads as a guarantee the scan didn't make.
+function safetyCoverage(audit: Audit): string {
+  const read = audit.profile?.scope?.secrets.scanned;
+  const listed = audit.safety.filter((s) => !s.blocking).length;
+  const over = read === undefined ? "" : ` from ${SECRET_PATTERN_COUNT} secret patterns over ${read} ${read === 1 ? "file" : "files"}`;
+  return `no blocking safety findings${over}${listed ? `; ${listed} ${listed === 1 ? "item" : "items"} listed for review` : ""}`;
+}
+
+// From 2026-12-beta only a command in a file written for agents can hold Level 2: README and
+// CONTRIBUTING items, and paths anywhere, are listed for the reader and don't gate.
+export function gatingInstruction(rubric: Rubric, item: Audit["instructions"][number]): boolean {
+  if (rubric.severities?.instructions !== "agent_commands") return true;
+  return item.kind === "command" && agentFacing(item.source);
+}
+
 export function repoStates(audit: Audit, rubric: Rubric): Record<"instructions" | "safety" | "toolchain" | "lockfile", CondDetail> {
   const items = audit.instructions;
-  const failed = items.filter((i) => i.result === "fail");
-  const pending = items.filter((i) => i.result === "not_run" && i.category === "replay");
+  const gating = items.filter((i) => gatingInstruction(rubric, i));
+  const failed = gating.filter((i) => i.result === "fail");
+  const listed = items.filter((i) => i.result === "fail" && !gatingInstruction(rubric, i));
+  const pending = gating.filter((i) => i.result === "not_run" && i.category === "replay");
   const insEvidence = items.map((i) => i.evidenceId).filter((x): x is string => Boolean(x));
   const instructions: CondDetail =
     failed.length > 0
-      ? { state: "not_met", reason: `${failed.length} of ${items.length} instruction items are wrong`, evidence: insEvidence }
+      ? { state: "not_met", reason: listed.length || gating.length < items.length ? `${failed.length} agent instruction ${failed.length === 1 ? "command is" : "commands are"} wrong` : `${failed.length} of ${items.length} instruction items are wrong`, evidence: insEvidence }
       : pending.length > 0 && pending.every((i) => i.blocked)
         ? { state: "blocked", reason: `${pending.length} instruction commands couldn't be replayed: ${pending[0].blocked}`, evidence: insEvidence }
         : pending.length > 0
           ? { state: "unknown", reason: `${pending.length} instruction commands haven't been run`, evidence: insEvidence }
-          : { state: "met", reason: instructionsMetReason(items), evidence: insEvidence };
+          : { state: "met", reason: instructionsMetReason(items) + (listed.length ? `; ${listed.length} wrong ${listed.length === 1 ? "item" : "items"} in the README, contributor guide or a path ${listed.length === 1 ? "is" : "are"} listed and ${listed.length === 1 ? "doesn't" : "don't"} gate` : ""), evidence: insEvidence };
   const blocking = audit.safety.filter((s) => s.blocking);
-  const safety: CondDetail = blocking.length > 0 ? { state: "not_met", reason: blocking.map((b) => b.detail).join("; "), evidence: [] } : { state: "met", reason: "no blocking safety findings", evidence: [] };
+  const safety: CondDetail = blocking.length > 0 ? { state: "not_met", reason: blocking.map((b) => b.detail).join("; "), evidence: [] } : { state: "met", reason: safetyCoverage(audit), evidence: [] };
   const tc = audit.profile?.toolchain;
   const toolchain: CondDetail = !tc ? { state: "unknown", reason: "not scanned", evidence: [] } : tc.pinned ? { state: "met", reason: `pinned in ${tc.files.join(", ")}`, evidence: [] } : { state: "not_met", reason: `missing ${tc.missing.join(" and ")}`, evidence: [] };
   const lockfile = fromEvidence(rubric, latest(audit.evidence.filter((e) => e.condition === "lockfile")), "bootstrap.cold_replay", "the frozen install hasn't run");

@@ -1,7 +1,7 @@
 import { cpSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scanText } from "./redact.ts";
+import { scanText } from "./secrets.ts";
 import type { Audit, HistoryLine, ReportJson, Roadmap } from "./types.ts";
 import { ensureDir, exists, fail, git, nowIso, readJson, readText, writeJson, writeText } from "./util.ts";
 import type { Paths } from "./workspace.ts";

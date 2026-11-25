@@ -38,10 +38,10 @@ Once the component's commands pass in a clean container:
 
 For an item like "Make worker's tests catch wrong behavior":
 
-1. The report names the file and the kind of fault, never the line or the edit. Don't look for planted-fault details in `.agent-readiness/`. Faults are chosen from the code and its tests, so once the tests change the next audit plants different faults, and tests aimed at the old ones don't help.
+1. The report names the file and the kind of fault, never the line or the edit. Don't look for planted-fault details in `.agent-readiness/`. From rubric 2026-12-beta the next audit plants the faults the last one missed again first, then at least one batch of faults no report has named, and keeps planting until the estimate is decided, so tests aimed only at the named faults don't carry a weak suite.
 2. Decide the intended behavior of the named files with the user when it isn't obvious, then write tests that assert results and edge cases.
 3. Never delete tests, add skip markers or loosen assertions. `readiness diff` flags all three.
-4. Prove it with a new audit: the tests must catch at least the rubric's kill rate of the faults it plants in that component (60% from rubric 2026-11-beta).
+4. Prove it with a new audit: under rubric 2026-12-beta the estimate must be strong ([checks.md](references/checks.md#verifybehavioral_oracle-tests-catch-planted-faults)); under 2026-11-beta the tests must catch at least 60% of the faults planted in that component.
 
 ## A type-check that doesn't cover the code
 
@@ -57,7 +57,7 @@ Fix each listed item in AGENTS.md, rules, skills or the README: the wrong packag
 
 ## Safety findings
 
-- **Committed secrets:** rotating them is the owner's decision. Never print a secret's value. Move the value to the secret store and remove it from the repo.
+- **Committed secrets:** rotating them is the owner's decision. Never print a secret's value. Move the value to the secret store or an environment variable the code reads, and delete the literal; a source or config file the app needs stays tracked. Only a dotenv file is taken out of version control. A value listed for review rather than blocking, such as a public client key the app ships, needs a decision, not a rotation.
 - **An install hook that pipes a download into a shell:** vendor the script and review it, or remove the hook.
 - **Tests that read production credentials:** replace them with a fake or a sandbox value from checked-in test config.
 

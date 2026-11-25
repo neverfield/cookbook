@@ -1,0 +1,213 @@
+{
+  "rubric": "2026-12-beta",
+  "from": {
+    "file": "kill-rate.json",
+    "rubric": "2026-11-beta",
+    "killRate": 0.6
+  },
+  "rule": {
+    "batch": 5,
+    "maxDecided": 20,
+    "maxPlanted": 30,
+    "strongConfidence": 0.975,
+    "strongLow": 0.4,
+    "strongRate": 0.6,
+    "weakConfidence": 0.95,
+    "weakHigh": 0.7
+  },
+  "minForPass": 3,
+  "table": [
+    {
+      "component": "ms/ms",
+      "verdicts": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "strong"
+      ],
+      "decided": [
+        5,
+        4,
+        5,
+        5,
+        5
+      ],
+      "killRate": [
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "component": "dotenv/dotenv",
+      "verdicts": [
+        "weak",
+        "strong",
+        "strong",
+        "weak",
+        "weak"
+      ],
+      "decided": [
+        5,
+        10,
+        10,
+        15,
+        10
+      ],
+      "killRate": [
+        "fail",
+        "pass",
+        "pass",
+        "pass",
+        "fail"
+      ]
+    },
+    {
+      "component": "zustand/zustand",
+      "verdicts": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "strong"
+      ],
+      "decided": [
+        6,
+        3,
+        13,
+        6,
+        10
+      ],
+      "killRate": [
+        "pass",
+        "pass",
+        "fail",
+        "not_run",
+        "pass"
+      ]
+    },
+    {
+      "component": "commander/commander",
+      "verdicts": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "strong"
+      ],
+      "decided": [
+        14,
+        9,
+        4,
+        4,
+        3
+      ],
+      "killRate": [
+        "fail",
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "component": "mcp-servers/everything",
+      "verdicts": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "strong"
+      ],
+      "decided": [
+        14,
+        9,
+        8,
+        4,
+        4
+      ],
+      "killRate": [
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "component": "mcp-servers/filesystem",
+      "verdicts": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "strong"
+      ],
+      "decided": [
+        4,
+        5,
+        3,
+        4,
+        8
+      ],
+      "killRate": [
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "fail"
+      ]
+    },
+    {
+      "component": "mcp-servers/memory",
+      "verdicts": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "strong"
+      ],
+      "decided": [
+        3,
+        7,
+        3,
+        4,
+        13
+      ],
+      "killRate": [
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "fail"
+      ]
+    },
+    {
+      "component": "mcp-servers/sequentialthinking",
+      "verdicts": [
+        "strong",
+        "strong",
+        "strong",
+        "strong",
+        "strong"
+      ],
+      "decided": [
+        5,
+        5,
+        18,
+        13,
+        10
+      ],
+      "killRate": [
+        "pass",
+        "pass",
+        "pass",
+        "fail",
+        "pass"
+      ]
+    }
+  ]
+}

@@ -2,7 +2,8 @@ import { componentLevel } from "./levels.ts";
 import { describeRate, rate, windowLabel } from "./outcomes.ts";
 import type { Rubric, RubricTemplate } from "./rubric.ts";
 import type { CompStates } from "./score.ts";
-import { commandsFor } from "./score.ts";
+import { commandsFor, gatingInstruction } from "./score.ts";
+import { removalAdvice } from "./secrets.ts";
 import type { Audit, CondId, CondState, Component, Effort, Fix, Level, OutcomeStats, OutcomesSnapshot, Roadmap, RoadmapItem, SafetyFinding, Watch } from "./types.ts";
 import { fill, nowIso } from "./util.ts";
 import { serviceLabel } from "./diagnose.ts";
@@ -148,7 +149,7 @@ export function candidates(ctx: RoadmapContext): Candidate[] {
     }
   }
   if (anyRepo?.instructions.state === "not_met") {
-    const failed = audit.instructions.filter((i) => i.result === "fail");
+    const failed = audit.instructions.filter((i) => i.result === "fail" && gatingInstruction(rubric, i));
     const files = [...new Set(failed.map((i) => i.source))];
     const itemList = failed.map((i) => `\`${i.source}:${i.line}\` \`${i.text}\`: ${i.reason ?? i.staticReason ?? "fails"}`).join("; ");
     const diag = failed.slice(0, 2).map((i) => `${i.text} (${i.reason ?? i.staticReason})`).join(", ");
@@ -157,7 +158,7 @@ export function candidates(ctx: RoadmapContext): Candidate[] {
   if (anyRepo?.safety.state === "not_met") {
     const blocking = audit.safety.filter((s) => s.blocking);
     const secrets = blocking.filter((s) => s.kind === "secret");
-    if (secrets.length) out.push({ id: "safety:secret", template: "safety:secret", kind: "fix", component: "*", fixes: [{ condition: "safety", component: "*" }], vars: { count: secrets.length, fileCount: new Set(secrets.map((s) => s.file)).size, types: [...new Set(secrets.map((s) => s.detail))].join(", ") }, evidence: [] });
+    if (secrets.length) out.push({ id: "safety:secret", template: "safety:secret", kind: "fix", component: "*", fixes: [{ condition: "safety", component: "*" }], vars: { count: secrets.length, fileCount: new Set(secrets.map((s) => s.file)).size, types: [...new Set(secrets.map((s) => s.detail))].join(", "), removal: removalAdvice([...new Set(secrets.map((s) => s.file))]) }, evidence: [] });
     const hooks = blocking.filter((s) => s.kind === "network_piped");
     if (hooks.length) out.push({ id: "safety:hook", template: "safety:hook", kind: "fix", component: "*", fixes: [{ condition: "safety", component: "*" }], vars: { detail: hooks.map((h) => `${h.file} ${h.detail}`).join("; ") }, evidence: [] });
     const creds = blocking.filter((s) => s.kind === "credential_needed");

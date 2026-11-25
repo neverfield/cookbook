@@ -2,6 +2,7 @@ import type { ProofEnv } from "./proofenv.ts";
 export type Strength = "asserted" | "static" | "executed" | "clean_replay" | "outcome_validated";
 export type Tier = "read-only" | "local-exec" | "external-systems";
 export type ScenarioId = "first_pr" | "bug_fixes" | "features" | "repo_wide";
+export type SecretClass = "provider_token" | "private_key" | "url_credential" | "generic_assignment";
 
 // An optional breakdown a user adds; reported nested under the components it names. "*" names
 // every assessed component.
@@ -138,6 +139,8 @@ export interface Evidence {
   // A type-check canary: the known type error planted in `file`. exempt: the component's tests import
   // no file of a language with a canary, so its type-check counts on its exit code alone.
   canary?: { kind: "typecheck"; file: string | null; line?: string; exempt?: boolean };
+  // The planted-fault estimate behind a faults result, from 2026-12-beta.
+  estimate?: FaultEstimate;
   at: string;
 }
 
@@ -186,6 +189,8 @@ export interface SafetyFinding {
   blocking: boolean;
   // The id of the rule in SAFETY_RULES (static.ts) that decided whether it blocks.
   rule?: string;
+  // For a secret: its class in secrets.ts, which decides whether it can block and what advice it gets.
+  secretClass?: SecretClass;
   waived?: AppliedWaiver;
 }
 
@@ -218,6 +223,20 @@ export interface WaiverRecord {
 
 // Where a fault was planted stays outside the repository until the seal: the draft holds only
 // each fault's result, so nothing in the working tree says which lines the tests were checked on.
+// The planted-fault estimate (mutate.ts faultEstimate): low and high are the rule's one-sided Wilson
+// bounds on the share of faults the tests catch.
+export interface FaultEstimate {
+  planted: number;
+  decided: number;
+  caught: number;
+  rate: number;
+  low: number;
+  high: number;
+  verdict: "strong" | "weak" | "inconclusive";
+  // Faults an earlier sealed audit planted that this one planted again.
+  carried: number;
+}
+
 export interface Mutant {
   id: string;
   component: string;
@@ -228,6 +247,8 @@ export interface Mutant {
   after?: string;
   result: "caught" | "survived" | "discarded" | "not_run";
   exitCodes: number[];
+  // mutate.ts faultId(): kept with the site details, so it is revealed only at the seal.
+  faultId?: string;
 }
 
 export interface Asset {

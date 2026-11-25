@@ -274,6 +274,34 @@
       "date": "2026-11-14",
       "by": "earlier work",
       "why": "its layout is reproduced in tests/discovery.test.ts"
+    },
+    {
+      "repo": "npkgz/cli-progress",
+      "commit": "e2347a35a6c0922cfb0a077cf5ed21696fba46da",
+      "date": "2026-11-24",
+      "by": "pr-f",
+      "why": "public golden at Level 1 (PR F): audited, and its fault population measured with the audit operators and Stryker"
+    },
+    {
+      "repo": "Marak/colors.js",
+      "commit": "baa0e1c7dc50d868354206b9ea71273e3f05f593",
+      "date": "2026-11-24",
+      "by": "pr-f",
+      "why": "audited as a Level 1 golden candidate in PR F (v1.4.0); rejected, Level 0"
+    },
+    {
+      "repo": "node-cron/node-cron",
+      "commit": "da425dd8a314c82ebf32d77f3d64a1a9b97a50ad",
+      "date": "2026-11-24",
+      "by": "pr-f",
+      "why": "audited as a Level 1 golden candidate in PR F; rejected, strong suite"
+    },
+    {
+      "repo": "pwaller/pyfiglet",
+      "commit": "255827efbc09d662875dad50fa0edc1e1263bf45",
+      "date": "2026-11-24",
+      "by": "pr-f",
+      "why": "audited as a Level 1 golden candidate in PR F; rejected, Level 0"
     }
   ]
 }

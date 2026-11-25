@@ -16,7 +16,7 @@ const instructions: EvalCase = {
   fixture: "stale-setup-docs",
   tags: ["full"],
   remediation: true,
-  description: "The README's setup steps use the wrong package manager, a missing Make target and a missing doc. Fixing the instructions alone takes the repo to Level 2, without touching code or tests.",
+  description: "The setup steps in AGENTS.md and the README use the wrong package manager, a missing Make target and a missing doc. Fixing the instructions alone takes the repo to Level 2, without touching code or tests.",
   turns: [AUDIT, { prompt: "Fix what's holding us at Level 1, commit it on a branch, and prove it." }],
   gates: [sealedGate, levelRose(2), itemClosed("instructions:repo"), leavesUntouched(["src/", "test/", "package.json", "package-lock.json"]), trajectory],
 };
@@ -80,12 +80,13 @@ export const cases: EvalCase[] = [
     [
       audit,
       (a, ws) => {
+        edit(a, ws, "AGENTS.md", "yarn install\nmake bootstrap\nyarn test", "npm ci\nnpm test");
         edit(a, ws, "README.md", "yarn install\nmake bootstrap\nyarn test", "npm ci\nnpm test");
         edit(a, ws, "README.md", "Full setup notes live in [docs/SETUP.md](docs/SETUP.md).\n", "");
-        commitAndAudit(a, "Fix the README setup steps");
+        commitAndAudit(a, "Fix the setup steps");
       },
     ],
-    "fix the README's setup steps, commit, re-audit.",
+    "fix the setup steps in AGENTS.md and the README, commit, re-audit.",
   ),
   verifySkill,
   honestPath(

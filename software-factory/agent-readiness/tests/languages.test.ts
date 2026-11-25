@@ -22,7 +22,7 @@ import { extractFromMarkdown, instructionItems } from "../skill/agent-readiness/
 import { staticSignals } from "../skill/agent-readiness/scripts/lib/signals.ts";
 import { instructionKey, packageCommand, replayInstructions } from "../skill/agent-readiness/scripts/lib/instructions.ts";
 import { existsExact } from "../skill/agent-readiness/scripts/lib/util.ts";
-import { scanText } from "../skill/agent-readiness/scripts/lib/redact.ts";
+import { scanText } from "../skill/agent-readiness/scripts/lib/secrets.ts";
 import { jvm } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
 import { loadRubric, latestRubricVersion } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { STACKS, supported } from "../skill/agent-readiness/scripts/lib/support.ts";

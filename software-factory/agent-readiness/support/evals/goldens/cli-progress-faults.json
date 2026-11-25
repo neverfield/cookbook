@@ -1,0 +1,82 @@
+{
+  "golden": "cli-progress",
+  "repo": "npkgz/cli-progress",
+  "sha": "e2347a35a6c0922cfb0a077cf5ed21696fba46da",
+  "purpose": "The fault population behind the cli-progress golden's expected level, measured outside the audit: every place the audit's operators (skill/agent-readiness/scripts/lib/mutate.ts allSites) can plant a fault in the files its tests import, each run against the suite (mocha 'test/**/*.test.js', the package's npm test) on Node 22.",
+  "testCommand": "mocha test/**/*.test.js",
+  "sites": [
+    {
+      "file": "lib/formatter.js",
+      "line": 22,
+      "operator": "change_constant",
+      "caught": false
+    },
+    {
+      "file": "lib/formatter.js",
+      "line": 28,
+      "operator": "change_constant",
+      "caught": false
+    },
+    {
+      "file": "lib/formatter.js",
+      "line": 39,
+      "operator": "change_constant",
+      "caught": false
+    },
+    {
+      "file": "lib/formatter.js",
+      "line": 42,
+      "operator": "change_constant",
+      "caught": false
+    },
+    {
+      "file": "lib/formatter.js",
+      "line": 48,
+      "operator": "negate_condition",
+      "caught": true
+    },
+    {
+      "file": "lib/formatter.js",
+      "line": 57,
+      "operator": "change_constant",
+      "caught": false
+    },
+    {
+      "file": "lib/formatter.js",
+      "line": 58,
+      "operator": "change_constant",
+      "caught": false
+    },
+    {
+      "file": "lib/formatter.js",
+      "line": 65,
+      "operator": "boundary_flip",
+      "caught": false
+    },
+    {
+      "file": "lib/formatter.js",
+      "line": 65,
+      "operator": "change_constant",
+      "caught": false
+    },
+    {
+      "file": "lib/formatter.js",
+      "line": 70,
+      "operator": "boundary_flip",
+      "caught": false
+    },
+    {
+      "file": "lib/formatter.js",
+      "line": 70,
+      "operator": "change_constant",
+      "caught": false
+    }
+  ],
+  "caught": 1,
+  "total": 11,
+  "expectation": "With 1 of 11 sites caught, any draw of 5 holds at most 1 caught fault, which the 2026-12-beta estimate calls weak (at 5 faults, 0 or 1 caught is weak), so the faults condition is not met whichever faults are drawn. The frozen install from yarn.lock and the 6 tests pass in a clean node:22-bookworm container, so the component is Level 1.",
+  "stryker": {
+    "version": "8",
+    "note": "Independent mutation tool, its own operators, run over every file in lib/: the suite kills 82 of 620 mutants (13%); 537 have no test covering them, since only lib/formatter.js and the files it requires are tested. On lib/formatter.js alone it kills 38 of 53 (72%), mostly string-literal mutants the audit's operators don't make."
+  }
+}

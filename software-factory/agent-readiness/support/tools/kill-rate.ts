@@ -1,8 +1,9 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { faultsVerdict } from "../../skill/agent-readiness/scripts/lib/mutate.ts";
+import { estimateRule, faultEstimate, faultsVerdict, keepPlanting } from "../../skill/agent-readiness/scripts/lib/mutate.ts";
+import type { EstimateRule } from "../../skill/agent-readiness/scripts/lib/mutate.ts";
 import { loadRubric } from "../../skill/agent-readiness/scripts/lib/rubric.ts";
-import type { Mutant } from "../../skill/agent-readiness/scripts/lib/types.ts";
+import type { FaultEstimate, Mutant } from "../../skill/agent-readiness/scripts/lib/types.ts";
 import { readiness } from "./fixture.ts";
 
 // Calibrates the planted-fault kill rate on real repos. For each repo it reads every sealed audit,
@@ -11,6 +12,7 @@ import { readiness } from "./fixture.ts";
 // often a component's verdict changes from one seed to the next: the noise a rate leaves in a level.
 //
 //   node --experimental-strip-types support/tools/kill-rate.ts <repo>... [--seeds a,b,c] [--rates 1,0.8,0.6] [--out file.json]
+//   node --experimental-strip-types support/tools/kill-rate.ts --replay support/evals/calibration/kill-rate.json [--out file.json]
 //
 // The pinned trial checkouts (npm run trials) live in $SA_TRIALS_CACHE or $TMPDIR/agent-readiness-trials.
 
@@ -67,12 +69,60 @@ export function rateTable(rows: Tally[], rates: number[], minForPass: number): R
   });
 }
 
+export interface EstimateRow {
+  component: string;
+  // One sequential estimate per starting draw: the component's draws taken in turn from that one,
+  // each a batch, as plantFaults plants them, until the estimate is decided or the cap is reached.
+  verdicts: FaultEstimate["verdict"][];
+  decided: number[];
+  // The 2026-11-beta verdict of each draw on its own, at its kill rate.
+  killRate: ("pass" | "fail" | "not_run")[];
+}
+
+export function estimateTable(rows: Tally[], rule: EstimateRule, minForPass: number, killRate: number): EstimateRow[] {
+  const by = new Map<string, Tally[]>();
+  for (const t of rows) by.set(`${t.repo}/${t.component}`, [...(by.get(`${t.repo}/${t.component}`) ?? []), t]);
+  return [...by].map(([component, draws]) => {
+    const verdicts: FaultEstimate["verdict"][] = [];
+    const decided: number[] = [];
+    for (let start = 0; start < draws.length; start++) {
+      let caught = 0;
+      let counted = 0;
+      let est = faultEstimate(0, 0, rule, minForPass);
+      for (let i = 0; i < draws.length; i++) {
+        const d = draws[(start + i) % draws.length];
+        caught += d.caught;
+        counted += d.counted;
+        est = faultEstimate(caught, counted, rule, minForPass);
+        if (!keepPlanting(est, rule)) break;
+      }
+      verdicts.push(est.verdict);
+      decided.push(est.decided);
+    }
+    return { component, verdicts, decided, killRate: draws.map((d) => faultsVerdict(d.caught, d.counted, { minForPass, killRate })) };
+  });
+}
+
 function flag(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
   return i < 0 ? undefined : process.argv[i + 1];
 }
 
+// --replay <kill-rate.json>: replays recorded draws under the rubric's sequential estimate, as batches.
+function replay(file: string): void {
+  const rubric = loadRubric();
+  const rule = estimateRule(rubric.mutation);
+  if (!rule) throw new Error(`rubric ${rubric.version} has no mutation.estimate`);
+  const cal = JSON.parse(readFileSync(resolve(file), "utf8")) as { rubric: string; minForPass: number; rows: Tally[] };
+  const killRate = loadRubric(cal.rubric).mutation.killRate ?? 1;
+  const table = estimateTable(cal.rows, rule, rubric.mutation.minForPass, killRate);
+  for (const r of table) process.stdout.write(`${r.component.padEnd(36)} estimate ${r.verdicts.join(" ")} (decided ${r.decided.join(", ")}); kill rate ${killRate} per draw ${r.killRate.join(" ")}\n`);
+  const out = flag("out");
+  if (out) writeFileSync(resolve(out), JSON.stringify({ rubric: rubric.version, from: { file: basename(file), rubric: cal.rubric, killRate }, rule, minForPass: rubric.mutation.minForPass, table }, null, 2) + "\n");
+}
+
 function main(): void {
+  if (flag("replay")) return replay(flag("replay")!);
   const valued = new Set(["--seeds", "--rates", "--out"]);
   const repos = process.argv.slice(2).filter((a, i, all) => !a.startsWith("--") && !valued.has(all[i - 1] ?? "")).map((r) => resolve(r));
   if (!repos.length) throw new Error("name at least one audited repo");

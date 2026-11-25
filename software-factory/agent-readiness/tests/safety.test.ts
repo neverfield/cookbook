@@ -9,7 +9,8 @@ import { addContractCommand, commandKind, discoverContract, nodeMajor, rootTestR
 import { IMAGE_DIGESTS, pinnedRef } from "../skill/agent-readiness/scripts/lib/images.ts";
 import { componentLevel, repoLevel } from "../skill/agent-readiness/scripts/lib/levels.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
-import { EXAMPLE_KEYS, proxyPasswords, redact, scanText } from "../skill/agent-readiness/scripts/lib/redact.ts";
+import { EXAMPLE_KEYS, proxyPasswords, redact } from "../skill/agent-readiness/scripts/lib/redact.ts";
+import { scanText } from "../skill/agent-readiness/scripts/lib/secrets.ts";
 import { ALLOW_HOST_ENV, HOST_NOT_ALLOWED, assertPlatformSupported, noRuntimeReason, copyWorkTree, failingComponents, hostExecutor, newBudget, runContract, unavailableExecutor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";

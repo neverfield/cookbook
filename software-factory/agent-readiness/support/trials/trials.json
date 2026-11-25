@@ -158,19 +158,20 @@
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
-          "level": 2,
+          "level": 1,
           "outcome": "proven",
           "unproven": false,
           "couldBe": null,
           "components": {
             "dotenv": {
-              "level": 2,
+              "level": 1,
               "unproven": false
             }
           },
           "notAssessed": [],
           "instructionFailures": [],
-          "blockingSafety": []
+          "blockingSafety": [],
+          "headline": "Agents can build and test dotenv, but its tests can't yet catch wrong changes."
         }
       }
     },
@@ -761,13 +762,13 @@
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
-          "level": 1,
+          "level": 2,
           "outcome": "proven",
           "unproven": false,
           "couldBe": null,
           "components": {
             "C-Sharp": {
-              "level": 1,
+              "level": 2,
               "unproven": false
             }
           },
@@ -778,7 +779,8 @@
             "README.md:109",
             "README.md:156"
           ],
-          "blockingSafety": []
+          "blockingSafety": [],
+          "headline": "Nothing blocks agents in C-Sharp: from a clean checkout it installs, builds and passes its tests, and its tests caught the planted bugs. Start giving agents work there."
         },
         "restricted": {
           "exit": 0,
@@ -856,24 +858,22 @@
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
-          "level": 1,
+          "level": 2,
           "outcome": "proven",
           "unproven": false,
           "couldBe": null,
           "components": {
             "zap": {
-              "level": 1,
+              "level": 2,
               "unproven": false
             }
           },
           "notAssessed": [
             "benchmarks"
           ],
-          "instructionFailures": [
-            "CONTRIBUTING.md:31"
-          ],
+          "instructionFailures": [],
           "blockingSafety": [],
-          "headline": "Agents can build and test zap, but its agent instructions don't match the repo."
+          "headline": "Nothing blocks agents in zap: from a clean checkout it installs, builds and passes its tests, and its tests caught the planted bugs. Start giving agents work there."
         }
       }
     },
@@ -899,7 +899,7 @@
           "level": 1,
           "outcome": "blocked",
           "unproven": false,
-          "couldBe": null,
+          "couldBe": 2,
           "components": {
             "flexget": {
               "level": 1,
@@ -908,13 +908,8 @@
           },
           "notAssessed": [],
           "instructionFailures": [],
-          "blockingSafety": [
-            "secret flexget/components/ftp/ftp_list.py:89",
-            "secret flexget/components/thetvdb/api_tvdb.py:27",
-            "secret flexget/components/tmdb/api_tmdb.py:29",
-            "secret flexget/plugins/internal/api_rottentomatoes.py:31"
-          ],
-          "headline": "Agents can build and test flexget, but a secret is committed to the repo; planted faults couldn't run on this machine."
+          "blockingSafety": [],
+          "headline": "Level 2 couldn't be proved for flexget because the audit's time budget ran out (--budget-total or --budget-component). A rerun where these checks can run can prove it."
         }
       }
     }

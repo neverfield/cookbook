@@ -5,7 +5,7 @@ import type { Rubric } from "./rubric.ts";
 import type { CompStates } from "./score.ts";
 import { PREVIEW } from "./preview.ts";
 import { sampledScope } from "./scope.ts";
-import { blockedBy, checkCounts } from "./score.ts";
+import { blockedBy, checkCounts, gatingInstruction } from "./score.ts";
 import type { ComponentResult } from "./seal.ts";
 import { NOT_SUPPORTED, STACKS, SUPPORTED_DOC } from "./support.ts";
 import type { Asset, Audit, CondId, Component, ComponentLevel, HistoryLine, Level, OutcomeStats, OutcomesSnapshot, ReportAction, ReportChanges, ReportJson, RevertsSnapshot, Roadmap, RoadmapItem, ScenarioId } from "./types.ts";
@@ -715,7 +715,10 @@ function checkResult(input: RenderInput, checkId: string): { result: string; ok:
   if (checkId === "context.instructions_verified") {
     const k = checkCounts(audit, checkId);
     const total = k.passed + k.failed + k.notRun;
-    return { result: `${k.passed} of ${total} instruction items check out${k.failed ? `, ${k.failed} wrong` : ""}${k.notRun ? `, ${k.notRun} not run` : ""}`, ok: k.failed ? false : audit.instructions.some((i) => i.result === "not_run" && i.category === "replay") ? null : true };
+    const gating = audit.instructions.filter((i) => gatingInstruction(input.rubric, i));
+    const listed = audit.instructions.filter((i) => i.result === "fail").length - gating.filter((i) => i.result === "fail").length;
+    const wrong = k.failed - listed;
+    return { result: `${k.passed} of ${total} instruction items check out${wrong ? `, ${wrong} wrong` : ""}${listed ? `, ${listed} wrong outside the agent files, listed` : ""}${k.notRun ? `, ${k.notRun} not run` : ""}`, ok: wrong ? false : gating.some((i) => i.result === "not_run" && i.category === "replay") ? null : true };
   }
   if (checkId === "safety.execution_boundary") {
     const blocking = audit.safety.filter((s) => s.blocking);

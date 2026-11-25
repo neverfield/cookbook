@@ -80,7 +80,7 @@ export function loadGoldens(): GoldenSet {
 
 export function goldenProblems(set: GoldenSet): string[] {
   const out: string[] = [];
-  if (set.goldens.length < 4 || set.goldens.length > 6) out.push(`${set.goldens.length} goldens; the set needs 4 to 6`);
+  if (set.goldens.length < 4 || set.goldens.length > 7) out.push(`${set.goldens.length} goldens; the set needs 4 to 7`);
   for (const g of set.goldens) {
     if (!/^[0-9a-f]{40}$/.test(g.sha)) out.push(`${g.id}: the commit must be a full 40-character SHA`);
     if (!PERMISSIVE.includes(g.license)) out.push(`${g.id}: ${g.license} isn't a permissive license`);

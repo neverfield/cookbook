@@ -15,7 +15,8 @@ import { appendHistory, pushHistory, readHistory, storeAudit } from "../skill/ag
 import { allSites, applySite, chooseSites, cosmetic, isTestFile, resolveJs, sitesForLine, targetFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { computeOutcomes, fetchPrs, isAgentPr } from "../skill/agent-readiness/scripts/lib/outcomes.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
-import { redact, scanText } from "../skill/agent-readiness/scripts/lib/redact.ts";
+import { redact } from "../skill/agent-readiness/scripts/lib/redact.ts";
+import { scanText } from "../skill/agent-readiness/scripts/lib/secrets.ts";
 import { INSTALL_BLOCKED, SUDO_REFUSED, hostExecutor, newBudget, runContract } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { componentLevel, statesOf } from "../skill/agent-readiness/scripts/lib/levels.ts";
 import { runCommand, scrubbedEnv } from "../skill/agent-readiness/scripts/lib/run.ts";

@@ -9,7 +9,7 @@ import { addEvidence } from "./evidence.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
 import { ecosystemOf } from "./languages/index.ts";
-import { TYPE_CANARIES, applySite, chooseSites, faultsVerdict, killRateOf, typeCanarySite, withCanary } from "./mutate.ts";
+import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary } from "./mutate.ts";
 import { proxyPasswords, redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { SUDO_SHIM_MARK, runCommand, scrubbedEnv } from "./run.ts";
@@ -20,7 +20,8 @@ import { commandsFor } from "./score.ts";
 import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
 import { makeRecipe } from "./static.ts";
 import { SUPPORTED_DOC, notSupportedReason } from "./support.ts";
-import { plantSeed, refreshTree } from "./workspace.ts";
+import { loadSealedAudit } from "./history.ts";
+import { paths, plantSeed, refreshTree } from "./workspace.ts";
 import { canCutNetwork, canaryFailure, detectDisposableVm, normalizedEnv, offlineCommand, provesIn, runCanary } from "./proofenv.ts";
 import type { Canary, ProofEnv, VmDetection } from "./proofenv.ts";
 import { loadRubric } from "./rubric.ts";
@@ -638,9 +639,29 @@ function faultRunSec(rubric: Rubric, comp: Component): number {
   return Math.max(rubric.mutation.runTimeoutSec, hooked(comp)?.budget?.mutationRunTimeoutSec ?? 0);
 }
 
-async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executor, rubric: Rubric, testCmd: ContractCommand, budget: Budget, log: (s: string) => void): Promise<void> {
+// Fault ids the last sealed audit decided in this component, missed ones first, to plant again first.
+function priorFaults(repo: string, componentId: string, cap: number): string[] {
+  try {
+    const { audit } = loadSealedAudit(paths(repo), "latest");
+    const mine = audit.mutants.filter((m) => m.component === componentId && m.file && m.operator && m.before && (m.result === "survived" || m.result === "caught"));
+    const ordered = [...mine.filter((m) => m.result === "survived"), ...mine.filter((m) => m.result === "caught")];
+    return ordered.map((m) => m.faultId ?? faultId({ file: m.file!, before: m.before!, operator: m.operator! })).slice(0, cap);
+  } catch {
+    return [];
+  }
+}
+
+const pct = (x: number) => `${Math.round(x * 100)}%`;
+const confidence = (x: number) => `${Math.round(x * 1000) / 10}%`;
+
+// `cleanMs`: the longest clean run of the test command. From 2026-12-beta a run with a planted fault
+// gets mutation.timeoutFactor times it, at least mutation.minRunSec and never more than the fixed limit,
+// so a fault that makes the suite hang costs seconds rather than the whole limit.
+export async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executor, rubric: Rubric, testCmd: ContractCommand, budget: Budget, log: (s: string) => void, cleanMs?: number): Promise<void> {
   const comp = audit.profile!.components.find((c) => c.id === testCmd.component)!;
   const runSec = faultRunSec(rubric, comp);
+  const factor = rubric.mutation.timeoutFactor;
+  const faultSec = factor && cleanMs ? Math.min(runSec, Math.max(rubric.mutation.minRunSec ?? 30, Math.ceil((factor * cleanMs) / 1000))) : runSec;
   // Used only when the clean tree passes it, so a repo's own type errors don't discard every fault.
   let probe = compileProbe(audit, ex, comp);
   if (probe) {
@@ -648,7 +669,10 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
     charge(budget, comp.id, clean.durationMs);
     if (clean.exitCode !== 0 || clean.timedOut) probe = null;
   }
-  const sites = chooseSites(repo, tree, comp, plantSeed(audit, { tree, createdAt: audit.createdAt }), rubric.mutation.perComponent, audit.repo.commit);
+  const rule = estimateRule(rubric.mutation);
+  const identity = rubric.mutation.identity;
+  const prior = identity === "fault" ? priorFaults(repo, comp.id, rule ? carriedCap(rule) : rubric.mutation.perComponent) : [];
+  const sites = chooseSites(repo, tree, comp, plantSeed(audit, { tree, createdAt: audit.createdAt }), rule ? rule.maxPlanted : rubric.mutation.perComponent, audit.repo.commit, { identity, prior });
   if (sites.length === 0) {
     addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp.id, strength: ex.strength, where: ex.where, result: "not_run", summary: "no places to plant a fault were found in files the tests import" });
     return;
@@ -661,19 +685,53 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
   let stalls = 0;
   let stalledOut = 0;
   const fresh = ex.execFresh ?? ex.exec;
+  const runs = rubric.mutation.caughtRuns ?? rubric.mutation.flakeRuns;
+  const decided = () => mutants.filter((m) => m.result === "caught" || m.result === "survived");
+  const estimate = () => faultEstimate(decided().filter((m) => m.result === "caught").length, decided().length, rule!, rubric.mutation.minForPass, mutants.filter((m) => m.result !== "not_run").length, mutants.filter((m) => m.result !== "not_run" && prior.includes(m.faultId!)).length);
+  // A narrowed run is used only once it passed on the clean tree, so a test that depends on another
+  // file's setup can't read as a caught fault.
+  const scopes = new Map<string, boolean>();
+  let reach: ReturnType<typeof testsReaching> | undefined;
+  const testCommandFor = async (file: string): Promise<string> => {
+    if (!rubric.mutation.scoped) return testCmd.command;
+    reach ??= testsReaching(tree, comp);
+    const tests = reach ? reach(file) : null;
+    const scoped = tests ? scopedCommand(testCmd.command, testCmd.cwd, tests) : null;
+    if (!scoped) return testCmd.command;
+    if (!scopes.has(scoped)) {
+      const clean = await fresh(scoped, testCmd.cwd, capped(budget, comp.id, faultSec).sec);
+      charge(budget, comp.id, clean.durationMs);
+      const counts = countTests(audit.profile, comp.id, clean.output);
+      scopes.set(scoped, clean.exitCode === 0 && !clean.timedOut && (counts === null || counts.total > 0));
+    }
+    return scopes.get(scoped) ? scoped : testCmd.command;
+  };
+  let lookedAt = 0;
   for (const site of sites) {
+    if (rule) {
+      const d = decided().length;
+      if (d >= rule.maxDecided) break;
+      if (atLook(d, rule, decided().filter((m) => prior.includes(m.faultId!)).length) && d !== lookedAt) {
+        lookedAt = d;
+        if (!keepPlanting(estimate(), rule)) break;
+      }
+    }
     const id = `mut-${comp.id}-${n++}`;
+    const record = { id, component: comp.id, file: site.file, line: site.line, operator: site.operator, before: redact(site.before), after: redact(site.after), faultId: faultId(site) };
     if (stalls >= 2) {
       stalledOut++;
-      mutants.push({ id, component: comp.id, file: site.file, line: site.line, operator: site.operator, before: redact(site.before), after: redact(site.after), result: "not_run", exitCodes: [] });
+      mutants.push({ ...record, result: "not_run", exitCodes: [] });
+      if (rule) break;
       continue;
     }
     if (overBudget(budget, comp.id) || budgetLeftSec(budget, comp.id) < 1) {
       cut++;
-      mutants.push({ id, component: comp.id, file: site.file, line: site.line, operator: site.operator, before: redact(site.before), after: redact(site.after), result: "not_run", exitCodes: [] });
+      mutants.push({ ...record, result: "not_run", exitCodes: [] });
+      if (rule) break;
       continue;
     }
     const filePath = join(ex.root, site.file);
+    const command = await testCommandFor(site.file);
     const original = readText(filePath);
     writeFileSync(filePath, applySite(original, site));
     const codes: number[] = [];
@@ -687,9 +745,9 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
           result = "discarded";
         }
       }
-      for (let run = 0; run < rubric.mutation.flakeRuns && result !== "discarded"; run++) {
-        const limit = capped(budget, comp.id, runSec);
-        const out = await fresh(testCmd.command, testCmd.cwd, limit.sec);
+      for (let run = 0; run < runs && result !== "discarded"; run++) {
+        const limit = capped(budget, comp.id, faultSec);
+        const out = await fresh(command, testCmd.cwd, limit.sec);
         charge(budget, comp.id, out.durationMs);
         codes.push(out.exitCode ?? -1);
         if (out.timedOut) {
@@ -698,6 +756,7 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
           result = "not_run";
           break;
         }
+        stalls = 0;
         if (out.exitCode === 0 && !((countTests(audit.profile, comp.id, out.output)?.failed ?? 0) > 0)) {
           result = run === 0 ? "survived" : "discarded";
           break;
@@ -711,30 +770,50 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
     } finally {
       writeFileSync(filePath, original);
     }
-    mutants.push({ id, component: comp.id, file: site.file, line: site.line, operator: site.operator, before: redact(site.before), after: redact(site.after), result, exitCodes: codes });
+    mutants.push({ ...record, result, exitCodes: codes });
   }
   saveMutantDetails(tree, mutants);
   audit.mutants.push(...mutants.map((m) => ({ id: m.id, component: m.component, result: m.result, exitCodes: m.exitCodes })));
-  const counted = mutants.filter((m) => m.result === "caught" || m.result === "survived");
+  const counted = decided();
   const caught = counted.filter((m) => m.result === "caught").length;
   const operators = [...new Set(mutants.map((m) => m.operator))].join(", ");
   const missed = mutants.filter((m) => m.result === "survived").map((m) => m.id);
-  const cutNote = (cut ? `; the time budget cut off ${cut} of ${sites.length}` : "") + (stalledOut ? `; ${stalledOut} weren't run after two runs with planted faults timed out` : "");
-  const need = killRateOf(rubric.mutation);
-  const result = faultsVerdict(caught, counted.length, rubric.mutation);
-  const share = need < 1 ? ` the ${Math.round(need * 100)}% the rubric requires` : "";
-  const summary =
-    result === "not_run"
-      ? `only ${counted.length} planted faults gave a clear result; at least ${rubric.mutation.minForPass} are needed${cutNote}`
-      : result === "pass" && caught === counted.length
-        ? `caught ${caught} of ${counted.length} planted faults (tried: ${operators})${cutNote}`
-        : result === "pass"
-          ? `caught ${caught} of ${counted.length} planted faults, at or above${share} (tried: ${operators})${cutNote}; missed ${missed.length}${MISSED_AFTER_SEAL}`
-          : `caught ${caught} of ${counted.length} planted faults${share ? `, below${share}` : ""}${cutNote}; missed ${missed.length}${MISSED_AFTER_SEAL}`;
+  const missedNote = missed.length ? `; missed ${missed.length}${MISSED_AFTER_SEAL}` : "";
+  let result: Evidence["result"];
+  let summary: string;
+  let est: ReturnType<typeof faultEstimate> | null = null;
+  if (rule) {
+    est = estimate();
+    const cutNote = (cut ? "; the time budget ran out before the estimate was decided" : "") + (stalledOut ? "; planting stopped after two runs with planted faults timed out" : "");
+    const carried = est.carried ? `, ${est.carried} of them planted again from the last audit` : "";
+    const scopedNote = [...scopes.values()].some(Boolean) ? "; each ran only the tests that import its file" : "";
+    const share = `caught ${caught} of ${counted.length} planted faults (${pct(est.rate)})${carried}`;
+    result = est.verdict === "strong" ? "pass" : est.verdict === "weak" ? "fail" : "not_run";
+    const why = counted.length < rubric.mutation.minForPass ? `; at least ${rubric.mutation.minForPass} must give a clear result` : est.decided >= rule.maxDecided || est.planted >= rule.maxPlanted ? `; the cap of ${rule.maxDecided} was reached` : !cut && !stalledOut ? "; no more places to plant a fault" : "";
+    summary =
+      est.verdict === "strong"
+        ? `${share}: strong, at least ${pct(est.low)} with ${confidence(rule.strongConfidence)} confidence (tried: ${operators})${scopedNote}${cutNote}${missedNote}`
+        : est.verdict === "weak"
+          ? `${share}: weak, at most ${pct(est.high)} with ${confidence(rule.weakConfidence)} confidence${scopedNote}${cutNote}${missedNote}`
+          : `${share}: inconclusive, between ${pct(est.low)} and ${pct(est.high)}, too few to tell strong tests from weak ones${why}${scopedNote}${cutNote}${missedNote}`;
+  } else {
+    const cutNote = (cut ? `; the time budget cut off ${cut} of ${sites.length}` : "") + (stalledOut ? `; ${stalledOut} weren't run after two runs with planted faults timed out` : "");
+    const need = killRateOf(rubric.mutation);
+    result = faultsVerdict(caught, counted.length, rubric.mutation);
+    const share = need < 1 ? ` the ${Math.round(need * 100)}% the rubric requires` : "";
+    summary =
+      result === "not_run"
+        ? `only ${counted.length} planted faults gave a clear result; at least ${rubric.mutation.minForPass} are needed${cutNote}`
+        : result === "pass" && caught === counted.length
+          ? `caught ${caught} of ${counted.length} planted faults (tried: ${operators})${cutNote}`
+          : result === "pass"
+            ? `caught ${caught} of ${counted.length} planted faults, at or above${share} (tried: ${operators})${cutNote}${missedNote}`
+            : `caught ${caught} of ${counted.length} planted faults${share ? `, below${share}` : ""}${cutNote}${missedNote}`;
+  }
   log(`  faults in ${comp.id}: ${summary}`);
   // Too few results because the budget ran out is the audit's limit, not weak tests.
   const blocked = cut && result === "not_run" ? { blocked: BUDGET_OUT } : stalledOut && result === "not_run" ? { blocked: "test runs with planted faults kept timing out, so the fault check couldn't finish" } : {};
-  addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp.id, strength: ex.strength, where: ex.where, result, summary, image: ex.image ?? undefined, ...(missed.length ? { missedFaults: missed } : {}), ...blocked });
+  addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp.id, strength: ex.strength, where: ex.where, result, summary, image: ex.image ?? undefined, ...(missed.length ? { missedFaults: missed } : {}), ...(est ? { estimate: est } : {}), ...blocked });
 }
 
 const MISSED_AFTER_SEAL = " (the sealed report says where)";
@@ -1237,7 +1316,7 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
           continue;
         }
         try {
-          await plantFaults(audit, repo, tree, ex, rubric, testRes.cmd, budget, opts.log);
+          await plantFaults(audit, repo, tree, ex, rubric, testRes.cmd, budget, opts.log, Math.max(second.durationMs, testRes.outcome?.durationMs ?? 0));
         } catch (e) {
           const why = (e as Error).message.split("\n")[0].slice(0, 200);
           opts.log(`  faults in ${comp}: couldn't be planted (${why}); the other results are kept`);
