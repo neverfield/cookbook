@@ -215,7 +215,7 @@ describe("part 1 rules", () => {
     assert.equal(unprovenHeading([{ condition: "clean.install", state: "blocked" }, { condition: "clean.build", state: "blocked" }, { condition: "clean.test", state: "blocked" }, { condition: "clean.test", state: "blocked" }]), "Level 1 unproven on this machine: no Level 1 check failed, and 3 were blocked here");
     assert.equal(unprovenHeading([{ condition: "clean.build", state: "blocked" }]), "Level 1 unproven on this machine: no Level 1 check failed, and 1 was blocked here", "a build the network cut off");
     // No test script: by the rubric's definition a clean checkout that can't pass its tests is Level 0.
-    const noTests = reportFor(makeAudit({ components: [{ id: "app", share: 1, test: "missing", faults: "not_run" }] }));
+    const noTests = reportFor(makeAudit({ components: [{ id: "app", share: 1, test: "missing", faults: "not_run", testFiles: 0 }] }));
     assert.equal(noTests.executive.heading, "Level 0 of 4, not bootable");
     assert.equal(noTests.scale[0].meaning, "A clean checkout can't install, build and pass its tests.", "the judge is shown this meaning, so not bootable reads as defined");
     // A failing test is Level 0 too, and a Level 2 repo says so; none of them claims a check passed.

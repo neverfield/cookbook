@@ -7,6 +7,8 @@ import type { Rubric } from "./rubric.ts";
 import { readPackageJson } from "./languages/node.ts";
 import type { CommandKind, Component, ContractCommand, Profile, SafetyFinding } from "./types.ts";
 import { exists, fail, listFiles, readText, shellQuote } from "./util.ts";
+import { ciCommands, ciTestScript } from "./plan/ci.ts";
+import { DELEGATES } from "./profile.ts";
 
 export { POETRY_ENV, VENV, poetryVersion, testGroups };
 export type { ToolchainCopy, ToolSetup };
@@ -216,6 +218,8 @@ export function discoverContract(profile: Profile, tree: string, rubric: Rubric,
   for (const g of plan.slice(1)) {
     for (const c of assessed.filter((x) => g.components.includes(x.id))) cmds.push({ id: `cmd-${c.id}-doctor`, kind: "doctor", component: c.id, cwd: ".", command: doctorCommand(profile, [c]), source: "readiness", reason: `the toolchain ${c.id} uses is present in ${g.image}`, timeoutSec: 60 });
   }
+  let ciRead: ReturnType<typeof ciCommands> | null = null;
+  const ci = () => (ciRead ??= ciCommands(tree, profile.ciFiles ?? []));
   const ignoreScripts = hasNetworkPipedHook(safety);
   const hookNote = ignoreScripts ? "; install hooks skipped because one pipes the network into a shell" : "";
   const own = assessed.filter((c) => hooked(c));
@@ -244,19 +248,27 @@ export function discoverContract(profile: Profile, tree: string, rubric: Rubric,
   for (const c of own) {
     for (const d of hooked(c)!.commands(tree, c)) {
       const cwd = d.cwd && d.cwd !== "." ? (c.path === "." ? d.cwd : `${c.path}/${d.cwd}`) : c.path;
-      cmds.push(checkOnlyCommand({ id: `cmd-${c.id}-${d.kind}`, kind: d.kind, component: c.id, cwd, command: d.command, source: d.source, reason: d.reason, timeoutSec: commandTimeout(rubric, c) }, {}, null));
+      cmds.push(checkOnlyCommand({ id: `cmd-${c.id}-${d.kind}`, kind: d.kind, component: c.id, cwd, command: d.command, source: d.source, reason: d.reason, timeoutSec: commandTimeout(rubric, c), tier: "convention", confidence: "derived" }, {}, null));
     }
   }
   for (const c of assessed.filter((x) => !hooked(x))) {
     if (c.language === "py") {
       const test = pythonTest(tree, c.path, c.packageManager ?? pm, c.stack === "uv-workspace" && c.path !== "." && !c.packageManager);
-      if (test) cmds.push({ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: c.path, command: test, source: c.manifest ?? "readiness", reason: "discovered test runner", timeoutSec: timeout });
+      if (test) cmds.push({ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: c.path, command: test, source: c.manifest ?? "readiness", reason: "discovered test runner", timeoutSec: timeout, tier: "convention", confidence: "derived" });
       continue;
     }
     for (const kind of ["build", "lint", "typecheck", "test"] as const) {
       const script = SCRIPT_ALIASES[kind].find((s) => c.scripts[s] && !(kind === "test" && PLACEHOLDER_TEST.test(c.scripts[s])));
+      // From 2026-12-beta the test script CI runs in the component's folder outranks the manifest's
+      // test script, when it is a different one.
+      const fromCi = kind === "test" && rubric.attribution ? ciTestScript(ci(), c.path, c.scripts, DELEGATES) : null;
+      if (fromCi && fromCi.script !== script) {
+        const via = fromCi.called === fromCi.script ? "" : `, through its ${fromCi.called} script`;
+        cmds.push(checkOnlyCommand({ id: `cmd-${c.id}-test`, kind, component: c.id, cwd: c.path, command: runScript(c.packageManager ?? pm, fromCi.script), source: fromCi.source, reason: `the test script CI runs${via}`, timeoutSec: timeout, tier: "ci", confidence: fromCi.called === fromCi.script ? "declared" : "derived" }, c.scripts, c.packageManager ?? pm));
+        continue;
+      }
       if (!script) continue;
-      const cmd: ContractCommand = { id: `cmd-${c.id}-${kind}`, kind, component: c.id, cwd: c.path, command: runScript(c.packageManager ?? pm, script), source: `${c.manifest} scripts.${script}`, reason: `discovered ${kind} script`, timeoutSec: timeout };
+      const cmd: ContractCommand = { id: `cmd-${c.id}-${kind}`, kind, component: c.id, cwd: c.path, command: runScript(c.packageManager ?? pm, script), source: `${c.manifest} scripts.${script}`, reason: `discovered ${kind} script`, timeoutSec: timeout, tier: "manifest", confidence: "declared" };
       cmds.push(checkOnlyCommand(cmd, c.scripts, c.packageManager ?? pm));
     }
     // No test script, but a Make target that runs the tests, such as `make test` calling a test:unit
@@ -264,7 +276,7 @@ export function discoverContract(profile: Profile, tree: string, rubric: Rubric,
     if (!cmds.some((k) => k.component === c.id && k.kind === "test")) {
       const makefile = c.path === "." ? "Makefile" : `${c.path}/Makefile`;
       const make = makeTestTarget(exists(join(tree, makefile)) ? readText(join(tree, makefile)) : null);
-      if (make) cmds.push({ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: c.path, command: `make ${make.target}`, source: `${makefile}:${make.line}`, reason: `the Makefile's ${make.target} target runs the tests`, timeoutSec: timeout });
+      if (make) cmds.push({ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: c.path, command: `make ${make.target}`, source: `${makefile}:${make.line}`, reason: `the Makefile's ${make.target} target runs the tests`, timeoutSec: timeout, tier: "task_runner", confidence: "derived" });
     }
   }
   // A workspace whose tests run from the root (`"test": "vitest"`) has packages with no test script
@@ -274,7 +286,7 @@ export function discoverContract(profile: Profile, tree: string, rubric: Rubric,
   if (root) {
     for (const c of assessed.filter((x) => nodeLang(x) && x.path !== "." && !cmds.some((k) => k.component === x.id && k.kind === "test"))) {
       if (!hasTestFiles(join(tree, c.path))) continue;
-      cmds.push({ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: ".", command: scopedRun(pm, root.script, c.path), source: `package.json scripts.${root.script}`, reason: `the root ${root.runner} run, scoped to ${c.path}`, timeoutSec: timeout });
+      cmds.push({ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: ".", command: scopedRun(pm, root.script, c.path), source: `package.json scripts.${root.script}`, reason: `the root ${root.runner} run, scoped to ${c.path}`, timeoutSec: timeout, tier: "manifest", confidence: "derived" });
     }
   }
   return cmds;
@@ -442,7 +454,7 @@ export function addContractCommand(cmds: ContractCommand[], rawInput: { kind: Co
   let i = 2;
   while (cmds.some((c) => c.id === id)) id = `${base}-${i++}`;
   const comp = profile?.components.find((c) => c.id === input.component) ?? profile?.components.find((c) => dir(c.path) === dir(input.cwd));
-  const cmd = checkOnlyCommand({ id, timeoutSec: input.timeoutSec ?? 600, ...input }, comp?.scripts ?? {}, comp?.packageManager ?? profile?.packageManager ?? null);
+  const cmd = checkOnlyCommand({ id, timeoutSec: input.timeoutSec ?? 600, ...input, tier: "override", confidence: input.source === "agent" ? "guessed" : "declared" }, comp?.scripts ?? {}, comp?.packageManager ?? profile?.packageManager ?? null);
   cmds.push(cmd);
   return cmd;
 }
@@ -470,6 +482,15 @@ export function toolSetup(profile: Profile, tree: string, only?: Set<string>): T
     const pin = pkg?.packageManager?.match(/^bun@(\d[\w.+-]*)/)?.[1] ?? pkg?.engines?.bun;
     const spec = `bun@${pin ?? "1"}`;
     out.push({ tool: "bun", spec, install: `npm install -g --silent --no-fund --no-audit ${shellQuote(spec)}` });
+  }
+  // Corepack runs the version packageManager names, or its own default. With no packageManager, an
+  // exact engines pin is the version the repo's engine check accepts, so corepack is set to it.
+  for (const pm of ["pnpm", "yarn"] as const) {
+    const dir = pms.get(pm);
+    if (dir === undefined) continue;
+    const pkg = readPackageJson(join(tree, dir));
+    const pin = pkg?.packageManager ? null : pkg?.engines?.[pm]?.trim().match(/^=?v?(\d+\.\d+\.\d+)$/)?.[1];
+    if (pin) out.push({ tool: pm, spec: `${pm}@${pin}`, install: `corepack prepare ${shellQuote(`${pm}@${pin}`)} --activate`, present: `test "$(corepack ${pm} --version 2>/dev/null)" = ${pin}` });
   }
   const poetryDir = pms.get("poetry");
   if (poetryDir !== undefined) {

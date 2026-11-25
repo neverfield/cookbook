@@ -242,18 +242,6 @@
       "fixedBy": "E"
     },
     {
-      "file": "tests/abstention.test.ts",
-      "test": "tests that fail because the audit's install left out the test runner are undetermined, not Level 0",
-      "finding": "review issue 1: pytest under optional dependencies is Level 0",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/abstention.test.ts",
-      "test": "with nothing run, no component is Level 0",
-      "finding": "proposal section 1: noRealResults returns early on a missing test command",
-      "fixedBy": "E"
-    },
-    {
       "file": "tests/docs.test.ts",
       "test": "the Quickstart clones the release RELEASE.json names, and never says no tag exists",
       "finding": "sims 8: the Quickstart contradicts RELEASE.json",

@@ -59,6 +59,9 @@ export interface Component {
   lockfile?: string | null;
   // The entry in scripts/lib/support.ts this component falls under.
   stack?: string;
+  // Files under the component, and no other component, that match its language's test-file rule.
+  // Unset when the scan didn't count them.
+  testFiles?: number;
 }
 
 export interface Profile {
@@ -125,6 +128,24 @@ export interface ContractCommand {
   fallbackFor?: string;
   // The command as the repo declares it, when the audit runs a check-only form without its write flags.
   declared?: string;
+  // Where the command came from, most authoritative first: a command added with `contract add`, a CI
+  // workflow's run step, the repo's environment file, a task runner, the manifest's scripts, or the
+  // language's convention. confidence: declared by the repo, derived from what it declares, or guessed.
+  tier?: CommandTier;
+  confidence?: "declared" | "derived" | "guessed";
+}
+
+export type CommandTier = "override" | "ci" | "environment" | "task_runner" | "manifest" | "convention";
+
+// Whose failure a failed step is. repo: an experiment showed it, or the step ran in an environment
+// whose self-check passed and failed on its own terms. environment: a limit of the audit's machine or
+// of a choice the audit made. undetermined: the audit can't tell, and says what would settle it.
+export interface Attribution {
+  verdict: "repo" | "environment" | "undetermined";
+  basis: "experiment" | "canary" | "known_cause";
+  // For an experiment, what the rerun changed.
+  changed?: "network" | "image" | "tool";
+  detail: string;
 }
 
 export interface Evidence {
@@ -160,13 +181,18 @@ export interface Evidence {
   canary?: { kind: "typecheck"; file: string | null; line?: string; exempt?: boolean };
   // The planted-fault estimate behind a faults result, from 2026-12-beta.
   estimate?: FaultEstimate;
+  // Whose failure this is, for a failed step (lib/attribute.ts).
+  attribution?: Attribution;
+  // "on": the step ran with the network on, as the rerun of a test that failed with it cut.
+  network?: "on";
   at: string;
 }
 
 export interface Diagnosis {
   // missing_ref: a git ref or remote the audit's single-commit clean copy doesn't have, such as origin/main.
   // interactive: the command stopped at a prompt that wants a person's answer.
-  cause: "service" | "credential" | "registry" | "missing_tool" | "missing_module" | "network" | "permission" | "timeout" | "compile" | "missing_ref" | "interactive" | "unknown";
+  // missing_library: a shared system library the code loads isn't in the image.
+  cause: "service" | "credential" | "registry" | "missing_tool" | "missing_module" | "missing_library" | "network" | "permission" | "timeout" | "compile" | "missing_ref" | "interactive" | "unknown";
   detail: string;
   // For a refused connection, the service usually on that port. It names the service in report text
   // only when serviceNamed says the output named it; otherwise it only guides remediation drafts.
@@ -505,6 +531,8 @@ export interface HistoryLine {
   noLevel?: boolean;
   // Level 1 was unproven on this machine: every Level 1 condition left was blocked here and none failed.
   unproven?: boolean;
+  // Level 1 was undetermined: none failed for a reason in the repo, and the audit couldn't tell the rest.
+  undetermined?: boolean;
   shares: Record<string, number>;
   active: string[];
   outcomes?: { window: string; agent: OutcomeStats; control: OutcomeStats; byComponent: Record<string, OutcomeStats>; source?: "gh" | "file" } | null;
@@ -557,6 +585,11 @@ export interface ReportJson {
     capReasons: CapReason[];
     // True when the level is 0 only because this machine couldn't check Level 1.
     unproven: boolean;
+    // From 2026-12-beta. proven: the level rests on checks that ran. unproven: this machine couldn't
+    // check Level 1, and another machine settles it. undetermined: no Level 1 check failed for a reason
+    // in the repo, and the audit couldn't tell the rest; one fact about the repo settles it.
+    status?: LevelStatus;
+    settleBy?: SettleBy | null;
     next: { level: Level; name: string; met: string[]; unmet: string[] } | null;
   };
   // Tier 2: each component found, with tier 3, the scenarios added for it, nested under it.
@@ -616,6 +649,15 @@ export interface ReportWaivers {
   rejected: { id: string; reason: string }[];
 }
 
+export type LevelStatus = "proven" | "unproven" | "undetermined" | "not_assessed";
+
+// What settles an unproven or undetermined level: a rerun on another machine, a command the repo
+// runs its tests with, a fix to the component map, or a declared environment.
+export interface SettleBy {
+  kind: "rerun" | "add_command" | "fix_map" | "declare_env";
+  text: string;
+}
+
 export interface CapReason {
   component: string;
   condition: string;
@@ -624,7 +666,8 @@ export interface CapReason {
   reason: string;
 }
 
-// level is null when the audit has no real results to give one from.
+// level is null when the audit has no real results to give one from, or the component's Level 1 is
+// undetermined.
 export interface ComponentLevel {
   id: string;
   path: string;
@@ -637,6 +680,8 @@ export interface ComponentLevel {
   level: Level | null;
   couldBe: Level | null;
   unproven: boolean;
+  status?: LevelStatus;
+  settleBy?: SettleBy | null;
   capReasons: CapReason[];
   scenarios: { id: ScenarioId; label: string; level: Level | null; couldBe: Level | null; unproven: boolean }[];
 }

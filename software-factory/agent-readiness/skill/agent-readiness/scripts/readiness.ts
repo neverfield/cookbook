@@ -366,7 +366,8 @@ function cmdNarrate(a: Args): void {
 }
 
 // One wording for a level wherever status prints it, matching part 4 of the report.
-function levelText(row: { level: number | null; couldBe: number | null; unproven: boolean } | undefined): string {
+function levelText(row: { level: number | null; couldBe: number | null; unproven: boolean; status?: string; settleBy?: { text: string } | null } | undefined): string {
+  if (row?.status === "undetermined") return `Level 1 undetermined${row.settleBy ? `; to settle it: ${row.settleBy.text}` : ""}`;
   if (!row || row.level === null) return "not assessed";
   if (row.unproven) return "Level 1 unproven on this machine (could be 1)";
   return `Level ${row.level}${row.couldBe !== null ? ` (could be ${row.couldBe})` : ""}`;

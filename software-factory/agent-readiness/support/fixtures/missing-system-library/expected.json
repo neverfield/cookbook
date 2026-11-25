@@ -1,0 +1,18 @@
+{
+  "purpose": "A test loads a shared system library the image the audit picked doesn't have. The audit can't tell whether the repo or its own choice of image is at fault, so Level 1 is undetermined rather than Level 0, and the report says declaring the image would settle it.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 0,
+      "levels": {
+        "missing-system-library": null
+      },
+      "top": [],
+      "startNow": null,
+      "noBlocker": false,
+      "safety": "pass",
+      "outcome": "proven",
+      "diagnosis": "the system library libreadiness-fixture.so.1 is missing"
+    }
+  ]
+}

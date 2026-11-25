@@ -6,6 +6,8 @@ import { hooked, imagePlan, toolchainCopies, toolSetup } from "./contract.ts";
 import { ALLOW_HOST_ENV } from "./guard.ts";
 import { BUNDLE_GAP, diagnose, rootError, testCounts } from "./diagnose.ts";
 import { addEvidence } from "./evidence.ts";
+import { attribute, networkVerdict, rerunsOnline } from "./attribute.ts";
+import type { AttributionInput } from "./attribute.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
 import { ecosystemOf } from "./languages/index.ts";
@@ -14,7 +16,7 @@ import { proxyPasswords, redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { SUDO_SHIM_MARK, runCommand, scrubbedEnv } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
-import type { Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Language, Mutant, Profile, Strength, Where } from "./types.ts";
+import type { Attribution, Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Language, Mutant, Profile, Strength, Where } from "./types.ts";
 import { containedPath, exists, fail, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
 import { commandsFor } from "./score.ts";
 import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
@@ -37,6 +39,10 @@ export interface Executor {
   // registry: a setup step (the doctor or an install), the only commands the registry variables reach.
   exec(command: string, cwd: string, timeoutSec: number, opts?: { imageUser?: boolean; registry?: boolean }): Promise<RunOutcome>;
   offline(): boolean;
+  // Turns the network back on after offline(), for one experiment; false when it can't.
+  online?(): boolean;
+  // Adds a tool the image the audit picked lacks, with the network on; false when it can't.
+  addTool?(tool: string): boolean;
   // Whether the last offline() call cut the network; null before it runs and on the host.
   networkOff: boolean | null;
   close(): void;
@@ -71,6 +77,7 @@ export function banRepeats(ex: Executor, timedOut: Set<string>): Executor {
 export const SUDO = /(^|[\s;&|(`]|\$\()sudo(\s|$)/;
 export const SUDO_REFUSED = "not run on the host: it uses sudo, which the audit only runs inside a container";
 export const NETWORK_ON = "the network couldn't be switched off for the test phase, so this pass doesn't prove a clean checkout";
+export const NEEDS_NETWORK = "the tests pass only with the network on, and it couldn't be switched back on to plant faults";
 
 const SECRET_NAME = /(KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|AUTH)/i;
 
@@ -153,6 +160,10 @@ export function vmExecutor(root: string, registryEnv: string[], inheritEnv: bool
     ex.networkOff = cut;
     return cut;
   };
+  ex.online = () => {
+    cut = false;
+    return true;
+  };
   return ex;
 }
 
@@ -182,6 +193,15 @@ export function containerExecutor(session: ContainerSession, root: string, image
     root,
     exec: (command, cwd, timeoutSec, opts) => session.exec(command, cwd, timeoutSec, opts),
     offline: () => (ex.networkOff = session.disconnectNetwork()),
+    online: () => session.reconnectNetwork(),
+    addTool: (tool) => {
+      const back = session.offline && session.reconnectNetwork();
+      try {
+        return session.asImageUser(addToolCommand(tool), 300000).ok;
+      } finally {
+        if (back) session.disconnectNetwork();
+      }
+    },
     networkOff: null,
     close: () => session.stop(),
     runUser: session.user ? session.user.split(":")[0] : null,
@@ -221,6 +241,10 @@ export interface PhaseResult {
   blocked?: string;
   // Where it ran, when the replay used more than one image.
   executor?: Executor;
+  // Whose failure it is, when an experiment decided it.
+  attribution?: Attribution;
+  // The rerun, with the network on, of a test run that failed with it cut.
+  networkOn?: boolean;
 }
 
 export const INSTALL_BLOCKED = "not run because the install was blocked on this machine";
@@ -354,7 +378,8 @@ export async function runContract(
   ex: Executor,
   contract: ContractCommand[],
   // tree: the audited commit, to list the files a check must leave alone and put them back from.
-  opts: { components: Set<string>; budget: Budget; registryValues: string[]; tree?: string; onResult?: (r: PhaseResult) => void; workspacePackages?: WorkspacePackage[]; profile?: Profile | null },
+  // reruns: the experiments a failed test run gets (lib/attribute.ts).
+  opts: { components: Set<string>; budget: Budget; registryValues: string[]; tree?: string; onResult?: (r: PhaseResult) => void; workspacePackages?: WorkspacePackage[]; profile?: Profile | null; reruns?: ("network" | "tool")[] },
 ): Promise<PhaseResult[]> {
   const results: PhaseResult[] = [];
   const push = (r: PhaseResult) => {
@@ -459,6 +484,8 @@ export async function runContract(
     else push({ ...first, note: again ? "failed before the build and again after it" : first.note });
   }
   for (const cmd of offlineCmds) await run(cmd);
+  if (opts.reruns?.includes("tool")) await toolExperiment(ex, results.slice(firstOffline), attempt, push);
+  if (opts.reruns?.includes("network") && wentOffline) await networkExperiment(ex, results.slice(firstOffline), attempt, push);
   // A container whose network wouldn't go down failed a check of the audit's own environment, so
   // nothing from the offline phase counts, pass or fail. A disposable VM that can't cut its network
   // runs the tests with it on, and the report says so.
@@ -466,6 +493,58 @@ export async function runContract(
     for (const r of results.slice(firstOffline)) if (r.status !== "not_run" || !r.blocked) r.blocked = NETWORK_ON;
   }
   return results;
+}
+
+// Each test run that failed with the network cut, for no reason the audit's install or image already
+// explains, runs once more with the network on. A pass makes the failure the environment's; a second
+// failure makes it the repo's. The network goes back off for the steps after.
+async function networkExperiment(ex: Executor, offline: PhaseResult[], attempt: (cmd: ContractCommand) => Promise<PhaseResult | null>, push: (r: PhaseResult) => void): Promise<void> {
+  const failed = offline.filter((r) => r.cmd.kind === "test" && r.status === "fail" && !r.blocked && rerunsOnline(attribute(phaseAttributionInput(ex, r), ex.imageSource)));
+  if (!failed.length || !ex.online?.()) return;
+  try {
+    for (const r of failed) {
+      const again = await attempt(r.cmd);
+      if (!again || again.status === "not_run") continue;
+      const first = attribute(phaseAttributionInput(ex, r), ex.imageSource);
+      r.attribution = networkVerdict(first, again.status === "pass", again.diagnosis?.detail ?? "non-zero exit");
+      push({ ...again, networkOn: true, attribution: again.status === "fail" ? r.attribution : undefined, note: again.status === "pass" ? NETWORK_RERUN_PASSED : "failed again with the network on" });
+    }
+  } finally {
+    ex.offline();
+  }
+}
+
+export const NETWORK_RERUN_PASSED = "passed with the network on, after failing with it cut";
+
+// The tools the audit adds to an image it picked when a test run fails for want of one: only git,
+// since the audit already sets the identity tests that commit use.
+const ADDABLE = new Set(["git"]);
+
+export function addToolCommand(tool: string): string {
+  return `command -v ${tool} >/dev/null 2>&1 || { (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ${tool} ca-certificates) >/dev/null 2>&1 || (apk add --no-cache ${tool} >/dev/null 2>&1); command -v ${tool} >/dev/null 2>&1; }`;
+}
+
+const missingTool = (r: PhaseResult) => (r.diagnosis?.cause === "missing_tool" ? r.diagnosis.detail.replace(/ is not installed$/, "") : null);
+
+// A test run blocked because git is missing from an image the audit picked runs again once the audit
+// adds it. A pass makes the failure the image's; the rerun's own result stands either way.
+async function toolExperiment(ex: Executor, offline: PhaseResult[], attempt: (cmd: ContractCommand) => Promise<PhaseResult | null>, push: (r: PhaseResult) => void): Promise<void> {
+  if (ex.where !== "container" || ex.imageSource === "repo" || !ex.addTool) return;
+  const failed = offline.filter((r) => r.cmd.kind === "test" && r.status === "fail" && r.blocked && ADDABLE.has(missingTool(r) ?? ""));
+  const added = new Map<string, boolean>();
+  for (const r of failed) {
+    const tool = missingTool(r)!;
+    if (!added.has(tool)) added.set(tool, ex.addTool(tool));
+    if (!added.get(tool)) continue;
+    const again = await attempt(r.cmd);
+    if (!again || again.status === "not_run") continue;
+    r.attribution = { verdict: "environment", basis: "experiment", changed: "tool", detail: `${tool} was missing from the image the audit picked` };
+    push({ ...again, note: `${again.status === "pass" ? "passed" : "ran"} once the audit added ${tool} to its image` });
+  }
+}
+
+function phaseAttributionInput(ex: Pick<Executor, "where">, r: PhaseResult): AttributionInput {
+  return { result: r.status, kind: r.cmd.kind, where: ex.where, blocked: r.blocked, diagnosis: r.diagnosis ?? undefined, timedOut: r.outcome?.timedOut, summary: r.diagnosis?.detail ?? "", outputTail: r.outcome?.output };
 }
 
 // The output's last 4 KB, led by the build tool's root error when that falls outside them, as
@@ -486,6 +565,9 @@ export function evidenceFromPhase(audit: Audit, ex: Executor, r: PhaseResult, re
   else summary = `${r.cmd.kind} failed: ${r.diagnosis?.detail ?? "non-zero exit"}${counts && counts.failed ? ` (${counts.failed} of ${counts.total} tests failed)` : ""}`;
   if (r.status === "fail" && r.diagnosis?.cause === "registry" && audit.environment.registryEnv.length === 0) summary = `${r.cmd.kind} failed: registry credentials not provided (pass them with --registry-env)`;
   if (r.cmd.declared && r.status !== "not_run") summary += `; ran check-only, without the write flags in \`${r.cmd.declared}\``;
+  if (r.networkOn) summary = r.status === "pass" ? `${summary}, with the network on, after failing with it cut` : `${summary}; it failed again with the network on`;
+  else if (/once the audit added /.test(r.note)) summary += `, ${r.note.replace(/^(passed|ran) /, "")}`;
+  const attribution = r.attribution ?? attribute(phaseAttributionInput(ex, r), ex.imageSource) ?? undefined;
   const failedIn = r.status === "fail" && r.cmd.component === "*" && ATTRIBUTED.has(r.cmd.kind) && r.outcome && !r.blocked ? failingComponents(r.outcome.output, r.cmd.cwd, audit.profile?.components.filter((c) => c.assessed) ?? [], ex.root) : null;
   if (failedIn) summary += `; every failure is in ${failedIn.join(", ")}`;
   return addEvidence(audit, {
@@ -509,6 +591,8 @@ export function evidenceFromPhase(audit: Audit, ex: Executor, r: PhaseResult, re
     diagnosis: r.diagnosis ?? undefined,
     blocked: r.blocked,
     ...(failedIn ? { failedIn } : {}),
+    ...(attribution ? { attribution } : {}),
+    ...(r.networkOn ? { network: "on" as const } : {}),
   });
 }
 
@@ -1002,7 +1086,7 @@ function startContainer(audit: Audit, runtime: NonNullable<ReturnType<typeof det
   // one. Poetry needs the venv module above.
   if (imageSource !== "repo") {
     for (const t of toolSetup(audit.profile!, copyDir, new Set(comps.map((c) => c.id)))) {
-      if (session.asImageUser(`command -v ${t.tool}`, 30000).ok) continue;
+      if (session.asImageUser(t.present ?? `command -v ${t.tool}`, 60000).ok) continue;
       const added = session.asImageUser(t.install, TOOL_SETUP_MS, { registry: true });
       (audit.environment.tools ??= []).push({ spec: t.spec, added: added.ok });
       log(added.ok ? `Added ${t.spec} to the image for the frozen install.` : `Couldn't add ${t.spec} to the image, so its install will be blocked: ${tail(added.output, 300)}`);
@@ -1231,6 +1315,7 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
   try {
     const results = await runContracts(exs, audit.contract, {
       components,
+      reruns: rubric.attribution?.reruns ?? [],
       budget,
       registryValues,
       tree,
@@ -1281,7 +1366,8 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
       for (const comp of components) {
         const ex = exs.forComponent(comp);
         const mine = new Set(commandsFor(audit.contract, comp, "test").map((c) => c.id));
-        const testRuns = results.filter((r) => mine.has(r.cmd.id));
+        // A rerun with the network on stands in for the run it repeated.
+        const testRuns = [...new Map(results.filter((r) => mine.has(r.cmd.id)).map((r) => [r.cmd.id, r])).values()];
         const testRes = testRuns.find((r) => r.cmd.component === comp) ?? testRuns[0];
         if (!testRes || testRuns.some((r) => r.status !== "pass")) {
           addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: testRes ? "tests must pass before faults can be planted" : "no test command found" });
@@ -1291,36 +1377,49 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
           addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "faults weren't planted: the network couldn't be switched off for the test phase", blocked: NETWORK_ON });
           continue;
         }
-        const limit = capped(budget, comp, testRes.cmd.timeoutSec);
-        const second = overBudget(budget, comp) || budgetLeftSec(budget, comp) < 1 ? null : await ex.exec(testRes.cmd.command, testRes.cmd.cwd, limit.sec);
-        if (second) charge(budget, comp, second.durationMs);
-        if (!second || (second.timedOut && limit.byBudget)) {
-          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "faults weren't planted: the time budget ran out first", blocked: BUDGET_OUT });
+        // Tests that passed only with the network on get it for the planted faults as well.
+        const needsNetwork = testRuns.some((r) => r.networkOn);
+        if (needsNetwork && !ex.online?.()) {
+          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `faults weren't planted: ${NEEDS_NETWORK}`, blocked: NEEDS_NETWORK });
           continue;
         }
-        // The unmutated tests timing out means every run with a planted fault would too: the fault
-        // check is unproven here, said once, rather than a timeout per fault.
-        if (second.timedOut) {
-          const why = diagnose(second.output, true, "test").detail;
-          const stalled = `the unmutated test run timed out (${why}), so each planted fault would time out too`;
-          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `faults weren't planted: ${stalled}`, blocked: stalled });
-          continue;
-        }
-        if (second.exitCode !== 0 || (countTests(profile, comp, second.output)?.failed ?? 0) > 0) {
-          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "tests passed once and failed on a second run, so faults weren't planted (possible flaky tests)" });
-          continue;
-        }
-        const lang = profile.components.find((c) => c.id === comp)!.language;
-        if (!rubric.mutation.languages.includes(lang)) {
-          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `faults can't be planted in ${lang} yet` });
-          continue;
-        }
+        const plant = async (): Promise<void> => {
+          const limit = capped(budget, comp, testRes.cmd.timeoutSec);
+          const second = overBudget(budget, comp) || budgetLeftSec(budget, comp) < 1 ? null : await ex.exec(testRes.cmd.command, testRes.cmd.cwd, limit.sec);
+          if (second) charge(budget, comp, second.durationMs);
+          if (!second || (second.timedOut && limit.byBudget)) {
+            addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "faults weren't planted: the time budget ran out first", blocked: BUDGET_OUT });
+            return;
+          }
+          // The unmutated tests timing out means every run with a planted fault would too: the fault
+          // check is unproven here, said once, rather than a timeout per fault.
+          if (second.timedOut) {
+            const why = diagnose(second.output, true, "test").detail;
+            const stalled = `the unmutated test run timed out (${why}), so each planted fault would time out too`;
+            addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `faults weren't planted: ${stalled}`, blocked: stalled });
+            return;
+          }
+          if (second.exitCode !== 0 || (countTests(profile, comp, second.output)?.failed ?? 0) > 0) {
+            addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "tests passed once and failed on a second run, so faults weren't planted (possible flaky tests)" });
+            return;
+          }
+          const lang = profile.components.find((c) => c.id === comp)!.language;
+          if (!rubric.mutation.languages.includes(lang)) {
+            addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `faults can't be planted in ${lang} yet` });
+            return;
+          }
+          try {
+            await plantFaults(audit, repo, tree, ex, rubric, testRes.cmd, budget, opts.log, Math.max(second.durationMs, testRes.outcome?.durationMs ?? 0));
+          } catch (e) {
+            const why = (e as Error).message.split("\n")[0].slice(0, 200);
+            opts.log(`  faults in ${comp}: couldn't be planted (${why}); the other results are kept`);
+            addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `planting faults failed: ${why}` });
+          }
+        };
         try {
-          await plantFaults(audit, repo, tree, ex, rubric, testRes.cmd, budget, opts.log, Math.max(second.durationMs, testRes.outcome?.durationMs ?? 0));
-        } catch (e) {
-          const why = (e as Error).message.split("\n")[0].slice(0, 200);
-          opts.log(`  faults in ${comp}: couldn't be planted (${why}); the other results are kept`);
-          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `planting faults failed: ${why}` });
+          await plant();
+        } finally {
+          if (needsNetwork) ex.offline();
         }
       }
     } else {

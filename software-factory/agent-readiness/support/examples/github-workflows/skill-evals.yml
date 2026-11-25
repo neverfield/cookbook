@@ -95,7 +95,7 @@ jobs:
       # repeats; tests/workflow.test.ts checks it.
       - name: Skill evals
         if: steps.set.outputs.tag != ''
-        run: npm run evals -- --tag ${{ steps.set.outputs.tag }} --arm ${{ steps.set.outputs.arms }} --model "$SA_READINESS_EVAL_MODEL" --repeats 5 --concurrency 4 --max-runs 1500 --json support/evals/runs/result.json --junit support/evals/runs/junit.xml --compare support/evals/baseline.json
+        run: npm run evals -- --tag ${{ steps.set.outputs.tag }} --arm ${{ steps.set.outputs.arms }} --model "$SA_READINESS_EVAL_MODEL" --repeats 5 --concurrency 4 --max-runs 1600 --json support/evals/runs/result.json --junit support/evals/runs/junit.xml --compare support/evals/baseline.json
       - name: Release check
         if: steps.set.outputs.tag != '' && github.event.inputs.release == 'true'
         run: npm run evals -- --release-check support/evals/runs/result.json --release-record support/evals/runs/release-record.json

@@ -1,3 +1,4 @@
+import { attributes, attributionOf } from "./attribute.ts";
 import type { Rubric } from "./rubric.ts";
 import { strengthRank } from "./rubric.ts";
 import { agentFacing } from "./profile.ts";
@@ -94,15 +95,34 @@ function fromEvidence(rubric: Rubric, ev: Evidence | undefined, check: string, m
     const passed = fromEvidence(rubric, { ...ev, result: "pass", failedIn: undefined }, check, missingReason);
     return passed.state === "met" ? { ...passed, reason: `the repo-wide ${ev.kind ?? "command"} passes for ${componentId}: every failure is in ${ev.failedIn.join(", ")}` } : passed;
   }
+  if (ev.result === "fail" && attributes(rubric)) {
+    const a = attributionOf(ev);
+    if (a?.verdict === "environment") return { state: "blocked", reason: `${a.detail}, a limit of the audit's environment rather than a repo defect`, evidence: [ev.id] };
+    if (a?.verdict === "undetermined") return { state: "unknown", reason: `${UNDETERMINED}${a.detail}`, evidence: [ev.id] };
+  }
   if (ev.result === "fail") return { state: "not_met", reason: ev.summary, evidence: [ev.id] };
-  if (ev.result === "not_run") return { state: "unknown", reason: ev.summary, evidence: [ev.id] };
-  const min = rubric.checks.find((c) => c.id === check)?.minStrengthForPass ?? "executed";
+  if (ev.result === "not_run") return { state: "unknown", reason: ev.summary, evidence: [ev.id] };  const min = rubric.checks.find((c) => c.id === check)?.minStrengthForPass ?? "executed";
   if (strengthRank(rubric, ev.strength) < strengthRank(rubric, min)) {
     if (needsContainer(rubric, check) && ev.where === "disposable_vm") return { state: "blocked", reason: "passed on a disposable VM, which this audit's rubric doesn't count as proof; Level 1 needs a clean container", evidence: [ev.id] };
     if (needsContainer(rubric, check)) return { state: "blocked", reason: "passed in host mode, which ran on this machine and could read its local files, so it isn't a sandbox; Level 1 needs a clean container", evidence: [ev.id] };
     return { state: "unknown", reason: `passed, but only ${rubric.strengthLabels[ev.strength]}`, evidence: [ev.id] };
   }
   return { state: "met", reason: ev.summary, evidence: [ev.id] };
+}
+
+// A reason that starts with this is a condition the audit couldn't decide, and says what would.
+export const UNDETERMINED = "undetermined: ";
+
+// No test command found. From 2026-12-beta that is "no tests" only when no file under the component
+// matches its language's test-file rule; with test files, or uncounted ones, the audit couldn't
+// tell how the tests run.
+function noTestCommand(audit: Audit, rubric: Rubric, componentId: string): CondDetail {
+  const missing: CondDetail = { state: "not_met", reason: "no test command was found", evidence: [] };
+  if (!attributes(rubric)) return missing;
+  const n = audit.profile?.components.find((c) => c.id === componentId)?.testFiles;
+  if (n === 0) return { ...missing, reason: "no test command was found, and no file matches its language's test-file rule" };
+  const found = n === undefined ? "the scan didn't count its test files" : `it has ${n} test ${n === 1 ? "file" : "files"}, and the audit found nothing that runs them`;
+  return { state: "unknown", reason: `${UNDETERMINED}the audit couldn't tell how its tests run: ${found}`, evidence: [] };
 }
 
 export const CANARY_MISSING = "the type-check hasn't been seen to fail on a planted type error";
@@ -133,14 +153,14 @@ export function componentStates(audit: Audit, rubric: Rubric, componentId: strin
   }
   const tests = commandsFor(contract, componentId, "test");
   if (tests.length === 0) {
-    states["clean.test"] = { state: "not_met", reason: "no test command was found", evidence: [] };
+    states["clean.test"] = noTestCommand(audit, rubric, componentId);
   } else {
     states["clean.test"] = allPass(tests.map((c) => fromEvidence(rubric, commandEvidence(evs, c.id, true), "bootstrap.cold_replay", "the clean test run hasn't run", componentId)), `${tests.length} test commands pass`);
   }
   const cmdKinds = ["build", "lint", "typecheck", "test"] as const;
   const discovered = cmdKinds.flatMap((k) => commandsFor(contract, componentId, k));
   if (!discovered.some((c) => c.kind === "test")) {
-    states.commands = { state: "not_met", reason: "no test command was found", evidence: [] };
+    states.commands = noTestCommand(audit, rubric, componentId);
   } else {
     const parts = discovered.map((c) => fromEvidence(rubric, commandEvidence(evs, c.id, false), "verify.canonical_interface", `${c.kind} hasn't run`, componentId));
     // The canary is asked of a type-check only once it passed; a failing or blocked one decides alone.
