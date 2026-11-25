@@ -189,69 +189,9 @@
     },
     {
       "file": "support/trials/trials.test.ts",
-      "test": "changesets truth K1",
-      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "changesets truth R3",
-      "finding": "R3: no proven level on a green, tested component in a container",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "mcp-servers truth K1",
-      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "mcp-servers truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
       "test": "mcp-servers truth R3",
-      "finding": "R3: no proven level on a green, tested component in a container",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "pocketbase truth K1",
-      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "pocketbase truth R3",
-      "finding": "R3: no proven level on a green, tested component in a container",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "umami truth K1",
-      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "umami truth R3",
-      "finding": "R3: no proven level on a green, tested component in a container",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/abstention.test.ts",
-      "test": "tests that fail because the audit's install left out the test runner are undetermined, not Level 0",
-      "finding": "review issue 1: pytest under optional dependencies is Level 0",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/abstention.test.ts",
-      "test": "with nothing run, no component is Level 0",
-      "finding": "proposal section 1: noRealResults returns early on a missing test command",
-      "fixedBy": "E"
+      "finding": "R3: no proven level on a green, tested component in a container. src/git is undetermined: the audit's uv bookworm-slim image has no git, the audit adds Debian bookworm's git 2.39, and 10 git show format tests fail with it that CI's newer git passes (truth review and Mac re-baseline at H)",
+      "fixedBy": "H"
     },
     {
       "file": "tests/docs.test.ts",

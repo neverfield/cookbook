@@ -1,0 +1,20 @@
+{
+  "purpose": "One test reads the package registry, so it fails with the network cut. The audit runs it once more with the network on; it passes, so the failure is the environment's, not the repo's: Level 1 holds with the network on, faults aren't planted, and confidence is capped at medium.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 2,
+      "levels": {
+        "network-test": 2
+      },
+      "top": [
+        "targets"
+      ],
+      "startNow": "delegate:network-test",
+      "noBlocker": true,
+      "safety": "pass",
+      "outcome": "proven",
+      "diagnosis": "with the network on, after failing with it cut"
+    }
+  ]
+}

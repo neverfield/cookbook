@@ -50,6 +50,8 @@
         "partialCoverage": { "type": "boolean" },
         "assessedComponents": { "type": "integer", "minimum": 0 },
         "outcome": { "enum": ["proven", "blocked", "not_assessed"] },
+        "status": { "$ref": "#/$defs/levelStatus" },
+        "settleBy": { "anyOf": [{ "$ref": "#/$defs/settleBy" }, { "type": "null" }] },
         "confidence": {
           "type": "object",
           "required": ["level", "reasons"],
@@ -78,6 +80,8 @@
             "properties": {
               "level": { "anyOf": [{ "$ref": "#/$defs/level" }, { "type": "null" }] },
               "couldBe": { "anyOf": [{ "$ref": "#/$defs/level" }, { "type": "null" }] },
+              "status": { "$ref": "#/$defs/levelStatus" },
+              "settleBy": { "anyOf": [{ "$ref": "#/$defs/settleBy" }, { "type": "null" }] },
               "scenarios": {
                 "type": "array",
                 "items": { "type": "object", "required": ["id", "label", "level", "couldBe", "unproven"], "properties": { "id": { "$ref": "#/$defs/activity" }, "level": { "anyOf": [{ "$ref": "#/$defs/level" }, { "type": "null" }] } } }
@@ -94,7 +98,7 @@
       "type": "object",
       "required": ["heading", "headline", "numbers", "nextLine", "gaps", "ask", "coverage", "noBlocker"],
       "properties": {
-        "heading": { "type": "string", "pattern": "^(Level [0-4] of 4, |Level 1 unproven on this machine: |Not assessed: )" },
+        "heading": { "type": "string", "pattern": "^(Level [0-4] of 4, |Level 1 unproven on this machine: |Undetermined: |Not assessed: )" },
         "headline": { "type": "string", "minLength": 1, "maxLength": 400 },
         "numbers": {
           "type": "array",
@@ -252,6 +256,8 @@
   },
   "$defs": {
     "level": { "type": "integer", "minimum": 0, "maximum": 4 },
+    "levelStatus": { "enum": ["proven", "unproven", "undetermined", "not_assessed"] },
+    "settleBy": { "type": "object", "required": ["kind", "text"], "properties": { "kind": { "enum": ["rerun", "add_command", "fix_map", "declare_env"] }, "text": { "type": "string", "minLength": 1 } } },
     "activity": { "enum": ["first_pr", "bug_fixes", "features", "repo_wide"] },
     "rate": {
       "type": "object",

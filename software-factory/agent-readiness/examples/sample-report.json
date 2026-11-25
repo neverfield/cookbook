@@ -9,7 +9,7 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "b4ecdb1c3dcc1169bba7d2a1b8d779711940631738e407d9b2e1d6586a7db45d",
+    "scriptsDigest": "06da7cbdca2b9b624162eeff8ded596812e93dab410b7678bad84bab312f0cb0",
     "seedPinned": true,
     "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
@@ -89,6 +89,8 @@
       }
     ],
     "unproven": false,
+    "status": "proven",
+    "settleBy": null,
     "next": {
       "level": 2,
       "name": "Verifiable",
@@ -104,12 +106,15 @@
         "path": "packages/api",
         "toolchain": "Node",
         "manifest": "packages/api/package.json",
-        "lockfile": null,
-        "changeShare": 0.592,
+        "lockfile": "package-lock.json",
+        "changeShare": 0.532,
+        "placement": "component",
         "active": true,
         "level": 2,
         "couldBe": null,
         "unproven": false,
+        "status": "proven",
+        "settleBy": null,
         "capReasons": [
           {
             "component": "api",
@@ -134,12 +139,15 @@
         "path": "packages/shared",
         "toolchain": "Node",
         "manifest": "packages/shared/package.json",
-        "lockfile": null,
-        "changeShare": 0.155,
+        "lockfile": "package-lock.json",
+        "changeShare": 0.139,
+        "placement": "component",
         "active": true,
         "level": 2,
         "couldBe": null,
         "unproven": false,
+        "status": "proven",
+        "settleBy": null,
         "capReasons": [
           {
             "component": "shared",
@@ -164,12 +172,15 @@
         "path": "packages/worker",
         "toolchain": "Node",
         "manifest": "packages/worker/package.json",
-        "lockfile": null,
-        "changeShare": 0.254,
+        "lockfile": "package-lock.json",
+        "changeShare": 0.228,
+        "placement": "component",
         "active": true,
         "level": 1,
         "couldBe": null,
         "unproven": false,
+        "status": "proven",
+        "settleBy": null,
         "capReasons": [
           {
             "component": "worker",
@@ -198,13 +209,20 @@
         "manifest": "infra/main.tf",
         "lockfile": null,
         "changeShare": 0,
+        "placement": "component",
         "reason": "Terraform isn't supported yet"
       }
+    ],
+    "unownedShare": 0.101,
+    "unownedTop": [
+      ".cursor/",
+      "AGENTS.md",
+      "scripts/"
     ]
   },
   "executive": {
     "heading": "Level 1 of 4, bootable",
-    "headline": "Agents can build and test worker, but its tests can't yet catch wrong changes, and 25% of recent changes land there. api and shared are already at Level 2.",
+    "headline": "Agents can build and test worker, but its tests can't yet catch wrong changes, and 23% of recent changes land there. api and shared are already at Level 2.",
     "numbers": [
       {
         "label": "Components ready for agents",
@@ -218,8 +236,8 @@
       },
       {
         "label": "Recent changes in components below Level 2",
-        "value": "25%",
-        "comparison": "First audit: 98%; last audit: 27%, counting the last 90 days"
+        "value": "23%",
+        "comparison": "First audit: 96%; last audit: 25%, counting the last 90 days"
       }
     ],
     "nextLine": "Next: Level 2, verifiable. Met: lint and test commands pass, agent instructions are accurate and normal work needs no production access. Not yet: worker tests catch planted faults.",
@@ -247,14 +265,14 @@
       "title": "Make worker's tests catch wrong behavior",
       "startNow": false,
       "why": "The audit planted 11 faults in worker in a throwaway copy, and the tests caught 0.",
-      "movesTheNeedle": "Takes worker to Level 2, covering 25% of recent changes. Changes in worker get a real pass-or-fail signal, so reviewers catch less by hand.",
+      "movesTheNeedle": "Takes worker to Level 2, covering 23% of recent changes. Changes in worker get a real pass-or-fail signal, so reviewers catch less by hand.",
       "watch": "Share of agent PRs touching worker where a reviewer requested changes. Baseline: 2 of 3 (too few for a rate), Sep 27 to Oct 27, 2026. Now: 50% (3 of 6), Oct 31 to Nov 30, 2026.",
       "research": "OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. https://openai.com/index/separating-signal-from-noise-coding-evaluations",
       "effortAndOwner": "Medium: tests in worker only. Component owner.",
       "decision": "What the untested behavior in packages/worker/src/retry.js should be",
       "doneWhen": "An audit after the change catches at least 60% of the faults it plants in worker.",
       "dependsOn": [],
-      "impact": 0.254,
+      "impact": 0.228,
       "effort": "medium",
       "evidence": [
         "ev-015"
@@ -273,7 +291,7 @@
         "label": "1. Make worker's tests catch wrong behavior",
         "x": 0.45,
         "y": 1,
-        "impact": 0.254,
+        "impact": 0.228,
         "quadrant": "Do first",
         "itemId": "faults:worker"
       }
@@ -1144,7 +1162,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "b4ecdb1c3dcc"
+        "value": "06da7cbdca2b"
       },
       {
         "label": "Planted faults",

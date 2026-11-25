@@ -81,6 +81,8 @@ export interface ToolSetup {
   tool: string;
   spec: string;
   install: string;
+  // Exits 0 when the image already has it; `command -v <tool>` when unset.
+  present?: string;
 }
 
 // A toolchain another of the audit's pinned images ships, copied into a component's container next

@@ -65,7 +65,7 @@ describe("an unproven re-audit is never compared as Level 0", () => {
 describe("headline causes match the condition states", () => {
   // changesets: docs has no test command; cli's tests were blocked by a sibling package not built first.
   function changesets(): Audit {
-    const audit = makeAudit({ components: [{ id: "docs", share: 0.64, test: "missing" }, { id: "cli", share: 0.19, test: "not_run" }, { id: "logger", share: 0.17, faults: "fail" }] });
+    const audit = makeAudit({ components: [{ id: "docs", share: 0.64, test: "missing", testFiles: 0 }, { id: "cli", share: 0.19, test: "not_run" }, { id: "logger", share: 0.17, faults: "fail" }] });
     Object.assign(audit.evidence.find((e) => e.component === "cli" && e.kind === "test")!, { result: "fail", summary: "test blocked", blocked: "a sibling package the audit didn't build first, which isn't supported yet" });
     return audit;
   }
@@ -104,7 +104,7 @@ describe("headline causes match the condition states", () => {
   });
 
   test("opentelemetry-go: Go modules held only by a blocked install are named as unchecked, never as failing", () => {
-    const audit = makeAudit({ components: [{ id: "log", share: 0.6, faults: "pass" }, { id: "app", share: 0.4, test: "missing" }] });
+    const audit = makeAudit({ components: [{ id: "log", share: 0.6, faults: "pass" }, { id: "app", share: 0.4, test: "missing", testFiles: 0 }] });
     Object.assign(audit.evidence.find((e) => e.kind === "install")!, { command: "pip install -r requirements.txt", result: "fail", summary: "install blocked", diagnosis: { cause: "network", detail: "a TLS or certificate error" }, blocked: "the install hit a TLS or certificate error" });
     const r = reportFor(audit);
     assert.equal(r.components.included.find((c) => c.id === "log")!.unproven, true);

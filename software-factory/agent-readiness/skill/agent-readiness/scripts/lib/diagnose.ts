@@ -185,6 +185,7 @@ export function mirrorRefused(output: string): string | null {
 const MISSING_MODULE = [
   /Cannot find (?:module|package) '([^'\n]+)'/,
   /ModuleNotFoundError: No module named '([^'\n]+)'/,
+  /python[\d.]*: No module named ([\w.-]+)/,
   /ERR_MODULE_NOT_FOUND[^\n']*'([^'\n]+)'/,
   /Could not resolve ["']([^"'\n]+)["']/,
   /[Ff]ailed to resolve (?:entry for package|import) ["']([^"'\n]+)["']/,
@@ -511,6 +512,8 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   // from ("Node.js was not found on PATH; using the pure-Python extractor").
   const onPath = phase === "test" ? null : output.match(/\bno usable [`'"]?([\w.+-]+)[`'"]? CLI\b|(?:^|[\s(`'"])[`'"]?([A-Za-z][\w.+-]*)[`'"]? (?:CLI )?(?:was |is )?(?:not found|not installed|not available) on (?:your |the )?PATH\b/im);
   if (onPath) return { cause: "missing_tool", detail: `${onPath[1] ?? onPath[2]} is not installed` };
+  // GitPython can't find git: "ImportError: Failed to initialize: Bad git executable."
+  if (/Bad git executable/.test(output)) return { cause: "missing_tool", detail: "git is not installed" };
   const tool = output.match(/(?:^|\n)(?:[^\n:]*: line \d+: |[^\n:]*: \d+: |(?:ba)?sh: )?([\w.+-]+): (?:command )?not found/);
   if (tool) return { cause: "missing_tool", detail: `${tool[1]} is not installed` };
   // GNU make runs a simple recipe line itself, so a missing tool reads "make: golangci-lint: No such
@@ -519,6 +522,8 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   if (makeTool) return { cause: "missing_tool", detail: `${makeTool[1]} is not installed` };
   const aot = nativeAotGap(output);
   if (aot) return { cause: "missing_tool", detail: aot };
+  const lib = output.match(/\b(lib[\w.+-]*?\.so(?:\.[\d.]+)?): cannot open shared object file/);
+  if (lib) return { cause: "missing_library", detail: `the system library ${lib[1]} is missing` };
   const mod = MISSING_MODULE.map((re) => output.match(re)).filter((m): m is RegExpMatchArray => m !== null).sort((a, b) => (a.index ?? 0) - (b.index ?? 0))[0];
   if (mod) return { cause: "missing_module", detail: `module ${mod[1]} is missing` };
   const network = networkFailure(output);

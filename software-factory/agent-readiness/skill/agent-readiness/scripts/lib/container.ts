@@ -226,6 +226,8 @@ export class ContainerSession {
   userEntry: UserEntry | null = null;
   // Set once disconnectNetwork() has cut every network.
   offline = false;
+  // The networks disconnectNetwork() cut, so reconnectNetwork() can attach them again.
+  cutFrom: string[] = [];
 
   constructor(runtime: Runtime, name: string, image: string, hostDir: string, registryEnv: string[], user: string | null = hostUser(), limits: Limits | null = null) {
     this.runtime = runtime;
@@ -251,10 +253,11 @@ export class ContainerSession {
   }
 
   // The repo's own declared setup runs as its image's user; everything else as the ordinary user.
-  async exec(command: string, cwd: string, timeoutSec: number, opts: { imageUser?: boolean; registry?: boolean } = {}): Promise<RunOutcome> {
+  async exec(command: string, cwd: string, timeoutSec: number, opts: { imageUser?: boolean; registry?: boolean; env?: Record<string, string> } = {}): Promise<RunOutcome> {
     const user = opts.imageUser ? null : this.user;
     const execId = randomHex(6);
-    const argv = [this.runtime.bin, ...execArgs(this.name, command, cwd, user, opts.registry ? this.registryEnv : [], execId)].map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(" ");
+    const env = [...(opts.registry ? this.registryEnv : []), ...Object.entries(opts.env ?? {}).map(([k, v]) => `${k}=${v}`)];
+    const argv = [this.runtime.bin, ...execArgs(this.name, command, cwd, user, env, execId)].map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(" ");
     let out = await runCommand(argv, process.cwd(), process.env as Record<string, string>, timeoutSec);
     if (out.timedOut) {
       const idle = spawnSync(this.runtime.bin, ["exec", ...(user ? ["-u", user] : []), this.name, "bash", "-c", idleCommand(execId)], { encoding: "utf8", timeout: 15000 });
@@ -305,10 +308,20 @@ export class ContainerSession {
   disconnectNetwork(): boolean {
     const r = spawnSync(this.runtime.bin, networksArgs(this.name), { encoding: "utf8" });
     if (r.status !== 0) return false;
-    for (const net of r.stdout.trim().split(/\s+/).filter(Boolean)) spawnSync(this.runtime.bin, disconnectArgs(this.name, net), { encoding: "utf8" });
+    const nets = r.stdout.trim().split(/\s+/).filter(Boolean);
+    if (nets.length) this.cutFrom = nets;
+    for (const net of nets) spawnSync(this.runtime.bin, disconnectArgs(this.name, net), { encoding: "utf8" });
     const probe = this.asImageUser('for i in /sys/class/net/*; do [ -f "$i/operstate" ] && echo "$(basename "$i") $(cat "$i/operstate")"; done; true', 30000);
     this.offline = probe.ok && probe.output.trim().split("\n").every((l) => l.startsWith("lo ") || l.endsWith(" down"));
     return this.offline;
+  }
+
+  // Attaches the networks disconnectNetwork() cut, for one rerun with the network on.
+  reconnectNetwork(): boolean {
+    if (!this.cutFrom.length) return false;
+    const ok = this.cutFrom.every((net) => spawnSync(this.runtime.bin, ["network", "connect", net, this.name], { encoding: "utf8" }).status === 0);
+    if (ok) this.offline = false;
+    return ok;
   }
 
   // The work tree is the audit's throwaway copy, so what root left in it is deleted from inside the

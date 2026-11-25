@@ -284,7 +284,7 @@ describe("fixes from the independent pre-ship review", () => {
   });
 
   test("components held back for different reasons are each named with their own", () => {
-    const report = reportFor(makeAudit({ components: [{ id: "api", share: 0.6, test: "fail" }, { id: "web", share: 0.4, test: "missing" }] }));
+    const report = reportFor(makeAudit({ components: [{ id: "api", share: 0.6, test: "fail" }, { id: "web", share: 0.4, test: "missing", testFiles: 0 }] }));
     assert.doesNotMatch(report.executive.headline, /api and web have no tests/);
     assert.match(report.executive.headline, /api fails its tests from a clean checkout and web has no tests/);
   });

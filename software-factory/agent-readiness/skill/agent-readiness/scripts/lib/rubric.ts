@@ -73,6 +73,13 @@ export interface Rubric {
   canary?: { typecheck?: boolean };
   // Where a pass proves Level 1 (from 2026-12-beta). Without it, only in a container.
   proof?: { environments: ProofKind[] };
+  // From 2026-12-beta. level0 "attributed": a failed step holds Level 1 only when it is the repo's
+  // (lib/attribute.ts), a missing test command holds it only when the component has no test files,
+  // and a Level 1 the audit can't decide either way is undetermined rather than Level 0.
+  // reruns: the experiments a failed test run gets, at most one each: "network" runs one that failed
+  // with the network cut once more with it on; "tool" adds git to an image the audit picked when the
+  // run failed for want of it. Without these, every failure and missing test command is Level 0.
+  attribution?: { level0: "attributed"; reruns?: ("network" | "tool")[] };
   outcomes: {
     windowDays: number;
     minRateN: number;
