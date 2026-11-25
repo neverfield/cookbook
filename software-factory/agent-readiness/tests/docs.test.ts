@@ -5,6 +5,7 @@ import { describe, test } from "node:test";
 import { LANGUAGES } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { guards } from "../support/tools/known-failures.ts";
+import { quickstartMismatch } from "../support/tools/release-manifest.ts";
 
 const SKILL = join(import.meta.dirname, "..", "skill/agent-readiness");
 const read = (rel: string) => readFileSync(join(SKILL, rel), "utf8");
@@ -50,5 +51,13 @@ describe("the README Quickstart agrees with the release", () => {
     const clone = readme.split("\n").find((l) => /^git clone .*cursor\/cookbook/.test(l)) ?? "";
     assert.ok(clone.includes(`--branch ${release.tag}`) || /\b[0-9a-f]{40}\b/.test(clone), `the Quickstart clones an unpinned ref: ${clone}`);
     assert.doesNotMatch(readme, /No release tag exists yet/, `README says no release tag exists, but RELEASE.json names ${release.tag}`);
+  });
+
+  test("the release manifest script refuses a Quickstart that clones another ref or says no tag exists", () => {
+    const tag = "agent-readiness-v0.2.0";
+    assert.match(quickstartMismatch("git clone --depth 1 https://github.com/cursor/cookbook /tmp/cookbook\n", tag) ?? "", /not --branch agent-readiness-v0\.2\.0/);
+    assert.match(quickstartMismatch(`git clone --depth 1 --branch ${tag} https://github.com/cursor/cookbook /tmp/cookbook\nNo release tag exists yet.`, tag) ?? "", /says no release tag exists/);
+    const readme = readFileSync(join(import.meta.dirname, "..", "README.md"), "utf8");
+    assert.equal(quickstartMismatch(readme, (JSON.parse(read("RELEASE.json")) as { tag: string }).tag), null);
   });
 });

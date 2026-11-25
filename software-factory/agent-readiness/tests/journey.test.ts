@@ -30,6 +30,8 @@ function sourceCheckout(): string {
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: src });
   execFileSync("git", ["add", "-A"], { cwd: src });
   execFileSync("git", ["-c", "commit.gpgsign=false", "-c", "user.name=Contributor A", "-c", "user.email=a@example.com", "commit", "-q", "-m", "skill"], { cwd: src });
+  // The source stands for the published release, which carries the tag RELEASE.json names.
+  execFileSync("git", ["tag", (JSON.parse(readFileSync(join(SKILL, "RELEASE.json"), "utf8")) as { tag: string }).tag], { cwd: src });
   return src;
 }
 

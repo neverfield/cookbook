@@ -6,18 +6,6 @@
       "test": "mcp-servers truth R3",
       "finding": "R3: no proven level on a green, tested component in a container. src/git is undetermined: the audit's uv bookworm-slim image has no git, the audit adds Debian bookworm's git 2.39, and 10 git show format tests fail with it that CI's newer git passes (truth review and Mac re-baseline at H)",
       "fixedBy": "H"
-    },
-    {
-      "file": "tests/docs.test.ts",
-      "test": "the Quickstart clones the release RELEASE.json names, and never says no tag exists",
-      "finding": "sims 8: the Quickstart contradicts RELEASE.json",
-      "fixedBy": "G"
-    },
-    {
-      "file": "tests/safety.test.ts",
-      "test": "the seal accepts negated, modal and future container wording",
-      "finding": "sims 3: the seal refuses negated and future container wording",
-      "fixedBy": "G"
     }
   ]
 }

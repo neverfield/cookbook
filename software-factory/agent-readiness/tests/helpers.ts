@@ -1,5 +1,6 @@
 import { partialCoverage } from "../skill/agent-readiness/scripts/lib/levels.ts";
-import { buildReport } from "../skill/agent-readiness/scripts/lib/model.ts";
+import type { ModelInput, NarrationChoices } from "../skill/agent-readiness/scripts/lib/model.ts";
+import { buildReport, narrationChoices } from "../skill/agent-readiness/scripts/lib/model.ts";
 import { updateRoadmap } from "../skill/agent-readiness/scripts/lib/roadmap.ts";
 import { latestRubricVersion, loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { compute } from "../skill/agent-readiness/scripts/lib/seal.ts";
@@ -8,13 +9,22 @@ import type { Audit, Component, ContractCommand, Diagnosis, Evidence, HistoryLin
 
 // Mirrors the seal's report build without git or files.
 export function reportFor(audit: Audit, history: HistoryLine[] = [], targets: Targets | null = null, previousReport: ReportJson | null = null): ReportJson {
+  return buildReport(modelInputFor(audit, history, targets, previousReport));
+}
+
+// The narration choices the seal checks slots against, for the same build.
+export function choicesFor(audit: Audit, history: HistoryLine[] = []): NarrationChoices {
+  return narrationChoices(modelInputFor(audit, history, null, null));
+}
+
+function modelInputFor(audit: Audit, history: HistoryLine[], targets: Targets | null, previousReport: ReportJson | null): ModelInput {
   const rubric = loadRubric(audit.rubric);
   const c = compute(audit, rubric, history, targets);
   const comps = audit.profile!.components;
   const noResults = noRealResults(audit, c.states);
   const rm = updateRoadmap(targets ? { schema: "agent-readiness/roadmap@1", owner: null, targets, items: [], updatedBy: "x", updatedAt: "2026-10-27T15:00:00.000Z" } : null, { audit, rubric, components: comps, states: c.states, active: c.active, outcomes: audit.outcomes, decisionsOnly: Boolean(noResults) });
   const line: HistoryLine = { id: audit.id, kind: "audit", date: "2026-10-27", commit: "abc", rubric: audit.rubric, scriptsDigest: "x", result: "sealed", levels: Object.fromEntries([...c.levels.entries()].map(([id, l]) => [id, l.level])), repoLevel: c.repo.level, scenarioLevels: {}, shares: {}, active: [...c.active], seedPinned: false };
-  return buildReport({ audit, rubric, components: comps, states: c.states, levels: c.levels, scenarioLevels: c.scenarioLevels, rollup: c.repo, active: c.active, roadmap: rm.roadmap, top: rm.top, startNow: rm.startNow, history, currentLine: line, previousOutcomes: null, weakening: null, sealStatus: "Seal verified against release agent-readiness-v0.1.0", staleCopy: null, storedAt: ".agent-readiness/history/audits/x", partial: partialCoverage(rubric, comps), noResults, previousReport });
+  return { audit, rubric, components: comps, states: c.states, levels: c.levels, scenarioLevels: c.scenarioLevels, rollup: c.repo, active: c.active, roadmap: rm.roadmap, top: rm.top, startNow: rm.startNow, history, currentLine: line, previousOutcomes: null, weakening: null, sealStatus: "Seal verified against release agent-readiness-v0.1.0", staleCopy: null, storedAt: ".agent-readiness/history/audits/x", partial: partialCoverage(rubric, comps), noResults, previousReport };
 }
 
 type R = "pass" | "fail";

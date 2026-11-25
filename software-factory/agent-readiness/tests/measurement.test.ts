@@ -11,7 +11,6 @@ import type { Baseline } from "../support/evals/lib/baseline.ts";
 import { scriptedArgs, scriptedAudit, tierOf } from "../support/evals/lib/controls.ts";
 import { expectedProblems } from "../support/evals/lib/expected.ts";
 import { DEFAULT_GATES, actionsGate, conditionsWithoutAction, expectedJsonGate, narrationGate } from "../support/evals/lib/grade.ts";
-import { narrationClaimErrors } from "../skill/agent-readiness/scripts/lib/claims.ts";
 import type { Audit } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { JUDGE_CANDIDATES, chooseJudge, evidenceBlock, family, headlinePrompt, judgePromptDigest, pagePrompt, parseJudge } from "../support/evals/lib/judge.ts";
 import { ISOLATION, isolateHome, userAgentDirs } from "../support/evals/lib/isolation.ts";
@@ -377,17 +376,6 @@ describe("round 3: what backs a remediation headline", () => {
     assert.match(block, /Roadmap item done, its checks pass in this audit: Remove the install hook that pipes a download into a shell\./);
     assert.match(block, /Safety finding, test\/payments\.test\.js:3 \(blocks Level 2\): tests read PAYMENTS_KEY, a production credential\./);
   });
-
-  test("the seal refuses \"its instructions check out\" when some were wrong or didn't run, and takes the count", () => {
-    const r = loadBase("monorepo-mixed");
-    const audit = (headline: string) => ({ narration: { headline }, evidence: [] }) as unknown as Audit;
-    const says = (headline: string) => narrationClaimErrors(r, audit(headline)).filter((e) => /instructions check out/.test(e));
-    assert.match(says("api sets the level; its instructions check out and shared is ready for agents.")[0], /the audit found 4 of 7 instruction items check out, 3 wrong; give that count instead/);
-    assert.deepEqual(says("api sets the level; 4 of 7 instruction items check out."), []);
-    const all = loadBase("monorepo-mixed");
-    all.details.checks = all.details.checks.map((c) => (c.id === "context.instructions_verified" ? { ...c, result: "7 of 7 instruction items check out" } : c));
-    assert.deepEqual(narrationClaimErrors(all, audit("api sets the level; its instructions check out.")).filter((e) => /instructions/.test(e)), []);
-  });
 });
 
 describe("the headline judge lift names the cases behind it", () => {
@@ -438,7 +426,7 @@ describe("control arms and holdouts", () => {
     }
   });
 
-  test("a scripted audit with no narration passes the narration and action gates; a narrated invented cause fails", () => {
+  test("a scripted audit with no narration passes the narration and action gates; narrating an invented cause is refused", () => {
     const base = fixtureCases.find((c) => c.id === "hidden-service")!;
     const c: EvalCase = { ...base, id: "fixtures/hidden-service", env: { ...base.env, SA_READINESS_RUNTIME: "none", SA_READINESS_ALLOW_HOST: "1" } };
     const ws = prepare(c);
@@ -451,11 +439,12 @@ describe("control arms and holdouts", () => {
     step(["init", "--tier", "local-exec", "--force"]);
     step(["scan"]);
     step(["replay"]);
-    step(["narrate", "--headline", "hidden-service's tests need a Redis cache that the setup doesn't start, so agents can't pass them from a clean checkout. A rerun with Docker can prove it.", "--ask", "Decision needed: approve committing the setup files."]);
+    const n = readiness(ws.dir, ["narrate", "--headline", "hidden-service's tests need a Redis cache that the setup doesn't start, so agents can't pass them from a clean checkout. A rerun with Docker can prove it."], caseEnv(c), cli);
+    assert.equal(n.code, 2, n.out);
     step(["seal"]);
-    const g = narrationGate(ws, t, c);
-    assert.equal(g.pass, false);
-    assert.match(g.detail, /names Redis as a cause, but no evidence row mentions it/);
+    const report = JSON.parse(readFileSync(join(ws.dir, ".agent-readiness/latest/report.json"), "utf8"));
+    assert.doesNotMatch(report.executive.headline, /Redis/);
+    assert.equal(narrationGate(ws, t, c).pass, true);
   });
 });
 

@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { activeComponents, componentLevel, partialCoverage, recheckStates, statesOf } from "../skill/agent-readiness/scripts/lib/levels.ts";
-import { allowedNumbers, danglingEvidence } from "../skill/agent-readiness/scripts/lib/claims.ts";
-import { renderMarkdown, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { danglingEvidence } from "../skill/agent-readiness/scripts/lib/seal.ts";
+import { renderMarkdown } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { validatePart1 } from "../support/evals/lib/part1.ts";
 import { updateRoadmap } from "../skill/agent-readiness/scripts/lib/roadmap.ts";
 import { mutantsFile } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
@@ -77,11 +78,11 @@ describe("regressions from the four-model review of the mock report", () => {
     assert.deepEqual(danglingEvidence(r, audit), ["ev-404"]);
   });
 
-  test("part 1 enforces the word, gap and banned-term limits", () => {
+  test("the part 1 grader enforces the word, gap and banned-term limits", () => {
     const r = reportFor(makeAudit({ components: [{ id: "a", share: 1, test: "fail" }] }));
     r.executive.headline = "Bootstrap replay failed and the oracle " + "is weak ".repeat(20);
     r.executive.gaps = [1, 2, 3, 4].map((n) => ({ rank: 1, text: `gap ${n}`, blocks: "x", itemId: `i${n}` }));
-    const errors = validatePart1(r, rubric, allowedNumbers(r)).join("\n");
+    const errors = validatePart1(r, rubric).join("\n");
     assert.match(errors, /words; the limit is 40/);
     assert.match(errors, /4 gaps; the limit is 3/);
     assert.match(errors, /banned term "oracle"/);

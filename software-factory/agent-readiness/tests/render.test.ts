@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { computeOutcomes, describeRate, rate } from "../skill/agent-readiness/scripts/lib/outcomes.ts";
-import { allowedNumbers, danglingEvidence } from "../skill/agent-readiness/scripts/lib/claims.ts";
+import { danglingEvidence } from "../skill/agent-readiness/scripts/lib/seal.ts";
 import { unprovenHeading } from "../skill/agent-readiness/scripts/lib/model.ts";
-import { renderMarkdown, scaleLine, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { renderMarkdown, scaleLine } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { validatePart1 } from "../support/evals/lib/part1.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { consistencyErrors, sealStatusFor } from "../skill/agent-readiness/scripts/lib/seal.ts";
 import { skillDigest } from "../skill/agent-readiness/scripts/lib/workspace.ts";
 import { validateAgainst } from "../skill/agent-readiness/scripts/lib/schema.ts";
-import type { HistoryLine, PrRecord, ReportJson } from "../skill/agent-readiness/scripts/lib/types.ts";
+import type { Audit, HistoryLine, PrRecord, ReportJson } from "../skill/agent-readiness/scripts/lib/types.ts";
 import type { AuditSpec } from "./helpers.ts";
-import { instruction, makeAudit, outcomes, reportFor, stats } from "./helpers.ts";
+import { choicesFor, instruction, makeAudit, outcomes, reportFor, stats } from "./helpers.ts";
 
 const rubric = loadRubric("2026-10-alpha");
 
@@ -28,7 +29,7 @@ describe("report.json", () => {
   test("validates against its schema and passes the part 1 rules by default", () => {
     const r = reportFor(makeAudit(mixed));
     assert.deepEqual(validateAgainst("report", r), []);
-    assert.deepEqual(validatePart1(r, rubric, null), []);
+    assert.deepEqual(validatePart1(r, rubric), []);
     assert.equal(r.executive.heading, "Level 0 of 4, not bootable");
     assert.match(r.executive.headline, /api/);
     assert.match(r.executive.headline, /shared is already at Level 2/);
@@ -100,13 +101,13 @@ describe("part 1 rules", () => {
   test("a headline over 40 words is rejected", () => {
     const r = base();
     r.executive.headline = Array.from({ length: 41 }, () => "word").join(" ");
-    assert.ok(validatePart1(r, rubric, null).some((e) => e.includes("41 words")));
+    assert.ok(validatePart1(r, rubric).some((e) => e.includes("41 words")));
   });
 
   test("more than three gaps is rejected", () => {
     const r = base();
     r.executive.gaps = [1, 2, 3, 4].map((n) => ({ rank: Math.min(n, 3), text: `gap ${n}`, blocks: "Blocks", itemId: `i${n}` }));
-    assert.ok(validatePart1(r, rubric, null).some((e) => e.includes("4 gaps")));
+    assert.ok(validatePart1(r, rubric).some((e) => e.includes("4 gaps")));
   });
 
   test("banned jargon, code formatting, check IDs and evidence IDs are rejected", () => {
@@ -119,24 +120,16 @@ describe("part 1 rules", () => {
     ] as const) {
       const r = base();
       (r.executive as Record<string, unknown>)[field] = text;
-      assert.ok(validatePart1(r, rubric, null).some((e) => e.includes(expect)), `${text} -> ${expect}`);
+      assert.ok(validatePart1(r, rubric).some((e) => e.includes(expect)), `${text} -> ${expect}`);
     }
   });
 
   test("a level name needs its number and plain meaning", () => {
     const r = base();
     r.executive.headline = "The repo is Bootable but api is not.";
-    assert.ok(validatePart1(r, rubric, null).some((e) => e.includes("Bootable")));
+    assert.ok(validatePart1(r, rubric).some((e) => e.includes("Bootable")));
     r.executive.headline = "The repo is at Level 1, bootable, for bug fixes.";
-    assert.deepEqual(validatePart1(r, rubric, null), []);
-  });
-
-  test("narrated text may contain only numbers the audit computed", () => {
-    const r = base();
-    r.executive.headline = "Failures dropped from 17 to 1 after the fix.";
-    assert.ok(validatePart1(r, rubric, allowedNumbers(r)).some((e) => e.includes('"17" in the narrated text')));
-    r.executive.headline = "Agents can't pass api's tests from a clean checkout, and 56% of recent changes land there.";
-    assert.deepEqual(validatePart1(r, rubric, allowedNumbers(r)), []);
+    assert.deepEqual(validatePart1(r, rubric), []);
   });
 
   test("a gap that unblocks only together with another names its own component", () => {
@@ -182,23 +175,14 @@ describe("part 1 rules", () => {
     assert.equal(drift, "Agents can build and test app, but its agent instructions don't match the repo.");
   });
 
-  test("narration may use every number the audit reports, and no other", () => {
-    const audit = makeAudit({ components: [{ id: "app", share: 1, faults: "fail" }] });
-    audit.evidence.find((e) => e.condition === "faults")!.summary = "caught 4 of 5 planted faults; missed: change_constant at src/a.js:47";
-    audit.narration = { headline: "Agents can build and test app, but its tests caught 4 of 5 planted faults." };
-    const r = reportFor(audit);
-    assert.deepEqual(validatePart1(r, rubric, allowedNumbers(r)), []);
-    audit.narration = { headline: "Agents can build and test app, but its tests caught 17 of 23 planted faults." };
-    const wrong = reportFor(audit);
-    assert.deepEqual(validatePart1(wrong, rubric, allowedNumbers(wrong)), ['"17" in the narrated text isn\'t a number the audit computed', '"23" in the narrated text isn\'t a number the audit computed']);
-  });
-
-  test("a narrated ask still asks for an owner when none is recorded, once", () => {
+  test("a chosen ask still asks for an owner when none is recorded, once", () => {
     const audit = makeAudit(mixed);
-    audit.narration = { ask: "Approve adding a Postgres service to the agent setup for api." };
-    assert.equal(reportFor(audit).executive.ask, "Approve adding a Postgres service to the agent setup for api. Also name an owner for agent readiness.");
-    audit.narration = { ask: "Approve the Postgres setup for api and name an owner for agent readiness." };
-    assert.equal(reportFor(audit).executive.ask, "Approve the Postgres setup for api and name an owner for agent readiness.");
+    const item = reportFor(audit).actions.at(-1)!;
+    audit.narration = { ask: item.itemId };
+    const ask = reportFor(audit).executive.ask;
+    assert.match(ask, /^Decision needed: /);
+    assert.ok(ask.includes(item.decision ? item.decision.slice(1, 20) : item.title.replace(/`/g, "")), ask);
+    assert.equal(ask.match(/name an owner/g)?.length ?? 0, /owner/i.test(item.decision ?? item.title) ? 0 : 1, ask);
   });
 
   test("part 1 and the checks claim only what the audit ran", () => {
@@ -270,7 +254,7 @@ describe("part 1 rules", () => {
     assert.equal(r.maturity.unproven, true);
     assert.deepEqual(r.executive.gaps.map((g) => [g.itemId, g.blocks]), [["faults:app", "Can start now; blocks Level 2 for app"]]);
     assert.deepEqual(r.actions.map((a) => [a.itemId, a.startNow]), [["faults:app", true]]);
-    assert.match(r.actions[0].movesTheNeedle, /^Takes app to Level 2 once Level 1 is proven in a clean container, covering 100% of recent changes/);
+    assert.match(r.actions[0].movesTheNeedle, /^Takes app to Level 2 once Level 1 is proven in a clean container or a disposable VM, covering 100% of recent changes/);
     assert.match(r.executive.ask, /^Decision needed: where to rerun this audit so it can prove Level 1, for example a CI job\. Meanwhile, make app's tests catch wrong behavior can start now\./);
     assert.match(r.executive.headline, /^Level 1 couldn't be proved for app because this machine has no container runtime/);
     assert.ok(!r.actions.some((a) => a.itemId.startsWith("delegate:")), "delegation waits for a real Level 2");
@@ -299,7 +283,7 @@ describe("part 1 rules", () => {
     const md = renderMarkdown(r, rubric);
     assert.match(md, /No actions can be planned yet: no component could be assessed/);
     assert.doesNotMatch(md, /No actions are open/);
-    assert.deepEqual(validatePart1(r, rubric, null), []);
+    assert.deepEqual(validatePart1(r, rubric), []);
     assert.deepEqual([r.maturity.outcome, r.maturity.confidence.level], ["not_assessed", "low"]);
     assert.deepEqual(validateAgainst("report", r), []);
   });
@@ -314,7 +298,7 @@ describe("part 1 rules", () => {
     const ex = r.executive;
     assert.deepEqual([r.maturity.outcome, r.maturity.unproven], ["blocked", true]);
     assert.equal(ex.heading, "Unproven on this machine: no Level 1 check failed, and 3 were blocked here");
-    assert.equal(ex.headline, "Level 1 couldn't be proved for buyer-web because this machine has no container runtime and dotnet is not installed on this machine. A rerun where Docker is available, such as CI, can prove it.");
+    assert.equal(ex.headline, "Level 1 couldn't be proved for buyer-web because this machine has no container runtime and dotnet is not installed on this machine. A rerun where Docker is available, such as CI, can prove it. commerce-core is not assessed.");
     assert.deepEqual([r.actions.length, ex.gaps.length, ex.noBlocker], [0, 0, false]);
     assert.match(ex.ask, /^Decision needed: where to rerun this audit so it can prove Level 1/);
     assert.match(ex.coverage, /On this machine dotnet is not installed, an environment limit rather than a repo defect/);
@@ -329,7 +313,7 @@ describe("part 1 rules", () => {
     assert.deepEqual(r.roadmap.items.map((i) => i.id), ["owner", "targets"], "the owner step stays, so the ask to name one has a step behind it");
     assert.match(ex.ask, /Also name an owner for agent readiness\.$/);
     assert.doesNotMatch(md, /blocked: blocked:/);
-    assert.deepEqual(validatePart1(r, rubric, null), []);
+    assert.deepEqual(validatePart1(r, rubric), []);
     assert.deepEqual(validateAgainst("report", r), []);
   });
 
@@ -361,7 +345,7 @@ describe("part 1 rules", () => {
     assert.match(reportFor(audit).details.checks.find((c) => c.id === "safety.execution_boundary")!.result, /^passed; 1 item listed for review$/);
   });
 
-  test("the seal's consistency pass names any component, evidence or narration key the scan doesn't know", () => {
+  test("the seal's consistency pass names any component, evidence or narration slot the scan doesn't know", () => {
     const audit = makeAudit({ components: [{ id: "web", share: 0.8, faults: "pass" }, { id: "core", share: 0.2, assessed: false }] });
     audit.contract = audit.contract.filter((c) => c.component !== "core");
     const r = reportFor(audit);
@@ -370,14 +354,15 @@ describe("part 1 rules", () => {
     audit.contract.push({ id: "cmd-core-test", kind: "test", component: "core", cwd: "core", command: "dotnet test", source: "agent", reason: "", timeoutSec: 60 });
     audit.contract.push({ id: "cmd-ghost-test", kind: "test", component: "ghost", cwd: "ghost", command: "npm test", source: "agent", reason: "", timeoutSec: 60 });
     audit.evidence.push({ ...audit.evidence[0], id: "ev-900", component: "ghost" });
-    audit.narration = { gaps: { "faults:ghost": "Ghost tests miss bugs" }, titles: { "clean.test:ghost": "Fix ghost" } };
-    const errors = consistencyErrors(audit, r, roadmap);
-    assert.equal(errors.length, 5, errors.join("\n"));
+    audit.narration = { lead: "ghost", ask: "clean.test:ghost", headline: "Ghost tests miss bugs" } as Audit["narration"];
+    const errors = consistencyErrors(audit, r, roadmap, choicesFor(audit));
+    assert.equal(errors.length, 6, errors.join("\n"));
     assert.match(errors[0], /cmd-core-test names core, which isn't assessed/);
     assert.match(errors[1], /cmd-ghost-test names ghost, which the scan didn't find/);
     assert.match(errors[2], /evidence ev-900 names ghost/);
-    assert.match(errors[3], /rewrites gap faults:ghost, which isn't in part 1/);
-    assert.match(errors[4], /retitles clean\.test:ghost, which isn't a roadmap item/);
+    assert.match(errors[3], /sets "headline", which isn't a slot/);
+    assert.match(errors[4], /lead ghost isn't a component that sets the level \(choices: web\)/);
+    assert.match(errors[5], /ask clean\.test:ghost isn't an item part 1 can ask about/);
   });
 
   test("scenario labels keep their acronyms, and the heading carries no activity", () => {
@@ -385,15 +370,6 @@ describe("part 1 rules", () => {
     assert.equal(r.executive.heading, "Level 0 of 4, not bootable");
     assert.equal(r.components.included[0].scenarios[0].label, "First PR");
     assert.match(renderMarkdown(r, rubric), /\| `api` › First PR \|/);
-  });
-
-  test("a narrated gap that ends in a period renders with one period", () => {
-    const audit = makeAudit(mixed);
-    const id = reportFor(audit).executive.gaps[0].itemId;
-    audit.narration = { gaps: { [id]: "Agents can't reach the api database from a clean checkout." } };
-    const r = reportFor(audit);
-    assert.equal(r.executive.gaps[0].text, "Agents can't reach the api database from a clean checkout");
-    assert.ok(!renderMarkdown(r, rubric).includes(".."));
   });
 
   test("a dangling evidence ID is rejected", () => {
