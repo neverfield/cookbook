@@ -58,8 +58,8 @@ describe("proof environments", () => {
     assert.equal(detectDisposableVm({ CURSOR_AGENT: "1" }, "linux", (p) => p === "/exec-daemon"), null, "a desktop agent sets CURSOR_AGENT too");
     assert.equal(detectDisposableVm(vm, "linux", () => false), null, "no agent daemon, no VM");
     assert.equal(detectDisposableVm(vm, "darwin", () => true), null, "Cursor's cloud VMs run Linux");
-    assert.equal(detectDisposableVm({ ...vm, SA_READINESS_VM_DETECT: "off" }, "linux", () => true), null, "the opt-out only takes proof away");
-    assert.equal(detectDisposableVm({ SA_READINESS_DISPOSABLE_VM: "1", SA_READINESS_VM_DETECT: "on" }, "linux", () => false), null, "there is no variable that declares one");
+    assert.equal(detectDisposableVm({ ...vm, SA_VM_DETECT: "off" }, "linux", () => true), null, "the opt-out only takes proof away");
+    assert.equal(detectDisposableVm({ SA_READINESS_DISPOSABLE_VM: "1", SA_VM_DETECT: "on" }, "linux", () => false), null, "there is no variable that declares one");
   });
 
   test("whether a disposable VM proves Level 1 is the rubric's: older rubrics prove only in a container", () => {

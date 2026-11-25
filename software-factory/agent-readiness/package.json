@@ -9,7 +9,7 @@
   "scripts": {
     "readiness": "node --experimental-strip-types --no-warnings skill/agent-readiness/scripts/readiness.ts",
     "typecheck": "tsc -p .",
-    "test": "SA_READINESS_VM_DETECT=off node --experimental-strip-types --no-warnings --test tests/*.test.ts",
+    "test": "SA_VM_DETECT=off node --experimental-strip-types --no-warnings --test tests/*.test.ts",
     "check": "npm run typecheck && npm test",
     "sample": "node --experimental-strip-types --no-warnings support/tools/generate-sample.ts",
     "release-manifest": "node --experimental-strip-types --no-warnings support/tools/release-manifest.ts",
