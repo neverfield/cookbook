@@ -32,7 +32,7 @@ flowchart TB
   end
 
   cli --> scan
-  replay <--> runtime[("Docker or Podman")]
+  replay <--> runtime[("Docker, or a disposable VM")]
   rubric[["rubric/*.json"]] -.-> score
   prs[("Agent PRs via gh<br/>external-systems tier")] -.-> score
   agent -.->|narrates the headline and ask| seal
@@ -61,7 +61,9 @@ An audit never claims Level 3 or 4 by itself. Those need team-set targets over a
 ## Requirements
 
 - **Node.js 22.14 or later** (type stripping; no packages for the skill itself).
-- **Docker or Podman** to prove Level 1 in a clean container. Without a container runtime the result is unproven on this machine. `--allow-host` runs the repo's commands in a scrubbed throwaway copy on the host instead; that copy can still read local files, so it is not a sandbox and needs the user's approval.
+- **Docker** to prove Level 1 in a clean container. Podman isn't offered until a fixture run tests it. Without a container runtime the result is unproven on this machine. `--allow-host` runs the repo's commands in a scrubbed throwaway copy on the host instead; that copy can still read local files, so it is not a sandbox and needs the user's approval.
+- **Or a disposable cloud VM.** On a Cursor Cloud Agent VM, which the audit detects on its own (nothing the agent passes declares it), host mode proves Level 1, after the same yes from the user. The tests run with the network cut where the VM allows it; where it doesn't, the report says Level 1 was proved with the network on and caps confidence at medium.
+- Before any repo command, the audit checks its own environment: the work tree is there and writable, commands run as the right user, git has an identity, and in a container the network goes down for the tests. When that self-check fails, every check it would decide is blocked, never counted against the repo.
 - Offline and air-gapped hosts can still run an audit when the base image and any private-registry credentials are already available locally. Pass `--image <ref>` for an approved internal image, and `--registry-env` for named install credentials (names are recorded; values never are). Without network after install, tests run with networking off. Sample reports under [examples/](examples/) open offline (HTML is self-contained: inline CSS and SVG, no scripts, nothing fetched).
 
 ## Quickstart
@@ -79,10 +81,7 @@ git clone --depth 1 https://github.com/cursor/cookbook /tmp/cookbook
 git -C /tmp/cookbook rev-parse HEAD    # the commit you copied: note it, it's your pin
 mkdir -p .cursor/skills
 cp -R /tmp/cookbook/software-factory/agent-readiness/skill/agent-readiness .cursor/skills/
-node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scripts/readiness.ts guard install
 ```
-
-`guard install` adds a shell hook to `.cursor/hooks.json` and keeps that file out of git, so an audit never counts it as one of the repo's agent assets. Until the user's yes is recorded with `readiness allow-host`, the hook refuses the repo's own install, build and test commands on this machine, and it refuses them while an audit is open. A `.cursor/hooks.json` the repo already commits is left alone, and the command prints the hook to add. New agent sessions load it.
 
 `.cursor/skills/agent-readiness` is the usual place, and any skills folder your agent reads works. The skill carries its own `package.json`, so it runs whatever module type the repo's `package.json` sets. Copy the whole folder: the seal checks a digest of the scripts, rubric and `package.json`. Commit the copy with the commit hash `rev-parse` printed in the message, and use that same hash as `SA_ACCELERATOR_REF` in the [example CI workflows](support/examples/github-workflows/), so CI runs and verifies the release you copied. No release tag exists yet; until one does, pin that commit rather than a branch.
 
@@ -97,6 +96,10 @@ node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scr
 ```
 
 The audit reads the committed tree only: it checks out the recorded commit into a temporary folder as a one-commit clone with its own `.git`, plus any submodules and Git LFS files this checkout already has. On a shallow clone it says so, since change shares then come from the commits the clone has; run `git fetch --unshallow` first for the full window.
+
+**Optional: the shell guard.** `readiness guard install` adds a shell hook to `.cursor/hooks.json` and keeps that file out of git (through the checkout's `info/exclude`, which works in a worktree too), so an audit never counts it as one of the repo's agent assets. It enforces only while an audit's session is open: from `readiness session start`, or `init`, until the seal, `readiness session end` or the session's expiry four hours after its last step. In a session it refuses the repo's own install, build and test commands on this machine until the user's yes is recorded with `readiness allow-host`, and at any time once the draft is open; outside one it lets them run, so the repo works as before once the audit is sealed. A `.cursor/hooks.json` the repo already commits is left alone, and the command prints the hook to add. New agent sessions load it. `readiness guard uninstall` puts `.cursor/hooks.json` and the exclude file back as they were, and `readiness guard status` says whether it is installed and enforcing.
+
+**Leftovers.** `init --force` and the seal remove the abandoned draft and its temporary tree. `readiness cleanup` removes what a crashed audit left: this repo's drafts no session holds, and the temporary folders and containers audits name as theirs once they are older than a session; `--images` also removes the images built from a repo's declared environment.
 
 **A finding is a false positive?** A maintainer lists it in `.agent-readiness/waivers.json`, committed to the repo, with a reason and a reviewer. Only instruction and safety findings can be waived, never a Level 1 check; waived findings are listed in part 5. The format is in [references/report.md](skill/agent-readiness/references/report.md#waivers).
 
@@ -134,7 +137,7 @@ Tests added to catch planted faults are proved against a fresh set of faults the
 - **Private registries:** `--registry-env NPM_TOKEN,PIP_INDEX_URL` passes named variables to the install. Names are recorded and values never are. Without them, a 401 reads "registry credentials not provided", not a repo blocker.
 - **Network:** tests run with networking off after the install.
 - **Base images:** `--image <ref>` replays on an approved internal image. A repo-declared `.cursor/Dockerfile` in `environment.json` is built and used.
-- **No container runtime:** nothing runs and the result is unproven on this machine, unless `--allow-host` lets the replay use a fresh copy on the host, and then part 1 says Level 1 can't be proved on that machine. A tool the host lacks, and every step behind it, is reported as blocked on this machine, never as a repo defect, and commands that use `sudo` are listed by the safety check and never run on the host. When nothing produced a real result, the report gives no level and says why.
+- **No container runtime:** nothing runs and the result is unproven on this machine, unless `--allow-host` lets the replay use a fresh copy on the host, and then part 1 says Level 1 can't be proved on that machine, except on a disposable cloud VM the audit detects, where it can. A tool the host lacks, and every step behind it, is reported as blocked on this machine, never as a repo defect, and commands that use `sudo` are listed by the safety check and never run on the host. When nothing produced a real result, the report gives no level and says why.
 - **Budgets:** `--budget-component` and `--budget-total` (15 and 60 minutes). The total covers the instruction replay too. Anything cut off counts as not run.
 - **Write-mode lint:** lint and type-check run check-only, without `--write` or `--fix`, and lint runs before the build, so the audit doesn't rewrite the copy it plants faults in. See [supported.md](skill/agent-readiness/references/supported.md).
 
@@ -152,7 +155,7 @@ Repo commands get an allowlisted environment: `PATH`, a temporary `HOME` and iso
 
 ```bash
 npm ci
-npm run check   # typecheck and unit tests; fixture audits need Docker or Podman
+npm run check   # typecheck and unit tests; fixture audits need Docker
 ```
 
 Maintainer evals, fixtures, baselines, goldens, labels, sample regeneration, release-gate tooling and example CI workflows live under [support/](support/). See [support/README.md](support/README.md).
