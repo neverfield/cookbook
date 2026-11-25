@@ -9,7 +9,7 @@ import { addEvidence } from "./evidence.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
 import { ecosystemOf } from "./languages/index.ts";
-import { TYPE_CANARIES, applySite, atLook, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary } from "./mutate.ts";
+import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary } from "./mutate.ts";
 import { proxyPasswords, redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { SUDO_SHIM_MARK, runCommand, scrubbedEnv } from "./run.ts";
@@ -639,11 +639,13 @@ function faultRunSec(rubric: Rubric, comp: Component): number {
   return Math.max(rubric.mutation.runTimeoutSec, hooked(comp)?.budget?.mutationRunTimeoutSec ?? 0);
 }
 
-// Fault ids the last sealed audit planted in this component, to plant again first.
-function priorFaults(repo: string, componentId: string): string[] {
+// Fault ids the last sealed audit decided in this component, missed ones first, to plant again first.
+function priorFaults(repo: string, componentId: string, cap: number): string[] {
   try {
     const { audit } = loadSealedAudit(paths(repo), "latest");
-    return audit.mutants.filter((m) => m.component === componentId && m.file && m.operator && m.before).map((m) => m.faultId ?? faultId({ file: m.file!, before: m.before!, operator: m.operator! }));
+    const mine = audit.mutants.filter((m) => m.component === componentId && m.file && m.operator && m.before && (m.result === "survived" || m.result === "caught"));
+    const ordered = [...mine.filter((m) => m.result === "survived"), ...mine.filter((m) => m.result === "caught")];
+    return ordered.map((m) => m.faultId ?? faultId({ file: m.file!, before: m.before!, operator: m.operator! })).slice(0, cap);
   } catch {
     return [];
   }
@@ -664,7 +666,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   }
   const rule = estimateRule(rubric.mutation);
   const identity = rubric.mutation.identity;
-  const prior = identity === "fault" ? priorFaults(repo, comp.id) : [];
+  const prior = identity === "fault" ? priorFaults(repo, comp.id, rule ? carriedCap(rule) : rubric.mutation.perComponent) : [];
   const sites = chooseSites(repo, tree, comp, plantSeed(audit, { tree, createdAt: audit.createdAt }), rule ? rule.maxPlanted : rubric.mutation.perComponent, audit.repo.commit, { identity, prior });
   if (sites.length === 0) {
     addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp.id, strength: ex.strength, where: ex.where, result: "not_run", summary: "no places to plant a fault were found in files the tests import" });
@@ -684,9 +686,11 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   // A narrowed run is used only once it passed on the clean tree, so a test that depends on another
   // file's setup can't read as a caught fault.
   const scopes = new Map<string, boolean>();
+  let reach: ReturnType<typeof testsReaching> | undefined;
   const testCommandFor = async (file: string): Promise<string> => {
     if (!rubric.mutation.scoped) return testCmd.command;
-    const tests = testsReaching(tree, comp, file);
+    reach ??= testsReaching(tree, comp);
+    const tests = reach ? reach(file) : null;
     const scoped = tests ? scopedCommand(testCmd.command, testCmd.cwd, tests) : null;
     if (!scoped) return testCmd.command;
     if (!scopes.has(scoped)) {
@@ -702,7 +706,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
     if (rule) {
       const d = decided().length;
       if (d >= rule.maxDecided) break;
-      if (atLook(d, rule) && d !== lookedAt) {
+      if (atLook(d, rule, decided().filter((m) => prior.includes(m.faultId!)).length) && d !== lookedAt) {
         lookedAt = d;
         if (!keepPlanting(estimate(), rule)) break;
       }

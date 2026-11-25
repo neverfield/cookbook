@@ -171,9 +171,11 @@ describe("scoped fault runs", () => {
       "tests/conftest.py": "from calc.shared import X\n",
     });
     const py: Component = { ...app(), path: ".", language: "py", manifest: "pyproject.toml" };
-    assert.deepEqual(testsReaching(repo, py, "calc/core.py"), ["tests/test_api.py"]);
-    assert.deepEqual(testsReaching(repo, py, "calc/other.py"), ["tests/test_other.py"]);
-    assert.equal(testsReaching(repo, py, "calc/shared.py"), null);
+    const reach = testsReaching(repo, py)!;
+    assert.deepEqual(reach("calc/core.py"), ["tests/test_api.py"]);
+    assert.deepEqual(reach("calc/other.py"), ["tests/test_other.py"]);
+    assert.equal(reach("calc/shared.py"), null);
+    assert.equal(testsReaching(repo, { ...py, language: "go" }), null);
   });
 });
 
@@ -246,6 +248,22 @@ describe("planting faults within the budget", () => {
       const ev = audit.evidence.find((e) => e.condition === "faults")!;
       assert.deepEqual([ev.estimate?.planted, ev.estimate?.verdict, ev.result], [5, verdict, result], ev.summary);
     }
+  });
+
+  test("faults planted again from the last audit can't decide the estimate without a fresh batch", async () => {
+    const repo = gitRepo(files);
+    const named = chooseSites(repo, repo, app(), "", 30, "HEAD", { identity: "fault" }).slice(10, 15);
+    const sealed = { mutants: named.map((s, i) => ({ id: `mut-app-${i + 1}`, component: "app", file: s.file, line: s.line, operator: s.operator, before: s.before, after: s.after, result: "survived", exitCodes: [0], faultId: faultId(s) })) };
+    mkdirSync(join(repo, ".agent-readiness/history/audits/aud-earlier"), { recursive: true });
+    writeFileSync(join(repo, ".agent-readiness/history/audits/aud-earlier/audit.json"), JSON.stringify(sealed));
+    writeFileSync(join(repo, ".agent-readiness/history/history.jsonl"), JSON.stringify({ id: "aud-earlier", kind: "audit", date: "2026-11-20" }) + "\n");
+    const audit = faultAudit(repo, "2026-12-beta");
+    await plantFaults(audit, repo, repo, fakeExecutor(repo, 1000, () => true), next, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {});
+    const ev = audit.evidence.find((e) => e.condition === "faults")!;
+    assert.deepEqual([ev.estimate?.carried, ev.estimate?.decided, ev.estimate?.verdict], [5, 10, "strong"], ev.summary);
+    const details = JSON.parse(readFileSync(join(repo, "..", "mutants.json"), "utf8")) as { faultId: string }[];
+    assert.deepEqual(details.slice(0, 5).map((d) => d.faultId), named.map(faultId), "the named faults go first");
+    assert.match(ev.summary, /5 of them planted again from the last audit/);
   });
 
   test("each fault's id is kept with its hidden details, not in the draft", async () => {

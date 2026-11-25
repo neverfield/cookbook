@@ -422,10 +422,10 @@ export function targetFiles(tree: string, comp: Component): string[] {
 // Vitest name in their config. A fault reached through one can be caught by any test.
 const SHARED_SETUP = /(^|\/)conftest\.py$|(^|\/)(jest|vitest)\.(setup|config)\.[mc]?[jt]s$|(^|\/)setup(Tests|-tests)?\.[mc]?[jt]s$/;
 
-// The test files that import `file`, directly or through other files of the component, or null when
-// the run can't be narrowed: a shared setup file reaches it, a language this file doesn't read, or
-// no test does.
-export function testsReaching(tree: string, comp: Component, file: string): string[] | null {
+// For each file, the test files that import it, directly or through other files of the component;
+// null for a file the run can't be narrowed for: a shared setup file reaches it, or no test does.
+// The whole index is null for a language this file doesn't read imports of.
+export function testsReaching(tree: string, comp: Component): ((file: string) => string[] | null) | null {
   const lang = comp.language;
   if (hooksFor(lang) || (lang !== "py" && lang !== "ts" && lang !== "js")) return null;
   const aliases = lang === "py" ? { aliases: [], baseUrl: null } : jsAliases(tree, comp);
@@ -448,18 +448,20 @@ export function testsReaching(tree: string, comp: Component, file: string): stri
       }
     }
   }
-  const reached = new Set<string>([file]);
-  const back = [file];
-  for (let i = 0; i < back.length; i++) {
-    for (const from of importedBy.get(back[i]) ?? []) {
-      if (reached.has(from)) continue;
-      reached.add(from);
-      back.push(from);
+  return (file: string) => {
+    const reached = new Set<string>([file]);
+    const back = [file];
+    for (let i = 0; i < back.length; i++) {
+      for (const from of importedBy.get(back[i]) ?? []) {
+        if (reached.has(from)) continue;
+        reached.add(from);
+        back.push(from);
+      }
     }
-  }
-  if ([...reached].some((f) => SHARED_SETUP.test(f))) return null;
-  const out = [...reached].filter((f) => tests.has(f)).sort();
-  return out.length ? out : null;
+    if ([...reached].some((f) => SHARED_SETUP.test(f))) return null;
+    const out = [...reached].filter((f) => tests.has(f)).sort();
+    return out.length ? out : null;
+  };
 }
 
 // pytest and `node --test` options that take the next word as their value.
@@ -752,8 +754,15 @@ export function keepPlanting(est: FaultEstimate, rule: EstimateRule): boolean {
 }
 
 // The looks fall at whole batches of decided faults, the points the rule's error rates were set at.
-export function atLook(decided: number, rule: EstimateRule): boolean {
-  return decided > 0 && decided % rule.batch === 0;
+// When earlier faults were planted again, none is taken before a whole batch of faults no sealed
+// report has named, so tests written against the named ones can't decide the estimate alone.
+export function atLook(decided: number, rule: EstimateRule, carriedDecided = 0): boolean {
+  return decided > 0 && decided % rule.batch === 0 && (carriedDecided === 0 || decided - carriedDecided >= rule.batch);
+}
+
+// How many earlier faults may be planted again: enough room is always left for one fresh batch.
+export function carriedCap(rule: EstimateRule): number {
+  return Math.max(0, rule.maxDecided - rule.batch);
 }
 
 // The fault check's result from its counts: not_run when too few faults gave a clear result.
