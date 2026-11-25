@@ -189,55 +189,7 @@
     },
     {
       "file": "support/trials/trials.test.ts",
-      "test": "changesets truth K1",
-      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "changesets truth R3",
-      "finding": "R3: no proven level on a green, tested component in a container",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "mcp-servers truth K1",
-      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "mcp-servers truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
       "test": "mcp-servers truth R3",
-      "finding": "R3: no proven level on a green, tested component in a container",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "pocketbase truth K1",
-      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "pocketbase truth R3",
-      "finding": "R3: no proven level on a green, tested component in a container",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "umami truth K1",
-      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "umami truth R3",
       "finding": "R3: no proven level on a green, tested component in a container",
       "fixedBy": "E"
     },

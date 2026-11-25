@@ -9,7 +9,7 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "b4ecdb1c3dcc1169bba7d2a1b8d779711940631738e407d9b2e1d6586a7db45d",
+    "scriptsDigest": "06da7cbdca2b9b624162eeff8ded596812e93dab410b7678bad84bab312f0cb0",
     "seedPinned": true,
     "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
@@ -77,10 +77,12 @@
         "condition": "clean.test",
         "label": "passes every test in a clean container",
         "state": "not_met",
-        "reason": "test failed: connection refused on port 5432 (1 of 1 tests failed)"
+        "reason": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on"
       }
     ],
     "unproven": false,
+    "status": "proven",
+    "settleBy": null,
     "next": {
       "level": 1,
       "name": "Bootable",
@@ -96,19 +98,22 @@
         "path": "packages/api",
         "toolchain": "Node",
         "manifest": "packages/api/package.json",
-        "lockfile": null,
-        "changeShare": 0.56,
+        "lockfile": "package-lock.json",
+        "changeShare": 0.549,
+        "placement": "component",
         "active": true,
         "level": 0,
         "couldBe": null,
         "unproven": false,
+        "status": "proven",
+        "settleBy": null,
         "capReasons": [
           {
             "component": "api",
             "condition": "clean.test",
             "label": "passes every test in a clean container",
             "state": "not_met",
-            "reason": "test failed: connection refused on port 5432 (1 of 1 tests failed)"
+            "reason": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on"
           }
         ],
         "scenarios": []
@@ -118,12 +123,15 @@
         "path": "packages/shared",
         "toolchain": "Node",
         "manifest": "packages/shared/package.json",
-        "lockfile": null,
-        "changeShare": 0.15,
+        "lockfile": "package-lock.json",
+        "changeShare": 0.147,
+        "placement": "component",
         "active": true,
         "level": 1,
         "couldBe": null,
         "unproven": false,
+        "status": "proven",
+        "settleBy": null,
         "capReasons": [
           {
             "component": "shared",
@@ -140,12 +148,15 @@
         "path": "packages/worker",
         "toolchain": "Node",
         "manifest": "packages/worker/package.json",
-        "lockfile": null,
-        "changeShare": 0.27,
+        "lockfile": "package-lock.json",
+        "changeShare": 0.265,
+        "placement": "component",
         "active": true,
         "level": 1,
         "couldBe": null,
         "unproven": false,
+        "status": "proven",
+        "settleBy": null,
         "capReasons": [
           {
             "component": "worker",
@@ -173,13 +184,19 @@
         "manifest": "infra/main.tf",
         "lockfile": null,
         "changeShare": 0.02,
+        "placement": "component",
         "reason": "Terraform isn't supported yet"
       }
+    ],
+    "unownedShare": 0.02,
+    "unownedTop": [
+      ".cursor/",
+      "AGENTS.md"
     ]
   },
   "executive": {
     "heading": "Level 0 of 4, not bootable",
-    "headline": "Agents can't pass the tests in api from a clean checkout because its tests need a service on port 5432 running, which the setup doesn't start, and 56% of recent changes land there.",
+    "headline": "Agents can't pass the tests in api from a clean checkout because its tests need a service on port 5432 running, which the setup doesn't start, and 55% of recent changes land there.",
     "numbers": [
       {
         "label": "Components ready for agents",
@@ -193,7 +210,7 @@
       },
       {
         "label": "Recent changes in components below Level 2",
-        "value": "98%",
+        "value": "96%",
         "comparison": "Level 2 needs 0%, counting the last 90 days"
       }
     ],
@@ -234,17 +251,17 @@
       "title": "Set up the service the tests expect on port 5432 for agents in api",
       "startNow": false,
       "why": "In a clean container, api's tests fail because nothing starts the service the tests expect on port 5432: the connection was refused.",
-      "movesTheNeedle": "Takes api to Level 1, covering 56% of recent changes. Agents can run api's checks before they push, so fewer agent PRs fail CI the first time.",
+      "movesTheNeedle": "Takes api to Level 1, covering 55% of recent changes. Agents can run api's checks before they push, so fewer agent PRs fail CI the first time.",
       "watch": "Share of agent PRs touching api that pass CI the first time. Now: 20% (1 of 5), Sep 27 to Oct 27, 2026.",
       "research": "In the BootstrapAgent study, a reusable, verified setup cut later agents' token use by 25.9% and build time by 22.3%. Measured on the study's benchmark repositories. https://arxiv.org/abs/2605.15815",
       "effortAndOwner": "Small: setup scripts and environment config, no source changes. Repo maintainer.",
       "decision": "Approve committing the setup files",
       "doneWhen": "`readiness replay --component api` passes every test.",
       "dependsOn": [],
-      "impact": 0.56,
+      "impact": 0.549,
       "effort": "small",
       "evidence": [
-        "ev-011"
+        "ev-014"
       ]
     },
     {
@@ -260,7 +277,7 @@
       "decision": null,
       "doneWhen": "`readiness run --instructions` replays every instruction item.",
       "dependsOn": [],
-      "impact": 0.15,
+      "impact": 0.147,
       "effort": "small",
       "evidence": [
         "ev-001",
@@ -283,7 +300,7 @@
       "impact": 0,
       "effort": "medium",
       "evidence": [
-        "ev-017"
+        "ev-018"
       ]
     }
   ],
@@ -299,7 +316,7 @@
         "label": "1. Set up the service the tests expect on port 5432 for agents in api",
         "x": 0.2,
         "y": 1,
-        "impact": 0.56,
+        "impact": 0.549,
         "quadrant": "Do first",
         "itemId": "clean.test:api"
       },
@@ -307,7 +324,7 @@
         "label": "2. Fix the stale agent instructions",
         "x": 0.22,
         "y": 0.268,
-        "impact": 0.15,
+        "impact": 0.147,
         "quadrant": "Quick fills",
         "itemId": "instructions:repo"
       },
@@ -512,7 +529,8 @@
           "ev-011",
           "ev-012",
           "ev-013",
-          "ev-014"
+          "ev-014",
+          "ev-015"
         ]
       },
       {
@@ -531,9 +549,9 @@
           "ev-008",
           "ev-009",
           "ev-010",
-          "ev-011",
           "ev-012",
-          "ev-013"
+          "ev-013",
+          "ev-014"
         ]
       },
       {
@@ -555,9 +573,9 @@
           "notRun": 1
         },
         "evidence": [
-          "ev-015",
           "ev-016",
-          "ev-017"
+          "ev-017",
+          "ev-018"
         ]
       },
       {
@@ -576,8 +594,8 @@
           "ev-001",
           "ev-002",
           "ev-003",
-          "ev-018",
-          "ev-019"
+          "ev-019",
+          "ev-020"
         ]
       },
       {
@@ -945,6 +963,15 @@
       {
         "id": "ev-014",
         "check": "bootstrap.cold_replay",
+        "component": "api",
+        "ran": "npm run test",
+        "where": "ran in a clean container",
+        "result": "fail",
+        "summary": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on"
+      },
+      {
+        "id": "ev-015",
+        "check": "bootstrap.cold_replay",
         "component": null,
         "ran": "frozen install reproduced the lockfile",
         "where": "ran in a clean container",
@@ -952,7 +979,7 @@
         "summary": "frozen install reproduced the lockfile"
       },
       {
-        "id": "ev-015",
+        "id": "ev-016",
         "check": "verify.behavioral_oracle",
         "component": "api",
         "ran": "tests must pass before faults can be planted",
@@ -961,7 +988,7 @@
         "summary": "tests must pass before faults can be planted"
       },
       {
-        "id": "ev-016",
+        "id": "ev-017",
         "check": "verify.behavioral_oracle",
         "component": "shared",
         "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
@@ -970,7 +997,7 @@
         "summary": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)"
       },
       {
-        "id": "ev-017",
+        "id": "ev-018",
         "check": "verify.behavioral_oracle",
         "component": "worker",
         "ran": "caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10",
@@ -979,7 +1006,7 @@
         "summary": "caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10"
       },
       {
-        "id": "ev-018",
+        "id": "ev-019",
         "check": "context.instructions_verified",
         "component": null,
         "ran": "npm run lint -w api",
@@ -988,7 +1015,7 @@
         "summary": ".cursor/rules/style.mdc:6 `npm run lint -w api` replays"
       },
       {
-        "id": "ev-019",
+        "id": "ev-020",
         "check": "context.instructions_verified",
         "component": null,
         "ran": "npm run test -w shared",
@@ -1020,7 +1047,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "b4ecdb1c3dcc"
+        "value": "06da7cbdca2b"
       },
       {
         "label": "Planted faults",
@@ -1049,7 +1076,7 @@
       "result": "Level 0",
       "ran": "the level rules over the active components, api, shared and worker",
       "where": "in a clean docker container (node:22-bookworm)",
-      "happened": "Set by api, held by api: passes every test in a clean container, not met (test failed: connection refused on port 5432 (1 of 1 tests failed)).",
+      "happened": "Set by api, held by api: passes every test in a clean container, not met (test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on).",
       "rule": "The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it."
     },
     {
@@ -1058,7 +1085,7 @@
       "result": "Level 0",
       "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (fail)",
       "where": "in a clean docker container (node:22-bookworm)",
-      "happened": "Held at Level 0 by passes every test in a clean container: not met (test failed: connection refused on port 5432 (1 of 1 tests failed))",
+      "happened": "Held at Level 0 by passes every test in a clean container: not met (test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on)",
       "rule": "Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
     },
     {
@@ -1112,7 +1139,7 @@
       "result": "not met",
       "ran": "`npm run test` (fail)",
       "where": "in a clean docker container (node:22-bookworm)",
-      "happened": "test failed: connection refused on port 5432 (1 of 1 tests failed)",
+      "happened": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on",
       "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails."
     },
     {
@@ -1121,7 +1148,7 @@
       "result": "not met",
       "ran": "`npm run lint` (pass) and `npm run test` (fail)",
       "where": "in a clean docker container (node:22-bookworm)",
-      "happened": "test failed: connection refused on port 5432 (1 of 1 tests failed)",
+      "happened": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on",
       "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Not met means it ran and failed, or the repo lacks what it needs. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone."
     },
     {
