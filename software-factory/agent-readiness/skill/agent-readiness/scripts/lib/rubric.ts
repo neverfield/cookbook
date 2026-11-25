@@ -45,7 +45,12 @@ export interface Rubric {
   // "streak" (from 2026-11-alpha): consecutiveWindows back-to-back windows at Level 3 or above.
   // Without it, the 2026-10-alpha rule: compare with the last audit at Level 3 or above.
   level4: { consecutiveWindows: number; volumeMultiplier: number; rule?: "streak" };
-  components: { maxAssessed: number; historyDays: number; botAuthorPatterns: string[]; generatedPatterns: string[]; lockfiles: string[] };
+  // unowned "counted" (from 2026-12-beta): shares are of every counted change, and changes no
+  // component or satellite holds count toward partial coverage; without it, shares are of the
+  // changes components own. satelliteHintShare (from 2026-12-beta): a folder name such as plugins/
+  // demotes the projects under it to satellites only while they hold less than this share of changes;
+  // without it, always.
+  components: { maxAssessed: number; historyDays: number; botAuthorPatterns: string[]; generatedPatterns: string[]; lockfiles: string[]; unowned?: "counted"; satelliteHintShare?: number };
   repoLevel: { activeShare: number; hysteresisAudits: number; partialCoverageShare: number; rule: string; newComponentsJoin?: boolean };
   // killRate (from 2026-11-beta): the share of faults with a clear result the tests must catch;
   // without it, every one. seedFrom "code" (from 2026-11-beta): faults come from the code, so they

@@ -56,6 +56,11 @@ export interface Detect {
   notes?(tree: string, dir: string, stack: string): string[];
   // A manifest that only lists other projects, such as a Dart workspace's root pubspec.yaml.
   workspaceOnly?(manifest: string, text: string): boolean;
+  // A manifest of this language nested in another project of it (`parent`, tree-relative) that is a
+  // project of its own rather than part of the enclosing build, such as a nested go.mod, which Go
+  // builds and tests apart. Without it, the enclosing project owns every folder under it, as a Maven
+  // reactor owns its modules.
+  ownUnit?(tree: string, parent: string, dir: string): boolean;
 }
 
 // A command the language discovers for a component, before the contract gives it an id and timeout.

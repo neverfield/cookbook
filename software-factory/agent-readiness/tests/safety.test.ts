@@ -335,7 +335,7 @@ describe("contract: kinds, root runners and failures by package", () => {
     assert.equal(added.kind, "typecheck");
   });
 
-  test("a root vitest run is credited to each package that has tests, scoped to its folder", () => {
+  test("a root vitest run is the root's test command, covering the packages with no test script of their own", () => {
     const dir = tree({
       "package.json": JSON.stringify({ name: "root", private: true, workspaces: ["packages/*"], scripts: { test: "vitest", build: "tsdown" } }),
       "package-lock.json": "{}",
@@ -352,9 +352,10 @@ describe("contract: kinds, root runners and failures by package", () => {
     const profile = buildProfile(dir, dir, rubric);
     const tests = discoverContract(profile, dir, rubric, []).filter((c) => c.kind === "test");
     const byComp = Object.fromEntries(tests.map((c) => [profile.components.find((x) => x.id === c.component)!.path, [c.cwd, c.command]]));
-    assert.deepEqual(byComp["packages/cli"], [".", "npm run test -- packages/cli"]);
+    assert.deepEqual(byComp["."], [".", "npm run test"]);
+    assert.deepEqual(profile.members?.map((m) => [m.path, m.of]), [["packages/cli", "."]], "CI tests cli only from the root, so it is a member of the root");
     assert.deepEqual(byComp["packages/write"], ["packages/write", "npm run test"], "a package's own test script wins");
-    assert.equal(byComp["packages/docs"], undefined, "a package with no test files isn't credited");
+    assert.equal(byComp["packages/docs"], undefined, "a docs package with no tests is a satellite");
     assert.equal(rootTestRunner(tree({ "package.json": JSON.stringify({ scripts: { test: "vitest && tsd" } }) })), null, "a chained script isn't narrowed");
   });
 

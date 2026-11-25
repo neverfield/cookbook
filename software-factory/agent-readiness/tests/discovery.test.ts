@@ -123,7 +123,7 @@ describe("a file cap on a large tree", () => {
     const profile = buildProfile(dir, dir, rubric, "HEAD", 20);
     const cut = profile.components.filter((c) => c.notAssessedReason === capCutReason(20));
     assert.deepEqual(cut.map((c) => c.path), ["arch", "drivers"]);
-    assert.deepEqual(cut.map((c) => c.changeShare), [0.484, 0.484], "their changes come from git, not the capped listing");
+    assert.deepEqual(cut.map((c) => c.changeShare), [0.455, 0.455], "their changes come from git, not the capped listing, as shares of every change");
     const sphinx = profile.components.find((c) => c.path === "Documentation/sphinx");
     assert.ok(sphinx && sphinx.changeShare < 0.1, "the docs build no longer gets every change");
     const audit = makeAudit({ components: [{ id: "app", share: 1, faults: "pass" }] });

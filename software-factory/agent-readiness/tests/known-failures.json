@@ -9,12 +9,6 @@
     },
     {
       "file": "support/trials/trials.test.ts",
-      "test": "changesets truth K6",
-      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
-      "fixedBy": "B"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
       "test": "commander truth K6",
       "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
       "fixedBy": "B"
@@ -129,6 +123,12 @@
     },
     {
       "file": "tests/dev-truth.test.ts",
+      "test": "make-test-unit truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
+      "file": "tests/dev-truth.test.ts",
       "test": "npm-plugins-workspace truth K6",
       "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
       "fixedBy": "B"
@@ -158,6 +158,12 @@
       "fixedBy": "B"
     },
     {
+      "file": "tests/dev-truth.test.ts",
+      "test": "tox-test-dir truth K6",
+      "finding": "K6: one fact rendered two ways: the heading against the ladder, blocked counts, or skipped items counted as not run (sims 4)",
+      "fixedBy": "B"
+    },
+    {
       "file": "tests/report-consistency.test.ts",
       "test": "a command a limit of this machine blocked never reads as failed",
       "finding": "sims 4: zap's blocked lint shows fail in one table",
@@ -183,92 +189,8 @@
     },
     {
       "file": "support/trials/trials.test.ts",
-      "test": "changesets truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "cookbook truth R6",
-      "finding": "R6: the share of changes outside every component isn't reported (review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "mcp-servers truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "umami truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "zap truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "cargo-nested truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "go-multi-module truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "go-multi-module: every unit's manifest is a manifest file",
-      "finding": "sims 1: a satellite's manifest is a source file",
-      "fixedBy": "D"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "lerna-no-workspaces truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "npm-plugins-workspace truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "pnpm-root-app truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "pnpm-root-app: contract add can target the root app",
-      "finding": "sims 1: contract add can't target the root",
-      "fixedBy": "D"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "pnpm-root-app: workspace members report the root lockfile",
-      "finding": "sims 5: lockfile none despite the root pnpm-lock.yaml",
-      "fixedBy": "D"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "services-build truth R1",
-      "finding": "R1: a weighty component missing or misplaced (sims 1, review issue 2)",
-      "fixedBy": "D"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "changesets truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
+      "test": "changesets truth K1",
+      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
       "fixedBy": "E"
     },
     {
@@ -315,32 +237,8 @@
     },
     {
       "file": "support/trials/trials.test.ts",
-      "test": "umami truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
       "test": "umami truth R3",
       "finding": "R3: no proven level on a green, tested component in a container",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "zap truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "zap truth R3",
-      "finding": "R3: no proven level on a green, tested component in a container",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/abstention.test.ts",
-      "test": "make-test-unit: tests a task runner runs are never \"no tests\" or Level 0",
-      "finding": "review issue 1: a test:unit script behind make test is Level 0",
       "fixedBy": "E"
     },
     {
@@ -351,80 +249,8 @@
     },
     {
       "file": "tests/abstention.test.ts",
-      "test": "tox-test-dir: tests a task runner runs are never \"no tests\" or Level 0",
-      "finding": "review issue 1: tox with test/ is Level 0",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/abstention.test.ts",
       "test": "with nothing run, no component is Level 0",
       "finding": "proposal section 1: noRealResults returns early on a missing test command",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "cargo-nested truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "go-multi-module truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "lerna-no-workspaces truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "make-test-unit truth K1",
-      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "make-test-unit truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "npm-plugins-workspace truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "pnpm-root-app truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "pytest-optional-deps: the install includes the extra that declares pytest",
-      "finding": "review issue 1: the install leaves out the test extra",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "services-build truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "tox-test-dir truth K1",
-      "finding": "K1: Level 0 or no tests on a tested component green upstream (review issue 1)",
-      "fixedBy": "E"
-    },
-    {
-      "file": "tests/dev-truth.test.ts",
-      "test": "tox-test-dir truth R2",
-      "finding": "R2: the test command isn't one CI runs (review issue 1)",
       "fixedBy": "E"
     },
     {

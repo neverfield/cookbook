@@ -5,9 +5,12 @@ import { NODE_LOCKFILES, readPackageJson, yarnBerry, yarnPath, yarnPinned } from
 import { PY_LOCKFILES, UV_WORKSPACE, pyproject, uvWorkspaceMembers } from "./languages/python.ts";
 import type { Rubric } from "./rubric.ts";
 import { STACKS, notSupportedReason, stack, supported } from "./support.ts";
-import type { Component, Language, PackageManager, Profile } from "./types.ts";
+import type { Component, Language, PackageManager, Profile, Unit } from "./types.ts";
 import { capCutReason } from "./scope.ts";
-import { MAX_FILES, addDays, containedPath, exists, git, listFilesScoped, readJson, readText, today, workspaceDirs } from "./util.ts";
+import { MAX_FILES, containedPath, exists, listFilesScoped, readJson, readText, workspaceDirs } from "./util.ts";
+import { OUTPUT_SEGMENT, SKIP_SEGMENT, inventory, namesByDir, pythonManifest, skipSegment } from "./discover/inventory.ts";
+import { assignShares, changeCounts, shareUnder } from "./discover/ownership.ts";
+import type { ChangeCounts } from "./discover/ownership.ts";
 
 export { pyproject, readPackageJson, uvWorkspaceMembers, yarnBerry };
 
@@ -49,6 +52,15 @@ function workspacePatterns(tree: string): string[] {
   const pkg = readPackageJson(tree);
   const ws = pkg?.workspaces;
   const fromPkg = Array.isArray(ws) ? ws : ws?.packages ?? [];
+  // A Lerna monorepo with no workspaces field lists its packages in lerna.json, packages/* by default.
+  if (!fromPkg.length && pkg && !exists(join(tree, "pnpm-workspace.yaml")) && exists(join(tree, "lerna.json"))) {
+    try {
+      const lerna = readJson<{ packages?: string[] }>(join(tree, "lerna.json"));
+      return Array.isArray(lerna.packages) && lerna.packages.length ? lerna.packages : ["packages/*"];
+    } catch {
+      return ["packages/*"];
+    }
+  }
   const pnpmFile = join(tree, "pnpm-workspace.yaml");
   const fromPnpm: string[] = [];
   if (exists(pnpmFile)) {
@@ -88,7 +100,6 @@ const OTHER_LOCKFILES = ["Podfile.lock"];
 const LOCKFILES = [...new Set([...NODE_LOCKFILES, ...PY_LOCKFILES, ...lockfileNames(), ...OTHER_LOCKFILES])];
 // Pods/ and Carthage/ hold an Xcode app's vendored dependencies, often committed, and DerivedData/ its build output.
 const VENDORED = /^(Pods|Carthage|DerivedData)$/;
-const SKIP_SEGMENT = /^(\..+|node_modules|fixtures?|__fixtures__|testdata|vendor|dist|build|bin|obj|target|Pods|Carthage|DerivedData)$/;
 // An Xcode project or workspace is a folder of its own files; the scan sees it as one name, and
 // the file git tracks inside it is the manifest.
 const XCODE_BUNDLE = /\.(xcodeproj|xcworkspace)$/;
@@ -135,16 +146,45 @@ const DOCS_SEGMENT = /^(docs?|documentation|website)$/i;
 const SATELLITE_HOLDS = "tests, samples or tooling";
 const PACKAGING_HOLDS = "packaging or a mobile platform shell";
 
-function satelliteReason(tree: string, m: FoundManifest): string | null {
-  const segment = m.dir.split("/").find((s) => SATELLITE_SEGMENT.test(s));
-  if (segment) return `it sits under ${segment}/, which usually holds ${SATELLITE_HOLDS} rather than the product`;
-  const docs = m.kind === "py" ? m.dir.split("/").find((s) => DOCS_SEGMENT.test(s)) : undefined;
-  if (docs) return `it sits under ${docs}/, which usually holds the documentation build rather than the product`;
+const hasTestScript = (scripts: Record<string, string> | undefined) => Boolean(scripts?.test && !/no test specified/.test(scripts.test));
+
+// A folder-name hint that the project is a satellite, and the folder the hint names, whose share of
+// changes decides whether the hint holds.
+interface Hint {
+  reason: string;
+  folder: string;
+}
+
+function satelliteHint(tree: string, m: FoundManifest): Hint | null {
+  const parts = m.dir.split("/");
+  const upTo = (s: string) => parts.slice(0, parts.indexOf(s) + 1).join("/");
+  const segment = parts.find((s) => SATELLITE_SEGMENT.test(s));
+  if (segment) return { reason: `it sits under ${segment}/, which usually holds ${SATELLITE_HOLDS} rather than the product`, folder: upTo(segment) };
+  // A Python manifest or a package with no tests under docs/ is the documentation build or site.
+  const docsBuild = m.kind === "py" || (m.kind === "js" && !hasTestScript(readPackageJson(join(tree, m.dir))?.scripts));
+  const docs = docsBuild ? parts.find((s) => DOCS_SEGMENT.test(s)) : undefined;
+  if (docs) return { reason: `it sits under ${docs}/, which usually holds the documentation build rather than the product`, folder: upTo(docs) };
   const packaging = m.kind === "other" ? packagingSegment(tree, m.dir) : undefined;
-  if (packaging) return `it sits under ${packaging}/, which usually holds ${PACKAGING_HOLDS} rather than the product`;
+  if (packaging) return { reason: `it sits under ${packaging}/, which usually holds ${PACKAGING_HOLDS} rather than the product`, folder: upTo(packaging) };
   const name = m.kind === "js" ? readPackageJson(join(tree, m.dir))?.name : undefined;
-  if (name && CONFIG_PACKAGE.test(name)) return `${name} is a shared config package, not a product`;
+  if (name && CONFIG_PACKAGE.test(name)) return { reason: `${name} is a shared config package, not a product`, folder: m.dir };
   return null;
+}
+
+export interface LayoutOptions {
+  // The share of every counted change under a folder, once the history has been read.
+  shareOf?: (dir: string) => number;
+  // A hint demotes only while the folder it names holds less than this share.
+  hintShare?: number;
+}
+
+// A hint demotes a project to a satellite, unless the folder it names holds enough of the changes
+// that the hint is wrong, as with a plugins/ folder that holds most of the work.
+function satelliteReason(tree: string, m: FoundManifest, opts: LayoutOptions = {}): string | null {
+  const hint = satelliteHint(tree, m);
+  if (!hint) return null;
+  if (opts.shareOf && opts.hintShare !== undefined && opts.shareOf(hint.folder) >= opts.hintShare) return null;
+  return hint.reason;
 }
 
 // A manifest that only lists other projects, such as a Dart workspace's root pubspec.yaml.
@@ -162,23 +202,16 @@ function pickManifest(names: string[], preferred: string): string {
 
 // Every manifest in the tree, at any depth, outside workspace members. A supported package owns
 // the folders under it; one nested in an unsupported project (a web client inside a .NET project)
-// is still its own component. Next to a root package of the same language, only nested packages
-// with their own lockfile count; a Python service next to a Node root can't be part of it.
-function discoverManifests(tree: string, files: string[], claimed: string[], hasRoot: boolean, rootPy: boolean, repoName: string): { found: FoundManifest[]; satellites: (FoundManifest & { reason: string })[] } {
+// is still its own component, and so is a nested project the language builds apart, such as a nested
+// go.mod. Next to a root package of the same language, only nested packages with their own lockfile
+// count; a Python service next to a Node root can't be part of it.
+function discoverManifests(tree: string, files: string[], claimed: string[], hasRoot: boolean, rootPy: boolean, repoName: string, opts: LayoutOptions): { found: FoundManifest[]; satellites: (FoundManifest & { reason: string })[] } {
   const byDir = new Map<string, string[]>();
-  for (const f of files) {
-    const segments = f.split("/");
-    const bundle = segments.findIndex((s) => XCODE_BUNDLE.test(s));
-    const dir = bundle >= 0 ? segments.slice(0, bundle).join("/") || "." : dirname(f);
-    const name = bundle >= 0 ? segments[bundle] : basename(f);
-    if (dir !== "." && dir.split("/").some((s) => SKIP_SEGMENT.test(s))) continue;
-    const names = byDir.get(dir) ?? [];
-    if (!names.includes(name)) byDir.set(dir, [...names, name]);
-  }
+  for (const [dir, names] of namesByDir(files)) if (!skipSegment(dir, LOCKFILES.some((l) => names.includes(l)))) byDir.set(dir, names);
   const found: FoundManifest[] = [];
   const satellites: (FoundManifest & { reason: string })[] = [];
   const add = (m: FoundManifest) => {
-    const reason = m.dir === "." ? null : satelliteReason(tree, m);
+    const reason = m.dir === "." ? null : satelliteReason(tree, m, opts);
     if (reason) satellites.push({ ...m, reason });
     else found.push(m);
   };
@@ -191,20 +224,22 @@ function discoverManifests(tree: string, files: string[], claimed: string[], has
       add({ dir, kind: "js", manifest: `${dir}/package.json` });
       continue;
     }
-    const py = has("pyproject.toml") ? "pyproject.toml" : has("setup.py") ? "setup.py" : has("requirements.txt") && names.some((n) => n.endsWith(".py")) ? "requirements.txt" : null;
+    const py = pythonManifest(names);
     if (dir !== "." && !insideSupported && py && (!hasRoot || !rootPy || PY_LOCKFILES.some(has))) {
       add({ dir, kind: "py", manifest: `${dir}/${py}` });
       continue;
     }
     const rule = UNSUPPORTED_MANIFESTS.find((u) => names.some((n) => u.match.test(n)));
-    if (rule && !(dir === "." && hasRoot) && ![...found, ...satellites].some((f) => within(dir, f.dir))) {
-      const picked = pickManifest(names.filter((n) => rule.match.test(n)), dir === "." ? repoName : basename(dir));
-      const bundle = picked.match(XCODE_BUNDLE)?.[1];
-      const project = bundle ? `${picked}/${XCODE_MANIFEST[bundle]}` : picked;
-      const manifest = dir === "." ? project : `${dir}/${project}`;
-      if (workspaceOnly(tree, manifest, rule.language)) continue;
-      add({ dir, kind: "other", manifest, stack: rule.language.detect.refine?.(manifest, readText(join(tree, manifest)), tree) ?? rule.stack, language: rule.language });
-    }
+    if (!rule || (dir === "." && hasRoot)) continue;
+    const enclosing = [...found, ...satellites].filter((f) => within(dir, f.dir)).sort((a, b) => b.dir.length - a.dir.length)[0];
+    const apart = enclosing && enclosing.kind === "other" && enclosing.language === rule.language && Boolean(rule.language.detect.ownUnit?.(tree, enclosing.dir, dir));
+    if (enclosing && !apart) continue;
+    const picked = pickManifest(names.filter((n) => rule.match.test(n)), dir === "." ? repoName : basename(dir));
+    const bundle = picked.match(XCODE_BUNDLE)?.[1];
+    const project = bundle ? `${picked}/${XCODE_MANIFEST[bundle]}` : picked;
+    const manifest = dir === "." ? project : `${dir}/${project}`;
+    if (workspaceOnly(tree, manifest, rule.language)) continue;
+    add({ dir, kind: "other", manifest, stack: rule.language.detect.refine?.(manifest, readText(join(tree, manifest)), tree) ?? rule.stack, language: rule.language });
   }
   return { found, satellites };
 }
@@ -228,6 +263,30 @@ function lockfileIn(tree: string, dir: string): string | null {
 
 export function discoverComponents(tree: string, files: string[], repoName?: string): Component[] {
   return discoverLayout(tree, files, repoName).components;
+}
+
+// A test script that runs the members' own scripts rather than a test runner over the code.
+const DELEGATES = /--workspaces?\b|(^|\s)-ws\b|(^|\s)(-r|--recursive)\b|--filter\b|\b(turbo|lerna|nx|wsrun|ultra)\b|\bworkspaces\s+(foreach|run)\b/;
+const SCRIPT_CALL = /^(?:npm\s+run(?:-script)?|pnpm(?:\s+run)?|yarn(?:\s+run)?|bun\s+run)\s+([\w:.-]+)\s*$/;
+
+// The test runner the workspace root runs itself, following a script that only calls another one.
+function rootRunsTests(scripts: Record<string, string> | undefined): boolean {
+  let script = scripts?.test;
+  for (let hop = 0; script && hop < 3; hop++) {
+    if (/no test specified/.test(script) || DELEGATES.test(script)) return false;
+    const next = script.trim().match(SCRIPT_CALL)?.[1];
+    if (!next || !scripts?.[next]) return true;
+    script = scripts[next];
+  }
+  return false;
+}
+
+const JS_TEST = /(^|\/)(__tests__\/.+|[^/]+\.(test|spec)\.[cm]?[jt]sx?)$/;
+
+// Tests of the root's own outside its members, such as the repo's scripts with their tests. A lint
+// script with no tests beside it is tooling, not a project.
+function rootTests(files: string[], elsewhere: string[]): boolean {
+  return files.some((f) => JS_TEST.test(f) && !f.split("/").slice(0, -1).some((s) => s.startsWith(".") || SKIP_SEGMENT.test(s)) && !elsewhere.some((p) => within(f, p)));
 }
 
 const ROOT_APP_MANIFESTS: { names: string[]; stack: string; toolchain: string; suffix: string }[] = [
@@ -282,9 +341,42 @@ function toolingOnlyRoot(tree: string, files: string[], others: Component[], els
   return ownSource || tools.length === 0 ? null : tools;
 }
 
-export function discoverLayout(tree: string, files: string[], repoName = basename(tree)): { components: Component[]; satellites: Profile["satellites"] } {
+export interface Layout {
+  components: Component[];
+  satellites: Profile["satellites"];
+  members: NonNullable<Profile["members"]>;
+  units: Unit[];
+}
+
+const deepest = <T extends { path: string }>(xs: T[], dir: string) => xs.filter((x) => within(dir, x.path)).sort((a, b) => b.path.length - a.path.length)[0];
+
+// Where every folder that holds a manifest ended up. Each is placed exactly once; one that nothing
+// accounts for is "unplaced", which the report lists rather than dropping it.
+function placeUnits(files: string[], layout: Omit<Layout, "units">, workspace: { members: Set<string>; excluded: string[] }): Unit[] {
+  const { components, satellites, members } = layout;
+  return inventory(files, LOCKFILES).map((e): Unit => {
+    const at = { path: e.dir, manifest: e.manifest };
+    const comp = components.find((c) => c.path === e.dir && c.manifest);
+    if (comp) return { ...at, placement: "component", source: workspace.members.has(e.dir) ? "workspace" : "manifest", reason: comp.notAssessedReason ? `a component, not assessed: ${comp.notAssessedReason}` : "a component" };
+    const member = members.find((m) => m.path === e.dir);
+    if (member) return { ...at, placement: "member", of: member.of, source: "workspace", reason: member.reason };
+    const sat = satellites.find((x) => x.path === e.dir);
+    if (sat) return { ...at, placement: "satellite", ...(deepest(components, e.dir) ? { of: deepest(components, e.dir).path } : {}), source: "hint", reason: sat.reason };
+    if (e.skippedBy) return { ...at, placement: "excluded", source: "hint", reason: `it sits under ${e.skippedBy}/, which holds vendored, generated or test files` };
+    if (workspace.excluded.some((d) => within(e.dir, d))) return { ...at, placement: "excluded", source: "workspace", reason: "the workspace leaves it out" };
+    const owner = deepest(components, e.dir);
+    if (owner) return { ...at, placement: "member", of: owner.path, source: "manifest", reason: `it sits inside ${owner.path === "." ? "the root project" : owner.path} and isn't a project of its own` };
+    const satOwner = deepest(satellites, e.dir);
+    if (satOwner) return { ...at, placement: "satellite", source: "hint", reason: `it sits inside ${satOwner.path}, ${satOwner.reason.replace(/^it /, "which ")}` };
+    if (e.dir === ".") return { ...at, placement: "satellite", source: "workspace", reason: "the workspace root, which lists the projects under it" };
+    return { ...at, placement: "unplaced", source: "manifest", reason: "the scan couldn't place it" };
+  });
+}
+
+export function discoverLayout(tree: string, files: string[], repoName = basename(tree), opts: LayoutOptions = {}): Layout {
   const comps: Component[] = [];
   const memberSatellites: Profile["satellites"] = [];
+  const memberList: Layout["members"] = [];
   const members = new Set<string>();
   const patterns = workspacePatterns(tree);
   // Folders the workspace leaves out on purpose aren't components of their own either.
@@ -294,13 +386,25 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
   if (included.length) {
     const all = listed.filter((d) => exists(join(tree, d, "package.json")));
     // Workspace members under tooling/ or examples/ are satellites too, unless nothing else exists.
-    const reasons = new Map(all.map((d) => [d, d === "." ? null : satelliteReason(tree, { dir: d, kind: "js", manifest: `${d}/package.json` })]));
+    const reasons = new Map(all.map((d) => [d, d === "." ? null : satelliteReason(tree, { dir: d, kind: "js", manifest: `${d}/package.json` }, opts)]));
     const product = all.filter((d) => !reasons.get(d));
     const dirs = product.length ? product : all;
     if (product.length) for (const d of all.filter((x) => reasons.get(x))) memberSatellites.push({ path: d, manifest: `${d}/package.json`, toolchain: "Node", reason: reasons.get(d)! });
+    // The workspace root is a project of its own beside its members when it runs a test runner itself,
+    // as an app at the root of a pnpm workspace does, or has tests of its own. Members with no test
+    // script of their own are then built and tested through the root's test run.
+    const rootPkg = readPackageJson(tree);
+    const rootProject = Boolean(rootPkg) && !dirs.includes(".") && (rootRunsTests(rootPkg?.scripts) || rootTests(files, [...all, ...excludedDirs]));
+    const rootRuns = rootProject && rootRunsTests(rootPkg?.scripts);
+    const rootId = sanitizeId(rootPkg?.name ?? "root");
+    if (rootProject) comps.push({ id: rootId, path: ".", language: languageOf(tree, ".", files), manifest: "package.json", scripts: rootPkg?.scripts ?? {}, changes: 0, changeShare: 0, assessed: false });
     for (const dir of dirs) {
       const pkg = readPackageJson(join(tree, dir));
       members.add(dir);
+      if (rootRuns && dir !== "." && !hasTestScript(pkg?.scripts)) {
+        memberList.push({ path: dir, manifest: `${dir}/package.json`, of: ".", reason: "it has no test script of its own, so the workspace root's test run covers it" });
+        continue;
+      }
       comps.push({
         id: dir === "." ? sanitizeId(pkg?.name ?? "root") : sanitizeId(basename(dir)),
         path: dir,
@@ -335,7 +439,7 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
     // A root package without a test script of its own goes with the app at the root, such as Django or
     // Laravel: it isn't assessed apart from that app, so its missing tests never read as the repo's.
     const unscored = apps.filter((a) => a.notAssessedReason);
-    if (jsRoot && unscored.length && !(jsRoot.scripts.test && !/no test specified/.test(jsRoot.scripts.test))) {
+    if (jsRoot && unscored.length && !hasTestScript(jsRoot.scripts)) {
       jsRoot.notAssessedReason = `it goes with the ${unscored[0].toolchain} app at the root, which isn't supported yet, so it isn't assessed on its own`;
     }
     for (const app of apps) {
@@ -344,7 +448,7 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
     }
   }
   const rootPy = comps.some((c) => c.path === "." && c.language === "py");
-  const { found, satellites } = discoverManifests(tree, files, [...comps.filter((c) => c.path !== ".").map((c) => c.path), ...memberSatellites.map((s) => s.path), ...excludedDirs], hasRoot, rootPy, repoName);
+  const { found, satellites } = discoverManifests(tree, files, [...comps.filter((c) => c.path !== ".").map((c) => c.path), ...memberSatellites.map((s) => s.path), ...memberList.map((m) => m.path), ...excludedDirs], hasRoot, rootPy, repoName, opts);
   const deferred = comps.length === 0 && found.length === 0;
   for (const m of deferred ? satellites : found) {
     const pkg = m.kind === "js" ? readPackageJson(join(tree, m.dir)) : null;
@@ -373,19 +477,21 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
     }
   }
   const rootPm = detectPackageManager(tree);
+  // A workspace member installs from the workspace root's lockfile.
+  const rootLockfile = lockfileIn(tree, ".");
   for (const c of comps) {
-    c.lockfile = lockfileIn(tree, c.path);
+    c.lockfile = lockfileIn(tree, c.path) ?? (members.has(c.path) ? rootLockfile : null);
     if (c.stack || c.language === "other") continue;
     c.stack = stackOf(tree, c, rootPm, members.has(c.path) && c.path !== ".");
     if (!supported(c.stack) && !c.notAssessedReason) c.notAssessedReason = notSupportedReason(c.stack);
   }
-  const satelliteList = [...memberSatellites, ...(deferred ? [] : satellites.map((s) => ({ path: s.dir, manifest: s.manifest, toolchain: s.kind === "js" ? "Node" : s.kind === "py" ? "Python" : stack(s.stack!).label, reason: s.reason })))];
+  const satelliteList: Profile["satellites"] = [...memberSatellites, ...(deferred ? [] : satellites.map((s) => ({ path: s.dir, manifest: s.manifest, toolchain: s.kind === "js" ? "Node" : s.kind === "py" ? "Python" : stack(s.stack!).label, reason: s.reason })))];
   // Unsupported source with no manifest, such as infra/*.tf, is listed by its top-level folder,
   // next to a root package too, so the root doesn't take its share of changes.
   const rootOnly = comps.length > 0 && comps.every((c) => c.path === ".");
   const rootStacks = new Set(comps.filter((c) => c.path === ".").map((c) => c.stack));
-  const claimed = new Set([...comps.map((c) => c.path), ...satelliteList.map((s) => s.path)].map((p) => p.split("/")[0]));
-  const topDirs = [...new Set(files.filter((f) => f.includes("/")).map((f) => f.split("/")[0]))].filter((d) => !d.startsWith(".") && !claimed.has(d) && !VENDORED.test(d));
+  const claimed = new Set([...comps.map((c) => c.path), ...satelliteList.map((s) => s.path), ...memberList.map((m) => m.path)].map((p) => p.split("/")[0]));
+  const topDirs = [...new Set(files.filter((f) => f.includes("/")).map((f) => f.split("/")[0]))].filter((d) => !d.startsWith(".") && !claimed.has(d) && !VENDORED.test(d) && !OUTPUT_SEGMENT.test(d));
   for (const dir of topDirs.sort()) {
     const inside = files.filter((f) => f.startsWith(dir + "/"));
     const hit = UNSUPPORTED.find((u) => inside.some((f) => u.ext.test(f)));
@@ -397,13 +503,15 @@ export function discoverLayout(tree: string, files: string[], repoName = basenam
     if ([...rootStacks].some((s) => sameLanguage(s, hit.stack)) && !EXAMPLE_SEGMENT.test(dir)) continue;
     const holds = SATELLITE_SEGMENT.test(dir) ? SATELLITE_HOLDS : packagingSegment(tree, dir) ? PACKAGING_HOLDS : null;
     if (holds && comps.length > 0) {
-      satelliteList.push({ path: dir, manifest: inside.find((f) => hit.ext.test(f))!, toolchain: stack(hit.stack).label, reason: `it sits under ${dir}/, which usually holds ${holds} rather than the product` });
+      // No manifest of its own: the folder is listed, never one of its source files as if it were one.
+      satelliteList.push({ path: dir, manifest: null, toolchain: stack(hit.stack).label, reason: `it sits under ${dir}/, which usually holds ${holds} rather than the product` });
       continue;
     }
     if (rootOnly && NOT_A_PROJECT.test(dir)) continue;
     comps.push({ ...languageComponent(tree, { id: sanitizeId(dir), path: dir, manifest: null }, hit.stack), lockfile: null });
   }
-  return { components: uniqueIds(comps), satellites: satelliteList };
+  const layout = { components: uniqueIds(comps), satellites: satelliteList, members: memberList };
+  return { ...layout, units: placeUnits(files, layout, { members, excluded: excludedDirs }) };
 }
 
 function sameLanguage(a: string | undefined, b: string): boolean {
@@ -431,73 +539,6 @@ function uniqueIds(comps: Component[]): Component[] {
     taken.add(id);
   }
   return comps;
-}
-
-// Two components at the root split its files: the root package keeps the Node files, and the app
-// next to it, such as Django or Laravel, takes its own files and the rest of the root.
-function ownsByType(c: Component, file: string): boolean {
-  return Boolean(c.stack && STACKS.find((s) => s.id === c.stack)?.files?.test(file));
-}
-
-const NODE_FILE = /\.(c|m)?[jt]sx?$|\.(vue|svelte|astro|css|scss|sass|less|html?)$|(^|\/)(package(-lock)?\.json|pnpm-(lock|workspace)\.yaml|yarn\.lock|bun\.lockb?|\.nvmrc|\.npmrc|tsconfig[^/]*\.json)$/;
-
-function owningComponent(file: string, comps: Component[]): Component | null {
-  let best: Component | null = null;
-  let bestLen = -1;
-  for (const c of comps) {
-    const matches = c.path === "." || file === c.path || file.startsWith(c.path + "/");
-    const len = c.path === "." ? 0 : c.path.length;
-    if (matches && len > bestLen) {
-      best = c;
-      bestLen = len;
-    }
-  }
-  const roots = comps.filter((c) => c.path === ".");
-  if (best?.path !== "." || roots.length < 2) return best;
-  const app = roots.find((c) => c !== best && STACKS.find((s) => s.id === c.stack)?.files);
-  return roots.find((c) => ownsByType(c, file)) ?? (NODE_FILE.test(file) || !app ? best : app);
-}
-
-// Counted up to the audited commit, so a commit made after `init` can't move the shares.
-export function computeChangeShares(repo: string, comps: Component[], rubric: Rubric, commit = "HEAD"): number {
-  const since = addDays(today(), -rubric.components.historyDays);
-  const r = git(["log", commit, `--since=${since}`, "--no-merges", "--name-status", "--no-renames", "--format=@@%an%x09%ae"], repo);
-  const counts = new Map<string, number>();
-  let author = "";
-  let commitFiles: string[] = [];
-  const flush = () => {
-    const isBot = rubric.components.botAuthorPatterns.some((p) => author.toLowerCase().includes(p.toLowerCase()));
-    const lockOnly = commitFiles.length > 0 && commitFiles.every((f) => rubric.components.lockfiles.includes(basename(f)));
-    if (!isBot && !lockOnly) {
-      for (const f of commitFiles) {
-        // Installing this skill, or committing its records, isn't work in the repo's components.
-        if (f.startsWith(".cursor/skills/agent-readiness/") || f.startsWith(".agent-readiness/")) continue;
-        if (rubric.components.generatedPatterns.some((g) => f.includes(g))) continue;
-        if (rubric.components.lockfiles.includes(basename(f))) continue;
-        const owner = owningComponent(f, comps);
-        if (owner) counts.set(owner.id, (counts.get(owner.id) ?? 0) + 1);
-      }
-    }
-    commitFiles = [];
-  };
-  if (r.ok) {
-    for (const line of r.stdout.split("\n")) {
-      if (line.startsWith("@@")) {
-        flush();
-        author = line.slice(2);
-      } else if (/^[AMD]\t/.test(line)) {
-        commitFiles.push(line.slice(2));
-      }
-    }
-    flush();
-  }
-  let total = 0;
-  for (const c of comps) {
-    c.changes = counts.get(c.id) ?? 0;
-    total += c.changes;
-  }
-  for (const c of comps) c.changeShare = total > 0 ? Math.round((c.changes / total) * 1000) / 1000 : Math.round((1 / comps.length) * 1000) / 1000;
-  return total;
 }
 
 function nodePins(tree: string, dir: string, pm: PackageManager | null, label: string, found: string[], missing: string[]): void {
@@ -614,9 +655,11 @@ export function instructionFiles(files: string[]): string[] {
 const LATER_LOCKFILES = ["bun.lock", "bun.lockb"];
 
 export function buildProfile(repo: string, tree: string, rubric: Rubric, commit = "HEAD", maxFiles = MAX_FILES): Profile {
-  const { files, cut } = listFilesScoped(tree, { includeHidden: true, maxFiles });
+  const { files, cut } = listFilesScoped(tree, { includeHidden: true, maxFiles, outputDirs: true });
   const pm = detectPackageManager(tree);
-  const { components, satellites } = discoverLayout(tree, files, basename(repo));
+  const counts: ChangeCounts = changeCounts(repo, rubric, commit);
+  const hintShare = rubric.components.satelliteHintShare;
+  const { components, satellites, members, units } = discoverLayout(tree, files, basename(repo), hintShare === undefined ? {} : { shareOf: (d) => shareUnder(counts, d), hintShare });
   // A folder the file cap left partly unlisted may hold projects the scan never saw. Unless a
   // component already covers it, it's listed with its own share of changes, so it can't vanish.
   for (const dir of cut.filter((d) => !components.some((c) => c.path !== "." && within(c.path, d)))) {
@@ -624,7 +667,8 @@ export function buildProfile(repo: string, tree: string, rubric: Rubric, commit 
     for (let i = 2; components.some((c) => c.id === id); i++) id = `${sanitizeId(dir)}-${i}`;
     components.push({ id, path: dir, language: "other", manifest: null, scripts: {}, changes: 0, changeShare: 0, assessed: false, lockfile: null, notAssessedReason: capCutReason(maxFiles) });
   }
-  const totalChanges = computeChangeShares(repo, components, rubric, commit);
+  const ownership = assignShares(components, satellites, counts, rubric);
+  const totalChanges = ownership.counted ? ownership.changes : components.reduce((s, c) => s + c.changes, 0);
   const supported = components.filter((c) => !c.notAssessedReason && rubric.mutation.languages.includes(c.language === "other" ? "x" : c.language));
   for (const c of components) {
     if (!c.notAssessedReason && c.language === "other") c.notAssessedReason = "no supported toolchain found";
@@ -651,10 +695,13 @@ export function buildProfile(repo: string, tree: string, rubric: Rubric, commit 
     lockfiles: files.filter((f) => [...rubric.components.lockfiles, ...LATER_LOCKFILES].includes(basename(f)) && (dirname(f) === "." || components.some((c) => c.packageManager && c.path === dirname(f)))),
     ciFiles: files.filter((f) => /^\.github\/workflows\/.+\.ya?ml$/.test(f) || f === ".gitlab-ci.yml" || f === ".circleci/config.yml" || f.startsWith(".buildkite/")),
     instructionFiles: instructionFiles(files),
-    toolchain: toolchain(tree, files, pm, components, environmentJson?.build?.dockerfile),
+    toolchain: toolchain(tree, files.filter((f) => !f.split("/").slice(0, -1).some((s) => OUTPUT_SEGMENT.test(s))), pm, components, environmentJson?.build?.dockerfile),
     environmentJson,
     components,
     satellites,
+    members,
+    units,
+    ownership,
     historyDays: rubric.components.historyDays,
     totalChanges,
   };

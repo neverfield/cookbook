@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { describe, test } from "node:test";
 import { inventory } from "../skill/agent-readiness/scripts/lib/assets.ts";
 import { discoverContract } from "../skill/agent-readiness/scripts/lib/contract.ts";
-import { componentLevel, statesOf, targetsMet } from "../skill/agent-readiness/scripts/lib/levels.ts";
+import { componentLevel, partialCoverage, statesOf, targetsMet } from "../skill/agent-readiness/scripts/lib/levels.ts";
 import { TYPE_CANARIES, typeCanarySite, withCanary } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { computeOutcomes, matchReverts, stats } from "../skill/agent-readiness/scripts/lib/outcomes.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
@@ -16,7 +16,7 @@ import { latestRubricVersion, loadRubric, rubricDir } from "../skill/agent-readi
 import { CANARY_MISSING, componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
 import { compute } from "../skill/agent-readiness/scripts/lib/seal.ts";
 import { staticSignals } from "../skill/agent-readiness/scripts/lib/signals.ts";
-import type { Audit, Evidence, PrRecord } from "../skill/agent-readiness/scripts/lib/types.ts";
+import type { Audit, Component, Evidence, PrRecord } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { makeAudit, reportFor } from "./helpers.ts";
 
 const next = loadRubric("2026-12-beta");
@@ -38,7 +38,7 @@ function gitRepo(files: Record<string, string>): string {
 describe("rubric 2026-12-beta", () => {
   test("is the rubric new audits use, and lists what changed", () => {
     assert.equal(latestRubricVersion(), "2026-12-beta");
-    assert.equal((next.changes ?? []).length, 8);
+    assert.equal((next.changes ?? []).length, 10);
   });
 
   test("is written as JSON.stringify(rubric, null, 2), so a reformat never moves its digest", () => {
@@ -46,7 +46,7 @@ describe("rubric 2026-12-beta", () => {
     assert.equal(JSON.stringify(JSON.parse(text), null, 2) + "\n", text);
   });
 
-  test("changes only the type-check canary, the revert window, where a pass proves Level 1, the fault estimate, secret classes, instruction severities, three templates, one check's why and the not-assessed list", () => {
+  test("changes only the type-check canary, the revert window, where a pass proves Level 1, the fault estimate, secret classes, instruction severities, three templates, one check's why, the not-assessed list, the unowned share and the folder-name hint's share", () => {
     const strip = (r: typeof next) => {
       const c = structuredClone(r) as Partial<typeof next> & Record<string, unknown>;
       delete c.version;
@@ -62,6 +62,7 @@ describe("rubric 2026-12-beta", () => {
       c.templates = templates;
       c.checks = r.checks.map((k) => (k.id === "verify.canonical_interface" ? { ...k, why: "" } : k));
       c.notAssessed = r.notAssessed.filter((n) => n !== "Whether the lint command catches anything");
+      c.components = { ...r.components, unowned: undefined, satelliteHintShare: undefined };
       return JSON.parse(JSON.stringify(c));
     };
     assert.deepEqual(strip(next), strip(beta));
@@ -71,6 +72,14 @@ describe("rubric 2026-12-beta", () => {
     assert.deepEqual(next.safety?.blockingSecretClasses, ["provider_token", "private_key", "url_credential"]);
     assert.deepEqual(next.templates["safety:secret"].steps.map((s) => s.title), ["Rotate first", "Move the values out", "Prove it"]);
     assert.equal(Object.keys(next.templates).indexOf("drive"), Object.keys(next.templates).indexOf("delegate") + 1, "the drive step comes right after giving agents work");
+    assert.deepEqual([next.components.unowned, next.components.satelliteHintShare, beta.components.unowned, beta.components.satelliteHintShare], ["counted", 0.5, undefined, undefined]);
+  });
+
+  test("changes no component holds count toward partial coverage, where 2026-11-beta leaves them out", () => {
+    const comps = [{ id: "app", path: "app", language: "ts", manifest: "app/package.json", scripts: {}, changes: 7, changeShare: 0.7, assessed: true }] as Component[];
+    const ownership = { changes: 10, unowned: 3, unownedShare: 0.3, unownedTop: ["docs/"], counted: true };
+    assert.deepEqual(partialCoverage(next, comps, ownership), { partial: true, unassessedShare: 0.3 });
+    assert.deepEqual(partialCoverage(beta, comps, { ...ownership, counted: false }), { partial: false, unassessedShare: 0 });
   });
 });
 

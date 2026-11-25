@@ -45,6 +45,20 @@ export const PY_LOCKFILES = ["uv.lock", "poetry.lock", "Pipfile.lock", "pdm.lock
 
 const NO_LOCKFILE = "no lockfile is committed";
 
+const TOX_CONFIG = (dir: string) => exists(join(dir, "tox.ini")) || exists(join(dir, "tox.toml")) || /^\[tool\.tox\]/m.test(pyproject(dir));
+
+// The extras of [project.optional-dependencies] that declare pytest, so the install has the runner.
+export function testExtras(dir: string): string[] {
+  const section = pyproject(dir).match(/^\[project\.optional-dependencies\][^\n]*\n([\s\S]*?)(?=^\[|(?![\s\S]))/m)?.[1] ?? "";
+  return [...section.matchAll(/^([\w.-]+)\s*=\s*\[([\s\S]*?)\]/gm)].filter((m) => /["']pytest\b/.test(m[2])).map((m) => m[1]).sort();
+}
+
+// tox runs the tests when the repo configures it and declares pytest nowhere else.
+export function toxRuns(dir: string): boolean {
+  const reqs = ["requirements.txt", "requirements-dev.txt", "pyproject.toml"].map((f) => (exists(join(dir, f)) ? readText(join(dir, f)) : "")).join("\n");
+  return TOX_CONFIG(dir) && !/pytest/.test(reqs) && !exists(join(dir, "pytest.ini")) && !exists(join(dir, "conftest.py"));
+}
+
 const pip: Ecosystem = {
   id: "pip",
   label: "pip",
@@ -54,8 +68,12 @@ const pip: Ecosystem = {
     const dir = join(tree, path);
     // The test runner is often only in requirements-dev.txt.
     const dev = exists(join(dir, "requirements-dev.txt")) ? " -r requirements-dev.txt" : "";
-    const req = exists(join(dir, "requirements.txt")) ? ` -r requirements.txt${dev}` : exists(join(dir, "pyproject.toml")) ? ` -e .${dev}` : dev;
-    return { command: `python3 -m venv ${VENV} && ${VENV}/bin/pip install -q --disable-pip-version-check${req}`, reason: "virtualenv install from requirements", frozen: true };
+    const extras = testExtras(dir);
+    const project = extras.length ? ` -e '.[${extras.join(",")}]'` : " -e .";
+    const req = exists(join(dir, "requirements.txt")) ? ` -r requirements.txt${dev}` : exists(join(dir, "pyproject.toml")) ? `${project}${dev}` : dev;
+    const tox = toxRuns(dir) ? " tox" : "";
+    const why = [extras.length ? `with the ${extras.join(" and ")} ${extras.length > 1 ? "extras" : "extra"}, which declare pytest` : "", tox ? "with tox, which runs the tests" : ""].filter(Boolean).join(", ");
+    return { command: `python3 -m venv ${VENV} && ${VENV}/bin/pip install -q --disable-pip-version-check${req}${tox}`, reason: `virtualenv install from requirements${why ? `, ${why}` : ""}`, frozen: true };
   },
   unpinned: (tree, path) => {
     const req = join(tree, path, "requirements.txt");

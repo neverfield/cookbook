@@ -261,6 +261,9 @@ export function gitOrThrow(args: string[], cwd: string): string {
 }
 
 const SKIP_DIRS = new Set([".git", "node_modules", ".agent-readiness", ".venv", "venv", "__pycache__", "dist", "build", "coverage"]);
+// Build output folder names. The audit tree is a clean checkout, so one there was committed, and the
+// scan lists it to find a project that lives in one, such as services/build.
+const OUTPUT_DIRS = new Set(["dist", "build"]);
 
 export const MAX_FILES = 50000;
 
@@ -271,7 +274,7 @@ export function listFiles(root: string, opts: { includeHidden?: boolean; maxFile
 // Folder by folder, shallowest first, so a file cap drops the deepest files of every top-level folder
 // rather than whole folders that sort late, such as fs/, kernel/ and mm/ after drivers/. The files
 // come back in a depth-first walk's order. `cut` names the top-level folders the cap left partly unlisted.
-export function listFilesScoped(root: string, opts: { includeHidden?: boolean; maxFiles?: number } = {}): { files: string[]; cut: string[] } {
+export function listFilesScoped(root: string, opts: { includeHidden?: boolean; maxFiles?: number; outputDirs?: boolean } = {}): { files: string[]; cut: string[] } {
   const out: string[] = [];
   const max = opts.maxFiles ?? MAX_FILES;
   const cut = new Set<string>();
@@ -287,7 +290,7 @@ export function listFilesScoped(root: string, opts: { includeHidden?: boolean; m
     }
     for (let i = 0; i < entries.length; i++) {
       const name = entries[i];
-      if (SKIP_DIRS.has(name)) continue;
+      if (SKIP_DIRS.has(name) && !(opts.outputDirs && OUTPUT_DIRS.has(name))) continue;
       const child = rel ? join(rel, name) : name;
       let st;
       if (out.length >= max) {

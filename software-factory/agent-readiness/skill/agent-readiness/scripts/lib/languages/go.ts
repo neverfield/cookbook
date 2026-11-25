@@ -44,6 +44,17 @@ export function taskFiles(tree: string, dir: string): string[] {
 
 // The first task file that runs a check, such as `go vet`: the audit runs a linter only when the
 // repo does, as it runs a Node package's lint only when the package declares one.
+function hasGoSource(dir: string, depth = 0): boolean {
+  let names: string[];
+  try {
+    names = readdirSync(dir, { withFileTypes: true }).map((e) => (e.isDirectory() ? `${e.name}/` : e.name));
+  } catch {
+    return false;
+  }
+  if (names.some((n) => n.endsWith(".go"))) return true;
+  return depth < 8 && names.some((n) => n.endsWith("/") && !/^(\.|vendor\/|testdata\/)/.test(n) && hasGoSource(join(dir, n.slice(0, -1)), depth + 1));
+}
+
 export function declaredBy(tree: string, dir: string, check: RegExp): string | null {
   return taskFiles(tree, dir).find((f) => check.test(readText(join(tree, f)))) ?? null;
 }
@@ -228,6 +239,9 @@ export const go: LanguageDef = {
     rootApp: { names: ["go.mod"], stack: "go", toolchain: "Go", suffix: "go", rank: 30 },
     lockfiles: ["go.sum"],
     projectName: (_tree, manifest, text) => (manifest === "go.mod" ? text.match(/^module\s+(\S+)/m)?.[1]?.split("/").pop() : undefined),
+    // `go test ./...` stops at a nested go.mod: that folder is another module, built and tested apart.
+    // One with no Go source, such as assets/ holding only a logo, only keeps its folder out of the module.
+    ownUnit: (tree, _parent, dir) => hasGoSource(join(tree, dir)),
   },
   ecosystems: [goModules],
   replay: {

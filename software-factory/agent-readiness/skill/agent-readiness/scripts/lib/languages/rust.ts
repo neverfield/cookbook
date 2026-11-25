@@ -367,6 +367,9 @@ export const rust: LanguageDef = {
     rootApp: { names: ["Cargo.toml"], stack: "rust", toolchain: "Rust", suffix: "rust", rank: 40 },
     lockfiles: ["Cargo.lock"],
     projectName: (_tree, manifest, text) => (manifest === "Cargo.toml" ? text.match(/^name\s*=\s*["']([^"']+)["']/m)?.[1] : undefined),
+    // A nested crate outside any workspace is built and tested apart. A workspace builds its members,
+    // and a crate it excludes is left out on purpose, as an npm workspace's `!` pattern is.
+    ownUnit: (tree, parent) => !isWorkspace(tree, parent),
   },
   ecosystems: [cargo],
   replay: {
