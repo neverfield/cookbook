@@ -21,6 +21,9 @@ import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
 import { makeRecipe } from "./static.ts";
 import { SUPPORTED_DOC, notSupportedReason } from "./support.ts";
 import { plantSeed, refreshTree } from "./workspace.ts";
+import { canCutNetwork, canaryFailure, detectDisposableVm, normalizedEnv, offlineCommand, provesIn, runCanary } from "./proofenv.ts";
+import type { Canary, ProofEnv, VmDetection } from "./proofenv.ts";
+import { loadRubric } from "./rubric.ts";
 
 export interface Executor {
   where: Where;
@@ -41,6 +44,8 @@ export interface Executor {
   // exec without the ban on rerunning a command line that timed out: a run with a planted fault is
   // different code, even when the command line is the same.
   execFresh?: Executor["exec"];
+  // The uid the repo's commands should run as, for the canary; null when it's the image's own user.
+  runUser?: string | null;
 }
 
 export const RAN_OUT_BEFORE = "not run again: this command line timed out earlier in this audit";
@@ -94,6 +99,9 @@ export function noRuntimeReason(preference: string): string {
   return `no container runtime on this machine: ${preference === "auto" ? "neither docker info nor podman info answered" : `${preference} info didn't answer`}`;
 }
 export const HOST_MODE_NOTE = "host mode was allowed: the repo's commands ran on this machine as this user, outside a container, with a throwaway home and no account credentials, but they could read this user's local files; it isn't a sandbox, and Level 1 can't be proved there";
+export function vmModeNote(vm: VmDetection): string {
+  return `host mode was allowed on ${vm.label}, detected by ${vm.signals.join(" and ")}: the repo's commands ran on that machine as its user, outside a container, with a throwaway home and no account credentials; they could read its local files, which a disposable VM holds only for this run`;
+}
 
 // Linux, macOS and cloud agents. The audit drives its container through bash on the host and its
 // host mode runs bash, joins PATH with ":" and writes bash shims, none of which native Windows has.
@@ -114,7 +122,7 @@ export function hostExecutor(root: string, registryEnv: string[], inheritEnv: bo
   assertPlatformSupported();
   if (!hostAllowed(allowHost)) fail(`This runs the repo's commands on this machine, outside a container, which needs the user's yes first: ${HOST_NOT_ALLOWED}. Ask the user, then rerun with --allow-host.`);
   // --inherit-env is host mode's alone: a container never inherits this shell's variables.
-  const setupEnv = scrubbedEnv({ registryEnv, inheritEnv });
+  const setupEnv = scrubbedEnv({ registryEnv, inheritEnv, extra: normalizedEnv() });
   const env = { ...setupEnv };
   for (const k of registryEnv) delete env[k];
   return {
@@ -127,7 +135,24 @@ export function hostExecutor(root: string, registryEnv: string[], inheritEnv: bo
     offline: () => false,
     networkOff: null,
     close: () => {},
+    runUser: process.getuid ? String(process.getuid()) : null,
   };
+}
+
+// Host mode on a disposable cloud VM: the same scrubbed copy, which proves Level 1 when the rubric
+// says a disposable VM does. The test phase runs with the network cut where the VM allows it.
+export function vmExecutor(root: string, registryEnv: string[], inheritEnv: boolean, proves: boolean): Executor {
+  const ex = hostExecutor(root, registryEnv, inheritEnv, "disposable_vm", true);
+  const raw = ex.exec;
+  let cut = false;
+  ex.strength = proves ? "clean_replay" : "executed";
+  ex.exec = (command, cwd, timeoutSec, opts) => raw(cut && !SUDO.test(command) ? offlineCommand(command) : command, cwd, timeoutSec, opts);
+  ex.offline = () => {
+    cut = canCutNetwork();
+    ex.networkOff = cut;
+    return cut;
+  };
+  return ex;
 }
 
 // Nothing runs: no container runtime or a container that didn't start, and host mode not allowed.
@@ -158,6 +183,7 @@ export function containerExecutor(session: ContainerSession, root: string, image
     offline: () => (ex.networkOff = session.disconnectNetwork()),
     networkOff: null,
     close: () => session.stop(),
+    runUser: session.user ? session.user.split(":")[0] : null,
   };
   return ex;
 }
@@ -432,11 +458,11 @@ export async function runContract(
     else push({ ...first, note: again ? "failed before the build and again after it" : first.note });
   }
   for (const cmd of offlineCmds) await run(cmd);
+  // A container whose network wouldn't go down failed a check of the audit's own environment, so
+  // nothing from the offline phase counts, pass or fail. A disposable VM that can't cut its network
+  // runs the tests with it on, and the report says so.
   if (ex.where === "container" && !wentOffline) {
-    for (const r of results.slice(firstOffline)) {
-      if (r.status === "pass") r.blocked = NETWORK_ON;
-      else if (!r.note) r.note = NETWORK_ON;
-    }
+    for (const r of results.slice(firstOffline)) if (r.status !== "not_run" || !r.blocked) r.blocked = NETWORK_ON;
   }
   return results;
 }
@@ -536,6 +562,8 @@ export interface ReplayOptions {
   log: (line: string) => void;
   // The user's yes to host mode for this run; without it the opt-in variable decides.
   allowHost?: boolean;
+  // Whether this machine is a disposable VM; detected when left out.
+  vm?: VmDetection | null;
 }
 
 // The ecosystem one of the audit's installs runs: the root's for a repo-wide one.
@@ -917,16 +945,90 @@ function startContainer(audit: Audit, runtime: NonNullable<ReturnType<typeof det
   return containerExecutor(session, copyDir, imageSource);
 }
 
-function hostModeSafety(audit: Audit): void {
-  if (!audit.safety.some((s) => s.kind === "host_mode")) audit.safety.push({ id: `saf-${String(audit.safety.length + 1).padStart(3, "0")}`, kind: "host_mode", file: ".", detail: HOST_MODE_NOTE, blocking: false });
+function hostModeSafety(audit: Audit, vm: VmDetection | null = null): void {
+  if (!audit.safety.some((s) => s.kind === "host_mode")) audit.safety.push({ id: `saf-${String(audit.safety.length + 1).padStart(3, "0")}`, kind: "host_mode", file: ".", detail: vm ? vmModeNote(vm) : HOST_MODE_NOTE, blocking: false });
+}
+
+// Host mode, on a disposable VM when this machine is one.
+function hostModeExecutor(audit: Audit, copyDir: string, vm: VmDetection | null): Executor {
+  hostModeSafety(audit, vm);
+  audit.environment.hostMode = true;
+  if (!vm) return hostExecutor(copyDir, audit.environment.registryEnv, audit.environment.inheritEnv, "fresh_copy", true);
+  return vmExecutor(copyDir, audit.environment.registryEnv, audit.environment.inheritEnv, provesIn(loadRubric(audit.rubric), "disposable_vm"));
+}
+
+const PENDING: Canary = { ok: true, checks: [] };
+
+// Where this replay's results are proved, before its canary has run.
+function recordProofEnv(audit: Audit, ex: Executor, vm: VmDetection | null): void {
+  const rubric = loadRubric(audit.rubric);
+  const env = audit.environment;
+  if (ex.unavailable) {
+    delete env.proofEnv;
+    return;
+  }
+  const kind: ProofEnv["kind"] = ex.where === "container" ? "container" : ex.where === "disposable_vm" ? "disposable_vm" : "host";
+  const id = kind === "container" ? `${env.containerRuntime ?? "container"}:${env.image ?? ex.image ?? "none"}` : kind === "disposable_vm" ? vm!.kind : "host";
+  env.proofEnv = { kind, id, imageSource: ex.imageSource, ...(kind === "disposable_vm" ? { detectedBy: vm!.signals } : {}), network: null, canary: PENDING, proves: kind !== "host" && provesIn(rubric, kind) };
+}
+
+// Runs the canary in every executor before any repo command. One that fails is replaced by an
+// executor that runs nothing, so every result it would have given is blocked with the reason.
+export async function checkExecutors(audit: Audit, exs: Executors, profile: Profile, log: (s: string) => void): Promise<Executors> {
+  const checks: Canary["checks"] = [];
+  let failed: string | null = null;
+  const groups: ExecutorGroup[] = [];
+  for (const g of exs.groups) {
+    const c = await runCanary(g.ex, g.ex.runUser ?? null);
+    checks.push(...c.checks.filter((k) => !checks.some((x) => x.id === k.id && x.ok === k.ok)));
+    if (c.ok) {
+      groups.push(g);
+      continue;
+    }
+    failed ??= canaryFailure(c);
+    log(`The environment failed its self-check: ${canaryFailure(c)}.`);
+    g.ex.close();
+    groups.push({ ...g, ex: unavailableExecutor(g.ex.root, canaryFailure(c)) });
+  }
+  const pe = audit.environment.proofEnv;
+  if (pe) {
+    pe.canary = { ok: !failed, checks };
+    if (failed) pe.proves = false;
+  }
+  if (failed) audit.environment.notRun = failed;
+  return failed ? executorSet(groups, profile) : exs;
+}
+
+// The network the test phase had, once it has run.
+export function recordNetwork(audit: Audit, exs: Executors): void {
+  const pe = audit.environment.proofEnv;
+  if (!pe) return;
+  const states = exs.groups.map((g) => g.ex.networkOff).filter((x): x is boolean => x !== null);
+  if (!states.length) return;
+  pe.network = states.every(Boolean) ? "cut" : "on";
+  pe.canary.checks = pe.canary.checks.filter((c) => c.id !== "network_cut");
+  if (pe.kind === "container") {
+    pe.canary.checks.push({ id: "network_cut", ok: pe.network === "cut", detail: pe.network === "cut" ? "ok" : "the container's network wouldn't go down" });
+    if (pe.network === "on") {
+      pe.canary.ok = false;
+      pe.proves = false;
+    }
+  }
 }
 
 // Clean containers, one per image in the plan, or host mode when the user allowed it, or nothing:
 // never a silent fallback to the host. With nothing, every command is recorded as not run with the
 // reason, so Level 1 is unproven on this machine and the report says why. `repoWide`: whether any
 // repo-wide command runs, which the repo's image is started for even when no component runs in it.
-export function makeExecutors(audit: Audit, copyDir: string, runtimePref: string, log: (s: string) => void, imageOverride?: string, allowHost?: boolean, repoWide = true): Executors {
+export function makeExecutors(audit: Audit, copyDir: string, runtimePref: string, log: (s: string) => void, imageOverride?: string, allowHost?: boolean, repoWide = true, vmDetected?: VmDetection | null): Executors {
   assertPlatformSupported();
+  const vm = vmDetected === undefined ? detectDisposableVm() : vmDetected;
+  const exs = pickExecutors(audit, copyDir, runtimePref, log, imageOverride, allowHost, repoWide, vm);
+  recordProofEnv(audit, exs.repo, vm);
+  return exs;
+}
+
+function pickExecutors(audit: Audit, copyDir: string, runtimePref: string, log: (s: string) => void, imageOverride: string | undefined, allowHost: boolean | undefined, repoWide: boolean, vm: VmDetection | null): Executors {
   const profile = audit.profile!;
   const runtime = detectRuntime(runtimePref);
   let single = imageOverride;
@@ -974,11 +1076,7 @@ export function makeExecutors(audit: Audit, copyDir: string, runtimePref: string
       // host mode when the user allowed it.
       const groups = started.map((g): ExecutorGroup => {
         if ("ex" in g) return g;
-        if (hostAllowed(allowHost)) {
-          hostModeSafety(audit);
-          audit.environment.hostMode = true;
-          return { ex: hostExecutor(copyDir, audit.environment.registryEnv, audit.environment.inheritEnv, "fresh_copy", true), components: g.components, repoWide: g.repoWide };
-        }
+        if (hostAllowed(allowHost)) return { ex: hostModeExecutor(audit, copyDir, vm), components: g.components, repoWide: g.repoWide };
         return { ex: unavailableExecutor(copyDir, `${g.why}, and ${HOST_NOT_ALLOWED}`), components: g.components, repoWide: g.repoWide };
       });
       audit.environment.containerRuntime = runtime.bin;
@@ -1001,11 +1099,11 @@ export function makeExecutors(audit: Audit, copyDir: string, runtimePref: string
   if (hostAllowed(allowHost)) {
     audit.environment.containerRuntime = null;
     audit.environment.image = null;
-    audit.environment.hostMode = true;
     delete audit.environment.notRun;
-    hostModeSafety(audit);
-    log(`${notStarted ? "No container" : "No container runtime"}: host mode is allowed, so the repo's commands run in a fresh copy on this machine. They can read this user's local files, and Level 1 can't be proved here.`);
-    return executorSet([{ ex: hostExecutor(copyDir, audit.environment.registryEnv, audit.environment.inheritEnv, "fresh_copy", true), components: allIds, repoWide: true }], profile);
+    const ex = hostModeExecutor(audit, copyDir, vm);
+    if (!vm) log(`${notStarted ? "No container" : "No container runtime"}: host mode is allowed, so the repo's commands run in a fresh copy on this machine. They can read this user's local files, and Level 1 can't be proved here.`);
+    else log(`${notStarted ? "No container" : "No container runtime"}: host mode is allowed on ${vm.label} (detected by ${vm.signals.join(" and ")}), so the repo's commands run in a fresh copy on it${ex.strength === "clean_replay" ? ", which proves Level 1 under this rubric" : "; this audit's rubric proves Level 1 only in a container"}.`);
+    return executorSet([{ ex, components: allIds, repoWide: true }], profile);
   }
   // A runtime that couldn't start the container stays recorded, so the report names the container
   // and its error rather than a missing runtime.
@@ -1047,7 +1145,7 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
   if (opts.image) audit.environment.imageOverride = opts.image;
   const components = new Set(profile.components.filter((c) => c.assessed && (!opts.component || c.id === opts.component)).map((c) => c.id));
   if (opts.component && components.size === 0) fail(`No assessed component named ${opts.component}`);
-  const exs = makeExecutors(audit, copyDir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost, audit.contract.some((c) => c.component === "*"));
+  const exs = await checkExecutors(audit, makeExecutors(audit, copyDir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost, audit.contract.some((c) => c.component === "*"), opts.vm), profile, opts.log);
   const ex = exs.repo;
   const registryValues = registryValuesOf(audit);
   const budget = newBudget(opts.budgetComponentMinutes, opts.budgetTotalMinutes, budgetFloors(profile));
@@ -1061,6 +1159,7 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
       workspacePackages: workspacePackages(copyDir, profile),
       onResult: (r) => opts.log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.blocked ? "blocked" : r.status}${r.blocked ? ` (${r.blocked})` : r.diagnosis ? ` (${r.diagnosis.detail})` : r.note ? ` (${r.note})` : ""}`),
     });
+    recordNetwork(audit, exs);
     for (const r of results) {
       const rex = r.executor ?? ex;
       if (r.blocked && r.diagnosis?.cause === "missing_tool" && rex.where !== "container") {

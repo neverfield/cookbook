@@ -1,3 +1,4 @@
+import type { ProofEnv } from "./proofenv.ts";
 export type Strength = "asserted" | "static" | "executed" | "clean_replay" | "outcome_validated";
 export type Tier = "read-only" | "local-exec" | "external-systems";
 export type ScenarioId = "first_pr" | "bug_fixes" | "features" | "repo_wide";
@@ -23,7 +24,7 @@ export type CondId =
 export type CondState = "met" | "not_met" | "unknown" | "blocked";
 export type Level = 0 | 1 | 2 | 3 | 4;
 export type CommandKind = "doctor" | "install" | "build" | "lint" | "typecheck" | "test" | "start";
-export type Where = "static" | "host" | "fresh_copy" | "container";
+export type Where = "static" | "host" | "fresh_copy" | "disposable_vm" | "container";
 export type Result = "pass" | "fail" | "not_run";
 // Every language a file in scripts/lib/languages/ can score. A component's language picks its
 // language file; "other" is a component no language file scores.
@@ -345,6 +346,8 @@ export interface Audit {
     limits?: { cpus: number | null; memoryMb: number; pids: number };
     // The user allowed repo commands to run on this machine, outside a container.
     hostMode?: boolean;
+    // Where the replay's results were proved, and the canary that checked that environment first.
+    proofEnv?: ProofEnv;
     // Why no repo command ran: no container runtime, or a container that didn't start, and host mode not allowed.
     notRun?: string;
     // One entry per image the replay used, the repo's first. A mixed-language repo runs each

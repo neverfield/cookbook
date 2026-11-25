@@ -38,7 +38,7 @@ function gitRepo(files: Record<string, string>): string {
 describe("rubric 2026-12-beta", () => {
   test("is the rubric new audits use, and lists what changed", () => {
     assert.equal(latestRubricVersion(), "2026-12-beta");
-    assert.equal((next.changes ?? []).length, 4);
+    assert.equal((next.changes ?? []).length, 5);
   });
 
   test("is written as JSON.stringify(rubric, null, 2), so a reformat never moves its digest", () => {
@@ -46,12 +46,13 @@ describe("rubric 2026-12-beta", () => {
     assert.equal(JSON.stringify(JSON.parse(text), null, 2) + "\n", text);
   });
 
-  test("changes only the type-check canary, the revert window, two templates, one check's why and the not-assessed list", () => {
+  test("changes only the type-check canary, the revert window, two templates, one check's why, the not-assessed list and where a pass proves Level 1", () => {
     const strip = (r: typeof next) => {
       const c = structuredClone(r) as Partial<typeof next> & Record<string, unknown>;
       delete c.version;
       delete c.changes;
       delete c.canary;
+      delete c.proof;
       c.outcomes = { ...r.outcomes, revertDays: undefined, metrics: r.outcomes.metrics.filter((m) => m !== "reverted_within_days") };
       const { "commands:canary": _c, drive: _d, ...templates } = r.templates;
       c.templates = templates;
@@ -61,6 +62,7 @@ describe("rubric 2026-12-beta", () => {
     };
     assert.deepEqual(strip(next), strip(beta));
     assert.deepEqual([next.canary?.typecheck, next.outcomes.revertDays, beta.canary, beta.outcomes.revertDays], [true, 14, undefined, undefined]);
+    assert.deepEqual([next.proof?.environments, beta.proof], [["container", "disposable_vm"], undefined]);
     assert.equal(Object.keys(next.templates).indexOf("drive"), Object.keys(next.templates).indexOf("delegate") + 1, "the drive step comes right after giving agents work");
   });
 });

@@ -203,6 +203,18 @@ function capReasons(input: RenderInput): ReportJson["maturity"]["capReasons"] {
   return out;
 }
 
+function vmEnvironmentNote(audit: Audit): string {
+  const pe = audit.environment.proofEnv;
+  const by = pe?.detectedBy?.length ? `, detected by ${pe.detectedBy.join(" and ")}` : "";
+  const net = pe?.network === "cut" ? "network cut for the tests" : pe?.network === "on" ? "network on for the tests, because the VM couldn't cut it" : "network not switched";
+  return `fresh copy on a disposable VM (no container runtime${by}), ${net}${pe?.proves ? "" : "; this audit's rubric doesn't count a disposable VM as proof"}`;
+}
+
+function canaryNote(c: NonNullable<Audit["environment"]["proofEnv"]>["canary"]): string {
+  const failed = c.checks.filter((k) => !k.ok);
+  return failed.length ? `failed: ${failed.map((k) => `${k.id.replace(/_/g, " ")} (${k.detail})`).join(", ")}; nothing that ran there counts for or against the repo` : `passed: ${c.checks.map((k) => k.id.replace(/_/g, " ")).join(", ")}`;
+}
+
 function confidenceOf(input: RenderInput, outcome: ReportJson["maturity"]["outcome"]): ReportJson["maturity"]["confidence"] {
   const { audit } = input;
   const low: string[] = [];
@@ -210,7 +222,9 @@ function confidenceOf(input: RenderInput, outcome: ReportJson["maturity"]["outco
   if (outcome === "not_assessed") low.push(noneAssessed(input) ? "no component could be assessed" : input.noResults!);
   if (outcome === "blocked") low.push(`a check that decides Level ${input.rollup.level + 1} was blocked on this machine`);
   if (outcome !== "not_assessed" && audit.tier === "read-only") low.push("the read-only tier runs no repo code");
-  if (outcome === "proven" && audit.tier !== "read-only" && !audit.environment.containerRuntime) low.push("setup ran in a fresh copy on the host, not in a clean container");
+  const vm = audit.environment.proofEnv?.kind === "disposable_vm" && audit.environment.proofEnv.proves ? audit.environment.proofEnv : null;
+  if (outcome === "proven" && audit.tier !== "read-only" && !audit.environment.containerRuntime && !vm) low.push("setup ran in a fresh copy on the host, not in a clean container");
+  if (outcome === "proven" && vm?.network === "on") medium.push("the tests ran on a disposable VM with the network on, because it couldn't be cut there");
   if (input.partial.partial) medium.push(`${pct(input.partial.unassessedShare, 1)}% of recent changes aren't assessed`);
   const sampled = input.components.filter((c) => c.notAssessedReason?.startsWith("outside the "));
   if (sampled.length) medium.push(`${sampled.length} supported ${sampled.length === 1 ? "component was" : "components were"} left out to keep the audit short`);
@@ -356,7 +370,7 @@ function headlineFor(input: RenderInput, ready: string[], setByShare: number): s
   }
   const resultOf = (id: string) => {
     const evs = [...input.audit.evidence].reverse().filter((e) => e.contractId === id);
-    return (evs.find((e) => e.where === "container" || e.where === "fresh_copy") ?? evs[0])?.result;
+    return (evs.find((e) => e.where === "container" || e.where === "fresh_copy" || e.where === "disposable_vm") ?? evs[0])?.result;
   };
   const failingKinds = [...new Set(input.audit.contract.filter((c) => (rollup.setBy.includes(c.component) || c.component === "*") && ["build", "lint", "typecheck", "test"].includes(c.kind) && resultOf(c.id) === "fail").map((c) => (c.kind === "typecheck" ? "type-check" : c.kind)))];
   const canaryMissed = input.audit.evidence.some((e) => e.canary?.kind === "typecheck" && e.result === "fail" && rollup.setBy.includes(e.component ?? ""));
@@ -932,10 +946,13 @@ export function buildReport(input: RenderInput): ReportJson {
               ? (imagesUsed(audit.environment)
                   ? `${audit.environment.containerRuntime} containers, ${imagesUsed(audit.environment)}`
                   : `${audit.environment.containerRuntime} container, ${audit.environment.image}`) + toolchainsNote(audit.environment) + userEntryNote(audit.environment) + networkNote(audit)
-              : audit.evidence.some((e) => e.where === "fresh_copy")
-                ? "fresh copy on the host (no container runtime)"
-                : `none: no repo command ran${noneAssessed(input) ? ", because no component could be assessed" : ""}`,
+              : audit.evidence.some((e) => e.where === "disposable_vm")
+                ? vmEnvironmentNote(audit)
+                : audit.evidence.some((e) => e.where === "fresh_copy")
+                  ? "fresh copy on the host (no container runtime)"
+                  : `none: no repo command ran${noneAssessed(input) ? ", because no component could be assessed" : ""}`,
         },
+        ...(audit.environment.proofEnv?.canary.checks.length ? [{ label: "Environment self-check", value: canaryNote(audit.environment.proofEnv.canary) }] : []),
         ...(audit.environment.registryEnv.length ? [{ label: "Registry variables", value: `${audit.environment.registryEnv.join(", ")}, passed to the setup steps by name; their values are never recorded` }] : []),
         { label: "Stored in", value: input.storedAt },
       ],

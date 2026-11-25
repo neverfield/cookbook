@@ -17,7 +17,7 @@ function latest(evs: Evidence[]): Evidence | undefined {
   return evs[evs.length - 1];
 }
 
-const replayed = (e: Evidence) => e.where === "container" || e.where === "fresh_copy";
+const replayed = (e: Evidence) => e.where === "container" || e.where === "fresh_copy" || e.where === "disposable_vm";
 
 // A component's own commands of a kind decide it. A repo-wide command fills in only where the
 // component has none of that kind: a root `npm test` that fails in one workspace can't be pinned
@@ -96,6 +96,7 @@ function fromEvidence(rubric: Rubric, ev: Evidence | undefined, check: string, m
   if (ev.result === "not_run") return { state: "unknown", reason: ev.summary, evidence: [ev.id] };
   const min = rubric.checks.find((c) => c.id === check)?.minStrengthForPass ?? "executed";
   if (strengthRank(rubric, ev.strength) < strengthRank(rubric, min)) {
+    if (needsContainer(rubric, check) && ev.where === "disposable_vm") return { state: "blocked", reason: "passed on a disposable VM, which this audit's rubric doesn't count as proof; Level 1 needs a clean container", evidence: [ev.id] };
     if (needsContainer(rubric, check)) return { state: "blocked", reason: "passed in host mode, which ran on this machine and could read its local files, so it isn't a sandbox; Level 1 needs a clean container", evidence: [ev.id] };
     return { state: "unknown", reason: `passed, but only ${rubric.strengthLabels[ev.strength]}`, evidence: [ev.id] };
   }

@@ -35,7 +35,8 @@
         "registryEnv": { "type": "array", "items": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" } },
         "images": { "type": "array", "items": { "type": "object", "required": ["image", "components", "started"], "properties": { "image": { "type": "string" }, "digest": { "type": "string" }, "components": { "type": "array", "items": { "type": "string" } }, "started": { "type": "boolean" }, "notRun": { "type": "string" } } } },
         "toolchains": { "type": "array", "items": { "type": "object", "required": ["spec", "image", "reason", "added"], "properties": { "spec": { "type": "string" }, "image": { "type": "string" }, "reason": { "type": "string" }, "added": { "type": "boolean" } } } },
-        "userEntryMissing": { "type": "object", "required": ["uid", "images"], "properties": { "uid": { "type": "string" }, "images": { "type": "array", "items": { "type": "string" } } } }
+        "userEntryMissing": { "type": "object", "required": ["uid", "images"], "properties": { "uid": { "type": "string" }, "images": { "type": "array", "items": { "type": "string" } } } },
+        "proofEnv": { "type": "object", "required": ["kind", "id", "imageSource", "network", "canary", "proves"], "properties": { "kind": { "enum": ["container", "disposable_vm", "host"] }, "id": { "type": "string" }, "imageSource": { "enum": ["audit", "repo", "override", null] }, "detectedBy": { "type": "array", "items": { "type": "string" } }, "network": { "enum": ["cut", "on", null] }, "canary": { "type": "object", "required": ["ok", "checks"], "properties": { "ok": { "type": "boolean" }, "checks": { "type": "array", "items": { "type": "object", "required": ["id", "ok", "detail"], "properties": { "id": { "enum": ["mount_visible", "mount_writable", "run_user", "network_cut", "git_identity"] }, "ok": { "type": "boolean" }, "detail": { "type": "string" } } } } } }, "proves": { "type": "boolean" } } }
       }
     },
     "profile": { "type": ["object", "null"] },
@@ -55,7 +56,7 @@
         "properties": {
           "id": { "type": "string", "pattern": "^ev-\\d{3,}$" },
           "strength": { "enum": ["asserted", "static", "executed", "clean_replay", "outcome_validated"] },
-          "where": { "enum": ["static", "host", "fresh_copy", "container"] },
+          "where": { "enum": ["static", "host", "fresh_copy", "disposable_vm", "container"] },
           "result": { "enum": ["pass", "fail", "not_run"] }
         }
       }

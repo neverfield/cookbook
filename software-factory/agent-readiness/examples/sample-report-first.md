@@ -319,9 +319,10 @@ Audited Oct 27, 2026 at 7070f44. Eval run with a pinned seed; not a production r
 - **Rubric:** 2026-12-beta
 - **Permission tier:** local-exec
 - **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
-- **Skill digest:** 2f1479f65399
+- **Skill digest:** 0cf9f6535268
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here
+- **Environment self-check:** passed: mount visible, mount writable, run user, git identity, network cut
 - **Stored in:** .agent-readiness/history/audits/aud-2026-10-27-7070f44-e101
 
 ---

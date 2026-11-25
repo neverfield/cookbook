@@ -32,6 +32,7 @@ function placeOf(audit: Audit, e: Evidence): string {
   const rt = audit.environment.containerRuntime;
   if (e.where === "container") return `in a clean ${rt ? `${rt} ` : ""}container${e.image ? ` (${e.image})` : ""}`;
   if (e.where === "fresh_copy") return "in a fresh copy on the host, with no container";
+  if (e.where === "disposable_vm") return "in a fresh copy on a disposable VM, with no container";
   if (e.where === "host") return "on the host, in the repo itself";
   return STATIC_PLACE;
 }
@@ -79,6 +80,8 @@ function environmentLine(input: RenderInput): string {
   const images = imagesUsed(audit.environment);
   if (audit.environment.containerRuntime && images) return `in clean ${audit.environment.containerRuntime} containers, one per toolchain: ${images}`;
   if (audit.environment.containerRuntime) return `in a clean ${audit.environment.containerRuntime} container (${audit.environment.image ?? "the audit's image"})`;
+  const pe = audit.environment.proofEnv;
+  if (pe?.kind === "disposable_vm" && audit.evidence.some((e) => e.where === "disposable_vm")) return `in a fresh copy on a disposable VM, detected by ${(pe.detectedBy ?? []).join(" and ")}, with the network ${pe.network === "cut" ? "cut for the tests" : "on for the tests, because the VM couldn't cut it"}`;
   if (audit.evidence.some((e) => e.where === "fresh_copy")) return "in a fresh copy on the host, because this machine has no container runtime";
   return "nowhere: no repo command ran";
 }

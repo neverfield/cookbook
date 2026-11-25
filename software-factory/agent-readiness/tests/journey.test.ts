@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { before, describe } from "node:test";
 import { afterAudit } from "../support/holdout/observe.ts";
 import { guards } from "../support/tools/known-failures.ts";
@@ -125,7 +125,7 @@ describe("the Quickstart journey", () => {
     const r = readiness(wt, ["guard", "install"], env(), join(wt, SKILL_REL, "scripts", "readiness.ts"));
     assert.equal(r.code, 0, r.out);
     const exclude = execFileSync("git", ["rev-parse", "--git-path", "info/exclude"], { cwd: wt, encoding: "utf8" }).trim();
-    assert.ok(readFileSync(join(wt, exclude), "utf8").includes("/.cursor/hooks.json"), "the hook isn't kept out of git");
+    assert.ok(readFileSync(resolve(wt, exclude), "utf8").includes("/.cursor/hooks.json"), "the hook isn't kept out of git");
   });
 
   guard("init --force leaves no abandoned draft or temp tree behind", () => {
