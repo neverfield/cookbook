@@ -1065,7 +1065,8 @@ export function reproOf(audit: Pick<Audit, "evidence" | "environment">, e: Evide
   for (const x of audit.evidence.slice(0, Math.max(0, at))) {
     if (x.kind && kinds.includes(x.kind) && x.result === "pass" && x.command && x.where === e.where && x.image === e.image && mine(x.component)) setup.set(x.contractId ?? x.command, x);
   }
-  const step = (x: Evidence) => (x.cwd && x.cwd !== "." ? `(cd ${shellQuote(x.cwd)} && ${x.command})` : x.command!);
+  const dir = (d: string) => (/^[\w./@+-]+$/.test(d) ? d : shellQuote(d));
+  const step = (x: Evidence) => (x.cwd && x.cwd !== "." ? `(cd ${dir(x.cwd)} && ${x.command})` : x.command!);
   const script = [...setup.values(), e].map(step).join(" && ");
   const rt = audit.environment.containerRuntime ?? "docker";
   return e.where === "container" ? `${rt} run --rm -v "$PWD":/work -w /work ${e.image ?? audit.environment.image ?? "<image>"} bash -lc ${shellQuote(script)}` : `bash -lc ${shellQuote(script)}`;

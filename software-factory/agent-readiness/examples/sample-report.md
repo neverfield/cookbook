@@ -31,6 +31,16 @@ Share of changes: the component's share of changed files over the last 90 days.
 
 - **Not assessed:** infra (no recent changes), because Terraform isn't supported yet. What the audit supports: [supported.md](../skill/agent-readiness/references/supported.md).
 
+<details><summary>What this audit assumed</summary>
+
+- **Components:** `packages/api` (packages/api/package.json); `packages/shared` (packages/shared/package.json); `packages/worker` (packages/worker/package.json); `infra` (infra/main.tf), not assessed: Terraform isn't supported yet.
+- **Commands:** `bash scripts/agent-install.sh` (install; from .cursor/environment.json install); `bash scripts/agent-start.sh` (start; from .cursor/environment.json start); `npm run lint` (lint, api, in packages/api; from packages/api/package.json scripts.lint); `npm run test` (test, api, in packages/api; from packages/api/package.json scripts.test); `npm run lint` (lint, shared, in packages/shared; from packages/shared/package.json scripts.lint); `npm run test` (test, shared, in packages/shared; from packages/shared/package.json scripts.test); `npm run lint` (lint, worker, in packages/worker; from packages/worker/package.json scripts.lint); `npm run test` (test, worker, in packages/worker; from packages/worker/package.json scripts.test).
+- **Where they ran:** docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here.
+- **Toolchains the doctor found:** node:22-bookworm: v22.23.5, 10.9.9.
+- **Reruns:** every step that ran has a command in part 5 that reruns it from a clean checkout of 9a2c092.
+
+</details>
+
 ## 2. Have I improved
 
 Since the audit on Oct 30, 2026:
@@ -295,24 +305,41 @@ Every level, every unproven or not-assessed result and every finding, with what 
 |---|---|---|---|---|
 | `ev-001` | `safety.execution_boundary` | repo | (read from files) | pass: no blocking findings; 2 items listed for review |
 | `ev-002` | `bootstrap.cold_replay` | repo | (read from files) | pass: toolchain pinned in .nvmrc |
-| `ev-003` | `bootstrap.cold_replay` | repo | node --version && npm --version (ran in a clean container) | pass: doctor passed |
-| `ev-004` | `bootstrap.cold_replay` | repo | bash scripts/agent-install.sh (ran in a clean container) | pass: install passed |
-| `ev-005` | `verify.canonical_interface` | api | npm run lint (ran in a clean container) | pass: lint passed |
-| `ev-006` | `verify.canonical_interface` | shared | npm run lint (ran in a clean container) | pass: lint passed |
-| `ev-007` | `verify.canonical_interface` | worker | npm run lint (ran in a clean container) | pass: lint passed |
-| `ev-008` | `bootstrap.cold_replay` | repo | bash scripts/agent-start.sh (ran in a clean container) | pass: start passed |
-| `ev-009` | `bootstrap.cold_replay` | api | npm run test (ran in a clean container) | pass: test passed (1 of 1 tests) |
-| `ev-010` | `bootstrap.cold_replay` | shared | npm run test (ran in a clean container) | pass: test passed (3 of 3 tests) |
-| `ev-011` | `bootstrap.cold_replay` | worker | npm run test (ran in a clean container) | pass: test passed (2 of 2 tests) |
+| `ev-003` | `bootstrap.cold_replay` | repo | node --version && npm --version (ran in a clean container, under 1 s) | pass: doctor passed |
+| `ev-004` | `bootstrap.cold_replay` | repo | bash scripts/agent-install.sh (ran in a clean container, 9 s) | pass: install passed |
+| `ev-005` | `verify.canonical_interface` | api | npm run lint (ran in a clean container, under 1 s) | pass: lint passed |
+| `ev-006` | `verify.canonical_interface` | shared | npm run lint (ran in a clean container, under 1 s) | pass: lint passed |
+| `ev-007` | `verify.canonical_interface` | worker | npm run lint (ran in a clean container, under 1 s) | pass: lint passed |
+| `ev-008` | `bootstrap.cold_replay` | repo | bash scripts/agent-start.sh (ran in a clean container, 2 s) | pass: start passed |
+| `ev-009` | `bootstrap.cold_replay` | api | npm run test (ran in a clean container, under 1 s) | pass: test passed (1 of 1 tests) |
+| `ev-010` | `bootstrap.cold_replay` | shared | npm run test (ran in a clean container, under 1 s) | pass: test passed (3 of 3 tests) |
+| `ev-011` | `bootstrap.cold_replay` | worker | npm run test (ran in a clean container, under 1 s) | pass: test passed (2 of 2 tests) |
 | `ev-012` | `bootstrap.cold_replay` | repo | (ran in a clean container) | pass: frozen install reproduced the lockfile |
 | `ev-013` | `verify.behavioral_oracle` | api | (ran in a clean container) | pass: caught 5 of 5 planted faults (100%), 5 of them planted again from the last audit: strong, at least 57% with 97.5% confidence (tried: negate_condition, change_co |
 | `ev-014` | `verify.behavioral_oracle` | shared | (ran in a clean container) | pass: caught 7 of 7 planted faults (100%), 7 of them planted again from the last audit: strong, at least 65% with 97.5% confidence (tried: negate_condition, drop_thro |
 | `ev-015` | `verify.behavioral_oracle` | worker | (ran in a clean container) | fail: caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worke |
-| `ev-016` | `context.instructions_verified` | repo | npm run lint -w api (ran in a clean container) | pass: .cursor/rules/style.mdc:6 `npm run lint -w api` replays |
-| `ev-017` | `context.instructions_verified` | repo | npm run test -w shared (ran in a clean container) | pass: AGENTS.md:6 `npm run test -w shared` replays |
-| `ev-018` | `context.instructions_verified` | repo | npm test (ran in a clean container) | pass: AGENTS.md:7 `npm test` replays |
-| `ev-019` | `context.instructions_verified` | repo | node --version && npm --version (ran in a clean container) | pass: .cursor/skills/verify/SKILL.md:15 `node --version && npm --version` replays |
-| `ev-020` | `context.instructions_verified` | repo | npm run test (ran in a clean container) | pass: .cursor/skills/verify/SKILL.md:56 `npm run test` replays |
+| `ev-016` | `context.instructions_verified` | repo | npm run lint -w api (ran in a clean container, under 1 s) | pass: .cursor/rules/style.mdc:6 `npm run lint -w api` replays |
+| `ev-017` | `context.instructions_verified` | repo | npm run test -w shared (ran in a clean container, under 1 s) | pass: AGENTS.md:6 `npm run test -w shared` replays |
+| `ev-018` | `context.instructions_verified` | repo | npm test (ran in a clean container, under 1 s) | pass: AGENTS.md:7 `npm test` replays |
+| `ev-019` | `context.instructions_verified` | repo | node --version && npm --version (ran in a clean container, under 1 s) | pass: .cursor/skills/verify/SKILL.md:15 `node --version && npm --version` replays |
+| `ev-020` | `context.instructions_verified` | repo | npm run test (ran in a clean container, under 1 s) | pass: .cursor/skills/verify/SKILL.md:56 `npm run test` replays |
+
+Rerun a step from a clean checkout of `9a2c092`:
+
+- `ev-003`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'node --version && npm --version'`
+- `ev-004`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh'`
+- `ev-005`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/api && npm run lint)'`
+- `ev-006`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/shared && npm run lint)'`
+- `ev-007`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/worker && npm run lint)'`
+- `ev-008`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && bash scripts/agent-start.sh'`
+- `ev-009`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/api && npm run test)'`
+- `ev-010`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/shared && npm run test)'`
+- `ev-011`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/worker && npm run test)'`
+- `ev-016`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run lint -w api'`
+- `ev-017`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run test -w shared'`
+- `ev-018`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm test'`
+- `ev-019`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && node --version && npm --version'`
+- `ev-020`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run test'`
 
 </details>
 
@@ -327,7 +354,8 @@ Audited Nov 30, 2026 at 9a2c092. Eval run with a pinned seed; not a production r
 - **Rubric:** 2026-12-beta
 - **Permission tier:** local-exec
 - **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
-- **Skill digest:** 06da7cbdca2b
+- **Integrity:** unsigned: the seal is a digest that shows edits, but anyone with the scripts could reseal an edited audit
+- **Skill digest:** ed44533b343a
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here
 - **Environment self-check:** passed: mount visible, mount writable, run user, git identity, network cut

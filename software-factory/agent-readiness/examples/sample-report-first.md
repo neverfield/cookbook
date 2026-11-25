@@ -29,6 +29,16 @@ Share of changes: the component's share of changed files over the last 90 days.
 
 - **Not assessed:** 2% of recent changes aren't assessed: infra (2%), because Terraform isn't supported yet. What the audit supports: [supported.md](../skill/agent-readiness/references/supported.md).
 
+<details><summary>What this audit assumed</summary>
+
+- **Components:** `packages/api` (packages/api/package.json); `packages/shared` (packages/shared/package.json); `packages/worker` (packages/worker/package.json); `infra` (infra/main.tf), not assessed: Terraform isn't supported yet.
+- **Commands:** `npm ci` (install; from readiness); `npm run lint` (lint, api, in packages/api; from packages/api/package.json scripts.lint); `npm run test` (test, api, in packages/api; from packages/api/package.json scripts.test); `npm run lint` (lint, shared, in packages/shared; from packages/shared/package.json scripts.lint); `npm run test` (test, shared, in packages/shared; from packages/shared/package.json scripts.test); `npm run lint` (lint, worker, in packages/worker; from packages/worker/package.json scripts.lint); `npm run test` (test, worker, in packages/worker; from packages/worker/package.json scripts.test).
+- **Where they ran:** docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here.
+- **Toolchains the doctor found:** node:22-bookworm: v22.23.5, 10.9.9.
+- **Reruns:** every step that ran has a command in part 5 that reruns it from a clean checkout of 7070f44.
+
+</details>
+
 ## 2. Have I improved
 
 This is the first audit, so there is nothing to compare yet. Rerun the audit after your first fix to see what changed here.
@@ -151,10 +161,10 @@ Effort against impact (impact is the share of recent changes an action unblocks)
 |---|---|---|---|
 | Components and where changes land (`scope.profile`) | Levels follow the work, so the audit finds each package and its share of recent changes. | 4 components found, 3 assessed |  |
 | Agent assets in the repo (`scope.agent_assets`) | Shows what agent setup already exists and who maintains it. Not scored. | 3 assets, 3 authors |  |
-| Setup works from a clean checkout (`bootstrap.cold_replay`) | Every agent starts from a clean checkout, so setup that only works on a prepared machine breaks every agent run. In the BootstrapAgent study, a reusable, verified setup cut later agents' token use by 25.9% and build time by 22.3%. Measured on the study's benchmark repositories. ([source](https://arxiv.org/abs/2605.15815)) | **failed: api**; passed: shared and worker | `ev-005`, `ev-006`, `ev-007`, `ev-011`, `ev-012`, `ev-013` and 2 more |
+| Setup works from a clean checkout (`bootstrap.cold_replay`) | Every agent starts from a clean checkout, so setup that only works on a prepared machine breaks every agent run. In the BootstrapAgent study, a reusable, verified setup cut later agents' token use by 25.9% and build time by 22.3%. Measured on the study's benchmark repositories. ([source](https://arxiv.org/abs/2605.15815)) | **failed: api**; passed: shared and worker | `ev-005`, `ev-006`, `ev-007`, `ev-012`, `ev-013`, `ev-014` and 1 more |
 | Build, lint, type-check and test commands pass (`verify.canonical_interface`) | Agents need one known way to check their own work, and a type-check counts only once the audit has seen it fail on a type error it planted. | **failed: api**; passed: shared and worker | `ev-008`, `ev-009`, `ev-010`, `ev-012`, `ev-013`, `ev-014` |
 | Tests catch planted faults (`verify.behavioral_oracle`) | Green tests aren't proof that a change is right. OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. ([source](https://openai.com/index/separating-signal-from-noise-coding-evaluations)) | api: tests must pass before faults can be planted; shared: caught 5 of 5 planted faults; worker: caught 0 of 5 planted faults | `ev-016`, `ev-017`, `ev-018` |
-| Agent instructions are accurate (`context.instructions_verified`) | Agents follow AGENTS.md, rules and skills literally, so a stale command costs more than a missing one. No outcome study yet measures how much these files help. | 4 of 7 instruction items check out, 2 wrong, 1 wrong outside the agent files, listed | `ev-001`, `ev-002`, `ev-003`, `ev-019`, `ev-020` |
+| Agent instructions are accurate (`context.instructions_verified`) | Agents follow AGENTS.md, rules and skills literally, so a stale command costs more than a missing one. No outcome study yet measures how much these files help. | 4 of 7 instruction items check out, 2 wrong, 1 wrong outside the agent files, listed | `ev-003`, `ev-019`, `ev-020` |
 | Normal work needs no production access (`safety.execution_boundary`) | Agents run with whatever access setup gives them, so normal work must never need production credentials. | passed | `ev-004` |
 
 Not assessed by this rubric version, which is different from unknown: whether CI matches the local commands, flaky tests, the quality of error messages, how easily code can be found, outcome checks on held-out tasks and whether the lint command catches anything.
@@ -249,7 +259,7 @@ Every level, every unproven or not-assessed result and every finding, with what 
 | api: passes every test in a clean container | not met | `npm run test` (fail) | in a clean docker container (node:22-bookworm) | test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails. |
 | api: build, lint, type-check and test commands pass | not met | `npm run lint` (pass) and `npm run test` (fail) | in a clean docker container (node:22-bookworm) | test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Not met means it ran and failed, or the repo lacks what it needs. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone. |
 | api: tests catch planted faults | not proven | tests must pass before faults can be planted | not run | tests must pass before faults can be planted | Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not proven means it didn't run, or ran below the strength the check requires. |
-| repo: agent instructions are accurate | not met | AGENTS.md:7 `pnpm test`: uses pnpm, but the repo uses npm, AGENTS.md:8 `docs/architecture.md`: docs/architecture.md doesn't exist, .cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no "changelog" script in package.json `npm run lint -w api` (pass), and 1 more | read from the audited commit's files, nothing ran and in a clean docker container (node:22-bookworm) | 2 agent instruction commands are wrong | Level 2 needs it: agent instructions are accurate (Agent instructions are accurate). Not met means it ran and failed, or the repo lacks what it needs. |
+| repo: agent instructions are accurate | not met | .cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no "changelog" script in package.json, `npm run lint -w api` (pass) and `npm run test -w shared` (pass) | read from the audited commit's files, nothing ran and in a clean docker container (node:22-bookworm) | 2 agent instruction commands are wrong | Level 2 needs it: agent instructions are accurate (Agent instructions are accurate). Not met means it ran and failed, or the repo lacks what it needs. |
 | repo: normal work needs no production access | met | nothing ran for it | read from the audited commit's files, nothing ran | no blocking safety findings from 12 secret patterns over 34 files | Level 2 needs it: normal work needs no production access (Normal work needs no production access). Met means it ran at the strength the check requires and passed. |
 | repo: toolchain versions are pinned | met | nothing ran for it | read from the audited commit's files, nothing ran | pinned in .nvmrc | Reported with Level 1; no level waits on it alone: toolchain versions are pinned (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
 | repo: a frozen install reproduces the lockfile | met | frozen install reproduced the lockfile | in a clean docker container (node:22-bookworm) | frozen install reproduced the lockfile | Reported with Level 1; no level waits on it alone: a frozen install reproduces the lockfile (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
@@ -286,26 +296,39 @@ Every level, every unproven or not-assessed result and every finding, with what 
 
 | ID | Check | Component | What ran | Result |
 |---|---|---|---|---|
-| `ev-001` | `context.instructions_verified` | repo | (read from files) | fail: AGENTS.md:7 `pnpm test`: uses pnpm, but the repo uses npm |
-| `ev-002` | `context.instructions_verified` | repo | (read from files) | fail: AGENTS.md:8 `docs/architecture.md`: docs/architecture.md doesn't exist |
 | `ev-003` | `context.instructions_verified` | repo | (read from files) | fail: .cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no "changelog" script in package.json |
+| `ev-001` | `context.instructions_verified` | repo | (read from files) | superseded by `ev-002`; was fail: AGENTS.md:7 `pnpm test`: uses pnpm, but the repo uses npm |
+| `ev-002` | `context.instructions_verified` | repo | (read from files) | superseded by `ev-003`; was fail: AGENTS.md:8 `docs/architecture.md`: docs/architecture.md doesn't exist |
 | `ev-004` | `safety.execution_boundary` | repo | (read from files) | pass: no blocking findings; 0 items listed for review |
 | `ev-005` | `bootstrap.cold_replay` | repo | (read from files) | pass: toolchain pinned in .nvmrc |
-| `ev-006` | `bootstrap.cold_replay` | repo | node --version && npm --version (ran in a clean container) | pass: doctor passed |
-| `ev-007` | `bootstrap.cold_replay` | repo | npm ci (ran in a clean container) | pass: install passed |
-| `ev-008` | `verify.canonical_interface` | api | npm run lint (ran in a clean container) | pass: lint passed |
-| `ev-009` | `verify.canonical_interface` | shared | npm run lint (ran in a clean container) | pass: lint passed |
-| `ev-010` | `verify.canonical_interface` | worker | npm run lint (ran in a clean container) | pass: lint passed |
-| `ev-011` | `bootstrap.cold_replay` | api | npm run test (ran in a clean container) | fail: test failed: connection refused on port 5432 (1 of 1 tests failed) |
-| `ev-012` | `bootstrap.cold_replay` | shared | npm run test (ran in a clean container) | pass: test passed (3 of 3 tests) |
-| `ev-013` | `bootstrap.cold_replay` | worker | npm run test (ran in a clean container) | pass: test passed (2 of 2 tests) |
-| `ev-014` | `bootstrap.cold_replay` | api | npm run test (ran in a clean container) | fail: test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on |
+| `ev-006` | `bootstrap.cold_replay` | repo | node --version && npm --version (ran in a clean container, under 1 s) | pass: doctor passed |
+| `ev-007` | `bootstrap.cold_replay` | repo | npm ci (ran in a clean container, under 1 s) | pass: install passed |
+| `ev-008` | `verify.canonical_interface` | api | npm run lint (ran in a clean container, under 1 s) | pass: lint passed |
+| `ev-009` | `verify.canonical_interface` | shared | npm run lint (ran in a clean container, under 1 s) | pass: lint passed |
+| `ev-010` | `verify.canonical_interface` | worker | npm run lint (ran in a clean container, under 1 s) | pass: lint passed |
+| `ev-012` | `bootstrap.cold_replay` | shared | npm run test (ran in a clean container, under 1 s) | pass: test passed (3 of 3 tests) |
+| `ev-013` | `bootstrap.cold_replay` | worker | npm run test (ran in a clean container, under 1 s) | pass: test passed (2 of 2 tests) |
+| `ev-014` | `bootstrap.cold_replay` | api | npm run test (ran in a clean container, under 1 s) | fail: test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on |
+| `ev-011` | `bootstrap.cold_replay` | api | npm run test (ran in a clean container, under 1 s) | superseded by `ev-014`; was fail: test failed: connection refused on port 5432 (1 of 1 tests failed) |
 | `ev-015` | `bootstrap.cold_replay` | repo | (ran in a clean container) | pass: frozen install reproduced the lockfile |
 | `ev-016` | `verify.behavioral_oracle` | api | (not run) | not_run: tests must pass before faults can be planted |
 | `ev-017` | `verify.behavioral_oracle` | shared | (ran in a clean container) | pass: caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant) |
 | `ev-018` | `verify.behavioral_oracle` | worker | (ran in a clean container) | fail: caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/wor |
-| `ev-019` | `context.instructions_verified` | repo | npm run lint -w api (ran in a clean container) | pass: .cursor/rules/style.mdc:6 `npm run lint -w api` replays |
-| `ev-020` | `context.instructions_verified` | repo | npm run test -w shared (ran in a clean container) | pass: AGENTS.md:6 `npm run test -w shared` replays |
+| `ev-019` | `context.instructions_verified` | repo | npm run lint -w api (ran in a clean container, under 1 s) | pass: .cursor/rules/style.mdc:6 `npm run lint -w api` replays |
+| `ev-020` | `context.instructions_verified` | repo | npm run test -w shared (ran in a clean container, under 1 s) | pass: AGENTS.md:6 `npm run test -w shared` replays |
+
+Rerun a step from a clean checkout of `7070f44`:
+
+- `ev-006`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'node --version && npm --version'`
+- `ev-007`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'npm ci'`
+- `ev-008`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/api && npm run lint)'`
+- `ev-009`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/shared && npm run lint)'`
+- `ev-010`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/worker && npm run lint)'`
+- `ev-012`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/shared && npm run test)'`
+- `ev-013`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/worker && npm run test)'`
+- `ev-014`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/api && npm run test)'`
+- `ev-019`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'npm ci && npm run lint -w api'`
+- `ev-020`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'npm ci && npm run test -w shared'`
 
 </details>
 
@@ -320,7 +343,8 @@ Audited Oct 27, 2026 at 7070f44. Eval run with a pinned seed; not a production r
 - **Rubric:** 2026-12-beta
 - **Permission tier:** local-exec
 - **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
-- **Skill digest:** 06da7cbdca2b
+- **Integrity:** unsigned: the seal is a digest that shows edits, but anyone with the scripts could reseal an edited audit
+- **Skill digest:** ed44533b343a
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here
 - **Environment self-check:** passed: mount visible, mount writable, run user, git identity, network cut

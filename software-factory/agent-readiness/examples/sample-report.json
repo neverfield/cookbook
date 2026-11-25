@@ -9,12 +9,13 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "06da7cbdca2b9b624162eeff8ded596812e93dab410b7678bad84bab312f0cb0",
+    "scriptsDigest": "ed44533b343a3e1d24dc3f37595a7c6ba9775dddedfc4b1b897c94ca184e908a",
     "seedPinned": true,
     "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
     "previous": "aud-2026-10-30-7e84b7e-c404",
-    "storedAt": ".agent-readiness/history/audits/aud-2026-11-30-9a2c092-ae7a"
+    "storedAt": ".agent-readiness/history/audits/aud-2026-11-30-9a2c092-ae7a",
+    "integrity": "unsigned"
   },
   "scale": [
     {
@@ -53,6 +54,115 @@
       "measuredBy": "outcomes"
     }
   ],
+  "assumptions": {
+    "components": [
+      {
+        "id": "api",
+        "path": "packages/api",
+        "manifest": "packages/api/package.json",
+        "assessed": true,
+        "note": null
+      },
+      {
+        "id": "shared",
+        "path": "packages/shared",
+        "manifest": "packages/shared/package.json",
+        "assessed": true,
+        "note": null
+      },
+      {
+        "id": "worker",
+        "path": "packages/worker",
+        "manifest": "packages/worker/package.json",
+        "assessed": true,
+        "note": null
+      },
+      {
+        "id": "infra",
+        "path": "infra",
+        "manifest": "infra/main.tf",
+        "assessed": false,
+        "note": "Terraform isn't supported yet"
+      }
+    ],
+    "commands": [
+      {
+        "component": "*",
+        "kind": "install",
+        "command": "bash scripts/agent-install.sh",
+        "cwd": ".",
+        "source": ".cursor/environment.json install",
+        "reason": "the repo's declared install"
+      },
+      {
+        "component": "*",
+        "kind": "start",
+        "command": "bash scripts/agent-start.sh",
+        "cwd": ".",
+        "source": ".cursor/environment.json start",
+        "reason": "the repo's declared services"
+      },
+      {
+        "component": "api",
+        "kind": "lint",
+        "command": "npm run lint",
+        "cwd": "packages/api",
+        "source": "packages/api/package.json scripts.lint",
+        "reason": "discovered lint script"
+      },
+      {
+        "component": "api",
+        "kind": "test",
+        "command": "npm run test",
+        "cwd": "packages/api",
+        "source": "packages/api/package.json scripts.test",
+        "reason": "discovered test script"
+      },
+      {
+        "component": "shared",
+        "kind": "lint",
+        "command": "npm run lint",
+        "cwd": "packages/shared",
+        "source": "packages/shared/package.json scripts.lint",
+        "reason": "discovered lint script"
+      },
+      {
+        "component": "shared",
+        "kind": "test",
+        "command": "npm run test",
+        "cwd": "packages/shared",
+        "source": "packages/shared/package.json scripts.test",
+        "reason": "discovered test script"
+      },
+      {
+        "component": "worker",
+        "kind": "lint",
+        "command": "npm run lint",
+        "cwd": "packages/worker",
+        "source": "packages/worker/package.json scripts.lint",
+        "reason": "discovered lint script"
+      },
+      {
+        "component": "worker",
+        "kind": "test",
+        "command": "npm run test",
+        "cwd": "packages/worker",
+        "source": "packages/worker/package.json scripts.test",
+        "reason": "discovered test script"
+      }
+    ],
+    "environment": {
+      "kind": "container",
+      "text": "docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here"
+    },
+    "toolchains": [
+      {
+        "where": "node:22-bookworm",
+        "command": "node --version && npm --version",
+        "versions": "v22.23.5, 10.9.9"
+      }
+    ]
+  },
   "scenarios": [
     {
       "id": "bug_fixes",
@@ -90,6 +200,7 @@
     ],
     "unproven": false,
     "status": "proven",
+    "provenIn": "container",
     "settleBy": null,
     "next": {
       "level": 2,
@@ -114,6 +225,7 @@
         "couldBe": null,
         "unproven": false,
         "status": "proven",
+        "provenIn": "container",
         "settleBy": null,
         "capReasons": [
           {
@@ -147,6 +259,7 @@
         "couldBe": null,
         "unproven": false,
         "status": "proven",
+        "provenIn": "container",
         "settleBy": null,
         "capReasons": [
           {
@@ -180,6 +293,7 @@
         "couldBe": null,
         "unproven": false,
         "status": "proven",
+        "provenIn": "container",
         "settleBy": null,
         "capReasons": [
           {
@@ -640,7 +754,8 @@
         "counts": {
           "passed": 7,
           "failed": 0,
-          "notRun": 0
+          "notRun": 0,
+          "skipped": 0
         },
         "evidence": [
           "ev-016",
@@ -965,7 +1080,10 @@
         "ran": "no blocking findings; 2 items listed for review",
         "where": "read from files",
         "result": "pass",
-        "summary": "no blocking findings; 2 items listed for review"
+        "summary": "no blocking findings; 2 items listed for review",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
       },
       {
         "id": "ev-002",
@@ -974,7 +1092,10 @@
         "ran": "toolchain pinned in .nvmrc",
         "where": "read from files",
         "result": "pass",
-        "summary": "toolchain pinned in .nvmrc"
+        "summary": "toolchain pinned in .nvmrc",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
       },
       {
         "id": "ev-003",
@@ -983,7 +1104,10 @@
         "ran": "node --version && npm --version",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "doctor passed"
+        "summary": "doctor passed",
+        "durationMs": 118,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'node --version && npm --version'",
+        "supersededBy": null
       },
       {
         "id": "ev-004",
@@ -992,7 +1116,10 @@
         "ran": "bash scripts/agent-install.sh",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "install passed"
+        "summary": "install passed",
+        "durationMs": 8553,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh'",
+        "supersededBy": null
       },
       {
         "id": "ev-005",
@@ -1001,7 +1128,10 @@
         "ran": "npm run lint",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "lint passed"
+        "summary": "lint passed",
+        "durationMs": 179,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/api && npm run lint)'",
+        "supersededBy": null
       },
       {
         "id": "ev-006",
@@ -1010,7 +1140,10 @@
         "ran": "npm run lint",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "lint passed"
+        "summary": "lint passed",
+        "durationMs": 176,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/shared && npm run lint)'",
+        "supersededBy": null
       },
       {
         "id": "ev-007",
@@ -1019,7 +1152,10 @@
         "ran": "npm run lint",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "lint passed"
+        "summary": "lint passed",
+        "durationMs": 187,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/worker && npm run lint)'",
+        "supersededBy": null
       },
       {
         "id": "ev-008",
@@ -1028,7 +1164,10 @@
         "ran": "bash scripts/agent-start.sh",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "start passed"
+        "summary": "start passed",
+        "durationMs": 2281,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && bash scripts/agent-start.sh'",
+        "supersededBy": null
       },
       {
         "id": "ev-009",
@@ -1037,7 +1176,10 @@
         "ran": "npm run test",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "test passed (1 of 1 tests)"
+        "summary": "test passed (1 of 1 tests)",
+        "durationMs": 252,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/api && npm run test)'",
+        "supersededBy": null
       },
       {
         "id": "ev-010",
@@ -1046,7 +1188,10 @@
         "ran": "npm run test",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "test passed (3 of 3 tests)"
+        "summary": "test passed (3 of 3 tests)",
+        "durationMs": 247,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/shared && npm run test)'",
+        "supersededBy": null
       },
       {
         "id": "ev-011",
@@ -1055,7 +1200,10 @@
         "ran": "npm run test",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "test passed (2 of 2 tests)"
+        "summary": "test passed (2 of 2 tests)",
+        "durationMs": 240,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/worker && npm run test)'",
+        "supersededBy": null
       },
       {
         "id": "ev-012",
@@ -1064,7 +1212,10 @@
         "ran": "frozen install reproduced the lockfile",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "frozen install reproduced the lockfile"
+        "summary": "frozen install reproduced the lockfile",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
       },
       {
         "id": "ev-013",
@@ -1073,7 +1224,10 @@
         "ran": "caught 5 of 5 planted faults (100%), 5 of them planted again from the last audit: strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip)",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "caught 5 of 5 planted faults (100%), 5 of them planted again from the last audit: strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip)"
+        "summary": "caught 5 of 5 planted faults (100%), 5 of them planted again from the last audit: strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip)",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
       },
       {
         "id": "ev-014",
@@ -1082,7 +1236,10 @@
         "ran": "caught 7 of 7 planted faults (100%), 7 of them planted again from the last audit: strong, at least 65% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "caught 7 of 7 planted faults (100%), 7 of them planted again from the last audit: strong, at least 65% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)"
+        "summary": "caught 7 of 7 planted faults (100%), 7 of them planted again from the last audit: strong, at least 65% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
       },
       {
         "id": "ev-015",
@@ -1091,7 +1248,10 @@
         "ran": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2",
         "where": "ran in a clean container",
         "result": "fail",
-        "summary": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2"
+        "summary": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
       },
       {
         "id": "ev-016",
@@ -1100,7 +1260,10 @@
         "ran": "npm run lint -w api",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": ".cursor/rules/style.mdc:6 `npm run lint -w api` replays"
+        "summary": ".cursor/rules/style.mdc:6 `npm run lint -w api` replays",
+        "durationMs": 190,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run lint -w api'",
+        "supersededBy": null
       },
       {
         "id": "ev-017",
@@ -1109,7 +1272,10 @@
         "ran": "npm run test -w shared",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "AGENTS.md:6 `npm run test -w shared` replays"
+        "summary": "AGENTS.md:6 `npm run test -w shared` replays",
+        "durationMs": 231,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run test -w shared'",
+        "supersededBy": null
       },
       {
         "id": "ev-018",
@@ -1118,7 +1284,10 @@
         "ran": "npm test",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "AGENTS.md:7 `npm test` replays"
+        "summary": "AGENTS.md:7 `npm test` replays",
+        "durationMs": 444,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm test'",
+        "supersededBy": null
       },
       {
         "id": "ev-019",
@@ -1127,7 +1296,10 @@
         "ran": "node --version && npm --version",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": ".cursor/skills/verify/SKILL.md:15 `node --version && npm --version` replays"
+        "summary": ".cursor/skills/verify/SKILL.md:15 `node --version && npm --version` replays",
+        "durationMs": 118,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && node --version && npm --version'",
+        "supersededBy": null
       },
       {
         "id": "ev-020",
@@ -1136,7 +1308,10 @@
         "ran": "npm run test",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": ".cursor/skills/verify/SKILL.md:56 `npm run test` replays"
+        "summary": ".cursor/skills/verify/SKILL.md:56 `npm run test` replays",
+        "durationMs": 457,
+        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run test'",
+        "supersededBy": null
       }
     ],
     "record": [
@@ -1161,8 +1336,12 @@
         "value": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it"
       },
       {
+        "label": "Integrity",
+        "value": "unsigned: the seal is a digest that shows edits, but anyone with the scripts could reseal an edited audit"
+      },
+      {
         "label": "Skill digest",
-        "value": "06da7cbdca2b"
+        "value": "ed44533b343a"
       },
       {
         "label": "Planted faults",
