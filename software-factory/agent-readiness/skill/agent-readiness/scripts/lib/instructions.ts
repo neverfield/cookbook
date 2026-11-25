@@ -172,7 +172,7 @@ async function replayOne(audit: Audit, item: InstructionItem, ex: Executor, cwd:
   charge(budget, "*", out.durationMs);
   const ok = out.exitCode === 0 && !out.timedOut;
   const redacted = redact(out.output, registryValues);
-  const why = ok ? null : diagnose(out.output, out.timedOut, "instruction");
+  const why = ok ? null : diagnose(redacted, out.timedOut, "instruction", out.exitCode);
   item.cwd = cwd;
   item.rule = "replay-environment";
   if (!ok && ex.where !== "container" && out.output.includes(SUDO_SHIM_MARK)) {
@@ -203,6 +203,12 @@ async function replayOne(audit: Audit, item: InstructionItem, ex: Executor, cwd:
     item.result = "not_run";
     item.reason = `not replayed: ${why.detail}`;
     item.rule = "interactive";
+    return;
+  }
+  if (why?.cause === "resource") {
+    item.result = "not_run";
+    item.reason = `not replayed to the end: ${why.detail} on this machine, an environment limit rather than a repo defect`;
+    item.blocked = `${why.detail} on this machine`;
     return;
   }
   if (why?.cause === "permission") {

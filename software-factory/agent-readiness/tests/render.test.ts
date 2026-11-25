@@ -253,7 +253,7 @@ describe("part 1 rules", () => {
     assert.doesNotMatch(md, /Not bootable \(could be/);
     assert.match(md, /No actions are open: nothing in the repo blocks Level 1\./);
     assert.equal(ex.noBlocker, false);
-    assert.equal(ex.headline, "Level 1 couldn't be proved for app because this machine has no container runtime. A rerun where Docker or Podman is available, such as CI, can prove it.");
+    assert.equal(ex.headline, "Level 1 couldn't be proved for app because this machine has no container runtime. A rerun where Docker is available, such as CI, can prove it.");
     assert.match(ex.ask, /^Decision needed: where to rerun this audit/);
     const stale = reportFor(makeAudit({ components: [{ id: "app", share: 1, faults: "pass" }], instructions: [instruction("fail", "pnpm test", "uses pnpm, but the repo uses npm")] })).executive.nextLine;
     assert.match(stale, /Not yet: agent instructions are accurate\./, "a repo-wide condition names no component");
@@ -314,7 +314,7 @@ describe("part 1 rules", () => {
     const ex = r.executive;
     assert.deepEqual([r.maturity.outcome, r.maturity.unproven], ["blocked", true]);
     assert.equal(ex.heading, "Unproven on this machine: no Level 1 check failed, and 3 were blocked here");
-    assert.equal(ex.headline, "Level 1 couldn't be proved for buyer-web because this machine has no container runtime and dotnet is not installed on this machine. A rerun where Docker or Podman is available, such as CI, can prove it.");
+    assert.equal(ex.headline, "Level 1 couldn't be proved for buyer-web because this machine has no container runtime and dotnet is not installed on this machine. A rerun where Docker is available, such as CI, can prove it.");
     assert.deepEqual([r.actions.length, ex.gaps.length, ex.noBlocker], [0, 0, false]);
     assert.match(ex.ask, /^Decision needed: where to rerun this audit so it can prove Level 1/);
     assert.match(ex.coverage, /On this machine dotnet is not installed, an environment limit rather than a repo defect/);

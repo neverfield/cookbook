@@ -39,6 +39,7 @@
         "proofEnv": { "type": "object", "required": ["kind", "id", "imageSource", "network", "canary", "proves"], "properties": { "kind": { "enum": ["container", "disposable_vm", "host"] }, "id": { "type": "string" }, "imageSource": { "enum": ["audit", "repo", "override", null] }, "detectedBy": { "type": "array", "items": { "type": "string" } }, "network": { "enum": ["cut", "on", null] }, "canary": { "type": "object", "required": ["ok", "checks"], "properties": { "ok": { "type": "boolean" }, "checks": { "type": "array", "items": { "type": "object", "required": ["id", "ok", "detail"], "properties": { "id": { "enum": ["mount_visible", "mount_writable", "run_user", "network_cut", "git_identity"] }, "ok": { "type": "boolean" }, "detail": { "type": "string" } } } } } }, "proves": { "type": "boolean" } } }
       }
     },
+    "masked": { "type": "array", "items": { "type": "object", "required": ["type", "where"], "properties": { "type": { "type": "string" }, "where": { "type": "string" } } } },
     "profile": { "type": ["object", "null"] },
     "contract": {
       "type": "array",

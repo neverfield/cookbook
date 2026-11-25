@@ -13,7 +13,7 @@ import { UNDETERMINED, blockedBy, checkCounts, gatingInstruction } from "./score
 import { sampledScope } from "./scope.ts";
 import type { ComponentResult } from "./seal.ts";
 import { NOT_SUPPORTED, STACKS, SUPPORTED_DOC } from "./support.ts";
-import type { Asset, Audit, CapReason, CommandKind, CondId, Component, ComponentLevel, Evidence, HistoryLine, Level, LevelStatus, OutcomeStats, OutcomesSnapshot, ProofEnvKind, ReportAction, ReportChanges, ReportJson, RevertsSnapshot, Roadmap, RoadmapItem, ScenarioId, SettleBy } from "./types.ts";
+import type { Asset, Audit, CapReason, CommandKind, CondId, Component, ComponentLevel, Evidence, HistoryLine, Level, LevelStatus, MaskedValue, OutcomeStats, OutcomesSnapshot, ProofEnvKind, ReportAction, ReportChanges, ReportJson, RevertsSnapshot, Roadmap, RoadmapItem, ScenarioId, SettleBy } from "./types.ts";
 import { fmtShortDate, pct, shellQuote, wordCount } from "./util.ts";
 import { WAIVER_FILE } from "./waivers.ts";
 
@@ -285,7 +285,7 @@ function platformBlocked(input: ModelInput): string[] | null {
 // the stack would, which the part 1 support line covers.
 function rerunAdvice(input: ModelInput, causes: string[], verb: "give one" | "prove it"): string | null {
   if (input.audit.tier === "read-only") return `A local-exec audit can ${verb}.`;
-  if (!input.audit.environment.containerRuntime) return `A rerun where Docker or Podman is available, such as CI, can ${verb}.`;
+  if (!input.audit.environment.containerRuntime) return `A rerun where Docker is available, such as CI, can ${verb}.`;
   if (causes.some((c) => NOT_SUPPORTED.test(c))) return null;
   if (causes.some((c) => / couldn't be pulled| can't be pulled| rate limit/.test(c))) return `A rerun where that image can be pulled, or with another image passed with --image, can ${verb}.`;
   if (causes.some((c) => / hit .*network/.test(c))) return `A rerun with open network access can ${verb}.`;
@@ -759,7 +759,7 @@ export function buildReport(raw: ModelInput): ReportJson {
     : none
     ? audit.tier === "read-only"
       ? "Decision needed: whether to allow a local-exec audit, which runs the repo's commands in a container."
-      : "Decision needed: where to rerun this audit so its checks can run, for example a CI job with Docker or Podman."
+      : "Decision needed: where to rerun this audit so its checks can run, for example a CI job with Docker."
     : undetermined(input)
     ? `Decision needed: who settles Level 1 for ${list(capComps(input))}: ${lower(settleByOf(input, capReasons(input))!.text.replace(/`/g, "").replace(/\.$/, ""))}.`
     : unproven(input) && notMachineCause(input)
@@ -969,6 +969,7 @@ export function buildReport(raw: ModelInput): ReportJson {
         { label: "Replay environment", value: replayEnvironment(input) },
         ...(audit.environment.proofEnv?.canary.checks.length ? [{ label: "Environment self-check", value: canaryNote(audit.environment.proofEnv.canary) }] : []),
         ...(audit.environment.registryEnv.length ? [{ label: "Registry variables", value: `${audit.environment.registryEnv.join(", ")}, passed to the setup steps by name; their values are never recorded` }] : []),
+        ...(audit.masked?.length ? [{ label: "Masked values", value: maskedNote(audit.masked) }] : []),
         { label: "Stored in", value: input.storedAt },
       ],
     },
@@ -1007,7 +1008,7 @@ function noticesOf(input: ModelInput): { text: string }[] {
   else if (input.sealStatus.startsWith("Seal not verified: no release manifest")) out.push("This copy of the skill ships no release manifest, so its scripts can't be checked against a release. Install a released copy and rerun the audit.");
   if (input.staleCopy) out.push(`${input.staleCopy} Update the installed skill and rerun the audit.`);
   if (audit.tier === "read-only") out.push("This audit ran at the read-only tier, so it ran no repo command. Rerun it with --tier local-exec to get a level.");
-  else if (!audit.environment.containerRuntime && audit.evidence.some((e) => e.where === "fresh_copy")) out.push("This audit ran without a container runtime, so Level 1 is unproven. Install Docker or Podman, or run it in CI, and rerun the audit.");
+  else if (!audit.environment.containerRuntime && audit.evidence.some((e) => e.where === "fresh_copy")) out.push("This audit ran without a container runtime, so Level 1 is unproven. Install Docker, or run it in CI, and rerun the audit.");
   if (audit.repo.dirtyTree) out.push("Uncommitted changes weren't audited. Commit them and rerun the audit to include them.");
   return out.map((text) => ({ text }));
 }
@@ -1032,6 +1033,15 @@ export function changesOf(prev: ReportJson, now: ReportJson, rubric: Rubric): Re
   const okBefore = new Map(prev.details.checks.map((c) => [c.id, c.ok]));
   const checks = now.details.checks.filter((c) => okBefore.has(c.id) && okBefore.get(c.id) !== c.ok && (okBefore.get(c.id) === false || c.ok === false)).map((c) => ({ id: c.id, name: c.name, from: okBefore.get(c.id) ?? null, to: c.ok }));
   return { since: { audit: prev.audit.id, date: prev.audit.date }, repo: { from: repoLevel(prev), to: repoLevel(now) }, components, nowMet, nowFailing, checks };
+}
+
+// The secret-shaped values the seal masked in the repo's own text, by type and place.
+export function maskedNote(masked: MaskedValue[]): string {
+  const counts = new Map<string, number>();
+  for (const m of masked) counts.set(`${m.type} at ${m.where}`, (counts.get(`${m.type} at ${m.where}`) ?? 0) + 1);
+  const places = [...counts].map(([k, n]) => (n > 1 ? `${k} (${n} copies)` : k));
+  const n = masked.length;
+  return `${n} secret-shaped ${n === 1 ? "value" : "values"} from the repo's own text ${n === 1 ? "was" : "were"} masked as [redacted:<type>] before sealing: ${places.join("; ")}. The safety findings list the repo files that hold them.`;
 }
 
 function replayEnvironment(input: ModelInput): string {

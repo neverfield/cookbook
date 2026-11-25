@@ -1,15 +1,16 @@
 import { createHmac } from "node:crypto";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { realpathSync, rmSync } from "node:fs";
 import { refreshAssetStatus } from "./assets.ts";
-import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { weakening, weakeningText } from "./diff.ts";
 import { ghJson } from "./gh.ts";
-import { HISTORY_BRANCH, appendHistory, loadSealedAudit, readHistory, readRoadmap, readSealedFile, storeAudit, storeRecheck, writeLatest, writeRoadmap } from "./history.ts";
+import { HISTORY_BRANCH, appendHistory, loadSealedAudit, maskSecrets, readHistory, readRoadmap, readSealedFile, storeAudit, storeRecheck, writeLatest, writeRoadmap } from "./history.ts";
+import type { NamedValue } from "./history.ts";
 import type { LevelResult } from "./levels.ts";
 import { activeComponents, capAt, componentLevel, level3Run, outcomeLevel, partialCoverage, previousAtLevel3, recheckStates, repoLevel, scenariosFor, statesOf } from "./levels.ts";
 import { emptyStats } from "./outcomes.ts";
-import { budgetFloors, checkExecutors, makeExecutors, newBudget, registryValuesOf, revealMutants, runContracts } from "./replay.ts";
+import { budgetFloors, checkExecutors, makeExecutors, newBudget, reapOrphans, registryValuesOf, revealMutants, runContracts } from "./replay.ts";
+import type { Executors, PhaseResult } from "./replay.ts";
 import { allowedNumbers, danglingEvidence, narrationClaimErrors } from "./claims.ts";
 import { buildReport } from "./model.ts";
 import { renderMarkdown, validatePart1 } from "./render.ts";
@@ -22,6 +23,7 @@ import type { CompStates } from "./score.ts";
 import { componentStates, noRealResults } from "./score.ts";
 import type { Audit, CondId, CondState, HistoryLine, Level, OutcomeStats, ReportJson, Roadmap, ScenarioId, Targets } from "./types.ts";
 import { SUPPORTED_DOC } from "./support.ts";
+import { tempDir } from "./teardown.ts";
 import { WAIVER_FILE, applyWaivers, loadWaivers } from "./waivers.ts";
 import { explanationGaps } from "./explain.ts";
 import { SKILL_ROOT, exists, fail, fmtShortDate, gitOrThrow, nowIso, randomHex, readText, sha256, stableStringify, today } from "./util.ts";
@@ -256,7 +258,25 @@ export function seal(audit: Audit, local: LocalInfo, p: Paths, log: (s: string) 
   audit.seed.value = realSeed(audit, local);
   const storedAt = join(p.history, "audits", audit.id).replace(p.repo + "/", "");
   const history = trustedHistory(p, readHistory(p), log);
-  const { report, roadmap, line } = buildSealedReport(audit, rubric, history, readRoadmap(p), p.repo, storedAt, previousSealedReport(p, history));
+  const named = namedValues(audit);
+  // The repo's own text, such as a token in an example command, is masked rather than refused, so
+  // the report, the seal and the stored audit all read the masked copy.
+  const own = maskSecrets(`audit ${audit.id}`, audit, named);
+  if (own.masked.length) {
+    Object.assign(audit, own.value);
+    audit.masked = own.masked;
+  }
+  let built = buildSealedReport(audit, rubric, history, readRoadmap(p), p.repo, storedAt, previousSealedReport(p, history));
+  // Text the report adds beyond the audit's own, masked the same way, and listed with the rest.
+  const extra = maskSecrets("the report", built.report, named).masked;
+  if (extra.length) {
+    audit.masked = [...(audit.masked ?? []), ...extra];
+    built = buildSealedReport(audit, rubric, history, readRoadmap(p), p.repo, storedAt, previousSealedReport(p, history));
+  }
+  const report = maskSecrets("the report", built.report, named).value;
+  const roadmap = maskSecrets("roadmap.json", built.roadmap, named).value;
+  const line = maskSecrets("history.jsonl", built.line, named).value;
+  if (audit.masked?.length) log(`Masked ${audit.masked.length} secret-shaped ${audit.masked.length === 1 ? "value" : "values"} the repo's own text carried into the records; "About this report" says where.`);
   const errors = [
     ...consistencyErrors(audit, report, roadmap),
     ...danglingEvidence(report, audit).map((id) => `the report cites ${id}, which isn't in the audit`),
@@ -278,7 +298,7 @@ export function seal(audit: Audit, local: LocalInfo, p: Paths, log: (s: string) 
   const dir = storeAudit(p, audit, report, md, html);
   writeLatest(p, report, md, html);
   writeRoadmap(p, roadmap);
-  appendHistory(p, line);
+  appendHistory(p, line, named);
   // Ending the session also drops the user's yes to host mode, which is for one audit (SKILL.md
   // rule 2): the next one asks again.
   clearCurrent(p);
@@ -286,6 +306,11 @@ export function seal(audit: Audit, local: LocalInfo, p: Paths, log: (s: string) 
   rmSync(join(local.tree, ".."), { recursive: true, force: true });
   log(`Sealed ${audit.id}: ${report.executive.heading}.`);
   return { report, markdown: md, dir };
+}
+
+// The values --registry-env passed, by name: finding one in a record refuses the seal.
+export function namedValues(audit: Pick<Audit, "environment">): NamedValue[] {
+  return audit.environment.registryEnv.map((name) => ({ name, value: process.env[name] ?? "" })).filter((n) => n.value);
 }
 
 export interface VerifyResult {
@@ -403,6 +428,8 @@ export function verifySeal(p: Paths, ref: string, opts: { releaseRepo?: string; 
   return { ok, production, lines };
 }
 
+export const MASKED_COMMAND = "not rerun: the seal masked a secret-shaped value in this command, so it can't run as written";
+
 export interface RecheckOptions {
   runtime: string;
   image?: string;
@@ -414,18 +441,23 @@ export async function recheck(p: Paths, opts: RecheckOptions): Promise<{ line: H
   const rubric = loadRubric(audit.rubric);
   const history = readHistory(p);
   const commit = gitOrThrow(["rev-parse", "HEAD"], p.repo).trim();
-  const root = mkdtempSync(join(tmpdir(), "readiness-recheck-"));
-  const copy = join(root, "work");
-  exportTree(p.repo, commit, copy);
-  const work: Audit = JSON.parse(JSON.stringify(audit)) as Audit;
-  const exs = await checkExecutors(work, makeExecutors(work, copy, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, undefined, audit.contract.some((c) => c.component === "*")), audit.profile!, opts.log);
+  for (const gone of reapOrphans(opts.runtime)) opts.log(`Removed ${gone}, left by an audit that was stopped before it could clean up.`);
   const comps = new Set(audit.profile!.components.filter((c) => c.assessed).map((c) => c.id));
-  let results;
+  // A command the seal masked a value in can't be run as written; it is blocked, never failed.
+  const masked = audit.contract.filter((c) => [c.command, ...Object.values(c.env ?? {})].some((t) => t.includes("[redacted:")));
+  const root = tempDir("readiness-recheck-");
+  const work: Audit = JSON.parse(JSON.stringify(audit)) as Audit;
+  let exs: Executors | null = null;
+  let results: PhaseResult[];
   try {
-    results = await runContracts(exs, audit.contract, { components: comps, budget: newBudget(rubric.budgets.componentMinutes, rubric.budgets.totalMinutes, budgetFloors(audit.profile!)), registryValues: registryValuesOf(audit), profile: audit.profile, onResult: (r) => opts.log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.blocked ? "blocked" : r.status}`) });
+    const copy = join(root.path, "work");
+    exportTree(p.repo, commit, copy);
+    exs = await checkExecutors(work, makeExecutors(work, copy, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, undefined, audit.contract.some((c) => c.component === "*")), audit.profile!, opts.log);
+    results = await runContracts(exs, audit.contract.filter((c) => !masked.includes(c)), { components: comps, budget: newBudget(rubric.budgets.componentMinutes, rubric.budgets.totalMinutes, budgetFloors(audit.profile!)), registryValues: registryValuesOf(audit), profile: audit.profile, onResult: (r) => opts.log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.blocked ? "blocked" : r.status}`) });
+    results.push(...masked.map((cmd): PhaseResult => ({ cmd, status: "not_run", outcome: null, diagnosis: null, note: MASKED_COMMAND, blocked: MASKED_COMMAND })));
   } finally {
-    exs.close();
-    rmSync(root, { recursive: true, force: true });
+    exs?.close();
+    root.dispose();
   }
   // A limit of this machine is never a regression, and a rerun outside a clean container can't
   // carry the last audit's levels onto a new commit.
@@ -475,7 +507,7 @@ export async function recheck(p: Paths, opts: RecheckOptions): Promise<{ line: H
     seedPinned: audit.seed.pinned,
   };
   const record = { schema: "agent-readiness/recheck@1", id, from: audit.id, at: nowIso(), commit, environment: work.environment, results: results.map((r) => ({ id: r.cmd.id, kind: r.cmd.kind, component: r.cmd.component, status: r.status, exitCode: r.outcome?.exitCode ?? null, diagnosis: r.diagnosis, note: r.note })) };
-  storeRecheck(p, id, record);
-  appendHistory(p, line);
+  storeRecheck(p, id, record, namedValues(audit));
+  appendHistory(p, line, namedValues(audit));
   return { line, record };
 }

@@ -1,8 +1,9 @@
 import { cpSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { redact } from "./redact.ts";
 import { scanText } from "./secrets.ts";
-import type { Audit, HistoryLine, ReportJson, Roadmap } from "./types.ts";
+import type { Audit, HistoryLine, MaskedValue, ReportJson, Roadmap } from "./types.ts";
 import { ensureDir, exists, fail, git, nowIso, readJson, readText, writeJson, writeText } from "./util.ts";
 import type { Paths } from "./workspace.ts";
 
@@ -24,6 +25,50 @@ function unescapeHtml(html: string): string {
 
 function guardSecrets(label: string, found: string[]): void {
   if (found.length > 0) fail(`Refusing to write ${label}: it contains ${found.join(", ")}. Nothing was written.`);
+}
+
+// A value the user passed by name (--registry-env) is theirs and was never the repo's to print, so
+// finding one stops the write: it means redaction failed somewhere. Its name is all the message says.
+export interface NamedValue {
+  name: string;
+  value: string;
+}
+
+// Where a masked value came from: the repo file and line of the nearest record that names one (an
+// instruction, a contract command, a safety finding), else the record's path in the audit.
+function locationOf(node: Record<string, unknown>): string | null {
+  const file = typeof node.source === "string" ? node.source : typeof node.file === "string" ? node.file : null;
+  if (!file || file === "agent") return null;
+  return typeof node.line === "number" && !/:\d+$/.test(file) ? `${file}:${node.line}` : file;
+}
+
+// Secret-shaped strings the repo's own text carries into the records, such as a token in an
+// example command in AGENTS.md, are replaced with [redacted:<type>] rather than refusing the whole
+// write. Returns the masked copy and what was masked where. A registry value refuses.
+export function maskSecrets<T>(label: string, value: T, named: NamedValue[] = []): { value: T; masked: MaskedValue[] } {
+  const masked: MaskedValue[] = [];
+  const values = named.filter((n) => n.value.length >= 4);
+  const walk = (v: unknown, path: string, where: string | null): unknown => {
+    if (typeof v === "string") {
+      const hit = values.find((n) => v.includes(n.value));
+      if (hit) fail(`Refusing to write ${label}: it contains the value of ${hit.name}, which --registry-env passed to the setup steps (${path}). Nothing was written. Report this with \`readiness feedback\`: the value should have been redacted.`);
+      const hits = scanText(v);
+      if (!hits.length) return v;
+      let out = redact(v);
+      // Whatever redact() doesn't reshape, the whole string goes.
+      if (scanText(out).length) out = `[redacted:${hits[0].type}]`;
+      for (const h of hits) masked.push({ type: h.type, where: where ?? path });
+      return out;
+    }
+    if (Array.isArray(v)) return v.map((x, i) => walk(x, `${path}[${i}]`, where));
+    if (v && typeof v === "object") {
+      const node = v as Record<string, unknown>;
+      const here = locationOf(node) ?? where;
+      return Object.fromEntries(Object.entries(node).map(([k, x]) => [walk(k, `${path} key`, here) as string, walk(x, `${path}.${k}`, here)]));
+    }
+    return v;
+  };
+  return { value: walk(value, label, null) as T, masked };
 }
 
 export function storeAudit(p: Paths, audit: Audit, report: ReportJson, md: string, html: string): string {
@@ -62,10 +107,9 @@ export function showFromBranch(repo: string, path: string): string | null {
   return null;
 }
 
-export function appendHistory(p: Paths, line: HistoryLine): void {
+export function appendHistory(p: Paths, line: HistoryLine, named: NamedValue[] = []): void {
   const f = join(p.history, "history.jsonl");
-  const text = JSON.stringify(line) + "\n";
-  guardSecrets("the history line", secretsIn("history.jsonl", line));
+  const text = JSON.stringify(maskSecrets("history.jsonl", line, named).value) + "\n";
   ensureDir(p.history);
   const prev = mergeHistory(branchHistory(p.repo) ?? "", exists(f) ? readText(f) : "");
   writeText(f, prev + text);
@@ -131,10 +175,9 @@ export function loadSealedAudit(p: Paths, ref: string): { audit: Audit; dir: str
   return fail(`No sealed audit ${id}`);
 }
 
-export function storeRecheck(p: Paths, id: string, record: unknown): string {
+export function storeRecheck(p: Paths, id: string, record: unknown, named: NamedValue[] = []): string {
   const f = join(p.history, "rechecks", `${id}.json`);
-  const text = JSON.stringify(record, null, 2) + "\n";
-  guardSecrets(`recheck ${id}`, secretsIn(`rechecks/${id}.json`, record));
+  const text = JSON.stringify(maskSecrets(`rechecks/${id}.json`, record, named).value, null, 2) + "\n";
   writeText(f, text);
   return f;
 }

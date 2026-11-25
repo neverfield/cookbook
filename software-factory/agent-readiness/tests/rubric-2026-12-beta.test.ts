@@ -35,10 +35,12 @@ function gitRepo(files: Record<string, string>): string {
   return dir;
 }
 
+const DONE_WHEN = ["commands", "faults", "instructions"];
+
 describe("rubric 2026-12-beta", () => {
   test("is the rubric new audits use, and lists what changed", () => {
     assert.equal(latestRubricVersion(), "2026-12-beta");
-    assert.equal((next.changes ?? []).length, 11);
+    assert.equal((next.changes ?? []).length, 12);
   });
 
   test("is written as JSON.stringify(rubric, null, 2), so a reformat never moves its digest", () => {
@@ -46,7 +48,7 @@ describe("rubric 2026-12-beta", () => {
     assert.equal(JSON.stringify(JSON.parse(text), null, 2) + "\n", text);
   });
 
-  test("changes only the type-check canary, the revert window, where a pass proves Level 1, the fault estimate, secret classes, instruction severities, three templates, one check's why, the not-assessed list, the unowned share, the folder-name hint's share and the Level 0 attribution rule", () => {
+  test("changes only the type-check canary, the revert window, where a pass proves Level 1, the fault estimate, secret classes, instruction severities, three templates, three done-whens, one check's why, the not-assessed list, the unowned share, the folder-name hint's share and the Level 0 attribution rule", () => {
     const strip = (r: typeof next) => {
       const c = structuredClone(r) as Partial<typeof next> & Record<string, unknown>;
       delete c.version;
@@ -60,6 +62,8 @@ describe("rubric 2026-12-beta", () => {
       c.mutation = mutation as typeof r.mutation;
       c.outcomes = { ...r.outcomes, revertDays: undefined, metrics: r.outcomes.metrics.filter((m) => m !== "reverted_within_days") };
       const { "commands:canary": _c, drive: _d, "safety:secret": _s2, ...templates } = r.templates;
+      // The done-when and the step that proves it, for the steps whose done-when names a new audit.
+      for (const id of DONE_WHEN) templates[id] = { ...templates[id], doneWhen: "", steps: templates[id].steps.map((s) => (/^Prove it/.test(s.title) ? { ...s, detail: "" } : s)) };
       c.templates = templates;
       c.checks = r.checks.map((k) => (k.id === "verify.canonical_interface" ? { ...k, why: "" } : k));
       c.notAssessed = r.notAssessed.filter((n) => n !== "Whether the lint command catches anything");
@@ -75,6 +79,24 @@ describe("rubric 2026-12-beta", () => {
     assert.equal(Object.keys(next.templates).indexOf("drive"), Object.keys(next.templates).indexOf("delegate") + 1, "the drive step comes right after giving agents work");
     assert.deepEqual([next.components.unowned, next.components.satelliteHintShare, beta.components.unowned, beta.components.satelliteHintShare], ["counted", 0.5, undefined, undefined]);
     assert.deepEqual([next.attribution, beta.attribution], [{ level0: "attributed", reruns: ["network", "tool"] }, undefined]);
+  });
+
+  // Production-readiness review B6: the printed bar has to be the rule the estimate applies, and the
+  // re-audit step has to say what mutation.identity "fault" does.
+  test("each done-when names a new audit and the faults step states the estimate's own bar", () => {
+    for (const id of DONE_WHEN) {
+      const t = next.templates[id];
+      assert.doesNotMatch(`${t.doneWhen} ${t.steps.map((s) => s.detail).join(" ")}`.replace(/Run `readiness run --component \{component\}` and read/, ""), /readiness run/, `${id}: a done-when never depends on host mode`);
+      assert.match(t.doneWhen, /new audit|audit after the change/, id);
+    }
+    const faults = next.templates.faults;
+    assert.match(faults.doneWhen, /rates \{component\}'s tests strong: at least 60% of planted faults caught, over enough faults to be sure/);
+    assert.doesNotMatch(faults.doneWhen, /catches at least 60% of the faults/, "60% of too few faults is inconclusive, so it can't be the bar");
+    const prove = faults.steps.find((s) => /new audit/.test(s.title))!.detail;
+    assert.doesNotMatch(prove, /plants different faults/);
+    assert.match(prove, /never redraws them/);
+    assert.match(prove, /missed again first/);
+    assert.equal(next.mutation.identity, "fault", "the step's wording holds only while faults are ranked by their own identity");
   });
 
   test("changes no component holds count toward partial coverage, where 2026-11-beta leaves them out", () => {

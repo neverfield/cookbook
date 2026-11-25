@@ -1,7 +1,19 @@
+import { NETWORK_ENV } from "./container.ts";
+import { proxyPasswords, redact } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { strengthRank } from "./rubric.ts";
 import type { Audit, Evidence, Result, Strength } from "./types.ts";
 import { fail, nowIso } from "./util.ts";
+
+const SECRET_NAME = /(KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|AUTH)/i;
+
+// Values to redact from command output: the registry variables, the passwords in proxy settings,
+// and with --inherit-env every inherited variable whose name looks like a secret.
+export function registryValuesOf(audit: Pick<Audit, "environment">): string[] {
+  const names = new Set(audit.environment.registryEnv);
+  if (audit.environment.inheritEnv) for (const k of Object.keys(process.env)) if (SECRET_NAME.test(k)) names.add(k);
+  return [...[...names].map((k) => process.env[k] ?? ""), ...proxyPasswords(process.env, NETWORK_ENV)].filter(Boolean);
+}
 
 // What one evidence row is a result for: the same check and condition, for the same component and
 // command, run the same way. A replay result and a later diagnostic run on the host stay separate,
@@ -14,9 +26,21 @@ export function evidenceKey(e: Pick<Evidence, "checkId" | "condition" | "compone
 }
 
 // A new result for a key supersedes the one before it, so scoring, counts and the report read only
-// the current row and the log folds the earlier one under it.
+// the current row and the log folds the earlier one under it. Every text the report can print is
+// redacted here, whichever path built it: a diagnosis can quote the line of output that echoed a
+// registry token.
 export function addEvidence(audit: Audit, e: Omit<Evidence, "id" | "at" | "supersededBy">): Evidence {
-  const ev: Evidence = { id: `ev-${String(audit.evidence.length + 1).padStart(3, "0")}`, at: nowIso(), ...e };
+  const values = registryValuesOf(audit);
+  const clean = (text: string) => redact(text, values);
+  const ev: Evidence = {
+    id: `ev-${String(audit.evidence.length + 1).padStart(3, "0")}`,
+    at: nowIso(),
+    ...e,
+    summary: clean(e.summary),
+    ...(e.blocked !== undefined ? { blocked: clean(e.blocked) } : {}),
+    ...(e.diagnosis ? { diagnosis: { ...e.diagnosis, detail: clean(e.diagnosis.detail) } } : {}),
+    ...(e.attribution ? { attribution: { ...e.attribution, detail: clean(e.attribution.detail) } } : {}),
+  };
   const key = evidenceKey(ev);
   if (key) for (const old of audit.evidence) if (!old.supersededBy && evidenceKey(old) === key) old.supersededBy = ev.id;
   audit.evidence.push(ev);

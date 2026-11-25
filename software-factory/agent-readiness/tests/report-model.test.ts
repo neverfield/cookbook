@@ -52,7 +52,7 @@ describe("one report model, pure renderers", () => {
     const unproven = reportFor(audit);
     assert.deepEqual([unproven.maturity.status, unproven.maturity.provenIn], ["unproven", null]);
     assert.equal(unproven.maturity.settleBy?.kind, "rerun");
-    assert.match(unproven.maturity.settleBy!.text, /Docker or Podman/);
+    assert.match(unproven.maturity.settleBy!.text, /Docker/);
     assert.deepEqual(unproven.components.included.map((c) => [c.status, c.settleBy?.kind]), [["unproven", "rerun"]]);
     assert.match(unproven.executive.heading, /^Unproven on this machine: /, "an unproven result names no level, as the ladder marks none");
 

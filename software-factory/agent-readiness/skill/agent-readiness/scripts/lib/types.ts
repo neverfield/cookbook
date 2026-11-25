@@ -196,7 +196,10 @@ export interface Diagnosis {
   // missing_ref: a git ref or remote the audit's single-commit clean copy doesn't have, such as origin/main.
   // interactive: the command stopped at a prompt that wants a person's answer.
   // missing_library: a shared system library the code loads isn't in the image.
-  cause: "service" | "credential" | "registry" | "missing_tool" | "missing_module" | "missing_library" | "network" | "permission" | "timeout" | "compile" | "missing_ref" | "interactive" | "unknown";
+  // resource: the command ran out of memory or disk, a limit of this machine or the audit's container.
+  cause: "service" | "credential" | "registry" | "missing_tool" | "missing_module" | "missing_library" | "network" | "permission" | "timeout" | "compile" | "missing_ref" | "interactive" | "resource" | "unknown";
+  // For a resource limit: which one the command ran into.
+  limit?: "memory" | "disk";
   detail: string;
   // For a refused connection, the service usually on that port. It names the service in report text
   // only when serviceNamed says the output named it; otherwise it only guides remediation drafts.
@@ -206,6 +209,12 @@ export interface Diagnosis {
   // Composer's problem, PHPStan's first error, Ruby's uncaught error), not a guessed last line, so
   // report text may quote it as the cause.
   fromTool?: boolean;
+}
+
+// A secret-shaped value the seal masked in the repo's own text: its pattern and where it came from.
+export interface MaskedValue {
+  type: string;
+  where: string;
 }
 
 export interface InstructionItem {
@@ -439,6 +448,8 @@ export interface Audit {
   signals?: Signal[];
   // Read by the scan from the audited commit's waiver file; sealed with the rest of the audit.
   waivers?: WaiverRecord;
+  // Secret-shaped values in the repo's own text that the seal masked as [redacted:<type>].
+  masked?: MaskedValue[];
   sealed?: { at: string; digest: string; reportJsonDigest: string; reportMdDigest: string; reportHtmlDigest?: string; roadmapItemsDigest?: string; historyLineDigest?: string; keyed?: boolean };
 }
 

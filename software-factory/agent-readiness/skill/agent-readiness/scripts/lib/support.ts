@@ -36,7 +36,7 @@ export const STACKS: Stack[] = [
   { id: "host-mode", label: "Host mode on Linux or macOS, with --allow-host", kind: "machine", tier: "supported", reason: "only on the user's yes; the repo's commands run in a copy with a throwaway home and no account credentials, but can read this user's local files, so on a machine the audit doesn't detect as a disposable VM Level 1 can't be proved there", proof: ["tests/safety.test.ts"] },
   { id: "disposable-vm", label: "Host mode on a Cursor Cloud Agent VM, with --allow-host", kind: "machine", tier: "supported", reason: "only on the user's yes, as host mode; the machine is made for one run, so a pass there proves Level 1, with the tests' network cut where the VM allows it, or stated as on, with confidence at most medium", proof: ["tests/proof-environments.test.ts"] },
   { id: "windows", label: "Native Windows", kind: "machine", tier: "not_yet", reason: "the audit drives its container and host mode through bash; run it in WSL 2", proof: ["tests/supported.test.ts", "tests/safety.test.ts"] },
-  { id: "podman", label: "Podman", kind: "machine", tier: "not_assessed", reason: "the audit drives it like Docker, but no fixture run has used it", proof: [] },
+  { id: "podman", label: "Podman", kind: "machine", tier: "not_assessed", reason: "not offered until a fixture run tests it: `--runtime auto` never picks it, and `--runtime podman` is refused", proof: [] },
 ];
 
 export function stack(id: string): Stack {
