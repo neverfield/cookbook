@@ -190,8 +190,8 @@
     {
       "file": "support/trials/trials.test.ts",
       "test": "mcp-servers truth R3",
-      "finding": "R3: no proven level on a green, tested component in a container",
-      "fixedBy": "E"
+      "finding": "R3: no proven level on a green, tested component in a container. src/git is undetermined: the audit's uv bookworm-slim image has no git, the audit adds Debian bookworm's git 2.39, and 10 git show format tests fail with it that CI's newer git passes (truth review and Mac re-baseline at H)",
+      "fixedBy": "H"
     },
     {
       "file": "tests/docs.test.ts",
