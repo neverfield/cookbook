@@ -4,7 +4,8 @@
     "Type-check canary (canary.typecheck): when a component's type-check command passes, the audit adds one known type error to the most recently changed TypeScript or Python file the component's tests import, in a throwaway copy. The type-check must fail on it and pass again once it is removed before the commands condition is met. A type-check that passes with the error in place doesn't check that file, so it no longer counts at Level 2. A component with no TypeScript or Python file its tests import is exempt, and the report says so.",
     "Revert rate (outcomes.revertDays): part 3 reports the share of merged agent PRs, and of other PRs, that were reverted within 14 days of merging. Reverts are detected from revert PR bodies and titles and from \"This reverts commit\" lines on the default branch. The rate is reported only: no level, target or roadmap status depends on it.",
     "A scripted way to drive the app: a new informational signal, never scored. It looks for Playwright, Cypress or WebdriverIO specs, a verify skill (and its feature map, if it has one), a smoke script or a terminal harness. When a Level 2 component has an app to run and none of these, the roadmap adds a later step, \"Give agents a way to drive\" it, after \"Give agents work in\" it.",
-    "\"Whether the lint command catches anything\" is listed as not assessed: the audit doesn't plant a lint error yet."
+    "\"Whether the lint command catches anything\" is listed as not assessed: the audit doesn't plant a lint error yet.",
+    "Proof environments (proof.environments): a pass proves Level 1 in a clean container or on a disposable cloud VM the audit detects (a Cursor Cloud Agent VM), after the user's yes to host mode. On a VM the tests run with the network cut where it can be, or with it on, which the report states and which caps confidence at medium. Before any repo command a self-check of the environment runs; when it fails, every condition it would decide is blocked, never not met."
   ],
   "scale": [
     {
@@ -812,5 +813,11 @@
   ],
   "canary": {
     "typecheck": true
+  },
+  "proof": {
+    "environments": [
+      "container",
+      "disposable_vm"
+    ]
   }
 }
