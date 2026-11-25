@@ -8,6 +8,8 @@
 
 1. `maturity`: the repo rollup, with `level`, the `rule` that produced it, `setBy`, `outcome` (`proven`, `blocked` or `not_assessed`), `confidence` and `capReasons`.
 2. `components.included[]`: each assessed component's standard `level` (null when the audit has no real results), its `capReasons`, and `scenarios[]` nested under it. `components.excluded[]` lists every component left out, with the reason.
+
+The repo level and every component's level also carry `status` (`proven`, `unproven`, `undetermined` or `not_assessed`), `provenIn` (where a proven level was shown, such as `container`) and `settleBy` (what would settle a result that isn't proven, with its kind and one sentence). An unproven result is no level: every view says "Unproven on this machine" and the ladder marks nothing.
 3. `components.included[].scenarios[]`: present only for scenarios someone added. `scenarios` at the top says which were added and for which components.
 
 ## The parts
@@ -18,17 +20,18 @@ Until 1.0, `preview` holds the skill's Preview label, quoted at the top of this 
 
 1. **Where am I now.** One screen, written like an executive slide, holding only what the reader acts on:
    - A notice only when the reader should act, phrased as the action (for example "This audit ran without a container runtime, so Level 1 is unproven. Install Docker or Podman, or run it in CI, and rerun the audit."). Integrity, provenance and eval-mode notes are in "About this report" at the end.
-   - The heading: the repo level with its plain meaning, for example "Level 0 of 4, not bootable". It names no activity. One line on what changed since the last audit follows it.
+   - The heading: the repo level with its plain meaning, for example "Level 0 of 4, not bootable", or "Unproven on this machine: no Level 1 check failed, and 3 were blocked here" when this machine couldn't check Level 1; that count is the blocked checks the components hold. It names no activity. One line on what changed since the last audit follows it.
    - The headline: one message.
    - The next move: the first step, what it unlocks, its effort and owner, and its decision.
    - The level ladder with the repo marked on it, what the marked level means and what the next one needs, and the trend of the repo level once there are three or more records. Levels 3 and 4 are labelled experimental: this version doesn't validate them end to end, so Level 2 is its proven top.
    - Three numbers, each compared with what the next level needs; one that isn't measured says how to measure it. The sealed comparisons are in part 5.
    - What isn't assessed and why, with a link to the supported stacks.
    - For a monorepo, each component with its level, change share, trend and what holds it, with the step that moves it.
+   - What the audit assumed, folded: the component map, each command with the file it came from, where the commands ran, and the toolchain versions the doctor printed there.
 2. **Have I improved.** From the second audit on, what changed since the last audit, read from its sealed report: level changes, conditions now met or now failing, and checks that flipped. Then levels over time, what each closed step was expected to deliver against what it did, and the weakened-test check. A first audit says there is nothing to compare yet.
 3. **What moves the needle next.** The one ask first; one line on what the next level still needs; at most three gaps, one plain line each; one ask, the single decision that unblocks the top gap, plus naming an owner when none is recorded; an effort-against-impact view; then each step, numbered as in the roadmap: why it matters, the level it unlocks and the share of recent changes that covers, the metric to watch with its baseline, any verified research, effort and owner role, the decision needed, the evidence it was raised from, and a re-runnable "done when". A "can start now" action follows when some component is already ready.
 4. **Roadmap to the max level.** Each level from 1 to 4 with what it needs and its steps, each with its status (done, in progress, next, can start now, waiting on step N, later), then the steps that serve every level.
-5. **Audit details.** The three numbers with their sealed comparisons, the confidence, the coverage note and the history; exact steps for each action; every check with why it matters, its result with exact counts, and its evidence IDs; what isn't assessed; levels by component, with any scenarios nested under each, and the repo level with its rule; agent PR outcomes; agent assets; how each result was reached; the waivers; the evidence log.
+5. **Audit details.** The three numbers with their sealed comparisons, the confidence, the coverage note and the history; exact steps for each action; every check with why it matters, its result with exact counts, and its evidence IDs; what isn't assessed; levels by component, with any scenarios nested under each, and the repo level with its rule; agent PR outcomes; agent assets; how each result was reached; the waivers; the evidence log. Each evidence row has how long it took and a command that reruns it from a clean checkout of the audited commit. When a step ran again, as in a second replay, the new row is the result and the old one is folded under it as superseded; counts and conditions read only the current rows.
 
 ## How each result was reached
 
@@ -53,7 +56,7 @@ A repo lists findings it has reviewed as false positives in `.agent-readiness/wa
 - `match` is a file and line, or a file for every finding in it. `reason` and `by` are required; `expires` is optional, and an expired waiver is refused. At most 50 waivers count.
 - The audit reads the file from the audited commit only. A copy edited during the audit, by the agent or anyone else, doesn't count, and the report says so. The agent never writes this file.
 - A waived finding stops counting, keeps what it was, and is listed in part 5 with the waiver's reason and reviewer. Part 5 also lists waivers that matched nothing and waivers that were refused. The coverage note counts the waived findings. The waivers are sealed with the audit.
-6. **About this report.** When and where it ran, the seal status, eval-mode notes and the audit record. The footer names `SA_READINESS_SEAL_KEY` for signed reports when the seal is unkeyed.
+6. **About this report.** When and where it ran, the seal status, its integrity in one word (unsigned or keyed), eval-mode notes and the audit record. The footer names `SA_READINESS_SEAL_KEY` for signed reports when the seal is unkeyed.
 
 ## Part 1 rules (enforced by `seal`)
 
