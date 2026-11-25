@@ -1,5 +1,5 @@
 {
-  "purpose": "No root package: a pnpm TypeScript app under apps/, a .NET solution whose test project belongs to it, a second .NET service, and a load-test package under bench/. The app is found with its own pnpm install and its nested lint, type-check, build and test scripts, and the bench package is listed as a satellite, not a component. Its type-check script only loads the code with Node's type stripping, which checks no types, so under rubric 2026-12-beta it passes with the type error the audit plants in src/cart.ts: checkout-web is at Level 1 (it was Level 2 under 2026-11-beta), and making its type-check cover src/cart.ts is the top step, since it would take 56% of recent changes to Level 2. Both .NET parts are now assessed: global.json pins SDK 10.0.100 under the default patch policy, which the image's 10.0.404 doesn't satisfy, so the audit adds 10.0.100 before the restore. commerce-core builds, but its test project references no test SDK or framework, so there is no test to run; identity-dev uses WebApplication without implicit usings and doesn't build. Both are at Level 0, and commerce-core's 33% share sets the repo level. With no test command for either service, the targeted-tests signal is now false.",
+  "purpose": "No root package: a pnpm TypeScript app under apps/, a .NET solution whose test project belongs to it, a second .NET service, and a load-test package under bench/. The app is found with its own pnpm install and its nested lint, type-check, build and test scripts, and the bench package is listed as a satellite, not a component. Its type-check script only loads the code with Node's type stripping, which checks no types, so under rubric 2026-12-beta it passes with the type error the audit plants in src/cart.ts: checkout-web is at Level 1 (it was Level 2 under 2026-11-beta), and making its type-check cover src/cart.ts is the top step, since it would take 56% of recent changes to Level 2. Both .NET parts are now assessed: global.json pins SDK 10.0.100 under the default patch policy, which the image's 10.0.404 doesn't satisfy, so the audit adds 10.0.100 before the restore. commerce-core builds, but its test project references no test SDK or framework, so there is no test to run; identity-dev uses WebApplication without implicit usings and doesn't build. Both are at Level 0, and commerce-core's 30% share sets the repo level (the bench satellite's own changes count toward the shares). With no test command for either service, the targeted-tests signal is now false.",
   "runs": [
     {
       "name": "default",
@@ -20,9 +20,9 @@
       "outcome": "proven",
       "notAssessed": [],
       "shares": {
-        "checkout-web": 0.556,
-        "commerce-core": 0.333,
-        "identity-dev": 0.111
+        "checkout-web": 0.5,
+        "commerce-core": 0.3,
+        "identity-dev": 0.1
       },
       "satellites": [
         "bench/checkout-load"
