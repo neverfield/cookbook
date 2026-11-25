@@ -167,9 +167,11 @@ describe("run plan: the test script CI runs", () => {
   test("carries the literal variables the workflow, job and step set, and none that read secrets or expressions", () => {
     const yml = ["name: ci", "env:", '  DATABASE_URL: "postgresql://user:pass@localhost:5432/dummy"', "  TOKEN: ${{ secrets.TOKEN }}", "jobs:", "  test:", "    env:", "      SKIP_DB_CHECK: 1", "      HOME_DIR: $HOME/x", "    steps:", "      - name: tests", "        env:", "          TZ: UTC", "        run: pnpm test", "      - run: pnpm build"].join("\n");
     const ci = ciCommands(tree({ ".github/workflows/ci.yml": yml }), [".github/workflows/ci.yml"]);
-    assert.deepEqual(ci.map((c) => [c.command, c.env]), [
-      ["pnpm test", { DATABASE_URL: "postgresql://user:pass@localhost:5432/dummy", SKIP_DB_CHECK: "1", TZ: "UTC" }],
-      ["pnpm build", { DATABASE_URL: "postgresql://user:pass@localhost:5432/dummy", SKIP_DB_CHECK: "1" }],
+    const url = ["DATABASE_URL", "postgresql://user:pass@localhost:5432/dummy"];
+    const skip = ["SKIP_DB_CHECK", "1"];
+    assert.deepEqual(ci.map((c) => [c.command, Object.entries(c.env)]), [
+      ["pnpm test", [url, skip, ["TZ", "UTC"]]],
+      ["pnpm build", [url, skip]],
     ]);
     assert.deepEqual(ciEnvFor(ci, ".", "test", "package.json scripts.test"), ci[0].env);
     assert.deepEqual(ciEnvFor(ci, "packages/x", "test", "package.json scripts.test"), {});
