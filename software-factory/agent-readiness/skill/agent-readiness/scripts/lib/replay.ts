@@ -650,6 +650,7 @@ function priorFaults(repo: string, componentId: string): string[] {
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
+const confidence = (x: number) => `${Math.round(x * 1000) / 10}%`;
 
 export async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executor, rubric: Rubric, testCmd: ContractCommand, budget: Budget, log: (s: string) => void): Promise<void> {
   const comp = audit.profile!.components.find((c) => c.id === testCmd.component)!;
@@ -781,9 +782,9 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
     const why = counted.length < rubric.mutation.minForPass ? `; at least ${rubric.mutation.minForPass} must give a clear result` : est.decided >= rule.maxDecided || est.planted >= rule.maxPlanted ? `; the cap of ${rule.maxDecided} was reached` : !cut && !stalledOut ? "; no more places to plant a fault" : "";
     summary =
       est.verdict === "strong"
-        ? `${share}: strong, at least ${pct(est.low)} with ${pct(rule.strongConfidence)} confidence (tried: ${operators})${scopedNote}${cutNote}${missedNote}`
+        ? `${share}: strong, at least ${pct(est.low)} with ${confidence(rule.strongConfidence)} confidence (tried: ${operators})${scopedNote}${cutNote}${missedNote}`
         : est.verdict === "weak"
-          ? `${share}: weak, at most ${pct(est.high)} with ${pct(rule.weakConfidence)} confidence${scopedNote}${cutNote}${missedNote}`
+          ? `${share}: weak, at most ${pct(est.high)} with ${confidence(rule.weakConfidence)} confidence${scopedNote}${cutNote}${missedNote}`
           : `${share}: inconclusive, between ${pct(est.low)} and ${pct(est.high)}, too few to tell strong tests from weak ones${why}${scopedNote}${cutNote}${missedNote}`;
   } else {
     const cutNote = (cut ? `; the time budget cut off ${cut} of ${sites.length}` : "") + (stalledOut ? `; ${stalledOut} weren't run after two runs with planted faults timed out` : "");
