@@ -37,7 +37,8 @@ export interface Executor {
   root: string;
   // imageUser: the repo's declared setup, run as its image's own user rather than an ordinary one.
   // registry: a setup step (the doctor or an install), the only commands the registry variables reach.
-  exec(command: string, cwd: string, timeoutSec: number, opts?: { imageUser?: boolean; registry?: boolean }): Promise<RunOutcome>;
+  // env: variables the command runs with, such as the literal ones a CI workflow sets for it.
+  exec(command: string, cwd: string, timeoutSec: number, opts?: { imageUser?: boolean; registry?: boolean; env?: Record<string, string> }): Promise<RunOutcome>;
   offline(): boolean;
   // Turns the network back on after offline(), for one experiment; false when it can't.
   online?(): boolean;
@@ -139,7 +140,7 @@ export function hostExecutor(root: string, registryEnv: string[], inheritEnv: bo
     image: null,
     imageSource: null,
     root,
-    exec: (command, cwd, timeoutSec, opts) => (SUDO.test(command) ? Promise.resolve({ exitCode: null, timedOut: false, durationMs: 0, output: `readiness: ${SUDO_REFUSED}` }) : runCommand(command, join(root, cwd), opts?.registry ? setupEnv : env, timeoutSec)),
+    exec: (command, cwd, timeoutSec, opts) => (SUDO.test(command) ? Promise.resolve({ exitCode: null, timedOut: false, durationMs: 0, output: `readiness: ${SUDO_REFUSED}` }) : runCommand(command, join(root, cwd), { ...(opts?.registry ? setupEnv : env), ...opts?.env }, timeoutSec)),
     offline: () => false,
     networkOff: null,
     close: () => {},
@@ -436,7 +437,7 @@ export async function runContract(
     }
     const watched = cmd.kind === "lint" || cmd.kind === "typecheck" ? snapshot(ex.root, opts.tree ?? ex.root, cmd.cwd) : null;
     const limit = capped(opts.budget, cmd.component, cmd.timeoutSec);
-    const out = await ex.exec(cmd.command, cmd.cwd, limit.sec, { imageUser: cmd.source.startsWith(".cursor/environment.json"), registry: cmd.kind === "doctor" || cmd.kind === "install" });
+    const out = await ex.exec(cmd.command, cmd.cwd, limit.sec, { imageUser: cmd.source.startsWith(".cursor/environment.json"), registry: cmd.kind === "doctor" || cmd.kind === "install", ...(cmd.env ? { env: cmd.env } : {}) });
     charge(opts.budget, cmd.component, out.durationMs);
     if (out.timedOut && limit.byBudget) return cutOff();
     // A check that changes the code it checks has to fail, and the code goes back for the steps after it.
@@ -499,13 +500,15 @@ export async function runContract(
 // explains, runs once more with the network on. A pass makes the failure the environment's; a second
 // failure makes it the repo's. The network goes back off for the steps after.
 async function networkExperiment(ex: Executor, offline: PhaseResult[], attempt: (cmd: ContractCommand) => Promise<PhaseResult | null>, push: (r: PhaseResult) => void): Promise<void> {
-  const failed = offline.filter((r) => r.cmd.kind === "test" && r.status === "fail" && !r.blocked && rerunsOnline(attribute(phaseAttributionInput(ex, r), ex.imageSource)));
+  const verdictOf = (r: PhaseResult) => r.attribution ?? attribute(phaseAttributionInput(ex, r), ex.imageSource);
+  const latest = [...new Map(offline.map((r) => [r.cmd.id, r])).values()];
+  const failed = latest.filter((r) => r.cmd.kind === "test" && r.status === "fail" && !r.blocked && rerunsOnline(verdictOf(r)));
   if (!failed.length || !ex.online?.()) return;
   try {
     for (const r of failed) {
       const again = await attempt(r.cmd);
       if (!again || again.status === "not_run") continue;
-      const first = attribute(phaseAttributionInput(ex, r), ex.imageSource);
+      const first = verdictOf(r);
       r.attribution = networkVerdict(first, again.status === "pass", again.diagnosis?.detail ?? "non-zero exit");
       push({ ...again, networkOn: true, attribution: again.status === "fail" ? r.attribution : undefined, note: again.status === "pass" ? NETWORK_RERUN_PASSED : "failed again with the network on" });
     }
@@ -539,7 +542,9 @@ async function toolExperiment(ex: Executor, offline: PhaseResult[], attempt: (cm
     const again = await attempt(r.cmd);
     if (!again || again.status === "not_run") continue;
     r.attribution = { verdict: "environment", basis: "experiment", changed: "tool", detail: `${tool} was missing from the image the audit picked` };
-    push({ ...again, note: `${again.status === "pass" ? "passed" : "ran"} once the audit added ${tool} to its image` });
+    // Failing with the tool the audit added says nothing yet about the repo: the version it added may differ from the one the repo's CI runs.
+    const after: Attribution | undefined = again.status === "fail" ? { verdict: "undetermined", basis: "experiment", changed: "tool", detail: `the tests failed with the ${tool} the audit added to its image, whose version may differ from the one the repo's CI uses` } : undefined;
+    push({ ...again, attribution: after, note: `${again.status === "pass" ? "passed" : "ran"} once the audit added ${tool} to its image` });
   }
 }
 
@@ -768,7 +773,8 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   // runs stall whatever the fault, so the rest aren't run.
   let stalls = 0;
   let stalledOut = 0;
-  const fresh = ex.execFresh ?? ex.exec;
+  const raw = ex.execFresh ?? ex.exec;
+  const fresh = (command: string, cwd: string, timeoutSec: number) => raw(command, cwd, timeoutSec, testCmd.env ? { env: testCmd.env } : undefined);
   const runs = rubric.mutation.caughtRuns ?? rubric.mutation.flakeRuns;
   const decided = () => mutants.filter((m) => m.result === "caught" || m.result === "survived");
   const estimate = () => faultEstimate(decided().filter((m) => m.result === "caught").length, decided().length, rule!, rubric.mutation.minForPass, mutants.filter((m) => m.result !== "not_run").length, mutants.filter((m) => m.result !== "not_run" && prior.includes(m.faultId!)).length);
@@ -933,7 +939,7 @@ async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Exe
   try {
     for (const c of typechecks) {
       const limit = capped(budget, comp.id, c.timeoutSec);
-      const out = await fresh(c.command, c.cwd, limit.sec);
+      const out = await fresh(c.command, c.cwd, limit.sec, c.env ? { env: c.env } : undefined);
       charge(budget, comp.id, out.durationMs);
       if (out.timedOut) {
         stalled = limit.byBudget ? BUDGET_OUT : `\`${c.command}\` timed out with the planted type error`;
@@ -950,7 +956,7 @@ async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Exe
   // The same command passing again without the line shows the failure came from the planted error.
   for (const c of caught) {
     const limit = capped(budget, comp.id, c.timeoutSec);
-    const again = await fresh(c.command, c.cwd, limit.sec);
+    const again = await fresh(c.command, c.cwd, limit.sec, c.env ? { env: c.env } : undefined);
     charge(budget, comp.id, again.durationMs);
     if (again.exitCode !== 0 || again.timedOut) return record("not_run", `the type-check failed with a type error planted in ${site.file}, but didn't pass again once it was removed, so the failure can't be pinned on it`);
   }
@@ -1385,7 +1391,7 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
         }
         const plant = async (): Promise<void> => {
           const limit = capped(budget, comp, testRes.cmd.timeoutSec);
-          const second = overBudget(budget, comp) || budgetLeftSec(budget, comp) < 1 ? null : await ex.exec(testRes.cmd.command, testRes.cmd.cwd, limit.sec);
+          const second = overBudget(budget, comp) || budgetLeftSec(budget, comp) < 1 ? null : await ex.exec(testRes.cmd.command, testRes.cmd.cwd, limit.sec, testRes.cmd.env ? { env: testRes.cmd.env } : undefined);
           if (second) charge(budget, comp, second.durationMs);
           if (!second || (second.timedOut && limit.byBudget)) {
             addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "faults weren't planted: the time budget ran out first", blocked: BUDGET_OUT });

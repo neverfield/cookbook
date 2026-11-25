@@ -133,6 +133,8 @@ export interface ContractCommand {
   // language's convention. confidence: declared by the repo, derived from what it declares, or guessed.
   tier?: CommandTier;
   confidence?: "declared" | "derived" | "guessed";
+  // Literal variables the repo's CI workflow sets for the step that runs this command's script.
+  env?: Record<string, string>;
 }
 
 export type CommandTier = "override" | "ci" | "environment" | "task_runner" | "manifest" | "convention";

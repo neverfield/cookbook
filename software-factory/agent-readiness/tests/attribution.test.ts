@@ -7,7 +7,7 @@ import { attribute, networkVerdict, rerunsOnline } from "../skill/agent-readines
 import { toolSetup } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { diagnose } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { componentLevel, repoLevel, statesOf } from "../skill/agent-readiness/scripts/lib/levels.ts";
-import { ciCommands, ciTestScript, scriptCalled, testScriptOf } from "../skill/agent-readiness/scripts/lib/plan/ci.ts";
+import { ciCommands, ciEnvFor, ciTestScript, scriptCalled, testScriptOf } from "../skill/agent-readiness/scripts/lib/plan/ci.ts";
 import { ownTestFiles } from "../skill/agent-readiness/scripts/lib/plan/test-files.ts";
 import { DELEGATES } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { addToolCommand } from "../skill/agent-readiness/scripts/lib/replay.ts";
@@ -163,6 +163,17 @@ describe("run plan: the test script CI runs", () => {
     assert.deepEqual(ciTestScript(ciCommands(dir, [".github/workflows/ci.yml"]), ".", scripts, DELEGATES), { script: "test:scripts", called: "validate:guards", source: ".github/workflows/ci.yml:9" });
     assert.equal(ciTestScript(ciCommands(dir, [".github/workflows/ci.yml"]), "packages/other", scripts, DELEGATES), null);
   });
+
+  test("carries the literal variables the workflow, job and step set, and none that read secrets or expressions", () => {
+    const yml = ["name: ci", "env:", '  DATABASE_URL: "postgresql://user:pass@localhost:5432/dummy"', "  TOKEN: ${{ secrets.TOKEN }}", "jobs:", "  test:", "    env:", "      SKIP_DB_CHECK: 1", "      HOME_DIR: $HOME/x", "    steps:", "      - name: tests", "        env:", "          TZ: UTC", "        run: pnpm test", "      - run: pnpm build"].join("\n");
+    const ci = ciCommands(tree({ ".github/workflows/ci.yml": yml }), [".github/workflows/ci.yml"]);
+    assert.deepEqual(ci.map((c) => [c.command, c.env]), [
+      ["pnpm test", { DATABASE_URL: "postgresql://user:pass@localhost:5432/dummy", SKIP_DB_CHECK: "1", TZ: "UTC" }],
+      ["pnpm build", { DATABASE_URL: "postgresql://user:pass@localhost:5432/dummy", SKIP_DB_CHECK: "1" }],
+    ]);
+    assert.deepEqual(ciEnvFor(ci, ".", "test", "package.json scripts.test"), ci[0].env);
+    assert.deepEqual(ciEnvFor(ci, "packages/x", "test", "package.json scripts.test"), {});
+  });
 });
 
 describe("the scan counts each component's own test files", () => {
@@ -181,7 +192,7 @@ describe("tool pins the audit honors", () => {
     const dir = tree({ "package.json": JSON.stringify({ name: "x", engines: { pnpm: "12.3.4" } }), "pnpm-lock.yaml": "" });
     const profile = { packageManager: "pnpm", components: [{ id: "x", path: ".", language: "ts", manifest: "package.json", scripts: {}, changes: 1, changeShare: 1, assessed: true, packageManager: "pnpm" }] } as unknown as Profile;
     const setup = toolSetup(profile, dir);
-    assert.deepEqual(setup.map((t) => [t.spec, t.install]), [["pnpm@12.3.4", "corepack prepare 'pnpm@12.3.4' --activate"]]);
+    assert.deepEqual(setup.map((t) => [t.spec, t.install]), [["pnpm@12.3.4", "COREPACK_HOME=/tmp/home/.cache/node/corepack corepack prepare 'pnpm@12.3.4' --activate"]]);
     assert.match(setup[0].present!, /corepack pnpm --version/);
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", packageManager: "pnpm@12.3.4", engines: { pnpm: "12.3.4" } }));
     assert.deepEqual(toolSetup(profile, dir), []);

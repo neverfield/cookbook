@@ -10,6 +10,9 @@ export interface CiCommand {
   line: number;
   cwd: string;
   command: string;
+  // The literal variables the workflow, its job and the step set; values that read secrets,
+  // expressions or other variables are left out.
+  env: Record<string, string>;
 }
 
 const RUN = /^(\s*)(-\s+)?run:\s*(.*)$/;
@@ -25,11 +28,53 @@ function cleanDir(dir: string): string | null {
   return n === "" || n === "." || n === "./" ? "." : n.replace(/^\.\//, "");
 }
 
-// The run step's working directory: its own, or its job's `defaults.run.working-directory`.
-function stepDir(lines: string[], at: number, keyCol: number): string | null {
+const ENV = /^(\s*)(?:-\s+)?env:\s*$/;
+const VAR = /^\s*([A-Za-z_][A-Za-z0-9_]*):\s*(.*?)\s*$/;
+
+// The literal entries of the `env:` map that starts on line `at`.
+function envMap(lines: string[], at: number, col: number): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (let j = at + 1; j < lines.length; j++) {
+    const l = lines[j];
+    if (!l.trim() || l.trim().startsWith("#")) continue;
+    if (indentOf(l) <= col) break;
+    const m = l.match(VAR);
+    if (!m) continue;
+    const value = unquote(m[2].replace(/\s+#.*$/, ""));
+    if (value && !/[$`|>]/.test(value.charAt(0)) && !value.includes("$")) out[m[1]] = value;
+  }
+  return out;
+}
+
+// The variables a run step gets: the workflow's, then its job's, then its own.
+function stepEnv(lines: string[], at: number, keyCol: number): Record<string, string> {
+  const start = stepStart(lines, at, keyCol);
+  let job = start;
+  while (job > 0 && !/^ {2}[\w-]+:\s*$/.test(lines[job])) job--;
+  const env: Record<string, string> = {};
+  lines.forEach((l, i) => {
+    if (/^env:\s*$/.test(l)) Object.assign(env, envMap(lines, i, 0));
+  });
+  for (let j = job + 1; j < start; j++) if (/^ {4}env:\s*$/.test(lines[j])) Object.assign(env, envMap(lines, j, 4));
+  for (let j = start; j < lines.length; j++) {
+    if (j > start && lines[j].trim() && indentOf(lines[j]) <= keyCol - 2) break;
+    const m = lines[j].match(ENV);
+    if (m && (indentOf(lines[j]) === keyCol || j === start)) Object.assign(env, envMap(lines, j, keyCol));
+  }
+  return env;
+}
+
+function stepStart(lines: string[], at: number, keyCol: number): number {
   let start = at;
   const dashCol = keyCol - 2;
   while (start > 0 && !(indentOf(lines[start]) === dashCol && /^\s*-\s/.test(lines[start]))) start--;
+  return start;
+}
+
+// The run step's working directory: its own, or its job's `defaults.run.working-directory`.
+function stepDir(lines: string[], at: number, keyCol: number): string | null {
+  const start = stepStart(lines, at, keyCol);
+  const dashCol = keyCol - 2;
   for (let j = start; j < lines.length; j++) {
     if (j > start && lines[j].trim() && indentOf(lines[j]) <= dashCol) break;
     const m = lines[j].match(WORKDIR);
@@ -78,6 +123,7 @@ export function ciCommands(tree: string, ciFiles: string[]): CiCommand[] {
       const keyCol = m[1].length + (m[2]?.length ?? 0);
       const dir = stepDir(lines, i, keyCol);
       if (dir === null) return;
+      const env = stepEnv(lines, i, keyCol);
       for (const c of stepCommands(lines, i, keyCol, m[3])) {
         let cwd = dir;
         for (const part of c.text.split(/\s*(?:&&|;)\s*/).filter(Boolean)) {
@@ -88,7 +134,7 @@ export function ciCommands(tree: string, ciFiles: string[]): CiCommand[] {
             cwd = next;
             continue;
           }
-          out.push({ file, line: c.line, cwd, command: part });
+          out.push({ file, line: c.line, cwd, command: part, env });
         }
       }
     });
@@ -137,4 +183,12 @@ export function ciTestScript(ci: CiCommand[], path: string, scripts: Record<stri
       return script ? [{ script, called: called!, source: `${c.file}:${c.line}` }] : [];
     });
   return found.find((f) => /^test(?:$|[:.-])/.test(f.script)) ?? found[0] ?? null;
+}
+
+// The variables CI sets for the step that runs a component's test command: the step its source line
+// names, or a step in the component's folder that calls the same script.
+export function ciEnvFor(ci: CiCommand[], path: string, script: string | null, source: string): Record<string, string> {
+  const at = source.match(/^(.+):(\d+)$/);
+  const step = (at ? ci.find((c) => c.file === at[1] && c.line === Number(at[2]) && c.cwd === path) : undefined) ?? (script ? ci.find((c) => c.cwd === path && scriptCalled(c.command) === script) : undefined);
+  return step?.env ?? {};
 }

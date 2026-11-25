@@ -7,8 +7,9 @@ import type { Rubric } from "./rubric.ts";
 import { readPackageJson } from "./languages/node.ts";
 import type { CommandKind, Component, ContractCommand, Profile, SafetyFinding } from "./types.ts";
 import { exists, fail, listFiles, readText, shellQuote } from "./util.ts";
-import { ciCommands, ciTestScript } from "./plan/ci.ts";
+import { ciCommands, ciEnvFor, ciTestScript, scriptCalled } from "./plan/ci.ts";
 import { DELEGATES } from "./profile.ts";
+import { HOME_DIR } from "./container.ts";
 
 export { POETRY_ENV, VENV, poetryVersion, testGroups };
 export type { ToolchainCopy, ToolSetup };
@@ -279,6 +280,21 @@ export function discoverContract(profile: Profile, tree: string, rubric: Rubric,
       if (make) cmds.push({ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: c.path, command: `make ${make.target}`, source: `${makefile}:${make.line}`, reason: `the Makefile's ${make.target} target runs the tests`, timeoutSec: timeout, tier: "task_runner", confidence: "derived" });
     }
   }
+  // From 2026-12-beta a Node component's commands run with the literal variables CI sets for the step
+  // that runs its tests, such as a placeholder database URL its build and tests read.
+  if (rubric.attribution) {
+    for (const c of assessed.filter((x) => !hooked(x) && nodeLang(x))) {
+      const test = cmds.find((k) => k.component === c.id && k.kind === "test");
+      if (!test) continue;
+      const env = ciEnvFor(ci(), c.path, scriptCalled(test.command), test.source);
+      if (!Object.keys(env).length) continue;
+      const names = Object.keys(env).sort().join(", ");
+      for (const k of cmds.filter((x) => x.component === c.id || (c.path === "." && x.component === "*" && x.kind !== "doctor"))) {
+        k.env = { ...env, ...k.env };
+        if (!k.reason.includes("CI sets")) k.reason += `, with the variables CI sets for it (${names})`;
+      }
+    }
+  }
   // A workspace whose tests run from the root (`"test": "vitest"`) has packages with no test script
   // of their own. Each package that has test files gets the root run scoped to its folder, so it is
   // credited with its own tests and one failing package doesn't fail the others.
@@ -490,7 +506,9 @@ export function toolSetup(profile: Profile, tree: string, only?: Set<string>): T
     if (dir === undefined) continue;
     const pkg = readPackageJson(join(tree, dir));
     const pin = pkg?.packageManager ? null : pkg?.engines?.[pm]?.trim().match(/^=?v?(\d+\.\d+\.\d+)$/)?.[1];
-    if (pin) out.push({ tool: pm, spec: `${pm}@${pin}`, install: `corepack prepare ${shellQuote(`${pm}@${pin}`)} --activate`, present: `test "$(corepack ${pm} --version 2>/dev/null)" = ${pin}` });
+    // Setup runs under its own home; the repo's commands read corepack's default from theirs.
+    const home = `COREPACK_HOME=${HOME_DIR}/.cache/node/corepack`;
+    if (pin) out.push({ tool: pm, spec: `${pm}@${pin}`, install: `${home} corepack prepare ${shellQuote(`${pm}@${pin}`)} --activate`, present: `test "$(${home} corepack ${pm} --version 2>/dev/null)" = ${pin}` });
   }
   const poetryDir = pms.get("poetry");
   if (poetryDir !== undefined) {

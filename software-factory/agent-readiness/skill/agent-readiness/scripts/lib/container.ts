@@ -253,10 +253,11 @@ export class ContainerSession {
   }
 
   // The repo's own declared setup runs as its image's user; everything else as the ordinary user.
-  async exec(command: string, cwd: string, timeoutSec: number, opts: { imageUser?: boolean; registry?: boolean } = {}): Promise<RunOutcome> {
+  async exec(command: string, cwd: string, timeoutSec: number, opts: { imageUser?: boolean; registry?: boolean; env?: Record<string, string> } = {}): Promise<RunOutcome> {
     const user = opts.imageUser ? null : this.user;
     const execId = randomHex(6);
-    const argv = [this.runtime.bin, ...execArgs(this.name, command, cwd, user, opts.registry ? this.registryEnv : [], execId)].map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(" ");
+    const env = [...(opts.registry ? this.registryEnv : []), ...Object.entries(opts.env ?? {}).map(([k, v]) => `${k}=${v}`)];
+    const argv = [this.runtime.bin, ...execArgs(this.name, command, cwd, user, env, execId)].map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(" ");
     let out = await runCommand(argv, process.cwd(), process.env as Record<string, string>, timeoutSec);
     if (out.timedOut) {
       const idle = spawnSync(this.runtime.bin, ["exec", ...(user ? ["-u", user] : []), this.name, "bash", "-c", idleCommand(execId)], { encoding: "utf8", timeout: 15000 });
