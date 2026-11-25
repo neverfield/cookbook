@@ -53,8 +53,9 @@ export interface Rubric {
   // From 2026-12-beta: estimate replaces killRate with the sequential estimate in mutate.ts;
   // caughtRuns is how often a caught fault runs (flakeRuns otherwise); scoped runs each fault against
   // only the tests that reach its file, where the runner takes paths; identity "fault" ranks each
-  // fault by its own identity and replants the last sealed audit's faults first.
-  mutation: { perComponent: number; minForPass: number; killRate?: number; seedFrom?: "audit" | "code"; languages: string[]; operators: string[]; runTimeoutSec: number; flakeRuns: number; targeting: string; estimate?: EstimateRule; caughtRuns?: number; scoped?: boolean; identity?: "fault" };
+  // fault by its own identity and replants the last sealed audit's faults first; timeoutFactor and
+  // minRunSec scale a run with a planted fault from the clean run's duration.
+  mutation: { perComponent: number; minForPass: number; killRate?: number; seedFrom?: "audit" | "code"; languages: string[]; operators: string[]; runTimeoutSec: number; flakeRuns: number; targeting: string; estimate?: EstimateRule; caughtRuns?: number; scoped?: boolean; identity?: "fault"; timeoutFactor?: number; minRunSec?: number };
   budgets: { commandTimeoutSec: number; componentMinutes: number; totalMinutes: number };
   // blockingSecretClasses (from 2026-12-beta): the secret classes in secrets.ts that block Level 2
   // when found in shipped code; the others are listed for review. Without it, every class blocks.

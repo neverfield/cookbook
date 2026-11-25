@@ -55,7 +55,7 @@ describe("rubric 2026-12-beta", () => {
       delete c.proof;
       delete c.safety;
       delete c.severities;
-      const { killRate: _k, estimate: _e, caughtRuns: _r, scoped: _s, identity: _i, ...mutation } = r.mutation;
+      const { killRate: _k, estimate: _e, caughtRuns: _r, scoped: _s, identity: _i, timeoutFactor: _t, minRunSec: _m, ...mutation } = r.mutation;
       c.mutation = mutation as typeof r.mutation;
       c.outcomes = { ...r.outcomes, revertDays: undefined, metrics: r.outcomes.metrics.filter((m) => m !== "reverted_within_days") };
       const { "commands:canary": _c, drive: _d, "safety:secret": _s2, ...templates } = r.templates;

@@ -654,9 +654,14 @@ function priorFaults(repo: string, componentId: string, cap: number): string[] {
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const confidence = (x: number) => `${Math.round(x * 1000) / 10}%`;
 
-export async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executor, rubric: Rubric, testCmd: ContractCommand, budget: Budget, log: (s: string) => void): Promise<void> {
+// `cleanMs`: the longest clean run of the test command. From 2026-12-beta a run with a planted fault
+// gets mutation.timeoutFactor times it, at least mutation.minRunSec and never more than the fixed limit,
+// so a fault that makes the suite hang costs seconds rather than the whole limit.
+export async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executor, rubric: Rubric, testCmd: ContractCommand, budget: Budget, log: (s: string) => void, cleanMs?: number): Promise<void> {
   const comp = audit.profile!.components.find((c) => c.id === testCmd.component)!;
   const runSec = faultRunSec(rubric, comp);
+  const factor = rubric.mutation.timeoutFactor;
+  const faultSec = factor && cleanMs ? Math.min(runSec, Math.max(rubric.mutation.minRunSec ?? 30, Math.ceil((factor * cleanMs) / 1000))) : runSec;
   // Used only when the clean tree passes it, so a repo's own type errors don't discard every fault.
   let probe = compileProbe(audit, ex, comp);
   if (probe) {
@@ -694,7 +699,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
     const scoped = tests ? scopedCommand(testCmd.command, testCmd.cwd, tests) : null;
     if (!scoped) return testCmd.command;
     if (!scopes.has(scoped)) {
-      const clean = await fresh(scoped, testCmd.cwd, capped(budget, comp.id, runSec).sec);
+      const clean = await fresh(scoped, testCmd.cwd, capped(budget, comp.id, faultSec).sec);
       charge(budget, comp.id, clean.durationMs);
       const counts = countTests(audit.profile, comp.id, clean.output);
       scopes.set(scoped, clean.exitCode === 0 && !clean.timedOut && (counts === null || counts.total > 0));
@@ -741,7 +746,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
         }
       }
       for (let run = 0; run < runs && result !== "discarded"; run++) {
-        const limit = capped(budget, comp.id, runSec);
+        const limit = capped(budget, comp.id, faultSec);
         const out = await fresh(command, testCmd.cwd, limit.sec);
         charge(budget, comp.id, out.durationMs);
         codes.push(out.exitCode ?? -1);
@@ -1311,7 +1316,7 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
           continue;
         }
         try {
-          await plantFaults(audit, repo, tree, ex, rubric, testRes.cmd, budget, opts.log);
+          await plantFaults(audit, repo, tree, ex, rubric, testRes.cmd, budget, opts.log, Math.max(second.durationMs, testRes.outcome?.durationMs ?? 0));
         } catch (e) {
           const why = (e as Error).message.split("\n")[0].slice(0, 200);
           opts.log(`  faults in ${comp}: couldn't be planted (${why}); the other results are kept`);

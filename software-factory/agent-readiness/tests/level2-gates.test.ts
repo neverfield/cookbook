@@ -282,6 +282,23 @@ describe("planting faults within the budget", () => {
     assert.match(together.blocked ?? "", /kept timing out/);
   });
 
+  test("a run with a planted fault gets ten times the clean run, at least 30 seconds, never more than the fixed limit", async () => {
+    const limits: number[] = [];
+    const repo = gitRepo(files);
+    const audit = faultAudit(repo, "2026-12-beta");
+    const ex = fakeExecutor(repo, 1000, () => true);
+    const exec = ex.exec;
+    ex.exec = (c, cwd, sec, o) => (limits.push(sec), exec(c, cwd, sec, o));
+    await plantFaults(audit, repo, repo, ex, next, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {}, 2000);
+    assert.deepEqual([...new Set(limits)], [30]);
+    limits.length = 0;
+    await plantFaults(faultAudit(repo, "2026-12-beta"), repo, repo, ex, next, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {}, 12_000);
+    assert.deepEqual([...new Set(limits)], [120]);
+    limits.length = 0;
+    await plantFaults(faultAudit(repo, "2026-12-beta"), repo, repo, ex, next, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {}, 90_000);
+    assert.deepEqual([...new Set(limits)], [next.mutation.runTimeoutSec]);
+  });
+
   test("each fault's id is kept with its hidden details, not in the draft", async () => {
     const repo = gitRepo(files);
     const audit = faultAudit(repo, "2026-12-beta");
