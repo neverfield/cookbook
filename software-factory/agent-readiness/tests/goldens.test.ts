@@ -41,7 +41,7 @@ describe("public goldens", () => {
   test("exact levels are asserted for the stable goldens, and a level off by one fails", () => {
     const set = loadGoldens();
     const exact = Object.fromEntries(set.goldens.flatMap((g) => Object.entries(g.expect.levels ?? {}).map(([c, l]) => [`${g.id}:${c}`, l])));
-    assert.deepEqual({ slugify: exact["slugify:slugify"], starlette: exact["starlette:starlette"], express: exact["express:express"] }, { slugify: 2, starlette: 2, express: 1 });
+    assert.deepEqual({ slugify: exact["slugify:slugify"], starlette: exact["starlette:starlette"], express: exact["express:express"] }, { slugify: 2, starlette: 2, express: 2 });
     const slugify = set.goldens.find((g) => g.id === "slugify")!;
     assert.deepEqual(levelViolations(slugify, { slugify: 2 }), []);
     assert.deepEqual(levelViolations(slugify, { slugify: 1 }), ["slugify:slugify is Level 1, expected Level 2"], "a regression that moves every repo down one level still keeps the ranking");

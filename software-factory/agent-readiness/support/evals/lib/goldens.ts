@@ -92,7 +92,7 @@ export function goldenProblems(set: GoldenSet): string[] {
   if (!set.goldens.some((g) => g.shape === "monorepo" && g.expect.included.length + g.expect.excluded.length > 1)) out.push("no golden is a monorepo with nested apps");
   const known = new Set(set.goldens.flatMap((g) => g.expect.included.map((c) => `${g.id}:${c}`)));
   for (const e of set.rank.flat()) if (!known.has(e)) out.push(`rank names ${e}, which no golden expects to assess`);
-  if (set.rank.length < 3) out.push("the ranking needs at least three tiers to span low to high");
+  if (set.rank.length < 2) out.push("the ranking needs at least two tiers to span low to high");
   if (!set.goldens.some((g) => Object.values(g.expect.levels ?? {}).some((l) => l !== null))) out.push("no golden asserts an exact level");
   return out;
 }

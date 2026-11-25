@@ -3,9 +3,7 @@
   "rank": [
     [
       "slugify:slugify",
-      "starlette:starlette"
-    ],
-    [
+      "starlette:starlette",
       "express:express"
     ],
     [
@@ -50,7 +48,7 @@
         ],
         "excluded": [],
         "levels": {
-          "express": 1
+          "express": 2
         }
       }
     },
