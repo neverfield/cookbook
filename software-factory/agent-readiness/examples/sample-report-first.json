@@ -9,7 +9,7 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "2f1479f6539941d078b8e949752e12df9ca0fee1f1ffd9116b8e0f515d5ea7bf",
+    "scriptsDigest": "ce596c543bbf8d13f36b9fce3276ba31d411afcfaf12dda5a6e41f63ec3b6263",
     "seedPinned": true,
     "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
@@ -1021,7 +1021,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "2f1479f65399"
+        "value": "ce596c543bbf"
       },
       {
         "label": "Planted faults",
@@ -1030,6 +1030,10 @@
       {
         "label": "Replay environment",
         "value": "docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here"
+      },
+      {
+        "label": "Environment self-check",
+        "value": "passed: mount visible, mount writable, run user, git identity, network cut"
       },
       {
         "label": "Stored in",
