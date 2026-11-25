@@ -43,9 +43,9 @@ export interface VmDetection {
 }
 
 // Turns detection off, so a run on a cloud VM reads as host mode. It can only take proof away,
-// never give it: the test suite sets it to stay the same on every machine. It isn't an
-// SA_READINESS_ setting, which the eval grader drops from its own re-audits.
-export const VM_DETECT_ENV = "SA_VM_DETECT";
+// never give it: the test suite and the eval grader's re-audits set it, so a graded result is the
+// same on every machine.
+export const VM_DETECT_ENV = "SA_READINESS_VM_DETECT";
 
 // A disposable cloud VM is detected, never declared: a flag or a variable the agent could set
 // would let any laptop prove Level 1. A Cursor Cloud Agent runs on a Linux VM made for the run,

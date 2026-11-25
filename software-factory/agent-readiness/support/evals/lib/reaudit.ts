@@ -107,6 +107,9 @@ function graderEnv(c: EvalCase, now: string): NodeJS.ProcessEnv {
   Object.assign(env, caseEnv(c));
   env.SA_READINESS_EVAL_SEED = graderSeed();
   env.SA_READINESS_SEAL_KEY = graderKey();
+  // The grader's audits prove only where every host can: never on a disposable VM this host
+  // happens to be, so the same control grades the same on a cloud VM and on a CI runner.
+  env.SA_READINESS_VM_DETECT = "off";
   Object.assign(env, { GIT_NO_REPLACE_OBJECTS: "1", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" });
   env.GIT_AUTHOR_NAME = env.GIT_COMMITTER_NAME = "Contributor A";
   env.GIT_AUTHOR_EMAIL = env.GIT_COMMITTER_EMAIL = "a@example.com";
