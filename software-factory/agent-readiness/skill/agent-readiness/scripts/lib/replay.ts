@@ -751,6 +751,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
           result = "not_run";
           break;
         }
+        stalls = 0;
         if (out.exitCode === 0 && !((countTests(audit.profile, comp.id, out.output)?.failed ?? 0) > 0)) {
           result = run === 0 ? "survived" : "discarded";
           break;

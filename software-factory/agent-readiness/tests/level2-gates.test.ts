@@ -181,7 +181,7 @@ describe("scoped fault runs", () => {
 
 // Runs every command instantly, reporting `durationMs` and the outcome `caught(i)` gives for the i-th
 // run with a planted fault.
-function fakeExecutor(root: string, durationMs: number, caught: (i: number) => boolean): Executor {
+function fakeExecutor(root: string, durationMs: number, caught: (i: number) => boolean, timesOut: (i: number) => boolean = () => false): Executor {
   let i = 0;
   return {
     where: "container",
@@ -190,7 +190,9 @@ function fakeExecutor(root: string, durationMs: number, caught: (i: number) => b
     imageSource: "audit",
     root,
     async exec() {
-      const c = caught(i++);
+      const n = i++;
+      if (timesOut(n)) return { exitCode: null, timedOut: true, durationMs, output: "" };
+      const c = caught(n);
       return { exitCode: c ? 1 : 0, timedOut: false, durationMs, output: c ? "# pass 4\n# fail 1\n" : "# pass 5\n# fail 0\n" };
     },
     offline: () => true,
@@ -264,6 +266,20 @@ describe("planting faults within the budget", () => {
     const details = JSON.parse(readFileSync(join(repo, "..", "mutants.json"), "utf8")) as { faultId: string }[];
     assert.deepEqual(details.slice(0, 5).map((d) => d.faultId), named.map(faultId), "the named faults go first");
     assert.match(ev.summary, /5 of them planted again from the last audit/);
+  });
+
+  test("two runs with planted faults that time out stop planting only when they come in a row", async () => {
+    const run = async (timesOut: (i: number) => boolean) => {
+      const repo = gitRepo(files);
+      const audit = faultAudit(repo, "2026-12-beta");
+      await plantFaults(audit, repo, repo, fakeExecutor(repo, 1000, () => true, timesOut), next, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {});
+      return audit.evidence.find((e) => e.condition === "faults")!;
+    };
+    const apart = await run((i) => i === 0 || i === 4);
+    assert.deepEqual([apart.estimate?.decided, apart.estimate?.verdict, apart.blocked], [5, "strong", undefined], apart.summary);
+    const together = await run((i) => i === 1 || i === 2);
+    assert.equal(together.estimate?.decided, 1);
+    assert.match(together.blocked ?? "", /kept timing out/);
   });
 
   test("each fault's id is kept with its hidden details, not in the draft", async () => {
