@@ -142,11 +142,11 @@ Effort against impact (impact is the share of recent changes an action unblocks)
 ### Steps for Make worker's tests catch wrong behavior (step 5)
 
 - **What to watch:** Share of agent PRs touching worker where a reviewer requested changes. Baseline: 2 of 3 (too few for a rate), Sep 27 to Oct 27, 2026. Now: 50% (3 of 6), Oct 31 to Nov 30, 2026.
-- **Done when:** An audit after the change catches at least 60% of the faults it plants in worker.
+- **Done when:** An audit after the change rates worker's tests strong: at least 60% of planted faults caught, over enough faults to be sure.
 
 1. **Decide the intended behavior.** For the files named here, write down what correct behavior is, including edge cases.
 2. **Write tests that pin it down.** Assert results and edge cases, not just that code runs.
-3. **Prove it with a new audit.** Run a new audit. Faults come from the code and the tests, so changing the tests plants different faults than this audit did, and tests aimed at one audit's faults don't help.
+3. **Prove it with a new audit.** Run a new audit. Each fault is ranked by its own file, line and operator, so editing the tests never redraws them: the next audit plants the faults this one missed again first, then at least one batch of faults no report has named, so tests aimed only at the named faults don't carry a weak suite.
 4. **Review.** `readiness diff` flags any deleted test or new skip marker, so nothing was weakened to pass.
 
 ### Everything we checked, and why
@@ -355,7 +355,7 @@ Audited Nov 30, 2026 at 9a2c092. Eval run with a pinned seed; not a production r
 - **Permission tier:** local-exec
 - **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
 - **Integrity:** unsigned: the seal is a digest that shows edits, but anyone with the scripts could reseal an edited audit
-- **Skill digest:** ed44533b343a
+- **Skill digest:** 51f3c663e1c6
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here
 - **Environment self-check:** passed: mount visible, mount writable, run user, git identity, network cut
