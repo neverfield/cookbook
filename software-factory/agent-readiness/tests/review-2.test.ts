@@ -178,7 +178,7 @@ describe("fixes from the second independent review", () => {
     const repo = materialize("healthy-node");
     const r = readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "/usr/bin/true"]);
     assert.notEqual(r.code, 0);
-    assert.match(r.out, /--runtime takes auto, docker, podman, none; got \/usr\/bin\/true/);
+    assert.match(r.out, /--runtime takes auto, docker, none; got \/usr\/bin\/true/);
     const s = readiness(repo, ["init", "--force", "--tier", "local-exec", "--registry-env", "SA_READINESS_SEAL_KEY"]);
     assert.notEqual(s.code, 0);
     assert.match(s.out, /--registry-env can't pass SA_READINESS_SEAL_KEY/);

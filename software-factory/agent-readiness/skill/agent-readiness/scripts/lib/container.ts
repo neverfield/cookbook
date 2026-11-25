@@ -1,11 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { hostname } from "node:os";
 import { basename, dirname, isAbsolute } from "node:path";
-import { IDLE_MARK, IDLE_OFFLINE } from "./diagnose.ts";
+import { IDLE_MARK, IDLE_OFFLINE, OOM_MARK } from "./diagnose.ts";
 import { pinnedRef } from "./images.ts";
 import { normalizedEnv } from "./proofenv.ts";
 import { runCommand } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
+import { onTeardown, ownerGone } from "./teardown.ts";
 import { fail, randomHex, shellQuote } from "./util.ts";
 
 export interface Runtime {
@@ -13,18 +15,38 @@ export interface Runtime {
 }
 
 // Only these runtimes: any other program given as --runtime would have its exit codes recorded as
-// clean-container results.
-export const RUNTIMES = ["auto", "docker", "podman", "none"];
+// clean-container results. Podman isn't offered until a fixture run tests it, so auto never picks it
+// and asking for it is refused rather than recorded as clean-container proof.
+export const RUNTIMES = ["auto", "docker", "none"];
+export const PODMAN_REFUSED = "Podman isn't supported yet: no fixture run has tested it, so its results can't count as clean-container proof. Use Docker (--runtime docker or auto), or --runtime none.";
 
 export function detectRuntime(preference: string = "auto"): Runtime | null {
+  if (preference === "podman") fail(PODMAN_REFUSED);
   if (!RUNTIMES.includes(preference)) fail(`--runtime takes ${RUNTIMES.join(", ")}; got ${preference}.`);
   if (preference === "none") return null;
-  const candidates = preference === "auto" ? ["docker", "podman"] : [preference];
-  for (const bin of candidates) {
-    const r = spawnSync(bin, ["info", "--format", "{{.ServerVersion}}"], { encoding: "utf8", timeout: 20000 });
-    if (r.status === 0) return { bin };
+  const r = spawnSync("docker", ["info", "--format", "{{.ServerVersion}}"], { encoding: "utf8", timeout: 20000 });
+  return r.status === 0 ? { bin: "docker" } : null;
+}
+
+// Labels on every container an audit starts: the process that started it and the machine it ran on,
+// so the next init or replay can remove one whose process was killed before it could.
+export const OWNER_PID_LABEL = "sa.readiness.pid";
+export const OWNER_HOST_LABEL = "sa.readiness.host";
+
+// Containers whose starting process is gone, whatever their age: an audit stopped by a signal it
+// couldn't catch. A container another audit is still using keeps running.
+export function removeOrphanedContainers(): string[] {
+  const runtime = detectRuntime("auto");
+  if (!runtime) return [];
+  const ps = spawnSync(runtime.bin, ["ps", "-a", "--filter", `label=${OWNER_PID_LABEL}`, "--format", `{{.Names}}\t{{.Label "${OWNER_PID_LABEL}"}}\t{{.Label "${OWNER_HOST_LABEL}"}}`], { encoding: "utf8", timeout: 30000 });
+  if (ps.status !== 0) return [];
+  const removed: string[] = [];
+  for (const line of ps.stdout.split("\n").filter(Boolean)) {
+    const [name, pid, host] = line.split("\t");
+    if (!name?.startsWith("readiness-") || !ownerGone(Number(pid), host ?? "")) continue;
+    if (spawnSync(runtime.bin, ["rm", "-f", name], { encoding: "utf8", timeout: 60000 }).status === 0) removed.push(`container ${name}`);
   }
-  return null;
+  return removed;
 }
 
 // Containers an audit left behind: named for an audit, other than `keep`'s, and older than
@@ -75,10 +97,24 @@ export function limitsFor(ncpu: number | null, memBytes: number | null): Limits 
   return { cpus, memoryMb: Math.round(Math.min(16 * GIB, Math.max(2 * GIB, mem)) / (1024 * 1024)), pids: 4096 };
 }
 
+// `readiness replay --memory MB` sets this, for a build or test suite that needs more than the
+// default share of the runtime's memory.
+export const MEMORY_ENV = "SA_READINESS_MEMORY_MB";
+
+export function memoryOverride(env: Record<string, string | undefined> = process.env): number | null {
+  const v = env[MEMORY_ENV];
+  if (!v) return null;
+  const mb = Number(v);
+  if (!Number.isInteger(mb) || mb < 256) fail(`--memory takes a whole number of MB, at least 256; got ${v}.`);
+  return mb;
+}
+
 export function probeLimits(runtime: Runtime): Limits {
   const r = spawnSync(runtime.bin, ["info", "--format", "{{.NCPU}} {{.MemTotal}}"], { encoding: "utf8", timeout: 20000 });
   const [ncpu, mem] = r.status === 0 ? r.stdout.trim().split(/\s+/).map(Number) : [NaN, NaN];
-  return limitsFor(Number.isFinite(ncpu) ? ncpu : null, Number.isFinite(mem) ? mem : null);
+  const limits = limitsFor(Number.isFinite(ncpu) ? ncpu : null, Number.isFinite(mem) ? mem : null);
+  const asked = memoryOverride();
+  return asked ? { ...limits, memoryMb: asked } : limits;
 }
 
 // Behind a proxy or TLS inspection, installs need the same settings the host has. A CA variable
@@ -97,8 +133,12 @@ export const CAPS_ADDED = ["CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL", 
 // pnpm_config_*, older pnpm only npm_config_*, so both are set.
 export const PNPM_STORE = "/tmp/home/.pnpm-store";
 
-export function startArgs(name: string, image: string, hostDir: string, limits: Limits | null = null, env: Record<string, string | undefined> = process.env, pathExists: (p: string) => boolean = existsSync): string[] {
-  const args = ["run", "-d", "--name", name, "-v", `${hostDir}:/work`, "-w", "/work", "-e", "CI=1", "-e", `HOME=${HOME_DIR}`, "-e", `npm_config_store_dir=${PNPM_STORE}`, "-e", `pnpm_config_store_dir=${PNPM_STORE}`];
+// How long a container may live: past it, its `sleep` ends and --rm removes it, so one an audit
+// couldn't stop still goes away on its own.
+export const DEFAULT_LIFETIME_SEC = 4 * 3600;
+
+export function startArgs(name: string, image: string, hostDir: string, limits: Limits | null = null, env: Record<string, string | undefined> = process.env, pathExists: (p: string) => boolean = existsSync, lifetimeSec = DEFAULT_LIFETIME_SEC): string[] {
+  const args = ["run", "-d", "--rm", "--name", name, "--label", `${OWNER_PID_LABEL}=${process.pid}`, "--label", `${OWNER_HOST_LABEL}=${hostname()}`, "-v", `${hostDir}:/work`, "-w", "/work", "-e", "CI=1", "-e", `HOME=${HOME_DIR}`, "-e", `npm_config_store_dir=${PNPM_STORE}`, "-e", `pnpm_config_store_dir=${PNPM_STORE}`];
   args.push("--cap-drop=ALL", ...CAPS_ADDED.map((c) => `--cap-add=${c}`), "--security-opt", "no-new-privileges");
   // An init as PID 1 reaps orphaned processes. Without it a killed child stays a zombie, and a test
   // that checks its process tree was stopped (kill -0) sees it as still running.
@@ -114,7 +154,7 @@ export function startArgs(name: string, image: string, hostDir: string, limits: 
     if (!path || !isAbsolute(path) || !pathExists(path)) continue;
     args.push("-e", key, "-v", `${path}:${path}:ro`);
   }
-  args.push(pinnedRef(image), "sleep", "infinity");
+  args.push(pinnedRef(image), "sleep", String(Math.max(60, Math.round(lifetimeSec))));
   return args;
 }
 
@@ -228,8 +268,12 @@ export class ContainerSession {
   offline = false;
   // The networks disconnectNetwork() cut, so reconnectNetwork() can attach them again.
   cutFrom: string[] = [];
+  lifetimeSec: number;
+  // Processes the kernel stopped at the memory limit so far, from the container's cgroup.
+  oomKills = 0;
+  private dropTeardown: (() => void) | null = null;
 
-  constructor(runtime: Runtime, name: string, image: string, hostDir: string, registryEnv: string[], user: string | null = hostUser(), limits: Limits | null = null) {
+  constructor(runtime: Runtime, name: string, image: string, hostDir: string, registryEnv: string[], user: string | null = hostUser(), limits: Limits | null = null, lifetimeSec = DEFAULT_LIFETIME_SEC) {
     this.runtime = runtime;
     this.name = name;
     this.image = image;
@@ -237,11 +281,13 @@ export class ContainerSession {
     this.registryEnv = registryEnv;
     this.user = user;
     this.limits = limits;
+    this.lifetimeSec = lifetimeSec;
   }
 
   start(): { ok: boolean; output: string } {
     const env = { ...process.env } as Record<string, string>;
-    const r = spawnSync(this.runtime.bin, startArgs(this.name, this.image, this.hostDir, this.limits), { encoding: "utf8", env, timeout: 300000 });
+    this.dropTeardown = onTeardown(() => this.stop(60000));
+    const r = spawnSync(this.runtime.bin, startArgs(this.name, this.image, this.hostDir, this.limits, process.env, existsSync, this.lifetimeSec), { encoding: "utf8", env, timeout: 300000 });
     if (r.status === 0) {
       if (this.user) {
         const entry = this.asImageUser(userEntryCommand(this.user), 30000);
@@ -263,6 +309,12 @@ export class ContainerSession {
       const idle = spawnSync(this.runtime.bin, ["exec", ...(user ? ["-u", user] : []), this.name, "bash", "-c", idleCommand(execId)], { encoding: "utf8", timeout: 15000 });
       if ((idle.stdout ?? "").trim() === "idle") out = { ...out, output: `${out.output}\n${IDLE_MARK}: no CPU in its last 2 seconds${this.offline ? `, ${IDLE_OFFLINE}` : ""}\n` };
       spawnSync(this.runtime.bin, ["exec", ...(user ? ["-u", user] : []), this.name, "bash", "-c", killCommand(execId)], { encoding: "utf8", timeout: 30000 });
+    } else if (out.exitCode !== 0) {
+      const kills = this.readOomKills();
+      if (kills !== null && kills > this.oomKills) {
+        out = { ...out, output: `${out.output}\n${oomNote(this.limits?.memoryMb ?? null, kills - this.oomKills)}\n` };
+        this.oomKills = kills;
+      }
     }
     if (opts.imageUser && this.user) {
       this.asImageUser(reclaimCommand(this.user, ["/work"]));
@@ -278,10 +330,11 @@ export class ContainerSession {
 
   // Copies a folder of another pinned image into this container, with the network still on for the pull.
   copyFromImage(image: string, from: string, to: string, timeoutMs = 900000): { ok: boolean; output: string } {
-    const created = spawnSync(this.runtime.bin, ["create", pinnedRef(image)], { encoding: "utf8", timeout: timeoutMs });
+    const created = spawnSync(this.runtime.bin, ["create", "--name", `${this.name}-src-${randomHex(3)}`, "--label", `${OWNER_PID_LABEL}=${process.pid}`, "--label", `${OWNER_HOST_LABEL}=${hostname()}`, pinnedRef(image)], { encoding: "utf8", timeout: timeoutMs });
     if (created.status !== 0) return { ok: false, output: (created.stdout ?? "") + (created.stderr ?? "") };
     const source = created.stdout.trim().split("\n").pop()!;
     const stage = `/tmp/readiness-copy-${randomHex(3)}`;
+    const drop = onTeardown(() => spawnSync(this.runtime.bin, ["rm", "-f", source], { encoding: "utf8" }));
     try {
       const mk = this.asImageUser(`mkdir -p ${stage}`, 30000);
       if (!mk.ok) return mk;
@@ -289,6 +342,7 @@ export class ContainerSession {
       if (piped.status !== 0) return { ok: false, output: (piped.stdout ?? "") + (piped.stderr ?? "") };
       return this.asImageUser(`mkdir -p ${shellQuote(dirname(to))} && rm -rf ${shellQuote(to)} && mv ${shellQuote(`${stage}/${basename(from)}`)} ${shellQuote(to)} && rm -rf ${stage}`, 120000);
     } finally {
+      drop();
       spawnSync(this.runtime.bin, ["rm", "-f", source], { encoding: "utf8" });
     }
   }
@@ -324,15 +378,36 @@ export class ContainerSession {
     return ok;
   }
 
+  // The kernel's count of processes it stopped at this container's memory limit: cgroup v2's
+  // memory.events, or v1's memory.oom_control. Null when neither can be read.
+  readOomKills(): number | null {
+    const r = spawnSync(this.runtime.bin, ["exec", this.name, "cat", "/sys/fs/cgroup/memory.events"], { encoding: "utf8", timeout: 15000 });
+    const v1 = r.status === 0 ? null : spawnSync(this.runtime.bin, ["exec", this.name, "cat", "/sys/fs/cgroup/memory/memory.oom_control"], { encoding: "utf8", timeout: 15000 });
+    return parseOomKills(r.status === 0 ? r.stdout : v1?.status === 0 ? v1.stdout : "");
+  }
+
   // The work tree is the audit's throwaway copy, so what root left in it is deleted from inside the
   // container rather than handed back with a chown, and the host can then remove the folder.
-  stop(): void {
-    spawnSync(this.runtime.bin, ["exec", this.name, "find", "/work", "-mindepth", "1", "-maxdepth", "1", "-exec", "rm", "-rf", "{}", "+"], { encoding: "utf8", timeout: 300000 });
+  stop(timeoutMs = 300000): void {
+    spawnSync(this.runtime.bin, ["exec", this.name, "find", "/work", "-mindepth", "1", "-maxdepth", "1", "-exec", "rm", "-rf", "{}", "+"], { encoding: "utf8", timeout: timeoutMs });
     this.remove();
   }
 
   // Removes the container and leaves the work tree as it is.
   remove(): void {
+    this.dropTeardown?.();
+    this.dropTeardown = null;
     spawnSync(this.runtime.bin, ["rm", "-f", this.name], { encoding: "utf8" });
   }
+}
+
+export function parseOomKills(text: string): number | null {
+  const m = text.match(/^oom_kill (\d+)$/m);
+  return m ? Number(m[1]) : null;
+}
+
+// What the audit appends to a failed command's output when the kernel stopped a process at the
+// container's memory limit while it ran. diagnose() reads it back as the audit's limit.
+export function oomNote(memoryMb: number | null, kills: number): string {
+  return `${OOM_MARK}: the kernel stopped ${kills === 1 ? "a process" : `${kills} processes`} at the container's ${memoryMb ? `${memoryMb} MB ` : ""}memory limit`;
 }

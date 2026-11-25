@@ -12,7 +12,8 @@ import { MAX_PRS, computeOutcomes, fetchPrs, loadPrsFile } from "./lib/outcomes.
 import { PREVIEW } from "./lib/preview.ts";
 import { buildProfile } from "./lib/profile.ts";
 import { redact } from "./lib/redact.ts";
-import { ALLOW_HOST_ENV, assertPlatformSupported, evidenceFromPhase, hostExecutor, newBudget, registryValuesOf, replay, runContract } from "./lib/replay.ts";
+import { MEMORY_ENV, memoryOverride } from "./lib/container.ts";
+import { ALLOW_HOST_ENV, HOST_NOT_ALLOWED, assertPlatformSupported, evidenceFromPhase, hostAllowed, hostExecutor, newBudget, reapOrphans, registryValuesOf, replay, runContract } from "./lib/replay.ts";
 import { latestRubricVersion, loadRubric } from "./lib/rubric.ts";
 import { SCAN_BOUND_MINUTES, capCutFolders, sampledScope } from "./lib/scope.ts";
 import { validateAgainst } from "./lib/schema.ts";
@@ -117,6 +118,7 @@ function cmdInit(a: Args): void {
   for (const k of registryEnv) if (k.startsWith("SA_")) fail(`--registry-env can't pass ${k}: the audit's own settings, such as the seal key, never reach the repo's code.`);
   const { audit, local, abandoned } = initAudit({ repo: repoOf(a), scenarios, tier, registryEnv, inheritEnv: Boolean(a.flags["inherit-env"]), force: Boolean(a.flags.force) });
   if (abandoned) log(`Abandoned ${abandoned}: its draft and audit tree are removed.`);
+  for (const gone of reapOrphans(process.env.SA_READINESS_RUNTIME || "auto")) log(`Removed ${gone}, left by an audit that was stopped before it could clean up.`);
   log(`Opened ${audit.id} (${tier}) at ${audit.repo.commit.slice(0, 7)}${scenarios.length ? `, with the ${scenarios.map((s) => s.id).join(" and ")} ${scenarios.length > 1 ? "scenarios" : "scenario"} for every component` : ""}${audit.repo.dirtyTree ? "; uncommitted changes are not audited" : ""}.`);
   log(`Audit tree: ${local.tree}`);
   if (audit.repo.shallow) log("This clone is shallow, so change shares and the active-component rule come only from the commits it has. Run `git fetch --unshallow` (or `--shallow-since`) before the audit for shares over the full window.");
@@ -234,8 +236,8 @@ async function cmdRun(a: Args): Promise<void> {
   requireTier(audit, "local-exec", "run");
   if (!audit.profile) fail("Run `readiness scan` first.");
   const rubric = loadRubric(audit.rubric);
-  const scratch = scratchTree(repo, audit.repo.commit);
-  const ex = hostExecutor(scratch.dir, audit.environment.registryEnv, audit.environment.inheritEnv, "host");
+  // Asked before the copy is made, so a refused run leaves no copy of the repo behind.
+  if (!hostAllowed()) fail(`This runs the repo's commands on this machine, outside a container, which needs the user's yes first: ${HOST_NOT_ALLOWED}. Ask the user, then rerun with --allow-host.`);
   const registryValues = registryValuesOf(audit);
   const component = opt(a, "component");
   if (component) checkComponent(audit.profile, component);
@@ -246,7 +248,10 @@ async function cmdRun(a: Args): Promise<void> {
   const id = opt(a, "id");
   const selected = audit.contract.filter((c) => (id ? c.id === id : true) && (!component || c.component === component || c.component === "*") && c.kind !== "start");
   const comps = new Set(audit.profile.components.filter((c) => c.assessed && (!component || c.id === component)).map((c) => c.id));
+  const scratch = scratchTree(repo, audit.repo.commit);
+  let ex: ReturnType<typeof hostExecutor> | null = null;
   try {
+    ex = hostExecutor(scratch.dir, audit.environment.registryEnv, audit.environment.inheritEnv, "host");
     const results = await runContract(ex, selected, { components: comps, budget: newBudget(rubric.budgets.componentMinutes, rubric.budgets.totalMinutes), registryValues, onResult: (r) => log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.status}${r.diagnosis ? ` (${r.diagnosis.detail})` : ""}`) });
     for (const r of results) evidenceFromPhase(audit, ex, r, registryValues);
     if (a.flags.instructions) {
@@ -266,6 +271,7 @@ async function cmdRun(a: Args): Promise<void> {
       }
     }
   } finally {
+    ex?.close();
     scratch.dispose();
   }
   saveDraft(p, audit);
@@ -706,21 +712,21 @@ Audit
   scan [--strict] [--budget-scan M]   profile, agent assets, static checks and the verification contract; --strict exits 1 on wrong instructions or blocking safety findings; past M minutes (default ${SCAN_BOUND_MINUTES}) the secret scan and asset history are sampled
   contract [list|add --kind K --component C --cmd "..." --reason "..." [--cwd D] [--source file:line]]
   scenario [list|add <id> [--components a,b]|remove <id>]   optional breakdowns reported under the components they name
-  replay [--component C] [--no-mutants] [--runtime auto|docker|podman|none] [--image ref] [--budget-component M] [--budget-total M]
+  replay [--component C] [--no-mutants] [--runtime auto|docker|none] [--image ref] [--memory MB] [--budget-component M] [--budget-total M]
   run [--component C] [--id cmd-id] [--instructions] [--cmd "..." --kind K --component C --reason "..."]
   record --check ID --result pass|fail|not_run --summary "..." [--component C] [--strength static|asserted]
   outcomes [--input prs.json] [--window-days 30] [--branch-prefix a,b] [--label L] [--author A] [--co-author T]
   narrate [--file narration.json] [--headline "..."] [--ask "..."] [--gap id=text] [--title id=text]
   status [--json]
   seal
-  audit --tier T [--scenario S] [--outcomes-input f] [--narration f] [--budget-scan M] [--budget-total M] [--force]   init, scan, replay, outcomes and seal in one go; --force abandons an open draft
+  audit --tier T [--scenario S] [--outcomes-input f] [--narration f] [--budget-scan M] [--budget-total M] [--memory MB] [--force]   init, scan, replay, outcomes and seal in one go; --force abandons an open draft
 
 --allow-host (replay, recheck, run, audit) lets repo commands run on the host when no container can,
 in a scrubbed copy that can still read local files. It is not a sandbox: use it only with the user's approval.
 
 After an audit
   verify-seal [audit-id|latest] [--release-repo owner/repo --release-ref tag --tier external-systems] [--allow-eval] [--allow-unkeyed]   with SA_READINESS_SEAL_KEY set, only keyed seals pass unless --allow-unkeyed
-  recheck [--runtime auto|docker|podman|none] [--image ref]
+  recheck [--runtime auto|docker|none] [--image ref] [--memory MB]
   diff [from] [to] [--json]
   history [--json] | history push [--push] [--remote origin]
   roadmap [show|owner "<team>"|targets --merge-rate R --first-pass R --max-changes-requested R [--min-prs N]]   --min-prs defaults to 20 and never goes below 10
@@ -767,6 +773,12 @@ async function main(): Promise<void> {
   assertPlatformSupported();
   const a = parse(process.argv.slice(2));
   if (a.flags["allow-host"]) process.env[ALLOW_HOST_ENV] = "1";
+  // The container's memory, for a build or test suite that the default share stops (replay, recheck, audit).
+  const memory = opt(a, "memory");
+  if (memory) {
+    process.env[MEMORY_ENV] = memory;
+    memoryOverride();
+  }
   const cmd = a.positional[0];
   if (!cmd || a.flags.help || cmd === "help") {
     process.stdout.write(PREVIEW ? `${PREVIEW}\n\n${HELP}` : HELP);

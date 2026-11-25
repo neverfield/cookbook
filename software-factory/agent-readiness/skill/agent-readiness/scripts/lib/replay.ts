@@ -1,11 +1,10 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
-import { ContainerSession, HOME_DIR, NETWORK_ENV, buildImage, detectRuntime, hostUser, probeLimits } from "./container.ts";
+import { ContainerSession, HOME_DIR, buildImage, detectRuntime, hostUser, probeLimits, removeOrphanedContainers } from "./container.ts";
 import { hooked, imagePlan, toolchainCopies, toolSetup } from "./contract.ts";
 import { ALLOW_HOST_ENV } from "./guard.ts";
 import { BUNDLE_GAP, diagnose, rootError, testCounts } from "./diagnose.ts";
-import { addEvidence } from "./evidence.ts";
+import { addEvidence, registryValuesOf } from "./evidence.ts";
 import { attribute, networkVerdict, rerunsOnline } from "./attribute.ts";
 import type { AttributionInput } from "./attribute.ts";
 import { fmtDuration } from "./format.ts";
@@ -14,11 +13,12 @@ import { replayInstructions } from "./instructions.ts";
 import { ecosystemOf } from "./languages/index.ts";
 import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary } from "./mutate.ts";
 import { Progress, budgetSummary } from "./progress.ts";
-import { proxyPasswords, redact, tail } from "./redact.ts";
+import { redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
-import { SUDO_SHIM_MARK, runCommand, scrubbedEnv } from "./run.ts";
+import { SUDO_SHIM_MARK, disposeHome, runCommand, scrubbedEnv } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
 import type { Attribution, Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Language, Mutant, Profile, Strength, Where } from "./types.ts";
+import { removeOrphanedTempDirs, tempDir } from "./teardown.ts";
 import { containedPath, exists, fail, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
 import { commandsFor } from "./score.ts";
 import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
@@ -82,15 +82,7 @@ export const SUDO_REFUSED = "not run on the host: it uses sudo, which the audit 
 export const NETWORK_ON = "the network couldn't be switched off for the test phase, so this pass doesn't prove a clean checkout";
 export const NEEDS_NETWORK = "the tests pass only with the network on, and it couldn't be switched back on to plant faults";
 
-const SECRET_NAME = /(KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|AUTH)/i;
-
-// Values to redact from command output: the registry variables, the passwords in proxy settings,
-// and with --inherit-env every inherited variable whose name looks like a secret.
-export function registryValuesOf(audit: Audit): string[] {
-  const names = new Set(audit.environment.registryEnv);
-  if (audit.environment.inheritEnv) for (const k of Object.keys(process.env)) if (SECRET_NAME.test(k)) names.add(k);
-  return [...[...names].map((k) => process.env[k] ?? ""), ...proxyPasswords(process.env, NETWORK_ENV)].filter(Boolean);
-}
+export { registryValuesOf };
 
 // Host mode: the repo's commands run on this machine instead of in a container. Only on the user's
 // explicit yes (`--allow-host`, which sets this variable), never as a fallback.
@@ -107,7 +99,7 @@ export const HOST_NOT_ALLOWED = `host mode wasn't allowed (--allow-host), so no 
 // then has no contradiction to probe with a container of its own.
 export function noRuntimeReason(preference: string): string {
   if (preference === "none") return "no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none)";
-  return `no container runtime on this machine: ${preference === "auto" ? "neither docker info nor podman info answered" : `${preference} info didn't answer`}`;
+  return `no container runtime on this machine: ${preference === "auto" ? "docker info" : `${preference} info`} didn't answer`;
 }
 export const HOST_MODE_NOTE = "host mode was allowed: the repo's commands ran on this machine as this user, outside a container, with a throwaway home and no account credentials, but they could read this user's local files; it isn't a sandbox, and Level 1 can't be proved there";
 export function vmModeNote(vm: VmDetection): string {
@@ -145,7 +137,7 @@ export function hostExecutor(root: string, registryEnv: string[], inheritEnv: bo
     exec: (command, cwd, timeoutSec, opts) => (SUDO.test(command) ? Promise.resolve({ exitCode: null, timedOut: false, durationMs: 0, output: `readiness: ${SUDO_REFUSED}` }) : runCommand(command, join(root, cwd), { ...(opts?.registry ? setupEnv : env), ...opts?.env }, timeoutSec)),
     offline: () => false,
     networkOff: null,
-    close: () => {},
+    close: () => disposeHome(setupEnv),
     runUser: process.getuid ? String(process.getuid()) : null,
   };
 }
@@ -293,6 +285,9 @@ export function environmentLimit(ex: Pick<Executor, "where" | "image" | "imageSo
   if (d.cause === "network" && ONLINE_KINDS.has(cmd.kind)) return `the ${cmd.kind} hit ${d.detail}`;
   // The audit picks the user commands run as and the home they share, so this is never the repo's.
   if (d.cause === "permission") return `${d.detail} on this machine`;
+  // Out of memory or disk: the audit's memory cap or this machine's disk, which a build that is fine
+  // on a bigger machine runs into. Never the repo's failure.
+  if (d.cause === "resource") return `${d.detail} on this machine; ${d.limit === "disk" ? "free disk space where the temp folder and the container runtime's storage are (TMPDIR moves the temp folder), then rerun" : ex.where === "container" ? "give the container more with `readiness replay --memory <MB>` (Docker needs that much to give), then rerun" : "rerun on a machine with more memory"}`;
   // A large repo's install can outlast the audit's limit on a slow machine or disk driver.
   if (d.cause === "timeout" && cmd.kind === "install") return `the install ran past the audit's ${Math.max(1, Math.round(cmd.timeoutSec / 60))}-minute limit on this machine`;
   if (d.cause === "missing_module") {
@@ -449,7 +444,8 @@ export async function runContract(
     const reportedFailures = cmd.kind === "test" && out.exitCode === 0 ? (countTests(opts.profile, cmd.component, out.output)?.failed ?? 0) : 0;
     const ok = out.exitCode === 0 && !out.timedOut && reportedFailures === 0 && changed.length === 0;
     const rewroteDetail = `it changed ${changed.length} ${changed.length === 1 ? "file" : "files"} (${changed.slice(0, 3).join(", ")}${changed.length > 3 ? ", …" : ""}), ${REWROTE}`;
-    const diagnosis = ok ? null : changed.length ? { cause: "unknown" as const, detail: rewroteDetail } : reportedFailures > 0 ? { cause: "unknown" as const, detail: `the runner reported ${reportedFailures} failing tests but exited 0` } : diagnose(out.output, out.timedOut, cmd.kind);
+    // Read from the redacted output, so a cause quoted from it never carries a secret.
+    const diagnosis = ok ? null : changed.length ? { cause: "unknown" as const, detail: rewroteDetail } : reportedFailures > 0 ? { cause: "unknown" as const, detail: `the runner reported ${reportedFailures} failing tests but exited 0` } : diagnose(redact(out.output, opts.registryValues), out.timedOut, cmd.kind, out.exitCode);
     const sudoRefused = !ok && ex.where !== "container" && out.output.includes(SUDO_SHIM_MARK);
     const blocked = sudoRefused ? `the ${cmd.kind} command uses sudo, which the audit never runs on the host` : ok ? undefined : environmentLimit(ex, cmd, diagnosis, opts.workspacePackages ?? []);
     if (!ok && cmd.kind === "install") {
@@ -1068,9 +1064,17 @@ export function instructionExecutor(exs: Pick<Executors, "forComponent" | "repo"
   return root ? exs.forComponent(root.id) : exs.repo;
 }
 
+// Past the whole budget, the setup the budget doesn't count: pulls, added tools and toolchain copies.
+const SETUP_ALLOWANCE_MIN = 120;
+
+// How long the audit's containers live unless it stops them: the whole budget and the setup around it.
+export function containerLifetimeSec(budgetTotalMinutes: number): number {
+  return (budgetTotalMinutes + SETUP_ALLOWANCE_MIN) * 60;
+}
+
 // Starts one clean container and adds what the audit's own image lacks for these components.
-function startContainer(audit: Audit, runtime: NonNullable<ReturnType<typeof detectRuntime>>, image: string, imageSource: Executor["imageSource"], copyDir: string, limits: ReturnType<typeof probeLimits>, comps: Component[], forWhom: string, log: (s: string) => void): Executor | { error: string } {
-  const session = new ContainerSession(runtime, `readiness-${audit.id}-${randomHex(3)}`, image, copyDir, audit.environment.registryEnv, hostUser(), limits);
+function startContainer(audit: Audit, runtime: NonNullable<ReturnType<typeof detectRuntime>>, image: string, imageSource: Executor["imageSource"], copyDir: string, limits: ReturnType<typeof probeLimits>, comps: Component[], forWhom: string, log: (s: string) => void, lifetimeSec: number): Executor | { error: string } {
+  const session = new ContainerSession(runtime, `readiness-${audit.id}-${randomHex(3)}`, image, copyDir, audit.environment.registryEnv, hostUser(), limits, lifetimeSec);
   const started = session.start();
   if (!started.ok) {
     session.remove();
@@ -1191,15 +1195,17 @@ export function recordNetwork(audit: Audit, exs: Executors): void {
 // never a silent fallback to the host. With nothing, every command is recorded as not run with the
 // reason, so Level 1 is unproven on this machine and the report says why. `repoWide`: whether any
 // repo-wide command runs, which the repo's image is started for even when no component runs in it.
-export function makeExecutors(audit: Audit, copyDir: string, runtimePref: string, log: (s: string) => void, imageOverride?: string, allowHost?: boolean, repoWide = true, vmDetected?: VmDetection | null): Executors {
+// budgetTotalMinutes: the replay's whole budget, which bounds how long its containers live.
+export function makeExecutors(audit: Audit, copyDir: string, runtimePref: string, log: (s: string) => void, imageOverride?: string, allowHost?: boolean, repoWide = true, vmDetected?: VmDetection | null, budgetTotalMinutes?: number): Executors {
   assertPlatformSupported();
   const vm = vmDetected === undefined ? detectDisposableVm() : vmDetected;
-  const exs = pickExecutors(audit, copyDir, runtimePref, log, imageOverride, allowHost, repoWide, vm);
+  const lifetimeSec = containerLifetimeSec(budgetTotalMinutes ?? loadRubric(audit.rubric).budgets.totalMinutes);
+  const exs = pickExecutors(audit, copyDir, runtimePref, log, imageOverride, allowHost, repoWide, vm, lifetimeSec);
   recordProofEnv(audit, exs.repo, vm);
   return exs;
 }
 
-function pickExecutors(audit: Audit, copyDir: string, runtimePref: string, log: (s: string) => void, imageOverride: string | undefined, allowHost: boolean | undefined, repoWide: boolean, vm: VmDetection | null): Executors {
+function pickExecutors(audit: Audit, copyDir: string, runtimePref: string, log: (s: string) => void, imageOverride: string | undefined, allowHost: boolean | undefined, repoWide: boolean, vm: VmDetection | null, lifetimeSec: number): Executors {
   const profile = audit.profile!;
   const runtime = detectRuntime(runtimePref);
   let single = imageOverride;
@@ -1229,7 +1235,7 @@ function pickExecutors(audit: Audit, copyDir: string, runtimePref: string, log: 
     for (const g of wanted) {
       const isRepo = g === plan[0];
       const forWhom = wanted.length > 1 ? ` ${isRepo ? "the repo" : g.components.join(", ")}` : "";
-      const r = startContainer(audit, runtime, g.image, imageSource, copyDir, limits, assessed.filter((c) => g.components.includes(c.id)), forWhom, log);
+      const r = startContainer(audit, runtime, g.image, imageSource, copyDir, limits, assessed.filter((c) => g.components.includes(c.id)), forWhom, log, lifetimeSec);
       const digest = digestOf(g.image);
       const ids = [...(isRepo ? ["*"] : []), ...g.components];
       if ("error" in r) {
@@ -1308,148 +1314,163 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
     return;
   }
   const profile = audit.profile;
-  refreshTree(repo, audit.repo.commit, tree);
-  const copyDir = join(mkdtempSync(join(tmpdir(), "readiness-replay-")), "work");
-  copyWorkTree(tree, copyDir);
-  const before = new Map<string, string>();
-  for (const f of lockfilesToCompare(profile, tree, audit.contract)) before.set(f, sha256(readText(join(copyDir, f))));
-  if (opts.image) audit.environment.imageOverride = opts.image;
   const components = new Set(profile.components.filter((c) => c.assessed && (!opts.component || c.id === opts.component)).map((c) => c.id));
   if (opts.component && components.size === 0) fail(`No assessed component named ${opts.component}`);
-  const exs = await checkExecutors(audit, makeExecutors(audit, copyDir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost, audit.contract.some((c) => c.component === "*"), opts.vm), profile, opts.log);
+  for (const gone of reapOrphans(opts.runtime)) opts.log(`Removed ${gone}, left by an audit that was stopped before it could clean up.`);
+  refreshTree(repo, audit.repo.commit, tree);
+  // Everything from the copy on is undone in the finally, and on a signal or crash by teardown.ts.
+  const scratch = tempDir("readiness-replay-");
+  let exs: Executors | null = null;
+  try {
+    const copyDir = join(scratch.path, "work");
+    copyWorkTree(tree, copyDir);
+    const before = new Map<string, string>();
+    for (const f of lockfilesToCompare(profile, tree, audit.contract)) before.set(f, sha256(readText(join(copyDir, f))));
+    if (opts.image) audit.environment.imageOverride = opts.image;
+    exs = await checkExecutors(audit, makeExecutors(audit, copyDir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost, audit.contract.some((c) => c.component === "*"), opts.vm, opts.budgetTotalMinutes), profile, opts.log);
+    await replayIn(audit, repo, tree, rubric, opts, exs, copyDir, before, components);
+  } finally {
+    exs?.close();
+    scratch.dispose();
+  }
+}
+
+// Containers and temp folders of audits on this machine whose process is gone, whatever their age.
+// With container runtimes turned off, the runtime isn't asked.
+export function reapOrphans(runtimePref = "auto"): string[] {
+  return [...(runtimePref === "none" ? [] : removeOrphanedContainers()), ...removeOrphanedTempDirs()];
+}
+
+async function replayIn(audit: Audit, repo: string, tree: string, rubric: Rubric, opts: ReplayOptions, exs: Executors, copyDir: string, before: Map<string, string>, components: Set<string>): Promise<void> {
+  const profile = audit.profile!;
   const ex = exs.repo;
   const progress = new Progress(opts.log);
   for (const g of exs.groups) progress.watch(g.ex);
   const registryValues = registryValuesOf(audit);
   const budget = newBudget(opts.budgetComponentMinutes, opts.budgetTotalMinutes, budgetFloors(profile));
   const firstRow = audit.evidence.length;
-  try {
-    const results = await runContracts(exs, audit.contract, {
-      components,
-      reruns: rubric.attribution?.reruns ?? [],
-      budget,
-      registryValues,
-      tree,
-      profile,
-      workspacePackages: workspacePackages(copyDir, profile),
-      onResult: (r) => opts.log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.blocked ? "blocked" : r.status}${r.outcome ? ` in ${fmtDuration(r.outcome.durationMs)}` : ""}${r.blocked ? ` (${r.blocked})` : r.diagnosis ? ` (${r.diagnosis.detail})` : r.note ? ` (${r.note})` : ""}`),
-    });
-    recordNetwork(audit, exs);
-    for (const r of results) {
-      const rex = r.executor ?? ex;
-      if (r.blocked && r.diagnosis?.cause === "missing_tool" && rex.where !== "container") {
-        const tool = r.diagnosis.detail.replace(/ is not installed$/, "");
-        const declared = declaredImageInstalls(copyDir, profile, tool);
-        if (declared) r.blocked += `, though the repo's declared image (${declared}) installs it`;
-      }
-      if (r.blocked && r.diagnosis?.cause === "missing_tool" && rex.where === "container") {
-        const tool = r.diagnosis.detail.replace(/ is not installed$/, "");
-        const failed = audit.environment.tools?.find((t) => !t.added && t.spec.split(/[@=]/)[0] === tool);
-        if (failed) r.blocked += `: the audit couldn't add ${failed.spec} to it on this machine`;
-      }
-      const ev = evidenceFromPhase(audit, rex, r, registryValues);
-      if (r.diagnosis?.cause === "credential" && !audit.safety.some((s) => s.kind === "credential_needed" && s.detail.includes(r.diagnosis!.detail))) {
-        audit.safety.push({ id: `saf-${String(audit.safety.length + 1).padStart(3, "0")}`, kind: "credential_needed", file: ev.id, detail: `tests ${r.diagnosis.detail}`, blocking: true });
+  const results = await runContracts(exs, audit.contract, {
+    components,
+    reruns: rubric.attribution?.reruns ?? [],
+    budget,
+    registryValues,
+    tree,
+    profile,
+    workspacePackages: workspacePackages(copyDir, profile),
+    onResult: (r) => opts.log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.blocked ? "blocked" : r.status}${r.outcome ? ` in ${fmtDuration(r.outcome.durationMs)}` : ""}${r.blocked ? ` (${r.blocked})` : r.diagnosis ? ` (${r.diagnosis.detail})` : r.note ? ` (${r.note})` : ""}`),
+  });
+  recordNetwork(audit, exs);
+  for (const r of results) {
+    const rex = r.executor ?? ex;
+    if (r.blocked && r.diagnosis?.cause === "missing_tool" && rex.where !== "container") {
+      const tool = r.diagnosis.detail.replace(/ is not installed$/, "");
+      const declared = declaredImageInstalls(copyDir, profile, tool);
+      if (declared) r.blocked += `, though the repo's declared image (${declared}) installs it`;
+    }
+    if (r.blocked && r.diagnosis?.cause === "missing_tool" && rex.where === "container") {
+      const tool = r.diagnosis.detail.replace(/ is not installed$/, "");
+      const failed = audit.environment.tools?.find((t) => !t.added && t.spec.split(/[@=]/)[0] === tool);
+      if (failed) r.blocked += `: the audit couldn't add ${failed.spec} to it on this machine`;
+    }
+    const ev = evidenceFromPhase(audit, rex, r, registryValues);
+    if (r.diagnosis?.cause === "credential" && !audit.safety.some((s) => s.kind === "credential_needed" && s.detail.includes(r.diagnosis!.detail))) {
+      audit.safety.push({ id: `saf-${String(audit.safety.length + 1).padStart(3, "0")}`, kind: "credential_needed", file: ev.id, detail: `tests ${r.diagnosis.detail}`, blocking: true });
+    }
+  }
+  const allInstalls = results.filter((r) => r.cmd.kind === "install");
+  // When this machine blocked the shared install, the components' own frozen installs stand in for it.
+  const installs = allInstalls.some((r) => r.cmd.fallbackFor) ? allInstalls.filter((r) => r.cmd.fallbackFor || !r.blocked) : allInstalls;
+  const installed = installs.length > 0 && installs.every((r) => r.status === "pass");
+  if (installed) lockfileEvidence(audit, ex, profile, tree, copyDir, before, installs.map((r) => r.cmd));
+  else if (installs.some((r) => r.blocked) && installs.every((r) => r.status === "pass" || r.blocked)) {
+    const blocked = installs.find((r) => r.blocked)!.blocked!;
+    addEvidence(audit, { checkId: "bootstrap.cold_replay", condition: "lockfile", component: "*", strength: ex.strength, where: ex.where, result: "not_run", summary: "the frozen install couldn't run on this machine", blocked, image: ex.image ?? undefined });
+  }
+  if (rubric.canary?.typecheck) {
+    for (const comp of components) {
+      const c = profile.components.find((x) => x.id === comp)!;
+      try {
+        await typecheckCanary(audit, repo, tree, exs.forComponent(comp), c, results, budget, opts.log);
+      } catch (e) {
+        const why = (e as Error).message.split("\n")[0].slice(0, 200);
+        opts.log(`  type-check canary in ${comp}: couldn't be planted (${why}); the other results are kept`);
+        addEvidence(audit, { checkId: "verify.canonical_interface", condition: "commands", component: comp, strength: exs.forComponent(comp).strength, where: exs.forComponent(comp).where, result: "not_run", summary: `planting the type error failed: ${why}`, canary: { kind: "typecheck", file: null } });
       }
     }
-    const allInstalls = results.filter((r) => r.cmd.kind === "install");
-    // When this machine blocked the shared install, the components' own frozen installs stand in for it.
-    const installs = allInstalls.some((r) => r.cmd.fallbackFor) ? allInstalls.filter((r) => r.cmd.fallbackFor || !r.blocked) : allInstalls;
-    const installed = installs.length > 0 && installs.every((r) => r.status === "pass");
-    if (installed) lockfileEvidence(audit, ex, profile, tree, copyDir, before, installs.map((r) => r.cmd));
-    else if (installs.some((r) => r.blocked) && installs.every((r) => r.status === "pass" || r.blocked)) {
-      const blocked = installs.find((r) => r.blocked)!.blocked!;
-      addEvidence(audit, { checkId: "bootstrap.cold_replay", condition: "lockfile", component: "*", strength: ex.strength, where: ex.where, result: "not_run", summary: "the frozen install couldn't run on this machine", blocked, image: ex.image ?? undefined });
-    }
-    if (rubric.canary?.typecheck) {
-      for (const comp of components) {
-        const c = profile.components.find((x) => x.id === comp)!;
+  }
+  if (opts.mutants) {
+    for (const comp of components) {
+      const ex = exs.forComponent(comp);
+      const mine = new Set(commandsFor(audit.contract, comp, "test").map((c) => c.id));
+      // A rerun with the network on stands in for the run it repeated.
+      const testRuns = [...new Map(results.filter((r) => mine.has(r.cmd.id)).map((r) => [r.cmd.id, r])).values()];
+      const testRes = testRuns.find((r) => r.cmd.component === comp) ?? testRuns[0];
+      if (!testRes || testRuns.some((r) => r.status !== "pass")) {
+        addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: testRes ? "tests must pass before faults can be planted" : "no test command found" });
+        continue;
+      }
+      if (testRuns.some((r) => r.blocked)) {
+        addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "faults weren't planted: the network couldn't be switched off for the test phase", blocked: NETWORK_ON });
+        continue;
+      }
+      // Tests that passed only with the network on get it for the planted faults as well.
+      const needsNetwork = testRuns.some((r) => r.networkOn);
+      if (needsNetwork && !ex.online?.()) {
+        addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `faults weren't planted: ${NEEDS_NETWORK}`, blocked: NEEDS_NETWORK });
+        continue;
+      }
+      const plant = async (): Promise<void> => {
+        const limit = capped(budget, comp, testRes.cmd.timeoutSec);
+        const second = overBudget(budget, comp) || budgetLeftSec(budget, comp) < 1 ? null : await ex.exec(testRes.cmd.command, testRes.cmd.cwd, limit.sec, testRes.cmd.env ? { env: testRes.cmd.env } : undefined);
+        if (second) charge(budget, comp, second.durationMs);
+        if (!second || (second.timedOut && limit.byBudget)) {
+          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "faults weren't planted: the time budget ran out first", blocked: BUDGET_OUT });
+          return;
+        }
+        // The unmutated tests timing out means every run with a planted fault would too: the fault
+        // check is unproven here, said once, rather than a timeout per fault.
+        if (second.timedOut) {
+          const why = diagnose(redact(second.output, registryValues), true, "test").detail;
+          const stalled = `the unmutated test run timed out (${why}), so each planted fault would time out too`;
+          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `faults weren't planted: ${stalled}`, blocked: stalled });
+          return;
+        }
+        if (second.exitCode !== 0 || (countTests(profile, comp, second.output)?.failed ?? 0) > 0) {
+          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "tests passed once and failed on a second run, so faults weren't planted (possible flaky tests)" });
+          return;
+        }
+        const lang = profile.components.find((c) => c.id === comp)!.language;
+        if (!rubric.mutation.languages.includes(lang)) {
+          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `faults can't be planted in ${lang} yet` });
+          return;
+        }
         try {
-          await typecheckCanary(audit, repo, tree, exs.forComponent(comp), c, results, budget, opts.log);
+          await plantFaults(audit, repo, tree, ex, rubric, testRes.cmd, budget, opts.log, Math.max(second.durationMs, testRes.outcome?.durationMs ?? 0));
         } catch (e) {
           const why = (e as Error).message.split("\n")[0].slice(0, 200);
-          opts.log(`  type-check canary in ${comp}: couldn't be planted (${why}); the other results are kept`);
-          addEvidence(audit, { checkId: "verify.canonical_interface", condition: "commands", component: comp, strength: exs.forComponent(comp).strength, where: exs.forComponent(comp).where, result: "not_run", summary: `planting the type error failed: ${why}`, canary: { kind: "typecheck", file: null } });
+          opts.log(`  faults in ${comp}: couldn't be planted (${why}); the other results are kept`);
+          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `planting faults failed: ${why}` });
         }
+      };
+      try {
+        await plant();
+      } finally {
+        if (needsNetwork) ex.offline();
       }
     }
-    if (opts.mutants) {
-      for (const comp of components) {
-        const ex = exs.forComponent(comp);
-        const mine = new Set(commandsFor(audit.contract, comp, "test").map((c) => c.id));
-        // A rerun with the network on stands in for the run it repeated.
-        const testRuns = [...new Map(results.filter((r) => mine.has(r.cmd.id)).map((r) => [r.cmd.id, r])).values()];
-        const testRes = testRuns.find((r) => r.cmd.component === comp) ?? testRuns[0];
-        if (!testRes || testRuns.some((r) => r.status !== "pass")) {
-          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: testRes ? "tests must pass before faults can be planted" : "no test command found" });
-          continue;
-        }
-        if (testRuns.some((r) => r.blocked)) {
-          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "faults weren't planted: the network couldn't be switched off for the test phase", blocked: NETWORK_ON });
-          continue;
-        }
-        // Tests that passed only with the network on get it for the planted faults as well.
-        const needsNetwork = testRuns.some((r) => r.networkOn);
-        if (needsNetwork && !ex.online?.()) {
-          addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `faults weren't planted: ${NEEDS_NETWORK}`, blocked: NEEDS_NETWORK });
-          continue;
-        }
-        const plant = async (): Promise<void> => {
-          const limit = capped(budget, comp, testRes.cmd.timeoutSec);
-          const second = overBudget(budget, comp) || budgetLeftSec(budget, comp) < 1 ? null : await ex.exec(testRes.cmd.command, testRes.cmd.cwd, limit.sec, testRes.cmd.env ? { env: testRes.cmd.env } : undefined);
-          if (second) charge(budget, comp, second.durationMs);
-          if (!second || (second.timedOut && limit.byBudget)) {
-            addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "faults weren't planted: the time budget ran out first", blocked: BUDGET_OUT });
-            return;
-          }
-          // The unmutated tests timing out means every run with a planted fault would too: the fault
-          // check is unproven here, said once, rather than a timeout per fault.
-          if (second.timedOut) {
-            const why = diagnose(second.output, true, "test").detail;
-            const stalled = `the unmutated test run timed out (${why}), so each planted fault would time out too`;
-            addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `faults weren't planted: ${stalled}`, blocked: stalled });
-            return;
-          }
-          if (second.exitCode !== 0 || (countTests(profile, comp, second.output)?.failed ?? 0) > 0) {
-            addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: "tests passed once and failed on a second run, so faults weren't planted (possible flaky tests)" });
-            return;
-          }
-          const lang = profile.components.find((c) => c.id === comp)!.language;
-          if (!rubric.mutation.languages.includes(lang)) {
-            addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `faults can't be planted in ${lang} yet` });
-            return;
-          }
-          try {
-            await plantFaults(audit, repo, tree, ex, rubric, testRes.cmd, budget, opts.log, Math.max(second.durationMs, testRes.outcome?.durationMs ?? 0));
-          } catch (e) {
-            const why = (e as Error).message.split("\n")[0].slice(0, 200);
-            opts.log(`  faults in ${comp}: couldn't be planted (${why}); the other results are kept`);
-            addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: ex.strength, where: ex.where, result: "not_run", summary: `planting faults failed: ${why}` });
-          }
-        };
-        try {
-          await plant();
-        } finally {
-          if (needsNetwork) ex.offline();
-        }
-      }
-    } else {
-      for (const comp of components) {
-        const cex = exs.forComponent(comp);
-        addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: cex.strength, where: cex.where, result: "not_run", summary: NO_MUTANTS, skipped: "--no-mutants" });
-      }
+  } else {
+    for (const comp of components) {
+      const cex = exs.forComponent(comp);
+      addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp, strength: cex.strength, where: cex.where, result: "not_run", summary: NO_MUTANTS, skipped: "--no-mutants" });
     }
-    if (opts.instructions) {
-      const blocked = installs.find((r) => r.blocked)?.blocked;
-      await replayInstructions(audit, (cwd, command) => instructionExecutor(exs, profile, copyDir, cwd, command), copyDir, budget, registryValues, installed ? null : { blocked });
-    }
-    const totalOut = Date.now() - budget.startedAt > budget.totalMs;
-    const cut = [...new Set(audit.evidence.slice(firstRow).filter((e) => e.blocked === BUDGET_OUT).map((e) => e.component ?? "*"))];
-    for (const line of budgetSummary(budget, opts.budgetComponentMinutes, { components: totalOut ? [] : cut, total: totalOut })) opts.log(line);
-  } finally {
-    exs.close();
-    rmSync(dirname(copyDir), { recursive: true, force: true });
   }
+  if (opts.instructions) {
+    const blocked = installs.find((r) => r.blocked)?.blocked;
+    await replayInstructions(audit, (cwd, command) => instructionExecutor(exs, profile, copyDir, cwd, command), copyDir, budget, registryValues, installed ? null : { blocked });
+  }
+  const totalOut = Date.now() - budget.startedAt > budget.totalMs;
+  const cut = [...new Set(audit.evidence.slice(firstRow).filter((e) => e.blocked === BUDGET_OUT).map((e) => e.component ?? "*"))];
+  for (const line of budgetSummary(budget, opts.budgetComponentMinutes, { components: totalOut ? [] : cut, total: totalOut })) opts.log(line);
 }
 
 export { CUT_OFF };

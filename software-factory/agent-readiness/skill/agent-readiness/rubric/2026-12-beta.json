@@ -11,7 +11,8 @@
     "Instruction severities (severities.instructions \"agent_commands\"): a wrong command in a file written for agents (AGENTS.md, CLAUDE.md, Cursor rules and skills, Copilot instructions) holds Level 2. Wrong README and CONTRIBUTING items, and wrong paths anywhere, are listed for the reader and don't gate.",
     "Shares are of every counted change (components.unowned \"counted\"): changes that lie in no component or satellite are reported as the unowned share and count toward partial coverage, where earlier rubrics left them out of the denominator, so a repo whose components hold little of its work no longer reads as fully covered.",
     "A folder name such as plugins/, tests/ or docs/ demotes the projects under it to satellites only while that folder holds less than components.satelliteHintShare (50%) of the changes, so a plugins/ folder holding most of the work stays components. Earlier rubrics demoted on the name alone.",
-    "Level 0 needs a repo failure (attribution.level0 \"attributed\"): a failed install, build or test holds Level 1 only when it is the repo's, either because an experiment showed it or because the step ran in an environment whose self-check passed and failed on its own terms. A failure the audit's own choices could explain, such as a test runner or system library missing from an image the audit picked, or an install that fails there without saying why, leaves Level 1 undetermined, with the one fact that would settle it. A component with test files and no test command the audit found is undetermined, not \"no tests\": no tests is a finding only when no test command is found and no file matches the language's test-file rule. Each failed test run gets at most one experiment (attribution.reruns): one that failed with the network cut runs once more with it on, and when it then passes, the failure is the audit's environment, Level 1 holds with the network on, the report says so, confidence is capped at medium, and its planted faults run with the network on as well; one that failed because git is missing from an image the audit picked runs again once the audit adds git, since the audit already sets the git identity tests use. An undetermined Level 1 is reported as undetermined, beside unproven, never as Level 0."
+    "Level 0 needs a repo failure (attribution.level0 \"attributed\"): a failed install, build or test holds Level 1 only when it is the repo's, either because an experiment showed it or because the step ran in an environment whose self-check passed and failed on its own terms. A failure the audit's own choices could explain, such as a test runner or system library missing from an image the audit picked, or an install that fails there without saying why, leaves Level 1 undetermined, with the one fact that would settle it. A component with test files and no test command the audit found is undetermined, not \"no tests\": no tests is a finding only when no test command is found and no file matches the language's test-file rule. Each failed test run gets at most one experiment (attribution.reruns): one that failed with the network cut runs once more with it on, and when it then passes, the failure is the audit's environment, Level 1 holds with the network on, the report says so, confidence is capped at medium, and its planted faults run with the network on as well; one that failed because git is missing from an image the audit picked runs again once the audit adds git, since the audit already sets the git identity tests use. An undetermined Level 1 is reported as undetermined, beside unproven, never as Level 0.",
+    "Done when, for the commands, faults and instructions steps: each names a new audit, never `readiness run`, which runs on the host and needs the user's yes. The faults step is done when an audit rates the tests strong, at least 60% of planted faults caught over enough faults to be sure, which is the estimate's own rule; 60% of too few faults is inconclusive. Its last step says what this rubric does: editing the tests never redraws the faults, and the next audit plants the missed ones again first."
   ],
   "scale": [
     {
@@ -582,7 +583,7 @@
       "size": "Small: one command in {component}",
       "ownerRole": "Repo maintainer",
       "why": "The {kinds} command for {component} fails at HEAD: {diagnosis}.",
-      "doneWhen": "`readiness run --component {component}` passes every discovered command.",
+      "doneWhen": "A new audit runs every discovered command for {component} from a clean checkout, and each one passes.",
       "steps": [
         {
           "title": "Reproduce it",
@@ -594,7 +595,7 @@
         },
         {
           "title": "Prove it",
-          "detail": "Rerun `readiness run --component {component}`."
+          "detail": "Run a new audit. It runs every discovered command again from a clean checkout."
         }
       ]
     },
@@ -627,7 +628,7 @@
       "ownerRole": "Component owner",
       "decision": "What the untested behavior in {files} should be",
       "why": "The audit planted {planted} faults in {component} in a throwaway copy, and the tests caught {caught}.",
-      "doneWhen": "An audit after the change catches at least 60% of the faults it plants in {component}.",
+      "doneWhen": "An audit after the change rates {component}'s tests strong: at least 60% of planted faults caught, over enough faults to be sure.",
       "steps": [
         {
           "title": "Decide the intended behavior",
@@ -639,7 +640,7 @@
         },
         {
           "title": "Prove it with a new audit",
-          "detail": "Run a new audit. Faults come from the code and the tests, so changing the tests plants different faults than this audit did, and tests aimed at one audit's faults don't help."
+          "detail": "Run a new audit. Each fault is ranked by its own file, line and operator, so editing the tests never redraws them: the next audit plants the faults this one missed again first, then at least one batch of faults no report has named, so tests aimed only at the named faults don't carry a weak suite."
         },
         {
           "title": "Review",
@@ -653,7 +654,7 @@
       "size": "Small: {fileCount} instruction files",
       "ownerRole": "Repo maintainer",
       "why": "{failedCount} instructions agents would follow are wrong: {diagnosis}.",
-      "doneWhen": "`readiness run --instructions` replays every instruction item.",
+      "doneWhen": "A new audit replays every instruction command and checks every path, and each one passes.",
       "steps": [
         {
           "title": "Fix each listed item",
@@ -661,7 +662,7 @@
         },
         {
           "title": "Prove it",
-          "detail": "`readiness run --instructions` replays every command and checks every path."
+          "detail": "Run a new audit. It replays every instruction command and checks every path."
         }
       ]
     },

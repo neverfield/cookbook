@@ -1,9 +1,9 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { showFromBranch } from "./history.ts";
+import { tempDir } from "./teardown.ts";
 import { latestRubricVersion, loadRubric, rubricDigest } from "./rubric.ts";
 import { attachAudit, endSession, lease, renewSession } from "./session.ts";
 import type { Audit, ScenarioSpec, Tier } from "./types.ts";
@@ -136,13 +136,13 @@ function cloneCommit(repo: string, commit: string, dest: string, hooks: string):
 
 // Streamed through a file on disk, so a large repo never sits in memory.
 function archiveCommit(repo: string, commit: string, dest: string): void {
-  const dir = mkdtempSync(join(tmpdir(), "readiness-archive-"));
+  const dir = tempDir("readiness-archive-");
   try {
-    const tar = join(dir, "tree.tar");
+    const tar = join(dir.path, "tree.tar");
     execFileSync("git", ["archive", "--format=tar", "-o", tar, commit], { cwd: repo, stdio: ["ignore", "ignore", "pipe"] });
     execFileSync("tar", ["-x", "-f", tar, "-C", dest], { stdio: ["ignore", "ignore", "pipe"] });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    dir.dispose();
   }
 }
 
@@ -195,7 +195,8 @@ function fillLfs(repo: string, dest: string, hooks: string, info: TreeInfo): voi
 export function exportTree(repo: string, commit: string, dest: string): TreeInfo {
   if (!/^[0-9a-f]{40}$/.test(commit)) fail(`Not a commit id: ${commit}`);
   ensureDir(dest);
-  const hooks = mkdtempSync(join(tmpdir(), "readiness-nohooks-"));
+  const hooksDir = tempDir("readiness-nohooks-");
+  const hooks = hooksDir.path;
   try {
     const info: TreeInfo = { git: cloneCommit(repo, commit, dest, hooks), submodulesMissing: [], lfsPointers: [] };
     if (!info.git) archiveCommit(repo, commit, dest);
@@ -203,7 +204,7 @@ export function exportTree(repo: string, commit: string, dest: string): TreeInfo
     if (info.git) fillLfs(repo, dest, hooks, info);
     return info;
   } finally {
-    rmSync(hooks, { recursive: true, force: true });
+    hooksDir.dispose();
   }
 }
 
@@ -224,10 +225,15 @@ export function commitReader(repo: string, commit: string): (path: string) => st
 }
 
 export function scratchTree(repo: string, commit: string): { dir: string; dispose: () => void } {
-  const parent = mkdtempSync(join(tmpdir(), "readiness-scratch-"));
-  const dir = join(parent, "tree");
-  exportTree(repo, commit, dir);
-  return { dir, dispose: () => rmSync(parent, { recursive: true, force: true }) };
+  const parent = tempDir("readiness-scratch-");
+  const dir = join(parent.path, "tree");
+  try {
+    exportTree(repo, commit, dir);
+  } catch (e) {
+    parent.dispose();
+    throw e;
+  }
+  return { dir, dispose: parent.dispose };
 }
 
 export function writeRecordsIgnore(p: Paths): void {
@@ -271,8 +277,16 @@ export function initAudit(opts: InitOptions): { audit: Audit; local: LocalInfo; 
   const commit = gitOrThrow(["rev-parse", "HEAD"], opts.repo).trim();
   const seedEnv = process.env.SA_READINESS_EVAL_SEED;
   const id = `aud-${today()}-${commit.slice(0, 7)}-${seedEnv ? sha256(`${seedEnv}:${commit}:${nowIso()}`).slice(0, 4) : randomHex(2)}`;
-  const tree = join(mkdtempSync(join(tmpdir(), `readiness-${id}-`)), "tree");
-  const info = exportTree(opts.repo, commit, tree);
+  // The draft's folder outlives this command, but not an export that fails or is stopped part way.
+  const draftDir = tempDir(`readiness-${id}-`);
+  const tree = join(draftDir.path, "tree");
+  let info: TreeInfo;
+  try {
+    info = exportTree(opts.repo, commit, tree);
+  } catch (e) {
+    draftDir.dispose();
+    throw e;
+  }
   const rubric = latestRubricVersion();
   const fromCode = seedFromCode(rubric);
   const seed = fromCode ? codeSeed(opts.repo, commit, seedEnv) : seedEnv ? sha256(`${seedEnv}:${priorAudits(p)}`).slice(0, 32) : randomHex(16);
@@ -317,6 +331,7 @@ export function initAudit(opts: InitOptions): { audit: Audit; local: LocalInfo; 
   saveDraft(p, audit);
   writeText(join(p.work, "CURRENT"), id + "\n");
   attachAudit(opts.repo, id);
+  draftDir.keep();
   return { audit, local, paths: p, abandoned: current };
 }
 

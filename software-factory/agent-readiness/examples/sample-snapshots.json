@@ -12,7 +12,7 @@
         "dirtyTree": false,
         "rubric": "2026-12-beta",
         "tier": "local-exec",
-        "scriptsDigest": "ed44533b343a3e1d24dc3f37595a7c6ba9775dddedfc4b1b897c94ca184e908a",
+        "scriptsDigest": "51f3c663e1c64e662b124ba5202dbf51d78c54bb2ee8f55b23745fb271239a85",
         "seedPinned": true,
         "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
         "staleCopy": null,
@@ -384,7 +384,7 @@
           "research": null,
           "effortAndOwner": "Small: 2 instruction files. Repo maintainer.",
           "decision": null,
-          "doneWhen": "`readiness run --instructions` replays every instruction item.",
+          "doneWhen": "A new audit replays every instruction command and checks every path, and each one passes.",
           "dependsOn": [],
           "impact": 0.147,
           "effort": "small",
@@ -404,7 +404,7 @@
           "research": "OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. https://openai.com/index/separating-signal-from-noise-coding-evaluations",
           "effortAndOwner": "Medium: tests in worker only. Component owner.",
           "decision": "What the untested behavior in packages/worker/src/retry.js should be",
-          "doneWhen": "An audit after the change catches at least 60% of the faults it plants in worker.",
+          "doneWhen": "An audit after the change rates worker's tests strong: at least 60% of planted faults caught, over enough faults to be sure.",
           "dependsOn": [],
           "impact": 0,
           "effort": "medium",
@@ -553,7 +553,7 @@
               },
               {
                 "title": "Prove it",
-                "detail": "`readiness run --instructions` replays every command and checks every path."
+                "detail": "Run a new audit. It replays every instruction command and checks every path."
               },
               {
                 "title": "Waive a finding that is a false positive",
@@ -575,7 +575,7 @@
               },
               {
                 "title": "Prove it with a new audit",
-                "detail": "Run a new audit. Faults come from the code and the tests, so changing the tests plants different faults than this audit did, and tests aimed at one audit's faults don't help."
+                "detail": "Run a new audit. Each fault is ranked by its own file, line and operator, so editing the tests never redraws them: the next audit plants the faults this one missed again first, then at least one batch of faults no report has named, so tests aimed only at the named faults don't carry a weak suite."
               },
               {
                 "title": "Review",
@@ -1018,7 +1018,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "doctor passed",
-            "durationMs": 133,
+            "durationMs": 131,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'node --version && npm --version'",
             "supersededBy": null
           },
@@ -1030,7 +1030,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "install passed",
-            "durationMs": 364,
+            "durationMs": 419,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci'",
             "supersededBy": null
           },
@@ -1042,7 +1042,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "lint passed",
-            "durationMs": 180,
+            "durationMs": 178,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/api && npm run lint)'",
             "supersededBy": null
           },
@@ -1054,7 +1054,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "lint passed",
-            "durationMs": 199,
+            "durationMs": 178,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/shared && npm run lint)'",
             "supersededBy": null
           },
@@ -1066,7 +1066,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "lint passed",
-            "durationMs": 188,
+            "durationMs": 173,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/worker && npm run lint)'",
             "supersededBy": null
           },
@@ -1078,7 +1078,7 @@
             "where": "ran in a clean container",
             "result": "fail",
             "summary": "test failed: connection refused on port 5432 (1 of 1 tests failed)",
-            "durationMs": 264,
+            "durationMs": 234,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/api && npm run test)'",
             "supersededBy": "ev-014"
           },
@@ -1090,7 +1090,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "test passed (3 of 3 tests)",
-            "durationMs": 237,
+            "durationMs": 226,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/shared && npm run test)'",
             "supersededBy": null
           },
@@ -1102,7 +1102,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "test passed (2 of 2 tests)",
-            "durationMs": 248,
+            "durationMs": 233,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/worker && npm run test)'",
             "supersededBy": null
           },
@@ -1114,7 +1114,7 @@
             "where": "ran in a clean container",
             "result": "fail",
             "summary": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on",
-            "durationMs": 250,
+            "durationMs": 229,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/api && npm run test)'",
             "supersededBy": null
           },
@@ -1174,7 +1174,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": ".cursor/rules/style.mdc:6 `npm run lint -w api` replays",
-            "durationMs": 185,
+            "durationMs": 173,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && npm run lint -w api'",
             "supersededBy": null
           },
@@ -1186,7 +1186,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "AGENTS.md:6 `npm run test -w shared` replays",
-            "durationMs": 223,
+            "durationMs": 230,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && npm run test -w shared'",
             "supersededBy": null
           }
@@ -1218,7 +1218,7 @@
           },
           {
             "label": "Skill digest",
-            "value": "ed44533b343a"
+            "value": "51f3c663e1c6"
           },
           {
             "label": "Planted faults",
@@ -1533,7 +1533,7 @@
         "dirtyTree": false,
         "rubric": "2026-12-beta",
         "tier": "local-exec",
-        "scriptsDigest": "ed44533b343a3e1d24dc3f37595a7c6ba9775dddedfc4b1b897c94ca184e908a",
+        "scriptsDigest": "51f3c663e1c64e662b124ba5202dbf51d78c54bb2ee8f55b23745fb271239a85",
         "seedPinned": true,
         "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
         "staleCopy": null,
@@ -1908,7 +1908,7 @@
           "research": "OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. https://openai.com/index/separating-signal-from-noise-coding-evaluations",
           "effortAndOwner": "Medium: tests in worker only. Component owner.",
           "decision": "What the untested behavior in packages/worker/src/retry.js should be",
-          "doneWhen": "An audit after the change catches at least 60% of the faults it plants in worker.",
+          "doneWhen": "An audit after the change rates worker's tests strong: at least 60% of planted faults caught, over enough faults to be sure.",
           "dependsOn": [],
           "impact": 0.228,
           "effort": "medium",
@@ -2156,7 +2156,7 @@
               },
               {
                 "title": "Prove it with a new audit",
-                "detail": "Run a new audit. Faults come from the code and the tests, so changing the tests plants different faults than this audit did, and tests aimed at one audit's faults don't help."
+                "detail": "Run a new audit. Each fault is ranked by its own file, line and operator, so editing the tests never redraws them: the next audit plants the faults this one missed again first, then at least one batch of faults no report has named, so tests aimed only at the named faults don't carry a weak suite."
               },
               {
                 "title": "Review",
@@ -2629,7 +2629,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "doctor passed",
-            "durationMs": 118,
+            "durationMs": 137,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'node --version && npm --version'",
             "supersededBy": null
           },
@@ -2641,7 +2641,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "install passed",
-            "durationMs": 8553,
+            "durationMs": 9412,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh'",
             "supersededBy": null
           },
@@ -2653,7 +2653,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "lint passed",
-            "durationMs": 179,
+            "durationMs": 187,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/api && npm run lint)'",
             "supersededBy": null
           },
@@ -2665,7 +2665,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "lint passed",
-            "durationMs": 176,
+            "durationMs": 178,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/shared && npm run lint)'",
             "supersededBy": null
           },
@@ -2677,7 +2677,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "lint passed",
-            "durationMs": 187,
+            "durationMs": 180,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/worker && npm run lint)'",
             "supersededBy": null
           },
@@ -2689,7 +2689,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "start passed",
-            "durationMs": 2281,
+            "durationMs": 2283,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && bash scripts/agent-start.sh'",
             "supersededBy": null
           },
@@ -2701,7 +2701,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "test passed (1 of 1 tests)",
-            "durationMs": 252,
+            "durationMs": 263,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/api && npm run test)'",
             "supersededBy": null
           },
@@ -2713,7 +2713,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "test passed (3 of 3 tests)",
-            "durationMs": 247,
+            "durationMs": 241,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/shared && npm run test)'",
             "supersededBy": null
           },
@@ -2725,7 +2725,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "test passed (2 of 2 tests)",
-            "durationMs": 240,
+            "durationMs": 223,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/worker && npm run test)'",
             "supersededBy": null
           },
@@ -2785,7 +2785,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": ".cursor/rules/style.mdc:6 `npm run lint -w api` replays",
-            "durationMs": 190,
+            "durationMs": 171,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run lint -w api'",
             "supersededBy": null
           },
@@ -2797,7 +2797,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "AGENTS.md:6 `npm run test -w shared` replays",
-            "durationMs": 231,
+            "durationMs": 226,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run test -w shared'",
             "supersededBy": null
           },
@@ -2809,7 +2809,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "AGENTS.md:7 `npm test` replays",
-            "durationMs": 444,
+            "durationMs": 447,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm test'",
             "supersededBy": null
           },
@@ -2833,7 +2833,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": ".cursor/skills/verify/SKILL.md:56 `npm run test` replays",
-            "durationMs": 457,
+            "durationMs": 452,
             "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run test'",
             "supersededBy": null
           }
@@ -2865,7 +2865,7 @@
           },
           {
             "label": "Skill digest",
-            "value": "ed44533b343a"
+            "value": "51f3c663e1c6"
           },
           {
             "label": "Planted faults",

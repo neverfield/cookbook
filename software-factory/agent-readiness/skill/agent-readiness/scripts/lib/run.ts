@@ -1,7 +1,9 @@
 import { spawn } from "node:child_process";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, writeFileSync } from "node:fs";
+import { constants } from "node:os";
 import { join } from "node:path";
+import { onTeardown, tempDir } from "./teardown.ts";
+import type { TempDir } from "./teardown.ts";
 import { ensureDir } from "./util.ts";
 
 export interface RunOutcome {
@@ -31,8 +33,21 @@ function sudoShim(bin: string): void {
 // --inherit-env they stay out of host runs unless --registry-env names one.
 export const ACCOUNT_CREDENTIAL = /^(AWS_|AZURE_|GOOGLE_APPLICATION_CREDENTIALS$|CLOUDSDK_|GH_|GITHUB_TOKEN$|GITLAB_TOKEN$|SSH_AUTH_SOCK$|SSH_AGENT_PID$|KUBECONFIG$|DOCKER_CONFIG$|NPM_CONFIG_USERCONFIG$|npm_config_userconfig$|VAULT_TOKEN$|OP_SESSION_|CURSOR_API_KEY$)/;
 
+// Each throwaway home by its path, so the executor that made one removes it when it closes. One
+// still open when the process stops is removed then.
+const homes = new Map<string, TempDir>();
+
+export function disposeHome(env: Record<string, string>): void {
+  const t = homes.get(env.HOME);
+  if (!t) return;
+  homes.delete(env.HOME);
+  t.dispose();
+}
+
 export function scrubbedEnv(opts: EnvOptions = {}): Record<string, string> {
-  const home = mkdtempSync(join(tmpdir(), "readiness-home-"));
+  const t = tempDir("readiness-home-");
+  const home = t.path;
+  homes.set(home, t);
   if (opts.inheritEnv) {
     const all: Record<string, string> = {};
     const named = new Set(opts.registryEnv ?? []);
@@ -92,6 +107,10 @@ export function runCommand(command: string, cwd: string, env: Record<string, str
     const started = Date.now();
     // pipefail, as CI shells run, so `tests | tee` fails when the tests do.
     const child = spawn("bash", ["-o", "pipefail", "-c", command], { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
+    // Its own process group outlives this process, so a stopped audit ends the group too.
+    const drop = onTeardown(() => {
+      if (child.pid && child.exitCode === null && child.signalCode === null) process.kill(-child.pid, "SIGKILL");
+    });
     let output = "";
     let timedOut = false;
     const onData = (chunk: Buffer) => {
@@ -107,12 +126,16 @@ export function runCommand(command: string, cwd: string, env: Record<string, str
         child.kill("SIGKILL");
       }
     }, timeoutSec * 1000);
-    child.on("close", (code) => {
+    // A process killed by a signal, such as the kernel's out-of-memory killer, exits as a shell
+    // reports it: 128 plus the signal's number.
+    child.on("close", (code, signal) => {
       clearTimeout(timer);
-      resolve({ exitCode: timedOut ? null : code, timedOut, durationMs: Date.now() - started, output });
+      drop();
+      resolve({ exitCode: timedOut ? null : (code ?? (signal ? 128 + constants.signals[signal] : null)), timedOut, durationMs: Date.now() - started, output });
     });
     child.on("error", (err) => {
       clearTimeout(timer);
+      drop();
       resolve({ exitCode: 127, timedOut: false, durationMs: Date.now() - started, output: output + String(err) });
     });
   });

@@ -75,7 +75,7 @@ describe("no silent host fallback: without a container nothing runs, and the res
     assert.equal(report.maturity.unproven, true);
     assert.notEqual(report.maturity.outcome, "not_assessed", "unproven is not the same as not assessed");
     assert.match(report.executive.heading, /^Unproven on this machine/);
-    assert.match(report.executive.headline, /A rerun where Docker or Podman is available, such as CI, can prove it\./);
+    assert.match(report.executive.headline, /A rerun where Docker is available, such as CI, can prove it\./);
     assert.ok(report.components.included.every((c: { unproven: boolean }) => c.unproven));
     assert.ok(report.maturity.capReasons.length > 0 && report.maturity.capReasons.every((c: { state: string; reason: string }) => c.state === "blocked" && c.reason.length > 0), "every cap names its reason");
     assert.ok(report.maturity.capReasons.some((c: { reason: string }) => c.reason.includes(HOST_NOT_ALLOWED)));
@@ -119,8 +119,8 @@ describe("no silent host fallback: without a container nothing runs, and the res
   });
 
   test("a runtime that is missing, rather than turned off, is named as missing", () => {
-    assert.equal(noRuntimeReason("auto"), "no container runtime on this machine: neither docker info nor podman info answered");
-    assert.equal(noRuntimeReason("podman"), "no container runtime on this machine: podman info didn't answer");
+    assert.equal(noRuntimeReason("auto"), "no container runtime on this machine: docker info didn't answer");
+    assert.equal(noRuntimeReason("docker"), "no container runtime on this machine: docker info didn't answer");
     assert.match(noRuntimeReason("none"), /turned off/);
   });
 
@@ -129,7 +129,7 @@ describe("no silent host fallback: without a container nothing runs, and the res
     const { code, out, report, audit } = audited(repo, ["--image", "node:12-bookworm", "--no-mutants"]);
     assert.equal(code, 0, out);
     assert.deepEqual(audit.evidence.filter((e: { where: string }) => e.where === "host" || e.where === "fresh_copy"), []);
-    assert.match(audit.environment.notRun, /^the audit's (docker|podman) container \(node:12-bookworm\) didn't start: .+, and host mode wasn't allowed/);
+    assert.match(audit.environment.notRun, /^the audit's docker container \(node:12-bookworm\) didn't start: .+, and host mode wasn't allowed/);
     assert.doesNotMatch(audit.environment.notRun, /--help/, "the runtime's help hint isn't the error");
     assert.equal(report.maturity.unproven, true);
     assert.ok(report.maturity.capReasons.every((c: { reason: string }) => /didn't start/.test(c.reason)));

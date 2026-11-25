@@ -412,6 +412,37 @@ function phpstanRoot(text: string): string | null {
 // What the audit appends to a timed-out command's output when the command's processes used no CPU
 // in the seconds before it was stopped, and whether the network was off then.
 export const IDLE_MARK = "readiness: idle at the timeout";
+// What the audit appends to a failed command's output when the container's cgroup counted a process
+// the kernel stopped at its memory limit (container.ts).
+export const OOM_MARK = "readiness: stopped at the memory limit";
+
+// Out of memory or out of disk: limits of the machine and of the audit's container, which a build or
+// test suite that is fine elsewhere runs into. A process the kernel killed with no other message
+// exits 137 (128 + SIGKILL); the audit's own timeout kills that way too, so only a run that didn't
+// time out counts. Each needs its own words in the output, or the cgroup's count, so a test that
+// exits 137 on its own terms isn't read as one.
+const MEMORY: { re: RegExp; what: string }[] = [
+  { re: /JavaScript heap out of memory|Reached heap limit Allocation failed|FATAL ERROR: [^\n]*Allocation failed/, what: "Node ran out of memory (JavaScript heap out of memory)" },
+  { re: /java\.lang\.OutOfMemoryError/, what: "the JVM ran out of memory (java.lang.OutOfMemoryError)" },
+  { re: /^(?:[\w.]+\.)?MemoryError\b/m, what: "Python ran out of memory (MemoryError)" },
+  { re: /fatal error: runtime: out of memory/, what: "Go ran out of memory (runtime: out of memory)" },
+  { re: /memory allocation of \d+ bytes failed/, what: "the process ran out of memory (memory allocation failed)" },
+  { re: /\bstd::bad_alloc\b|\bCannot allocate memory\b|\bENOMEM\b|\bOut of memory\b/, what: "the process ran out of memory (cannot allocate memory)" },
+];
+const KILLED = /(?:^|\s)Killed(?:\s|$)|signal: 9, SIGKILL|\(signal: killed\)|\bsignal: killed\b|\b(?:exit(?:ed)?(?: with)? (?:code|status) |Error )137\b/m;
+const WATCHERS = /ENOSPC: System limit for number of file watchers reached|inotify watch limit reached/;
+const DISK = /\bENOSPC\b|No space left on device|Disk quota exceeded|\bEDQUOT\b/;
+
+export function resourceLimit(output: string, exitCode: number | null = null): { detail: string; limit: "memory" | "disk" } | null {
+  const marked = output.match(new RegExp(`${OOM_MARK}: the kernel stopped (?:a process|\\d+ processes) at the container's (?:(\\d+) MB )?memory limit`));
+  if (marked) return { detail: `a process was stopped at the audit's ${marked[1] ? `${Number(marked[1]).toLocaleString("en-US")} MB ` : ""}memory limit`, limit: "memory" };
+  const mem = MEMORY.find((m) => m.re.test(output));
+  if (mem) return { detail: mem.what, limit: "memory" };
+  if (WATCHERS.test(output)) return { detail: "the machine's limit on file watchers was reached (ENOSPC)", limit: "disk" };
+  if (DISK.test(output)) return { detail: "the disk ran out of space (No space left on device)", limit: "disk" };
+  if (exitCode === 137 && KILLED.test(output)) return { detail: "a process was killed (exit 137), as the kernel does at a memory limit", limit: "memory" };
+  return null;
+}
 export const IDLE_OFFLINE = "with the network off";
 
 // A .NET NativeAOT build links with the platform's C toolchain, which an SDK image may not ship:
@@ -465,7 +496,8 @@ export function externalHost(output: string): string | null {
   return null;
 }
 
-export function diagnose(rawOutput: string, timedOut: boolean, phase: string): Diagnosis {
+// exitCode: the command's, when it finished; 137 with the words of a kill reads as a memory limit.
+export function diagnose(rawOutput: string, timedOut: boolean, phase: string, exitCode: number | null = null): Diagnosis {
   const clean = withoutMavenWarnings(rawOutput.replace(/\x1b\[[0-9;]*m/g, ""));
   // Stuck with no CPU while the network was off: most likely waiting on a download, such as an
   // npm install of a packed tarball inside a test script.
@@ -473,6 +505,9 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string): D
   if (timedOut) return { cause: "timeout", detail: `the ${phase} step ran out of time` };
   const focus = failingPart(clean);
   const output = `${focus}\n${unwrap(focus)}`;
+  // The cgroup's count is read from the whole output: the mark comes after every test's lines.
+  const resource = clean.includes(OOM_MARK) ? resourceLimit(clean, exitCode) : resourceLimit(output, exitCode);
+  if (resource) return { cause: "resource", detail: resource.detail, limit: resource.limit };
   // A Maven module that didn't compile ran no tests, so nothing printed before it explains the
   // failure, as gson's offline test-jpms "module not found" under the Gson module's test logs.
   const compiled = compilerError(clean);

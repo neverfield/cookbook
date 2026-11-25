@@ -308,7 +308,7 @@ function needle(r: ReportJson): string {
   });
   if (r.actions.length) out.push(`</ol>`);
   const noResults = r.maturity.outcome === "not_assessed";
-  if (r.actions.length === 0) out.push(`<p>${esc(r.maturity.assessedComponents === 0 ? "No actions can be planned yet: no component could be assessed, so nothing was checked." : noResults ? "No actions can be planned yet: this audit has no real check results to plan from." : r.maturity.outcome === "blocked" ? `No actions are open: nothing in the repo blocks Level ${r.maturity.level + 1}. Proving it needs a rerun where this machine's limits don't apply, such as CI with Docker or Podman.` : "No actions are open.")}</p>`);
+  if (r.actions.length === 0) out.push(`<p>${esc(r.maturity.assessedComponents === 0 ? "No actions can be planned yet: no component could be assessed, so nothing was checked." : noResults ? "No actions can be planned yet: this audit has no real check results to plan from." : r.maturity.outcome === "blocked" ? `No actions are open: nothing in the repo blocks Level ${r.maturity.level + 1}. Proving it needs a rerun where this machine's limits don't apply, such as CI with Docker.` : "No actions are open.")}</p>`);
   out.push(`</section>`);
   return out.join("");
 }

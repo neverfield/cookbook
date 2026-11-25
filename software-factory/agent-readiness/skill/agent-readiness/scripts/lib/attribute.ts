@@ -39,6 +39,8 @@ export function attribute(ev: AttributionInput, imageSource?: ImageSource): Attr
   if (ev.result !== "fail") return null;
   if (ev.blocked) return { verdict: "environment", basis: "known_cause", detail: ev.blocked };
   const d = ev.diagnosis ?? diagnose(`${ev.summary}\n${ev.outputTail ?? ""}`, Boolean(ev.timedOut), ev.kind ?? "test");
+  // A memory cap or a full disk is the machine's or the audit's, whatever image ran.
+  if (d.cause === "resource") return { verdict: "undetermined", basis: "known_cause", detail: `${d.detail}, a limit of this machine or the audit's container rather than of the repo` };
   const auditsImage = ev.where !== "container" || imageSource !== "repo";
   const runner = ev.kind === "test" ? runnerOf(d) : null;
   if (runner) return { verdict: "undetermined", basis: "known_cause", detail: `the test runner ${runner} wasn't there to run the tests, so the audit's install may have left it out` };
