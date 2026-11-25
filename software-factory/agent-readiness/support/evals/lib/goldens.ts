@@ -80,7 +80,7 @@ export function loadGoldens(): GoldenSet {
 
 export function goldenProblems(set: GoldenSet): string[] {
   const out: string[] = [];
-  if (set.goldens.length < 4 || set.goldens.length > 6) out.push(`${set.goldens.length} goldens; the set needs 4 to 6`);
+  if (set.goldens.length < 4 || set.goldens.length > 7) out.push(`${set.goldens.length} goldens; the set needs 4 to 7`);
   for (const g of set.goldens) {
     if (!/^[0-9a-f]{40}$/.test(g.sha)) out.push(`${g.id}: the commit must be a full 40-character SHA`);
     if (!PERMISSIVE.includes(g.license)) out.push(`${g.id}: ${g.license} isn't a permissive license`);
@@ -92,7 +92,7 @@ export function goldenProblems(set: GoldenSet): string[] {
   if (!set.goldens.some((g) => g.shape === "monorepo" && g.expect.included.length + g.expect.excluded.length > 1)) out.push("no golden is a monorepo with nested apps");
   const known = new Set(set.goldens.flatMap((g) => g.expect.included.map((c) => `${g.id}:${c}`)));
   for (const e of set.rank.flat()) if (!known.has(e)) out.push(`rank names ${e}, which no golden expects to assess`);
-  if (set.rank.length < 2) out.push("the ranking needs at least two tiers to span low to high");
+  if (set.rank.length < 3) out.push("the ranking needs at least three tiers to span low to high");
   if (!set.goldens.some((g) => Object.values(g.expect.levels ?? {}).some((l) => l !== null))) out.push("no golden asserts an exact level");
   return out;
 }

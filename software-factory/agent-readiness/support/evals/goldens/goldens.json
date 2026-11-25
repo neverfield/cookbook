@@ -7,6 +7,9 @@
       "express:express"
     ],
     [
+      "cli-progress:cli-progress"
+    ],
+    [
       "create-t3-turbo:nextjs",
       "create-t3-turbo:ui"
     ]
@@ -49,6 +52,26 @@
         "excluded": [],
         "levels": {
           "express": 2
+        }
+      }
+    },
+    {
+      "id": "cli-progress",
+      "repo": "npkgz/cli-progress",
+      "sha": "e2347a35a6c0922cfb0a077cf5ed21696fba46da",
+      "license": "MIT",
+      "toolchains": [
+        "js-ts"
+      ],
+      "shape": "single",
+      "reason": "A real mocha suite that tests only the formatter, so it catches too few planted faults: of the 11 places the audit can plant a fault in the files its tests import, the suite catches 1 (cli-progress-faults.json), so any draw of 5 is weak. It installs from yarn.lock and passes its 6 tests in a clean container: Level 1, the low middle.",
+      "expect": {
+        "included": [
+          "cli-progress"
+        ],
+        "excluded": [],
+        "levels": {
+          "cli-progress": 1
         }
       }
     },

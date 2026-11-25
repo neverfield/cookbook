@@ -24,7 +24,7 @@ function audited(fixture: string): { repo: string; report: ReportJson; audit: Au
 }
 
 describe("public goldens", () => {
-  test("the pinned set is 4 to 6 permissive repos at full SHAs, covering JS/TS, Python, Go, .NET and a monorepo with nested apps", () => {
+  test("the pinned set is 4 to 7 permissive repos at full SHAs, covering JS/TS, Python, Go, .NET and a monorepo with nested apps", () => {
     const set = loadGoldens();
     assert.deepEqual(goldenProblems(set), []);
     assert.ok(set.goldens.some((g) => g.shape === "monorepo" && g.expect.included.length > 1), "the monorepo has more than one assessed app");
@@ -41,7 +41,7 @@ describe("public goldens", () => {
   test("exact levels are asserted for the stable goldens, and a level off by one fails", () => {
     const set = loadGoldens();
     const exact = Object.fromEntries(set.goldens.flatMap((g) => Object.entries(g.expect.levels ?? {}).map(([c, l]) => [`${g.id}:${c}`, l])));
-    assert.deepEqual({ slugify: exact["slugify:slugify"], starlette: exact["starlette:starlette"], express: exact["express:express"] }, { slugify: 2, starlette: 2, express: 2 });
+    assert.deepEqual({ slugify: exact["slugify:slugify"], starlette: exact["starlette:starlette"], express: exact["express:express"], cliProgress: exact["cli-progress:cli-progress"] }, { slugify: 2, starlette: 2, express: 2, cliProgress: 1 });
     const slugify = set.goldens.find((g) => g.id === "slugify")!;
     assert.deepEqual(levelViolations(slugify, { slugify: 2 }), []);
     assert.deepEqual(levelViolations(slugify, { slugify: 1 }), ["slugify:slugify is Level 1, expected Level 2"], "a regression that moves every repo down one level still keeps the ranking");
