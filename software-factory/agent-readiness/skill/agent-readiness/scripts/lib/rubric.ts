@@ -90,7 +90,10 @@ export interface Rubric {
     metrics: string[];
     activityLabels: Record<string, string[]>;
   };
-  part1: { maxHeadlineWords: number; maxGaps: number; maxGapWords: number; bannedTerms: string[]; levelNames: string[] };
+  // From 2026-12-beta, part 1's words come from templates filled from the narration's slots, so the
+  // rubric sets no gap-length or level-name rule for narrated text; maxHeadlineWords, maxGaps and
+  // bannedTerms shape what the templates write.
+  part1: { maxHeadlineWords: number; maxGaps: number; maxGapWords?: number; bannedTerms: string[]; levelNames?: string[] };
   effortX: Record<Effort, number>;
   matrixQuadrants: string[];
   // "relative" (from 2026-11-alpha): impact is placed against the largest action's impact.
@@ -125,6 +128,11 @@ export function loadRubric(version?: string): Rubric {
 
 export function rubricDigest(version: string): string {
   return sha256(readText(join(rubricDir(), `${version}.json`)));
+}
+
+// Where a pass proves Level 1, in words for the report.
+export function provingPlace(rubric: Rubric): string {
+  return (rubric.proof?.environments ?? ["container"]).includes("disposable_vm") ? "a clean container or a disposable VM" : "a clean container";
 }
 
 export function strengthRank(rubric: Rubric, s: Strength): number {

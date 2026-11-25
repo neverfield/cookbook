@@ -77,13 +77,13 @@ node -e 'const [a, b] = process.versions.node.split(".").map(Number); if (a < 22
 Copy the skill into the repository you want to audit, from that repository's root:
 
 ```bash
-git clone --depth 1 https://github.com/cursor/cookbook /tmp/cookbook
-git -C /tmp/cookbook rev-parse HEAD    # the commit you copied: note it, it's your pin
+git clone --depth 1 --branch agent-readiness-v0.2.0 https://github.com/cursor/cookbook /tmp/cookbook
+git -C /tmp/cookbook rev-parse HEAD    # the commit the release tag points to: note it, it's your pin
 mkdir -p .cursor/skills
 cp -R /tmp/cookbook/software-factory/agent-readiness/skill/agent-readiness .cursor/skills/
 ```
 
-`.cursor/skills/agent-readiness` is the usual place, and any skills folder your agent reads works. The skill carries its own `package.json`, so it runs whatever module type the repo's `package.json` sets. Copy the whole folder: the seal checks a digest of the scripts, rubric and `package.json`. Commit the copy with the commit hash `rev-parse` printed in the message, and use that same hash as `SA_ACCELERATOR_REF` in the [example CI workflows](support/examples/github-workflows/), so CI runs and verifies the release you copied. No release tag exists yet; until one does, pin that commit rather than a branch.
+`.cursor/skills/agent-readiness` is the usual place, and any skills folder your agent reads works. The skill carries its own `package.json`, so it runs whatever module type the repo's `package.json` sets. Copy the whole folder: the seal checks a digest of the scripts, rubric and `package.json`. Commit the copy with the commit hash `rev-parse` printed in the message, and use that same hash as `SA_ACCELERATOR_REF` in the [example CI workflows](support/examples/github-workflows/), so CI runs and verifies the release you copied. The clone takes the release tag that `skill/agent-readiness/RELEASE.json` names; pin the commit it points to rather than a branch or the tag, since a commit can't move.
 
 **License.** The cursor/cookbook repository doesn't carry a license file yet, so it grants no license to copy the skill. Check with its maintainers, or your own legal team, before you copy it into another repository.
 

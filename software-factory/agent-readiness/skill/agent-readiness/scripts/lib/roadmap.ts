@@ -1,6 +1,7 @@
 import { componentLevel } from "./levels.ts";
 import { describeRate, rate, windowLabel } from "./outcomes.ts";
 import type { Rubric, RubricTemplate } from "./rubric.ts";
+import { provingPlace } from "./rubric.ts";
 import type { CompStates } from "./score.ts";
 import { commandsFor, gatingInstruction } from "./score.ts";
 import { removalAdvice } from "./secrets.ts";
@@ -236,9 +237,9 @@ function sharesOf(ctx: RoadmapContext): Map<string, number> {
   return new Map(ctx.components.map((c) => [c.id, c.changeShare]));
 }
 
-function unlocksText(before: Map<string, Level>, after: Map<string, Level>, unproven: Set<string> = new Set()): string {
+function unlocksText(before: Map<string, Level>, after: Map<string, Level>, unproven: Set<string> = new Set(), place = "a clean container"): string {
   const rose = [...after.entries()].filter(([id, l]) => l > (before.get(id) ?? 0));
-  return rose.map(([id, l]) => `${id} to Level ${l}${unproven.has(id) ? " once Level 1 is proven in a clean container" : ""}`).join(", ");
+  return rose.map(([id, l]) => `${id} to Level ${l}${unproven.has(id) ? ` once Level 1 is proven in ${place}` : ""}`).join(", ");
 }
 
 // A component held at Level 0 only by limits of this machine is planned as if Level 1 held, so
@@ -318,7 +319,7 @@ export function updateRoadmap(prev: Roadmap | null, ctx: RoadmapContext): Roadma
     const base = {
       kind: c.kind,
       template: c.template,
-      title: audit.narration?.titles?.[c.id] ?? c.title ?? filled.title,
+      title: c.title ?? filled.title,
       fixes: c.fixes,
       effort: t.effort,
       size: filled.size,
@@ -384,7 +385,7 @@ export function updateRoadmap(prev: Roadmap | null, ctx: RoadmapContext): Roadma
     const after = standardLevels(rubric, flipFor(item, open, maps));
     const rose = [...after.entries()].filter(([id, l]) => l > (levels.get(id) ?? 0) && ctx.active.has(id));
     item.impact = Math.min(1, Math.round(rose.reduce((s, [id]) => s + (shares.get(id) ?? 0), 0) * 1000) / 1000);
-    const text = unlocksText(levels, after, unproven);
+    const text = unlocksText(levels, after, unproven, provingPlace(rubric));
     const prerequisites = new Set<string>();
     const coRequired = new Set<string>();
     const goalConds = new Set<CondId>([...rubric.level1, ...rubric.level2]);
@@ -411,7 +412,7 @@ export function updateRoadmap(prev: Roadmap | null, ctx: RoadmapContext): Roadma
       const together = [item, ...[...coRequired].map((d) => byId.get(d)!)];
       let joint = maps;
       for (const t of together) joint = flipFor(t, open.filter((o) => !together.includes(o) || o === t), joint);
-      const jointText = unlocksText(levels, standardLevels(rubric, joint), unproven);
+      const jointText = unlocksText(levels, standardLevels(rubric, joint), unproven, provingPlace(rubric));
       item.unlocks = `${jointText || "the next level"} together with ${[...coRequired].map((d) => byId.get(d)?.title ?? d).join(" and ")}`;
     } else item.unlocks = "no level change yet";
   }
