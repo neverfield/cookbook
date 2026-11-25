@@ -9,7 +9,7 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "51f3c663e1c64e662b124ba5202dbf51d78c54bb2ee8f55b23745fb271239a85",
+    "scriptsDigest": "6bc9673bcf7af5eb8554d8db1ead1f77357b12763b045053679cbbd42090ba5a",
     "seedPinned": true,
     "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
@@ -177,7 +177,7 @@
       {
         "component": "api",
         "condition": "clean.test",
-        "label": "passes every test in a clean container",
+        "label": "passes every test in a clean environment",
         "state": "not_met",
         "reason": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on"
       }
@@ -215,7 +215,7 @@
           {
             "component": "api",
             "condition": "clean.test",
-            "label": "passes every test in a clean container",
+            "label": "passes every test in a clean environment",
             "state": "not_met",
             "reason": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on"
           }
@@ -302,7 +302,7 @@
   },
   "executive": {
     "heading": "Level 0 of 4, not bootable",
-    "headline": "Agents can't pass the tests in api from a clean checkout because its tests need a service on port 5432 running, which the setup doesn't start, and 55% of recent changes land there.",
+    "headline": "Agents can't pass the tests in api from a clean checkout because its tests need a service on port 5432 running, which the setup doesn't start, and 55% of recent changes land there. infra is not assessed.",
     "numbers": [
       {
         "label": "Components ready for agents",
@@ -320,7 +320,7 @@
         "comparison": "Level 2 needs 0%, counting the last 90 days"
       }
     ],
-    "nextLine": "Next: Level 1, bootable. Met: installs from the lockfile in a clean container. Not yet: api passes every test in a clean container.",
+    "nextLine": "Next: Level 1, bootable. Met: installs from the lockfile in a clean environment. Not yet: api passes every test in a clean environment.",
     "gaps": [
       {
         "rank": 1,
@@ -728,7 +728,7 @@
       "Whether the lint command catches anything"
     ],
     "levelRules": {
-      "level1": "Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container",
+      "level1": "Level 1 needs: installs from the lockfile in a clean environment, builds in a clean environment and passes every test in a clean environment",
       "level2": "Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access",
       "scenarios": []
     },
@@ -1015,7 +1015,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "doctor passed",
-        "durationMs": 131,
+        "durationMs": 143,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'node --version && npm --version'",
         "supersededBy": null
       },
@@ -1027,7 +1027,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "install passed",
-        "durationMs": 419,
+        "durationMs": 398,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci'",
         "supersededBy": null
       },
@@ -1039,7 +1039,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 178,
+        "durationMs": 204,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/api && npm run lint)'",
         "supersededBy": null
       },
@@ -1051,7 +1051,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 178,
+        "durationMs": 225,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/shared && npm run lint)'",
         "supersededBy": null
       },
@@ -1063,7 +1063,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 173,
+        "durationMs": 196,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/worker && npm run lint)'",
         "supersededBy": null
       },
@@ -1075,7 +1075,7 @@
         "where": "ran in a clean container",
         "result": "fail",
         "summary": "test failed: connection refused on port 5432 (1 of 1 tests failed)",
-        "durationMs": 234,
+        "durationMs": 266,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/api && npm run test)'",
         "supersededBy": "ev-014"
       },
@@ -1087,7 +1087,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "test passed (3 of 3 tests)",
-        "durationMs": 226,
+        "durationMs": 258,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/shared && npm run test)'",
         "supersededBy": null
       },
@@ -1099,7 +1099,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "test passed (2 of 2 tests)",
-        "durationMs": 233,
+        "durationMs": 250,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/worker && npm run test)'",
         "supersededBy": null
       },
@@ -1111,7 +1111,7 @@
         "where": "ran in a clean container",
         "result": "fail",
         "summary": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on",
-        "durationMs": 229,
+        "durationMs": 265,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && (cd packages/api && npm run test)'",
         "supersededBy": null
       },
@@ -1171,7 +1171,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": ".cursor/rules/style.mdc:6 `npm run lint -w api` replays",
-        "durationMs": 173,
+        "durationMs": 187,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && npm run lint -w api'",
         "supersededBy": null
       },
@@ -1183,7 +1183,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "AGENTS.md:6 `npm run test -w shared` replays",
-        "durationMs": 230,
+        "durationMs": 254,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'npm ci && npm run test -w shared'",
         "supersededBy": null
       }
@@ -1215,7 +1215,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "51f3c663e1c6"
+        "value": "6bc9673bcf7a"
       },
       {
         "label": "Planted faults",
@@ -1244,7 +1244,7 @@
       "result": "Level 0",
       "ran": "the level rules over the active components, api, shared and worker",
       "where": "in a clean docker container (node:22-bookworm)",
-      "happened": "Set by api, held by api: passes every test in a clean container, not met (test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on).",
+      "happened": "Set by api, held by api: passes every test in a clean environment, not met (test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on).",
       "rule": "The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it."
     },
     {
@@ -1253,8 +1253,8 @@
       "result": "Level 0",
       "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (fail)",
       "where": "in a clean docker container (node:22-bookworm)",
-      "happened": "Held at Level 0 by passes every test in a clean container: not met (test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on)",
-      "rule": "Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
+      "happened": "Held at Level 0 by passes every test in a clean environment: not met (test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on)",
+      "rule": "Level 1 needs: installs from the lockfile in a clean environment, builds in a clean environment and passes every test in a clean environment. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
     },
     {
       "kind": "level",
@@ -1263,7 +1263,7 @@
       "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "Held at Level 1 by agent instructions are accurate: not met (2 agent instruction commands are wrong)",
-      "rule": "Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
+      "rule": "Level 1 needs: installs from the lockfile in a clean environment, builds in a clean environment and passes every test in a clean environment. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
     },
     {
       "kind": "level",
@@ -1272,7 +1272,7 @@
       "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "Held at Level 1 by tests catch planted faults: not met (caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10) and agent instructions are accurate: not met (2 agent instruction commands are wrong)",
-      "rule": "Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
+      "rule": "Level 1 needs: installs from the lockfile in a clean environment, builds in a clean environment and passes every test in a clean environment. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
     },
     {
       "kind": "not_assessed",
@@ -1285,30 +1285,30 @@
     },
     {
       "kind": "condition",
-      "subject": "api: installs from the lockfile in a clean container",
+      "subject": "api: installs from the lockfile in a clean environment",
       "result": "met",
       "ran": "`npm ci` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "install passed",
-      "rule": "Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+      "rule": "Level 1 needs it: installs from the lockfile in a clean environment (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
     },
     {
       "kind": "condition",
-      "subject": "api: builds in a clean container",
+      "subject": "api: builds in a clean environment",
       "result": "met",
       "ran": "`npm ci` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "no build step; follows the install",
-      "rule": "Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+      "rule": "Level 1 needs it: builds in a clean environment (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
     },
     {
       "kind": "condition",
-      "subject": "api: passes every test in a clean container",
+      "subject": "api: passes every test in a clean environment",
       "result": "not met",
       "ran": "`npm run test` (fail)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on",
-      "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails."
+      "rule": "Level 1 needs it: passes every test in a clean environment (Setup works from a clean checkout). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails."
     },
     {
       "kind": "condition",
@@ -1366,30 +1366,30 @@
     },
     {
       "kind": "condition",
-      "subject": "shared: installs from the lockfile in a clean container",
+      "subject": "shared: installs from the lockfile in a clean environment",
       "result": "met",
       "ran": "`npm ci` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "install passed",
-      "rule": "Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+      "rule": "Level 1 needs it: installs from the lockfile in a clean environment (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
     },
     {
       "kind": "condition",
-      "subject": "shared: builds in a clean container",
+      "subject": "shared: builds in a clean environment",
       "result": "met",
       "ran": "`npm ci` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "no build step; follows the install",
-      "rule": "Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+      "rule": "Level 1 needs it: builds in a clean environment (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
     },
     {
       "kind": "condition",
-      "subject": "shared: passes every test in a clean container",
+      "subject": "shared: passes every test in a clean environment",
       "result": "met",
       "ran": "`npm run test` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "test passed (3 of 3 tests)",
-      "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
+      "rule": "Level 1 needs it: passes every test in a clean environment (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
     },
     {
       "kind": "condition",
@@ -1411,30 +1411,30 @@
     },
     {
       "kind": "condition",
-      "subject": "worker: installs from the lockfile in a clean container",
+      "subject": "worker: installs from the lockfile in a clean environment",
       "result": "met",
       "ran": "`npm ci` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "install passed",
-      "rule": "Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+      "rule": "Level 1 needs it: installs from the lockfile in a clean environment (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
     },
     {
       "kind": "condition",
-      "subject": "worker: builds in a clean container",
+      "subject": "worker: builds in a clean environment",
       "result": "met",
       "ran": "`npm ci` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "no build step; follows the install",
-      "rule": "Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+      "rule": "Level 1 needs it: builds in a clean environment (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
     },
     {
       "kind": "condition",
-      "subject": "worker: passes every test in a clean container",
+      "subject": "worker: passes every test in a clean environment",
       "result": "met",
       "ran": "`npm run test` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "test passed (2 of 2 tests)",
-      "rule": "Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
+      "rule": "Level 1 needs it: passes every test in a clean environment (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
     },
     {
       "kind": "condition",
