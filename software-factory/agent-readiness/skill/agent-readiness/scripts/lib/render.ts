@@ -5,10 +5,11 @@ import type { Rubric } from "./rubric.ts";
 import type { CompStates } from "./score.ts";
 import { PREVIEW } from "./preview.ts";
 import { sampledScope } from "./scope.ts";
-import { blockedBy, checkCounts, gatingInstruction } from "./score.ts";
+import { UNDETERMINED, blockedBy, checkCounts, gatingInstruction } from "./score.ts";
+import { attributes } from "./attribute.ts";
 import type { ComponentResult } from "./seal.ts";
 import { NOT_SUPPORTED, STACKS, SUPPORTED_DOC } from "./support.ts";
-import type { Asset, Audit, CondId, Component, ComponentLevel, HistoryLine, Level, OutcomeStats, OutcomesSnapshot, ReportAction, ReportChanges, ReportJson, RevertsSnapshot, Roadmap, RoadmapItem, ScenarioId } from "./types.ts";
+import type { Asset, Audit, CondId, Component, ComponentLevel, HistoryLine, Level, LevelStatus, OutcomeStats, OutcomesSnapshot, ReportAction, ReportChanges, ReportJson, RevertsSnapshot, Roadmap, RoadmapItem, ScenarioId, SettleBy } from "./types.ts";
 import { EMOJI, fmtDate, fmtShortDate, pct, wordCount } from "./util.ts";
 import { serviceLabel } from "./diagnose.ts";
 import { explanationsOf, imagesUsed, waiversOf } from "./explain.ts";
@@ -22,7 +23,7 @@ export interface RenderInput {
   states: Map<string, CompStates>;
   levels: Map<string, ComponentResult>;
   scenarioLevels: Map<string, Map<ScenarioId, LevelResult>>;
-  rollup: { level: Level; couldBe: Level | null; setBy: string[]; outcomeReasons: string[] };
+  rollup: { level: Level; couldBe: Level | null; setBy: string[]; outcomeReasons: string[]; undetermined?: boolean };
   active: Set<string>;
   roadmap: Roadmap;
   top: RoadmapItem[];
@@ -222,9 +223,11 @@ function confidenceOf(input: RenderInput, outcome: ReportJson["maturity"]["outco
   if (outcome === "not_assessed") low.push(noneAssessed(input) ? "no component could be assessed" : input.noResults!);
   if (outcome === "blocked") low.push(`a check that decides Level ${input.rollup.level + 1} was blocked on this machine`);
   if (outcome !== "not_assessed" && audit.tier === "read-only") low.push("the read-only tier runs no repo code");
+  if (undetermined(input)) low.push(`Level 1 is undetermined: ${undeterminedCause(input)}`);
   const vm = audit.environment.proofEnv?.kind === "disposable_vm" && audit.environment.proofEnv.proves ? audit.environment.proofEnv : null;
   if (outcome === "proven" && audit.tier !== "read-only" && !audit.environment.containerRuntime && !vm) low.push("setup ran in a fresh copy on the host, not in a clean container");
   if (outcome === "proven" && vm?.network === "on") medium.push("the tests ran on a disposable VM with the network on, because it couldn't be cut there");
+  if (outcome === "proven" && audit.evidence.some((e) => e.network === "on" && e.result === "pass")) medium.push("some tests passed only with the network on");
   if (input.partial.partial) medium.push(`${pct(input.partial.unassessedShare, 1)}% of recent changes aren't assessed`);
   const sampled = input.components.filter((c) => c.notAssessedReason?.startsWith("outside the "));
   if (sampled.length) medium.push(`${sampled.length} supported ${sampled.length === 1 ? "component was" : "components were"} left out to keep the audit short`);
@@ -314,6 +317,12 @@ function headlineFor(input: RenderInput, ready: string[], setByShare: number): s
     const tail = rerun ? ` ${rerun}` : "";
     return fit(...(causes.length ? [`Nothing could be checked ${where}, so this audit gives no level: ${list(causes)}.${tail}`] : []), `Nothing could be checked ${where}, so this audit gives no level.${tail}`);
   }
+  if (undetermined(input)) {
+    const held = capComps(input);
+    const where = held.length <= 3 ? list(held) : `all ${held.length} ${held.length === active.length ? "active " : ""}components`;
+    const cause = undeterminedCause(input);
+    return fit(`Level 1 is undetermined for ${where}: no check failed for a reason in the repo, but ${cause}.`, `Level 1 is undetermined for ${where}: ${cause}.`, `Level 1 is undetermined for ${where}.`);
+  }
   if (unproven(input)) {
     const held = capComps(input);
     const where = held.length <= 3 ? list(held) : `all ${held.length} ${held.length === active.length ? "active " : ""}components`;
@@ -346,13 +355,17 @@ function headlineFor(input: RenderInput, ready: string[], setByShare: number): s
     // and one whose checks were only blocked is never said to fail.
     const own = rollup.setBy.map((id) => ({ id, ...level0Hold(input, id) }));
     const failed = own.filter((o) => o.cond !== null);
-    const unchecked = own.filter((o) => o.cond === null).map((o) => o.id);
+    // An undetermined component is one fact about the repo short of a result, not a machine's limit.
+    const undecided = own.filter((o) => o.cond === null && compLevel(input, o.id)?.undetermined).map((o) => o.id);
+    const unchecked = own.filter((o) => o.cond === null && !undecided.includes(o.id)).map((o) => o.id);
     const blockers = new Set(failed.map((o) => o.cond));
-    if (new Set(failed.map((o) => o.says)).size > 1 || unchecked.length) {
-      const off = unchecked.length ? [`${unchecked.length <= 3 ? list(unchecked) : `${unchecked.length} other components`} couldn't be checked on this machine`] : [];
+    if (new Set(failed.map((o) => o.says)).size > 1 || unchecked.length || undecided.length) {
+      const names = (ids: string[], other: string) => (ids.length <= 3 ? list(ids) : `${ids.length} ${other} components`);
+      const off = [...(unchecked.length ? [`${names(unchecked, "other")} couldn't be checked on this machine`] : []), ...(undecided.length ? [`Level 1 is undetermined for ${names(undecided, "other")}`] : [])];
       const each = list([...failed.map((o) => `${o.id} ${o.says}`), ...off]);
       const eachShort = list(failed.map((o) => `${o.id} ${o.says}`));
-      return fit(`${each}, so agents can't check their changes there yet${share}.${readyLine}`, `${each}${share}.`, `${each}.`, `${eachShort}; other components couldn't be checked on this machine.`);
+      const rest = unchecked.length ? "other components couldn't be checked on this machine" : "Level 1 is undetermined for the others";
+      return fit(`${each}, so agents can't check their changes there yet${share}.${readyLine}`, `${each}${share}.`, `${each}.`, `${eachShort}; ${rest}.`);
     }
     const names = list(failed.map((o) => o.id));
     const many = failed.length > 1;
@@ -749,6 +762,8 @@ export function buildReport(input: RenderInput): ReportJson {
     ? audit.tier === "read-only"
       ? "Decision needed: whether to allow a local-exec audit, which runs the repo's commands in a container."
       : "Decision needed: where to rerun this audit so its checks can run, for example a CI job with Docker or Podman."
+    : undetermined(input)
+    ? `Decision needed: who settles Level 1 for ${list(capComps(input))}: ${lower(settleByOf(input, capReasons(input))!.text.replace(/`/g, "").replace(/\.$/, ""))}.`
     : unproven(input) && notMachineCause(input)
     ? `Decision needed: how the audit can check Level ${L + 1} in ${list(capComps(input))}, since ${lower(notMachineCause(input)!)}.`
     : unproven(input)
@@ -846,6 +861,7 @@ export function buildReport(input: RenderInput): ReportJson {
       confidence: confidenceOf(input, outcome),
       capReasons: caps,
       unproven: !none && unprovenLevel1(L, input.rollup.couldBe, caps),
+      ...(rubricStatus(input) ? { status: levelStatus(none, undetermined(input), unprovenLevel1(L, input.rollup.couldBe, caps)), settleBy: settleByOf(input, caps) } : {}),
       next: L < 4 ? { level: (L + 1) as Level, name: rubric.scale[L + 1].name, met: [], unmet: [] } : null,
     },
     components: componentsOf(input),
@@ -854,7 +870,7 @@ export function buildReport(input: RenderInput): ReportJson {
         ? "Not assessed: none of the components found can be assessed yet"
         : none
           ? `Not assessed: ${audit.tier === "read-only" ? "the read-only tier runs no repo code" : "no check could run on this machine"}`
-          : `${!none && unprovenLevel1(L, input.rollup.couldBe, caps) ? unprovenHeading(caps) : `Level ${L} of 4, ${rubric.scale[L].plain}${outcome === "blocked" ? (failedCap ? `; Level ${L + 1} isn't met, and some of its checks were blocked on this machine` : `; Level ${L + 1} is blocked on this machine`) : ""}`}${mostlyUnassessed(input) ? `; it covers only ${pct(1 - input.partial.unassessedShare, 1)}% of recent changes, and the rest isn't assessed` : ""}`,
+          : `${undetermined(input) ? undeterminedHeading(caps) : !none && unprovenLevel1(L, input.rollup.couldBe, caps) ? unprovenHeading(caps) : `Level ${L} of 4, ${rubric.scale[L].plain}${outcome === "blocked" ? (failedCap ? `; Level ${L + 1} isn't met, and some of its checks were blocked on this machine` : `; Level ${L + 1} is blocked on this machine`) : ""}`}${mostlyUnassessed(input) ? `; it covers only ${pct(1 - input.partial.unassessedShare, 1)}% of recent changes, and the rest isn't assessed` : ""}`,
       headline: narr.headline ?? headlineFor(input, ready, setByShare),
       numbers: stats3(input),
       nextLine: nextLine(input),
@@ -1009,7 +1025,7 @@ function noticesOf(input: RenderInput): { text: string }[] {
 // What changed since the previous audit, read from its sealed report and this one only.
 export function changesOf(prev: ReportJson, now: ReportJson, rubric: Rubric): ReportChanges {
   // An unproven result is no level: its 0 is only there for the rollup's minimum, never to compare.
-  const repoLevel = (r: ReportJson) => (r.maturity.outcome === "not_assessed" || r.maturity.unproven ? null : r.maturity.level);
+  const repoLevel = (r: ReportJson) => (r.maturity.outcome === "not_assessed" || r.maturity.unproven || r.maturity.status === "undetermined" ? null : r.maturity.level);
   const levels = (r: ReportJson) => new Map(r.components.included.map((c) => [c.id, c.unproven ? null : c.level] as [string, Level | null]));
   const before = levels(prev);
   const after = levels(now);
@@ -1041,6 +1057,45 @@ function plantedFaultsRecord(audit: Audit, rubric: Rubric): string {
 export function unprovenHeading(caps: { condition: string; state: string }[]): string {
   const n = new Set(caps.filter((c) => c.state === "blocked").map((c) => c.condition)).size;
   return `Level 1 unproven on this machine: no Level 1 check failed, and ${n} ${n === 1 ? "was" : "were"} blocked here`;
+}
+
+// No level is named: the heading's level would be one the audit couldn't decide.
+export function undeterminedHeading(caps: { condition: string; state: string }[]): string {
+  const n = new Set(caps.filter((c) => c.state === "unknown").map((c) => c.condition)).size;
+  return `Undetermined: no Level 1 check failed for a reason in the repo, and ${n} couldn't be decided`;
+}
+
+function undetermined(input: RenderInput): boolean {
+  return !notAssessed(input) && Boolean(input.rollup.undetermined);
+}
+
+// Status and settleBy are reported from the rubric that can make a level undetermined.
+function rubricStatus(input: RenderInput): boolean {
+  return attributes(input.rubric);
+}
+
+function levelStatus(none: boolean, undet: boolean, unproven: boolean): LevelStatus {
+  return none ? "not_assessed" : undet ? "undetermined" : unproven ? "unproven" : "proven";
+}
+
+// The first condition the audit couldn't decide, in plain words for part 1.
+function undeterminedCause(input: RenderInput): string {
+  const reason = capReasons(input).find((c) => c.state === "unknown" && c.reason.startsWith(UNDETERMINED))?.reason ?? capReasons(input).find((c) => c.state === "unknown")?.reason;
+  const plain = (reason ?? "").replace(UNDETERMINED, "").replace(/`/g, "").replace(/\s*\([^)]*\)/g, "");
+  return plain && quotable(input, plain) ? plain : "a check that decides it didn't produce a result";
+}
+
+// What settles an unproven or undetermined level, from the reasons that hold it.
+export function settleByOf(input: RenderInput, caps: { component: string; state: string; reason: string }[]): SettleBy | null {
+  const open = caps.filter((c) => c.state === "unknown" || c.state === "blocked");
+  if (!open.length) return null;
+  const comp = open.find((c) => c.component !== "*")?.component ?? "<component>";
+  const why = open.map((c) => c.reason).join("; ");
+  if (/couldn't tell how its tests run/.test(why)) return { kind: "add_command", text: `Add the command the repo runs ${comp}'s tests with, \`readiness contract add --kind test --component ${comp} --cmd "<command>"\`, and rerun the audit.` };
+  if (/test runner \S+ wasn't there/.test(why)) return { kind: "add_command", text: `Add the install command that brings in ${comp}'s test runner, \`readiness contract add --kind install --component ${comp} --cmd "<command>"\`, and rerun the audit.` };
+  if (/image the audit picked|in the audit's image/.test(why)) return { kind: "declare_env", text: `Declare the image ${comp} builds in, in .cursor/environment.json or with --image, and rerun the audit.` };
+  if (open.every((c) => c.state === "blocked")) return { kind: "rerun", text: rerunAdvice(input, open.map((c) => c.reason), "prove it") ?? "Rerun the audit where these checks can run." };
+  return { kind: "rerun", text: "Rerun the audit; if the result holds, add the command that decides it with `readiness contract add`." };
 }
 
 export function unprovenLevel1(level: Level | null, couldBe: Level | null, caps: { state: string }[]): boolean {
@@ -1075,8 +1130,10 @@ function componentsOf(input: RenderInput): ReportJson["components"] {
         const level = none || !l ? null : l.level;
         const couldBe = none || !l ? null : l.couldBe;
         const unproven = unprovenLevel1(level, couldBe, caps);
+        const undet = !none && Boolean(l?.undetermined);
+        const status = rubricStatus(input) ? { status: levelStatus(none || !l, undet, unproven), settleBy: undet || unproven ? settleByOf(input, caps) : null } : {};
         const scenarios = [...(input.scenarioLevels.get(c.id) ?? new Map<ScenarioId, LevelResult>()).entries()].map(([sid, s]) => ({ id: sid, label: input.rubric.scenarios.find((x) => x.id === sid)!.label, level: none ? null : s.level, couldBe: none ? null : s.couldBe, unproven: unproven && s.level === 0 && s.couldBe === 1 }));
-        return { ...row(c), placement: "component" as const, active: input.active.has(c.id), level, couldBe, unproven, capReasons: caps, scenarios };
+        return { ...row(c), placement: "component" as const, active: input.active.has(c.id), level: undet ? null : level, couldBe, unproven, ...status, capReasons: caps, scenarios };
       }),
     excluded: [
       ...comps.filter((c) => !c.assessed).map((c) => ({ ...row(c), placement: "component" as const, reason: c.notAssessedReason ?? "not assessed" })),
@@ -1300,13 +1357,13 @@ function levelWord(rubric: Rubric, l: number): string {
 }
 
 export function scaleLine(r: ReportJson): string {
-  const here = r.maturity.assessedComponents === 0 || r.maturity.outcome === "not_assessed" || r.maturity.unproven ? null : r.maturity.level;
+  const here = r.maturity.assessedComponents === 0 || r.maturity.outcome === "not_assessed" || r.maturity.unproven || r.maturity.status === "undetermined" ? null : r.maturity.level;
   return r.scale.map((s) => (s.level === here ? `[Level ${s.level} ${s.name}]` : `Level ${s.level} ${s.name}`)).join(" > ");
 }
 
 // The level the report can mark on the scale, or null when it can't prove one.
 export function markedLevel(r: ReportJson): Level | null {
-  return r.maturity.assessedComponents === 0 || r.maturity.outcome === "not_assessed" || r.maturity.unproven ? null : r.maturity.level;
+  return r.maturity.assessedComponents === 0 || r.maturity.outcome === "not_assessed" || r.maturity.unproven || r.maturity.status === "undetermined" ? null : r.maturity.level;
 }
 
 // Part 1's compact ladder: the scale left to right, with the repo's level bracketed.

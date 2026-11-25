@@ -10,6 +10,9 @@ export interface LevelResult {
   // Unproven on this machine: no Level 1 condition failed, and every one left was blocked here. A
   // result of its own, not Level 0: `level` stays 0 only so a rollup can take the minimum.
   unproven?: boolean;
+  // Undetermined (from 2026-12-beta): no Level 1 condition failed for a reason in the repo, and the
+  // audit couldn't decide one that wasn't blocked here. Not Level 0 either; one fact settles it.
+  undetermined?: boolean;
 }
 
 type StateMap = Partial<Record<CondId, CondState>>;
@@ -32,7 +35,8 @@ export function componentLevel(rubric: Rubric, states: StateMap, scenarioId?: Sc
   const l1 = evaluate(rubric.level1, states);
   if (!l1.met) {
     const unproven = l1.missing.length === 0 && l1.blocked;
-    return { level: 0, couldBe: l1.missing.length === 0 ? 1 : null, missing: l1.missing, unknown: l1.unknown, ...(unproven ? { unproven } : {}) };
+    const undetermined = rubric.attribution?.level0 === "attributed" && l1.missing.length === 0 && !l1.blocked;
+    return { level: 0, couldBe: l1.missing.length === 0 ? 1 : null, missing: l1.missing, unknown: l1.unknown, ...(unproven ? { unproven } : {}), ...(undetermined ? { undetermined } : {}) };
   }
   const l2 = evaluate(level2, states);
   if (!l2.met) return { level: 1, couldBe: l2.missing.length === 0 ? 2 : null, missing: l2.missing, unknown: l2.unknown };
@@ -71,15 +75,18 @@ export function activeComponents(rubric: Rubric, components: Component[], previo
   return active;
 }
 
-// Unproven when every component that sets the minimum is itself unproven.
-export function repoLevel(levels: Map<string, LevelResult>, active: Set<string>): { level: Level; couldBe: Level | null; setBy: string[]; unproven?: boolean } {
+// Unproven when every component that sets the minimum is itself unproven; undetermined when each is
+// unproven or undetermined and at least one is undetermined, since a rerun alone can't settle that.
+export function repoLevel(levels: Map<string, LevelResult>, active: Set<string>): { level: Level; couldBe: Level | null; setBy: string[]; unproven?: boolean; undetermined?: boolean } {
   const rows = [...levels.entries()].filter(([id]) => active.has(id));
   if (rows.length === 0) return { level: 0, couldBe: null, setBy: [] };
   const min = Math.min(...rows.map(([, l]) => l.level)) as Level;
   const setBy = rows.filter(([, l]) => l.level === min).map(([id]) => id);
   const couldBe = rows.filter(([, l]) => l.level === min).every(([, l]) => l.couldBe !== null) ? ((min + 1) as Level) : null;
-  const unproven = rows.filter(([, l]) => l.level === min).every(([, l]) => l.unproven);
-  return { level: min, couldBe, setBy, ...(unproven ? { unproven } : {}) };
+  const lowest = rows.filter(([, l]) => l.level === min);
+  const unproven = lowest.every(([, l]) => l.unproven);
+  const undetermined = !unproven && lowest.every(([, l]) => l.unproven || l.undetermined);
+  return { level: min, couldBe, setBy, ...(unproven ? { unproven } : {}), ...(undetermined ? { undetermined } : {}) };
 }
 
 // Under a rubric that counts them, changes no component holds aren't assessed either.

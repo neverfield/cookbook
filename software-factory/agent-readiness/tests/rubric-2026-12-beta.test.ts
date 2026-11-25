@@ -38,7 +38,7 @@ function gitRepo(files: Record<string, string>): string {
 describe("rubric 2026-12-beta", () => {
   test("is the rubric new audits use, and lists what changed", () => {
     assert.equal(latestRubricVersion(), "2026-12-beta");
-    assert.equal((next.changes ?? []).length, 10);
+    assert.equal((next.changes ?? []).length, 11);
   });
 
   test("is written as JSON.stringify(rubric, null, 2), so a reformat never moves its digest", () => {
@@ -46,7 +46,7 @@ describe("rubric 2026-12-beta", () => {
     assert.equal(JSON.stringify(JSON.parse(text), null, 2) + "\n", text);
   });
 
-  test("changes only the type-check canary, the revert window, where a pass proves Level 1, the fault estimate, secret classes, instruction severities, three templates, one check's why, the not-assessed list, the unowned share and the folder-name hint's share", () => {
+  test("changes only the type-check canary, the revert window, where a pass proves Level 1, the fault estimate, secret classes, instruction severities, three templates, one check's why, the not-assessed list, the unowned share, the folder-name hint's share and the Level 0 attribution rule", () => {
     const strip = (r: typeof next) => {
       const c = structuredClone(r) as Partial<typeof next> & Record<string, unknown>;
       delete c.version;
@@ -55,6 +55,7 @@ describe("rubric 2026-12-beta", () => {
       delete c.proof;
       delete c.safety;
       delete c.severities;
+      delete c.attribution;
       const { killRate: _k, estimate: _e, caughtRuns: _r, scoped: _s, identity: _i, timeoutFactor: _t, minRunSec: _m, ...mutation } = r.mutation;
       c.mutation = mutation as typeof r.mutation;
       c.outcomes = { ...r.outcomes, revertDays: undefined, metrics: r.outcomes.metrics.filter((m) => m !== "reverted_within_days") };
@@ -73,6 +74,7 @@ describe("rubric 2026-12-beta", () => {
     assert.deepEqual(next.templates["safety:secret"].steps.map((s) => s.title), ["Rotate first", "Move the values out", "Prove it"]);
     assert.equal(Object.keys(next.templates).indexOf("drive"), Object.keys(next.templates).indexOf("delegate") + 1, "the drive step comes right after giving agents work");
     assert.deepEqual([next.components.unowned, next.components.satelliteHintShare, beta.components.unowned, beta.components.satelliteHintShare], ["counted", 0.5, undefined, undefined]);
+    assert.deepEqual([next.attribution, beta.attribution], [{ level0: "attributed", reruns: ["network", "tool"] }, undefined]);
   });
 
   test("changes no component holds count toward partial coverage, where 2026-11-beta leaves them out", () => {

@@ -53,6 +53,7 @@ export interface ComponentResult {
   couldBe: Level | null;
   outcomeReasons: string[];
   unproven?: boolean;
+  undetermined?: boolean;
 }
 
 export interface Computed {
@@ -62,7 +63,7 @@ export interface Computed {
   // Tier 3: only the scenarios a user added, under the components they apply to.
   scenarioLevels: Map<string, Map<ScenarioId, LevelResult>>;
   // Tier 1: the repo rollup over the active components.
-  repo: { level: Level; couldBe: Level | null; setBy: string[]; outcomeReasons: string[]; unproven?: boolean };
+  repo: { level: Level; couldBe: Level | null; setBy: string[]; outcomeReasons: string[]; unproven?: boolean; undetermined?: boolean };
   active: Set<string>;
 }
 
@@ -78,13 +79,13 @@ export function compute(audit: Audit, rubric: Rubric, history: HistoryLine[], ta
     const s = statesOf(states.get(c.id)!);
     const proven = componentLevel(rubric, s);
     const measured = outcomeLevel(rubric, { level2: proven.level === 2, targets, outcomes: o ? { agent: o.byComponent[c.id] ?? emptyStats(), control: o.control, truncated: o.truncated, windowDays: o.window.days } : null, previousAtLevel3: previousAtLevel3(history, c.id), level3Run: level3Run(history, c.id, run) });
-    levels.set(c.id, { level: measured.level ?? proven.level, couldBe: measured.level ? null : proven.couldBe, outcomeReasons: measured.reasons, ...(!measured.level && proven.unproven ? { unproven: true } : {}) });
+    levels.set(c.id, { level: measured.level ?? proven.level, couldBe: measured.level ? null : proven.couldBe, outcomeReasons: measured.reasons, ...(!measured.level && proven.unproven ? { unproven: true } : {}), ...(!measured.level && proven.undetermined ? { undetermined: true } : {}) });
     const m = new Map<ScenarioId, LevelResult>();
     for (const id of scenariosFor(rubric, audit.scenarios ?? [], c.id)) m.set(id, componentLevel(rubric, s, id));
     scenarioLevels.set(c.id, m);
   }
   const active = activeComponents(rubric, audit.profile!.components, history);
-  const r = repoLevel(new Map([...levels.entries()].map(([id, l]) => [id, { level: l.level, couldBe: l.couldBe, missing: [], unknown: [], ...(l.unproven ? { unproven: true } : {}) }])), active);
+  const r = repoLevel(new Map([...levels.entries()].map(([id, l]) => [id, { level: l.level, couldBe: l.couldBe, missing: [], unknown: [], ...(l.unproven ? { unproven: true } : {}), ...(l.undetermined ? { undetermined: true } : {}) }])), active);
   const outcomeReasons = [...new Set(r.setBy.flatMap((id) => levels.get(id)?.outcomeReasons ?? []))];
   return { states, levels, scenarioLevels, repo: { ...r, outcomeReasons }, active };
 }
@@ -138,6 +139,7 @@ export function buildSealedReport(audit: Audit, rubric: Rubric, history: History
     scenarioLevels: Object.fromEntries([...c.scenarioLevels.entries()].filter(([, m]) => m.size).map(([id, m]) => [id, Object.fromEntries([...m.entries()].map(([k, v]) => [k, v.level]))])),
     ...(noResults ? { noLevel: true } : {}),
     ...(c.repo.unproven ? { noLevel: true, unproven: true } : {}),
+    ...(c.repo.undetermined ? { noLevel: true, undetermined: true } : {}),
     shares: Object.fromEntries(audit.profile.components.map((x) => [x.id, x.changeShare])),
     active: [...c.active],
     outcomes: o ? { window: `${o.window.from} to ${o.window.to}`, agent: o.agent, control: o.control, byComponent: o.byComponent, source: o.source } : null,

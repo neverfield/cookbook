@@ -6,9 +6,9 @@
 
 **Level 0 of 4, not bootable.**
 
-**Agents can't pass the tests in api from a clean checkout because its tests need a service on port 5432 running, which the setup doesn't start, and 56% of recent changes land there.**
+**Agents can't pass the tests in api from a clean checkout because its tests need a service on port 5432 running, which the setup doesn't start, and 55% of recent changes land there.**
 
-> **Next move, step 2:** Set up the service the tests expect on port 5432 for agents in api. Takes api to Level 1, covering 56% of recent changes. Agents can run api's checks before they push, so fewer agent PRs fail CI the first time. Effort and owner: Small: setup scripts and environment config, no source changes. Repo maintainer. Decision: Approve committing the setup files.
+> **Next move, step 2:** Set up the service the tests expect on port 5432 for agents in api. Takes api to Level 1, covering 55% of recent changes. Agents can run api's checks before they push, so fewer agent PRs fail CI the first time. Effort and owner: Small: setup scripts and environment config, no source changes. Repo maintainer. Decision: Approve committing the setup files.
 
 Level ladder: **[0 Not bootable]** → 1 Bootable → 2 Verifiable → 3 Delegable → 4 Scalable
 
@@ -16,11 +16,11 @@ Level 0 means: a clean checkout can't install, build and pass its tests. Level 1
 
 - **Components ready for agents:** 0 of 3. Level 2 needs 3 of 3.
 - **Agent PRs that pass CI the first time:** 33% (3 of 9). Other PRs: 71% (29 of 41), Sep 27 to Oct 27, 2026.
-- **Recent changes in components below Level 2:** 98%. Level 2 needs 0%, counting the last 90 days.
+- **Recent changes in components below Level 2:** 96%. Level 2 needs 0%, counting the last 90 days.
 
 | Component | Level | Ladder 0 to 4 | Share of changes | Trend | What holds it |
 |---|---|---|---|---|---|
-| `api` | Level 0 | ●○○○○ | 56% | first audit | passes every test in a clean container: test failed: connection refused on port 5432 (1 of 1 tests failed) (step 2) |
+| `api` | Level 0 | ●○○○○ | 55% | first audit | passes every test in a clean container: test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on (step 2) |
 | `worker` | Level 1 | ○●○○○ | 27% | first audit | tests catch planted faults: caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence (step 5) |
 | `shared` | Level 1 | ○●○○○ | 15% | first audit | agent instructions are accurate: 2 agent instruction commands are wrong (step 3) |
 | `infra` | not assessed: Terraform isn't supported yet | | 2% | | |
@@ -45,11 +45,11 @@ Next: Level 1, bootable. Met: installs from the lockfile in a clean container. N
 
 ### Step 2: Set up the service the tests expect on port 5432 for agents in api (do first)
 
-- **How it moves the needle:** Takes api to Level 1, covering 56% of recent changes. Agents can run api's checks before they push, so fewer agent PRs fail CI the first time.
+- **How it moves the needle:** Takes api to Level 1, covering 55% of recent changes. Agents can run api's checks before they push, so fewer agent PRs fail CI the first time.
 - **Why it matters:** In a clean container, api's tests fail because nothing starts the service the tests expect on port 5432: the connection was refused.
 - **Effort and owner:** Small: setup scripts and environment config, no source changes. Repo maintainer.
 - **Decision needed:** Approve committing the setup files.
-- **Evidence:** `ev-011`
+- **Evidence:** `ev-014`
 
 ### Step 3: Fix the stale agent instructions (then)
 
@@ -65,7 +65,7 @@ Next: Level 1, bootable. Met: installs from the lockfile in a clean container. N
 - **Why it matters:** The audit planted 5 faults in worker in a throwaway copy, and the tests caught 0.
 - **Effort and owner:** Medium: tests in worker only. Component owner.
 - **Decision needed:** What the untested behavior in packages/worker/src/retry.js should be.
-- **Evidence:** `ev-017`
+- **Evidence:** `ev-018`
 
 ## 4. Roadmap to the max level
 
@@ -109,11 +109,11 @@ Confidence: high (every check that decides the level ran).
 
 - **Components ready for agents:** 0 of 3. Level 2 needs 3 of 3.
 - **Agent PRs that pass CI the first time:** 33% (3 of 9). Other PRs: 71% (29 of 41), Sep 27 to Oct 27, 2026.
-- **Recent changes in components below Level 2:** 98%. Level 2 needs 0%, counting the last 90 days.
+- **Recent changes in components below Level 2:** 96%. Level 2 needs 0%, counting the last 90 days.
 
 The level covers 3 components and ignores infra (2% of changes, Terraform isn't supported yet). Tests and planted faults ran in a clean container with the network switched off, so a test that needs the internet fails here. Agent PRs are matched by head branch starting with cursor/.
 
-Effort against impact (impact is the share of recent changes an action unblocks): 1. Set up the service the tests expect on port 5432 for agents in api (Do first: effort small, 56%); 2. Fix the stale agent instructions (Quick fills: effort small, 15%); 3. Make worker's tests catch wrong behavior (Do first: effort medium, 0%).
+Effort against impact (impact is the share of recent changes an action unblocks): 1. Set up the service the tests expect on port 5432 for agents in api (Do first: effort small, 55%); 2. Fix the stale agent instructions (Quick fills: effort small, 15%); 3. Make worker's tests catch wrong behavior (Do first: effort medium, 0%).
 
 ### Steps for Set up the service the tests expect on port 5432 for agents in api (step 2)
 
@@ -151,10 +151,10 @@ Effort against impact (impact is the share of recent changes an action unblocks)
 |---|---|---|---|
 | Components and where changes land (`scope.profile`) | Levels follow the work, so the audit finds each package and its share of recent changes. | 4 components found, 3 assessed |  |
 | Agent assets in the repo (`scope.agent_assets`) | Shows what agent setup already exists and who maintains it. Not scored. | 3 assets, 3 authors |  |
-| Setup works from a clean checkout (`bootstrap.cold_replay`) | Every agent starts from a clean checkout, so setup that only works on a prepared machine breaks every agent run. In the BootstrapAgent study, a reusable, verified setup cut later agents' token use by 25.9% and build time by 22.3%. Measured on the study's benchmark repositories. ([source](https://arxiv.org/abs/2605.15815)) | **failed: api**; passed: shared and worker | `ev-005`, `ev-006`, `ev-007`, `ev-011`, `ev-012`, `ev-013` and 1 more |
-| Build, lint, type-check and test commands pass (`verify.canonical_interface`) | Agents need one known way to check their own work, and a type-check counts only once the audit has seen it fail on a type error it planted. | **failed: api**; passed: shared and worker | `ev-008`, `ev-009`, `ev-010`, `ev-011`, `ev-012`, `ev-013` |
-| Tests catch planted faults (`verify.behavioral_oracle`) | Green tests aren't proof that a change is right. OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. ([source](https://openai.com/index/separating-signal-from-noise-coding-evaluations)) | api: tests must pass before faults can be planted; shared: caught 5 of 5 planted faults; worker: caught 0 of 5 planted faults | `ev-015`, `ev-016`, `ev-017` |
-| Agent instructions are accurate (`context.instructions_verified`) | Agents follow AGENTS.md, rules and skills literally, so a stale command costs more than a missing one. No outcome study yet measures how much these files help. | 4 of 7 instruction items check out, 2 wrong, 1 wrong outside the agent files, listed | `ev-001`, `ev-002`, `ev-003`, `ev-018`, `ev-019` |
+| Setup works from a clean checkout (`bootstrap.cold_replay`) | Every agent starts from a clean checkout, so setup that only works on a prepared machine breaks every agent run. In the BootstrapAgent study, a reusable, verified setup cut later agents' token use by 25.9% and build time by 22.3%. Measured on the study's benchmark repositories. ([source](https://arxiv.org/abs/2605.15815)) | **failed: api**; passed: shared and worker | `ev-005`, `ev-006`, `ev-007`, `ev-011`, `ev-012`, `ev-013` and 2 more |
+| Build, lint, type-check and test commands pass (`verify.canonical_interface`) | Agents need one known way to check their own work, and a type-check counts only once the audit has seen it fail on a type error it planted. | **failed: api**; passed: shared and worker | `ev-008`, `ev-009`, `ev-010`, `ev-012`, `ev-013`, `ev-014` |
+| Tests catch planted faults (`verify.behavioral_oracle`) | Green tests aren't proof that a change is right. OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. ([source](https://openai.com/index/separating-signal-from-noise-coding-evaluations)) | api: tests must pass before faults can be planted; shared: caught 5 of 5 planted faults; worker: caught 0 of 5 planted faults | `ev-016`, `ev-017`, `ev-018` |
+| Agent instructions are accurate (`context.instructions_verified`) | Agents follow AGENTS.md, rules and skills literally, so a stale command costs more than a missing one. No outcome study yet measures how much these files help. | 4 of 7 instruction items check out, 2 wrong, 1 wrong outside the agent files, listed | `ev-001`, `ev-002`, `ev-003`, `ev-019`, `ev-020` |
 | Normal work needs no production access (`safety.execution_boundary`) | Agents run with whatever access setup gives them, so normal work must never need production credentials. | passed | `ev-004` |
 
 Not assessed by this rubric version, which is different from unknown: whether CI matches the local commands, flaky tests, the quality of error messages, how easily code can be found, outcome checks on held-out tasks and whether the lint command catches anything.
@@ -165,16 +165,16 @@ Repo shape: monorepo. Each component gets one standard level; scenarios someone 
 
 | Component | Path | Toolchain | Manifest | Lockfile | Share of changes | Level |
 |---|---|---|---|---|---|---|
-| `api` | `packages/api` | Node | `packages/api/package.json` | none | 56% | 0 Not bootable |
-| `shared` | `packages/shared` | Node | `packages/shared/package.json` | none | 15% | 1 Bootable |
-| `worker` | `packages/worker` | Node | `packages/worker/package.json` | none | 27% | 1 Bootable |
+| `api` | `packages/api` | Node | `packages/api/package.json` | `package-lock.json` | 55% | 0 Not bootable |
+| `shared` | `packages/shared` | Node | `packages/shared/package.json` | `package-lock.json` | 15% | 1 Bootable |
+| `worker` | `packages/worker` | Node | `packages/worker/package.json` | `package-lock.json` | 27% | 1 Bootable |
 | `infra` | `infra` | Terraform | `infra/main.tf` | none | 2% | not assessed: Terraform isn't supported yet |
 
 Repo level: 0 Not bootable. The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it.
 
 What holds the repo at Level 0:
 
-- `api`: passes every test in a clean container, not met (test failed: connection refused on port 5432 (1 of 1 tests failed)).
+- `api`: passes every test in a clean container, not met (test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on).
 
 - **Standard level:** Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access.
 
@@ -234,8 +234,8 @@ Every level, every unproven or not-assessed result and every finding, with what 
 
 | Result for | Result | What ran | Where it ran | What happened | Rule |
 |---|---|---|---|---|---|
-| repo | Level 0 | the level rules over the active components, api, shared and worker | in a clean docker container (node:22-bookworm) | Set by api, held by api: passes every test in a clean container, not met (test failed: connection refused on port 5432 (1 of 1 tests failed)). | The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it. |
-| api | Level 0 | `node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (fail) | in a clean docker container (node:22-bookworm) | Held at Level 0 by passes every test in a clean container: not met (test failed: connection refused on port 5432 (1 of 1 tests failed)) | Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets. |
+| repo | Level 0 | the level rules over the active components, api, shared and worker | in a clean docker container (node:22-bookworm) | Set by api, held by api: passes every test in a clean container, not met (test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on). | The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it. |
+| api | Level 0 | `node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (fail) | in a clean docker container (node:22-bookworm) | Held at Level 0 by passes every test in a clean container: not met (test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on) | Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets. |
 | shared | Level 1 | `node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | Held at Level 1 by agent instructions are accurate: not met (2 agent instruction commands are wrong) | Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets. |
 | worker | Level 1 | `node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (pass) | in a clean docker container (node:22-bookworm) | Held at Level 1 by tests catch planted faults: not met (caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10) and agent instructions are accurate: not met (2 agent instruction commands are wrong) | Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets. |
 | infra | not assessed | nothing: the audit runs commands only for assessed components | not run | Terraform isn't supported yet | Only components on a supported toolchain are assessed, up to the 10 most active by share of recent changes; the support list says which toolchains are supported. |
@@ -246,8 +246,8 @@ Every level, every unproven or not-assessed result and every finding, with what 
 |---|---|---|---|---|---|
 | api: installs from the lockfile in a clean container | met | `npm ci` (pass) | in a clean docker container (node:22-bookworm) | install passed | Level 1 needs it: installs from the lockfile in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
 | api: builds in a clean container | met | `npm ci` (pass) | in a clean docker container (node:22-bookworm) | no build step; follows the install | Level 1 needs it: builds in a clean container (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. |
-| api: passes every test in a clean container | not met | `npm run test` (fail) | in a clean docker container (node:22-bookworm) | test failed: connection refused on port 5432 (1 of 1 tests failed) | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails. |
-| api: build, lint, type-check and test commands pass | not met | `npm run lint` (pass) and `npm run test` (fail) | in a clean docker container (node:22-bookworm) | test failed: connection refused on port 5432 (1 of 1 tests failed) | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Not met means it ran and failed, or the repo lacks what it needs. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone. |
+| api: passes every test in a clean container | not met | `npm run test` (fail) | in a clean docker container (node:22-bookworm) | test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on | Level 1 needs it: passes every test in a clean container (Setup works from a clean checkout). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails. |
+| api: build, lint, type-check and test commands pass | not met | `npm run lint` (pass) and `npm run test` (fail) | in a clean docker container (node:22-bookworm) | test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on | Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Not met means it ran and failed, or the repo lacks what it needs. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone. |
 | api: tests catch planted faults | not proven | tests must pass before faults can be planted | not run | tests must pass before faults can be planted | Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not proven means it didn't run, or ran below the strength the check requires. |
 | repo: agent instructions are accurate | not met | AGENTS.md:7 `pnpm test`: uses pnpm, but the repo uses npm, AGENTS.md:8 `docs/architecture.md`: docs/architecture.md doesn't exist, .cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no "changelog" script in package.json `npm run lint -w api` (pass), and 1 more | read from the audited commit's files, nothing ran and in a clean docker container (node:22-bookworm) | 2 agent instruction commands are wrong | Level 2 needs it: agent instructions are accurate (Agent instructions are accurate). Not met means it ran and failed, or the repo lacks what it needs. |
 | repo: normal work needs no production access | met | nothing ran for it | read from the audited commit's files, nothing ran | no blocking safety findings from 12 secret patterns over 34 files | Level 2 needs it: normal work needs no production access (Normal work needs no production access). Met means it ran at the strength the check requires and passed. |
@@ -299,12 +299,13 @@ Every level, every unproven or not-assessed result and every finding, with what 
 | `ev-011` | `bootstrap.cold_replay` | api | npm run test (ran in a clean container) | fail: test failed: connection refused on port 5432 (1 of 1 tests failed) |
 | `ev-012` | `bootstrap.cold_replay` | shared | npm run test (ran in a clean container) | pass: test passed (3 of 3 tests) |
 | `ev-013` | `bootstrap.cold_replay` | worker | npm run test (ran in a clean container) | pass: test passed (2 of 2 tests) |
-| `ev-014` | `bootstrap.cold_replay` | repo | (ran in a clean container) | pass: frozen install reproduced the lockfile |
-| `ev-015` | `verify.behavioral_oracle` | api | (not run) | not_run: tests must pass before faults can be planted |
-| `ev-016` | `verify.behavioral_oracle` | shared | (ran in a clean container) | pass: caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant) |
-| `ev-017` | `verify.behavioral_oracle` | worker | (ran in a clean container) | fail: caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/wor |
-| `ev-018` | `context.instructions_verified` | repo | npm run lint -w api (ran in a clean container) | pass: .cursor/rules/style.mdc:6 `npm run lint -w api` replays |
-| `ev-019` | `context.instructions_verified` | repo | npm run test -w shared (ran in a clean container) | pass: AGENTS.md:6 `npm run test -w shared` replays |
+| `ev-014` | `bootstrap.cold_replay` | api | npm run test (ran in a clean container) | fail: test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on |
+| `ev-015` | `bootstrap.cold_replay` | repo | (ran in a clean container) | pass: frozen install reproduced the lockfile |
+| `ev-016` | `verify.behavioral_oracle` | api | (not run) | not_run: tests must pass before faults can be planted |
+| `ev-017` | `verify.behavioral_oracle` | shared | (ran in a clean container) | pass: caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant) |
+| `ev-018` | `verify.behavioral_oracle` | worker | (ran in a clean container) | fail: caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/wor |
+| `ev-019` | `context.instructions_verified` | repo | npm run lint -w api (ran in a clean container) | pass: .cursor/rules/style.mdc:6 `npm run lint -w api` replays |
+| `ev-020` | `context.instructions_verified` | repo | npm run test -w shared (ran in a clean container) | pass: AGENTS.md:6 `npm run test -w shared` replays |
 
 </details>
 
@@ -319,7 +320,7 @@ Audited Oct 27, 2026 at 7070f44. Eval run with a pinned seed; not a production r
 - **Rubric:** 2026-12-beta
 - **Permission tier:** local-exec
 - **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
-- **Skill digest:** b4ecdb1c3dcc
+- **Skill digest:** 06da7cbdca2b
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here
 - **Environment self-check:** passed: mount visible, mount writable, run user, git identity, network cut

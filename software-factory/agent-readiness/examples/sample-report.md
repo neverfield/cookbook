@@ -6,9 +6,9 @@
 
 **Level 1 of 4, bootable.** Unchanged since Oct 30; 3 steps closed.
 
-**Agents can build and test worker, but its tests can't yet catch wrong changes, and 25% of recent changes land there. api and shared are already at Level 2.**
+**Agents can build and test worker, but its tests can't yet catch wrong changes, and 23% of recent changes land there. api and shared are already at Level 2.**
 
-> **Next move, step 5:** Make worker's tests catch wrong behavior. Takes worker to Level 2, covering 25% of recent changes. Changes in worker get a real pass-or-fail signal, so reviewers catch less by hand. Effort and owner: Medium: tests in worker only. Component owner. Decision: What the untested behavior in packages/worker/src/retry.js should be.
+> **Next move, step 5:** Make worker's tests catch wrong behavior. Takes worker to Level 2, covering 23% of recent changes. Changes in worker get a real pass-or-fail signal, so reviewers catch less by hand. Effort and owner: Medium: tests in worker only. Component owner. Decision: What the untested behavior in packages/worker/src/retry.js should be.
 
 Level ladder: 0 Not bootable → **[1 Bootable]** → 2 Verifiable → 3 Delegable → 4 Scalable
 
@@ -18,13 +18,13 @@ Trend: ▁▂▂▂▂▂ Oct 27 Level 0 → Oct 30 Level 1 → Nov 6 Level 1 (r
 
 - **Components ready for agents:** 2 of 3. Level 2 needs 3 of 3; last audit: 2 of 3.
 - **Agent PRs that pass CI the first time:** 65% (11 of 17). Other PRs: 71% (27 of 38), Oct 31 to Nov 30, 2026.
-- **Recent changes in components below Level 2:** 25%. Level 2 needs 0%; last audit: 27%, counting the last 90 days.
+- **Recent changes in components below Level 2:** 23%. Level 2 needs 0%; last audit: 25%, counting the last 90 days.
 
 | Component | Level | Ladder 0 to 4 | Share of changes | Trend | What holds it |
 |---|---|---|---|---|---|
-| `api` | Level 2 | ○○●○○ | 59% | ▁▄▄▄▄▄ | ready for agents |
-| `worker` | Level 1 | ○●○○○ | 25% | ▂▂▂▂▂▂ | tests catch planted faults: caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence (step 5) |
-| `shared` | Level 2 | ○○●○○ | 16% | ▂▄▄▂▄▄ | ready for agents |
+| `api` | Level 2 | ○○●○○ | 53% | ▁▄▄▄▄▄ | ready for agents |
+| `worker` | Level 1 | ○●○○○ | 23% | ▂▂▂▂▂▂ | tests catch planted faults: caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence (step 5) |
+| `shared` | Level 2 | ○○●○○ | 14% | ▂▄▄▂▄▄ | ready for agents |
 | `infra` | not assessed: Terraform isn't supported yet | | 0% | | |
 
 Share of changes: the component's share of changed files over the last 90 days.
@@ -49,7 +49,7 @@ Next: Level 2, verifiable. Met: lint and test commands pass, agent instructions 
 
 ### Step 5: Make worker's tests catch wrong behavior (do first)
 
-- **How it moves the needle:** Takes worker to Level 2, covering 25% of recent changes. Changes in worker get a real pass-or-fail signal, so reviewers catch less by hand.
+- **How it moves the needle:** Takes worker to Level 2, covering 23% of recent changes. Changes in worker get a real pass-or-fail signal, so reviewers catch less by hand.
 - **Why it matters:** The audit planted 11 faults in worker in a throwaway copy, and the tests caught 0.
 - **Effort and owner:** Medium: tests in worker only. Component owner.
 - **Decision needed:** What the untested behavior in packages/worker/src/retry.js should be.
@@ -98,7 +98,7 @@ Confidence: high (every check that decides the level ran).
 
 - **Components ready for agents:** 2 of 3. First audit: 0 of 3; last audit: 2 of 3.
 - **Agent PRs that pass CI the first time:** 65% (11 of 17). Other PRs: 71% (27 of 38), Oct 31 to Nov 30, 2026.
-- **Recent changes in components below Level 2:** 25%. First audit: 98%; last audit: 27%, counting the last 90 days.
+- **Recent changes in components below Level 2:** 23%. First audit: 96%; last audit: 25%, counting the last 90 days.
 
 The level covers 3 components and ignores infra (0% of changes, Terraform isn't supported yet). Tests and planted faults ran in a clean container with the network switched off, so a test that needs the internet fails here. Listed for review, not blocking: runs sudo; the audit runs it only inside a container, never on the host (scripts/agent-install.sh); runs sudo; the audit runs it only inside a container, never on the host (scripts/agent-start.sh). Agent PRs are matched by head branch starting with cursor/.
 
@@ -127,7 +127,7 @@ Movement after a step closed, not proof that the step caused it. Each step shows
 
 No test files changed since the last audit. No test files were deleted. No test cases were removed overall. No skip markers were added. The CI workflow is unchanged. The lockfile is unchanged.
 
-Effort against impact (impact is the share of recent changes an action unblocks): 1. Make worker's tests catch wrong behavior (Do first: effort medium, 25%).
+Effort against impact (impact is the share of recent changes an action unblocks): 1. Make worker's tests catch wrong behavior (Do first: effort medium, 23%).
 
 ### Steps for Make worker's tests catch wrong behavior (step 5)
 
@@ -159,11 +159,11 @@ Repo shape: monorepo. Each component gets one standard level; scenarios someone 
 
 | Component | Path | Toolchain | Manifest | Lockfile | Share of changes | Level |
 |---|---|---|---|---|---|---|
-| `api` | `packages/api` | Node | `packages/api/package.json` | none | 59% | 2 Verifiable |
+| `api` | `packages/api` | Node | `packages/api/package.json` | `package-lock.json` | 53% | 2 Verifiable |
 | `api` › Bug fixes | | | | | | 2 Verifiable |
-| `shared` | `packages/shared` | Node | `packages/shared/package.json` | none | 16% | 2 Verifiable |
+| `shared` | `packages/shared` | Node | `packages/shared/package.json` | `package-lock.json` | 14% | 2 Verifiable |
 | `shared` › Bug fixes | | | | | | 2 Verifiable |
-| `worker` | `packages/worker` | Node | `packages/worker/package.json` | none | 25% | 1 Bootable |
+| `worker` | `packages/worker` | Node | `packages/worker/package.json` | `package-lock.json` | 23% | 1 Bootable |
 | `worker` › Bug fixes | | | | | | 1 Bootable |
 | `infra` | `infra` | Terraform | `infra/main.tf` | none | 0% | not assessed: Terraform isn't supported yet |
 
@@ -327,7 +327,7 @@ Audited Nov 30, 2026 at 9a2c092. Eval run with a pinned seed; not a production r
 - **Rubric:** 2026-12-beta
 - **Permission tier:** local-exec
 - **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
-- **Skill digest:** b4ecdb1c3dcc
+- **Skill digest:** 06da7cbdca2b
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here
 - **Environment self-check:** passed: mount visible, mount writable, run user, git identity, network cut

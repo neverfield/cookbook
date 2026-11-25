@@ -11,6 +11,7 @@ import { MAX_FILES, containedPath, exists, listFilesScoped, readJson, readText, 
 import { OUTPUT_SEGMENT, SKIP_SEGMENT, inventory, namesByDir, pythonManifest, skipSegment } from "./discover/inventory.ts";
 import { assignShares, changeCounts, shareUnder } from "./discover/ownership.ts";
 import type { ChangeCounts } from "./discover/ownership.ts";
+import { ownTestFiles } from "./plan/test-files.ts";
 
 export { pyproject, readPackageJson, uvWorkspaceMembers, yarnBerry };
 
@@ -266,7 +267,7 @@ export function discoverComponents(tree: string, files: string[], repoName?: str
 }
 
 // A test script that runs the members' own scripts rather than a test runner over the code.
-const DELEGATES = /--workspaces?\b|(^|\s)-ws\b|(^|\s)(-r|--recursive)\b|--filter\b|\b(turbo|lerna|nx|wsrun|ultra)\b|\bworkspaces\s+(foreach|run)\b/;
+export const DELEGATES = /--workspaces?\b|(^|\s)-ws\b|(^|\s)(-r|--recursive)\b|--filter\b|\b(turbo|lerna|nx|wsrun|ultra)\b|\bworkspaces\s+(foreach|run)\b/;
 const SCRIPT_CALL = /^(?:npm\s+run(?:-script)?|pnpm(?:\s+run)?|yarn(?:\s+run)?|bun\s+run)\s+([\w:.-]+)\s*$/;
 
 // The test runner the workspace root runs itself, following a script that only calls another one.
@@ -678,6 +679,7 @@ export function buildProfile(repo: string, tree: string, rubric: Rubric, commit 
   supported.sort((a, b) => b.changeShare - a.changeShare);
   supported.slice(0, rubric.components.maxAssessed).forEach((c) => (c.assessed = true));
   supported.slice(rubric.components.maxAssessed).forEach((c) => (c.notAssessedReason = `outside the ${rubric.components.maxAssessed} most active components`));
+  if (rubric.attribution) for (const c of components.filter((x) => x.assessed)) c.testFiles = ownTestFiles(files, { components, satellites }, c);
   const envPath = join(tree, ".cursor", "environment.json");
   let environmentJson: Profile["environmentJson"] = null;
   if (exists(envPath)) {

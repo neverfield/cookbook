@@ -10,7 +10,8 @@
     "Secret classes (safety.blockingSecretClasses): only a provider-shaped token, a private key with a body and a literal password in a URL for a real host block Level 2 in shipped code. A long value assigned to a name that sounds secret is listed for review with its name and length, since public client keys an app ships, test values and placeholders look the same. Template URLs ({x}, {{x}}, %(x)s, ${x}) are placeholders. The secret step no longer says to add files to .gitignore: a tracked source or config file keeps its place and loses the value, and only a dotenv file is told to stop being tracked. The safety condition states the patterns and files it covered.",
     "Instruction severities (severities.instructions \"agent_commands\"): a wrong command in a file written for agents (AGENTS.md, CLAUDE.md, Cursor rules and skills, Copilot instructions) holds Level 2. Wrong README and CONTRIBUTING items, and wrong paths anywhere, are listed for the reader and don't gate.",
     "Shares are of every counted change (components.unowned \"counted\"): changes that lie in no component or satellite are reported as the unowned share and count toward partial coverage, where earlier rubrics left them out of the denominator, so a repo whose components hold little of its work no longer reads as fully covered.",
-    "A folder name such as plugins/, tests/ or docs/ demotes the projects under it to satellites only while that folder holds less than components.satelliteHintShare (50%) of the changes, so a plugins/ folder holding most of the work stays components. Earlier rubrics demoted on the name alone."
+    "A folder name such as plugins/, tests/ or docs/ demotes the projects under it to satellites only while that folder holds less than components.satelliteHintShare (50%) of the changes, so a plugins/ folder holding most of the work stays components. Earlier rubrics demoted on the name alone.",
+    "Level 0 needs a repo failure (attribution.level0 \"attributed\"): a failed install, build or test holds Level 1 only when it is the repo's, either because an experiment showed it or because the step ran in an environment whose self-check passed and failed on its own terms. A failure the audit's own choices could explain, such as a test runner or system library missing from an image the audit picked, or an install that fails there without saying why, leaves Level 1 undetermined, with the one fact that would settle it. A component with test files and no test command the audit found is undetermined, not \"no tests\": no tests is a finding only when no test command is found and no file matches the language's test-file rule. Each failed test run gets at most one experiment (attribution.reruns): one that failed with the network cut runs once more with it on, and when it then passes, the failure is the audit's environment, Level 1 holds with the network on, the report says so, confidence is capped at medium, and its planted faults run with the network on as well; one that failed because git is missing from an image the audit picked runs again once the audit adds git, since the audit already sets the git identity tests use. An undetermined Level 1 is reported as undetermined, beside unproven, never as Level 0."
   ],
   "scale": [
     {
@@ -849,6 +850,13 @@
     "environments": [
       "container",
       "disposable_vm"
+    ]
+  },
+  "attribution": {
+    "level0": "attributed",
+    "reruns": [
+      "network",
+      "tool"
     ]
   }
 }
