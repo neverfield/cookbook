@@ -15,6 +15,17 @@ const KINDS: { re: RegExp; kind: Asset["kind"] }[] = [
   { re: /^\.github\/copilot-instructions\.md$|^\.github\/instructions\/.+\.instructions\.md$/, kind: "instructions" },
 ];
 
+const VERIFY_SKILL = /^(\.(?:cursor|claude|agents)\/skills\/verify-[^/]+)\/SKILL\.md$/;
+
+// Skills named verify-<app> that drive a running app, and the feature map beside each: one file per
+// feature under features/, saying how a user reaches it and what proves it works.
+export function verifySkills(files: string[]): { path: string; features: number }[] {
+  return files.flatMap((f) => {
+    const dir = f.match(VERIFY_SKILL)?.[1];
+    return dir ? [{ path: f, features: files.filter((x) => x.startsWith(`${dir}/features/`) && /\.mdx?$/.test(x)).length }] : [];
+  });
+}
+
 export function frontmatterOk(text: string): boolean {
   const m = text.match(/^---\n([\s\S]*?)\n---/);
   if (!m) return false;
@@ -29,7 +40,13 @@ function authors(repo: string, path: string, timeoutMs?: number): { name: string
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name, commits]) => ({ name, commits }));
 }
 
-export function statusFor(asset: Pick<Asset, "kind" | "path" | "frontmatterOk" | "elevated">, items: InstructionItem[]): { status: string; ok: boolean } {
+export function statusFor(asset: Pick<Asset, "kind" | "path" | "frontmatterOk" | "elevated" | "features">, items: InstructionItem[]): { status: string; ok: boolean } {
+  const s = baseStatus(asset, items);
+  if (asset.features === undefined) return s;
+  return { ...s, status: `${s.status}; a verify skill, ${asset.features ? `with a feature map of ${asset.features} ${asset.features === 1 ? "feature" : "features"}` : "with no feature map"}` };
+}
+
+function baseStatus(asset: Pick<Asset, "kind" | "path" | "frontmatterOk" | "elevated">, items: InstructionItem[]): { status: string; ok: boolean } {
   const mine = items.filter((i) => i.source === asset.path);
   const failed = mine.filter((i) => i.result === "fail").length;
   const notRun = mine.filter((i) => i.result === "not_run" && i.category === "replay").length;
@@ -69,6 +86,7 @@ export function inventory(repo: string, tree: string, items: InstructionItem[], 
   const assets: Asset[] = [];
   const listed = new Set(files);
   const dates = lastChanged(repo, files.filter((f) => KINDS.some((k) => k.re.test(f))), bound ? { timeoutMs: Math.max(1000, bound.until - Date.now()) } : {});
+  const verify = new Map(verifySkills(files).map((v) => [v.path, v.features]));
   for (const file of files) {
     const hit = KINDS.find((k) => k.re.test(file));
     if (!hit) continue;
@@ -78,7 +96,8 @@ export function inventory(repo: string, tree: string, items: InstructionItem[], 
     if (real !== file && real !== null && listed.has(real) && KINDS.some((k) => k.re.test(real))) continue;
     const fm = hit.kind === "skill" ? frontmatterOk(readText(join(tree, file))) : undefined;
     const elevated = hit.kind === "environment" ? elevatedSetup(join(tree, file)) : undefined;
-    const { status, ok } = statusFor({ kind: hit.kind, path: file, frontmatterOk: fm, elevated }, items);
+    const features = verify.get(file);
+    const { status, ok } = statusFor({ kind: hit.kind, path: file, frontmatterOk: fm, elevated, features }, items);
     const left = bound ? bound.until - Date.now() : undefined;
     const who = left === undefined || left > 0 ? authors(repo, file, left) : null;
     const last = who ? (dates.get(file) ?? "") : "";
@@ -86,7 +105,7 @@ export function inventory(repo: string, tree: string, items: InstructionItem[], 
       bound.scope.assetHistory.total++;
       if (who) bound.scope.assetHistory.read++;
     }
-    assets.push({ kind: hit.kind, path: file, authors: who ?? [], lastChanged: last ? last.slice(0, 10) : null, status, ok, frontmatterOk: fm, ...(elevated ? { elevated } : {}) });
+    assets.push({ kind: hit.kind, path: file, authors: who ?? [], lastChanged: last ? last.slice(0, 10) : null, status, ok, frontmatterOk: fm, ...(elevated ? { elevated } : {}), ...(features !== undefined ? { features } : {}) });
   }
   return assets;
 }

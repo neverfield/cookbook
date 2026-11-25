@@ -1,12 +1,12 @@
 {
-  "ranAt": "2026-11-16T01:28:02.274Z",
+  "ranAt": "2026-11-24T18:42:19.436Z",
   "results": [
     {
       "id": "slugify",
       "sha": "3b17b2e84b97624a683aafaa38184bf2746fab22",
-      "scoring": "60f9eff4ff44fb5dabf333604bad48a52aff6ec70c8cca5b034f02c0294d0062",
-      "commit": "3231d3f09ee452991aba037c1302feb86fb1bf91",
-      "minutes": 1.3,
+      "scoring": "7522dcc28466281d970886d26819003210e63fb9203c56f93bc76de93e7a8b29",
+      "commit": "ad5a0f9b5ac9114cf92e146ccbb5802350d18523",
+      "minutes": 0.9,
       "repoLevel": 2,
       "outcome": "proven",
       "levels": {
@@ -18,9 +18,9 @@
     {
       "id": "express",
       "sha": "1c6f1b0fe4000977b9a7b4f34097e4d527dd9824",
-      "scoring": "60f9eff4ff44fb5dabf333604bad48a52aff6ec70c8cca5b034f02c0294d0062",
-      "commit": "3231d3f09ee452991aba037c1302feb86fb1bf91",
-      "minutes": 0.5,
+      "scoring": "7522dcc28466281d970886d26819003210e63fb9203c56f93bc76de93e7a8b29",
+      "commit": "ad5a0f9b5ac9114cf92e146ccbb5802350d18523",
+      "minutes": 0.6,
       "repoLevel": 1,
       "outcome": "proven",
       "levels": {
@@ -32,9 +32,9 @@
     {
       "id": "starlette",
       "sha": "2745bbc5afa2f8ce900d290bedca2bc5d3f3cfe8",
-      "scoring": "60f9eff4ff44fb5dabf333604bad48a52aff6ec70c8cca5b034f02c0294d0062",
-      "commit": "43ade0b5be351ee9db8b85f93c51bc0af78ce8c7",
-      "minutes": 1.7,
+      "scoring": "7522dcc28466281d970886d26819003210e63fb9203c56f93bc76de93e7a8b29",
+      "commit": "ad5a0f9b5ac9114cf92e146ccbb5802350d18523",
+      "minutes": 2,
       "repoLevel": 2,
       "outcome": "proven",
       "levels": {
@@ -46,11 +46,11 @@
     {
       "id": "create-t3-turbo",
       "sha": "8f945b7bb3bfb3ca8358d48b1ff0214079bc11ee",
-      "scoring": "60f9eff4ff44fb5dabf333604bad48a52aff6ec70c8cca5b034f02c0294d0062",
-      "commit": "3231d3f09ee452991aba037c1302feb86fb1bf91",
-      "minutes": 1.4,
+      "scoring": "7522dcc28466281d970886d26819003210e63fb9203c56f93bc76de93e7a8b29",
+      "commit": "ad5a0f9b5ac9114cf92e146ccbb5802350d18523",
+      "minutes": 1.5,
       "repoLevel": 0,
-      "outcome": "blocked",
+      "outcome": "proven",
       "levels": {
         "expo": 0,
         "nextjs": 0,
@@ -93,8 +93,8 @@
     {
       "id": "uuid",
       "sha": "2d3c2a9cc518326daf99a383f07c4d3c44317e4d",
-      "scoring": "60f9eff4ff44fb5dabf333604bad48a52aff6ec70c8cca5b034f02c0294d0062",
-      "commit": "f239ba72204112e4da70c4704d315625c57b63e6",
+      "scoring": "7522dcc28466281d970886d26819003210e63fb9203c56f93bc76de93e7a8b29",
+      "commit": "ad5a0f9b5ac9114cf92e146ccbb5802350d18523",
       "minutes": 0.3,
       "repoLevel": 2,
       "outcome": "proven",
@@ -107,9 +107,9 @@
     {
       "id": "serilog",
       "sha": "43105b35095337d77f022561a8f2d3db2f9a7937",
-      "scoring": "60f9eff4ff44fb5dabf333604bad48a52aff6ec70c8cca5b034f02c0294d0062",
-      "commit": "4ef923c7f138715a799a5047886b4d8c57a281dc",
-      "minutes": 3,
+      "scoring": "7522dcc28466281d970886d26819003210e63fb9203c56f93bc76de93e7a8b29",
+      "commit": "ad5a0f9b5ac9114cf92e146ccbb5802350d18523",
+      "minutes": 2.4,
       "repoLevel": 2,
       "outcome": "proven",
       "levels": {

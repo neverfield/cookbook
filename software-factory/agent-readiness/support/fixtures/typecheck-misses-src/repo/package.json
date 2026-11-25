@@ -1,0 +1,15 @@
+{
+  "name": "typecheck-misses-src",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "lint": "node scripts/lint.mjs",
+    "typecheck": "node scripts/typecheck.mjs types",
+    "test": "node --experimental-strip-types --test test/pricing.test.ts"
+  }
+}

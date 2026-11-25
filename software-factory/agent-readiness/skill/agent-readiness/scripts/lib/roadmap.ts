@@ -133,6 +133,11 @@ export function candidates(ctx: RoadmapContext): Candidate[] {
       const ev = latestEvidence(audit, (e) => mine(e.component) && e.result === "fail" && e.contractId !== undefined && e.kind !== undefined && otherKinds.includes(e.kind));
       out.push({ id: `commands:${c.id}`, template: "commands", kind: "fix", component: c.id, fixes: [{ condition: "commands", component: c.id }], vars: { component: c.id, kinds: otherKinds.join(" and "), diagnosis: ev?.diagnosis?.detail ?? s.commands.reason }, evidence: ev ? [ev.id] : [] });
     }
+    // A type-check that passed with the planted type error in place.
+    const canary = latestEvidence(audit, (e) => e.canary?.kind === "typecheck" && e.component === c.id);
+    if (rubric.templates["commands:canary"] && s.commands.state === "not_met" && canary?.result === "fail" && canary.canary?.file && s.commands.evidence.includes(canary.id)) {
+      out.push({ id: `commands:canary:${c.id}`, template: "commands:canary", kind: "fix", component: c.id, fixes: [{ condition: "commands", component: c.id }], vars: { component: c.id, file: canary.canary.file, canary: canary.canary.line ?? "", command: canary.command ?? "the type-check", cwd: !canary.cwd || canary.cwd === "." ? "the repo root" : `\`${canary.cwd}\`` }, evidence: [canary.id] });
+    }
     if (goalNeedsFaults && s.faults.state === "not_met") {
       const mine = audit.mutants.filter((m) => m.component === c.id && (m.result === "caught" || m.result === "survived"));
       const files = [...new Set(audit.mutants.filter((m) => m.component === c.id && m.result === "survived").map((m) => m.file))];
@@ -185,7 +190,9 @@ export function watchFor(metric: string, scope: string, o: OutcomesSnapshot | nu
   if (!o || !s) return { metric: pattern ? `${metric}:${pattern}` : metric, scope, baseline: "not measured (outcomes need the external-systems tier)", n: null, window: null };
   const w = windowLabel(o);
   let r;
-  if (metric === "first_time_ci_pass") r = rate(s.firstTimeCiPass, s.firstTimeCiKnown, rubric, w);
+  if (metric === "reverted" && s.revertKnown === undefined) return { metric, scope, baseline: `not measured (${o.reverts?.unavailable ?? "this rubric doesn't look for reverts"})`, n: null, window: null };
+  if (metric === "reverted") r = rate(s.reverted ?? 0, s.revertKnown ?? 0, rubric, w);
+  else if (metric === "first_time_ci_pass") r = rate(s.firstTimeCiPass, s.firstTimeCiKnown, rubric, w);
   else if (metric === "changes_requested") r = rate(s.changesRequested, s.opened, rubric, w);
   else if (metric === "prs_adding_path") r = rate(s.addingPaths[pattern ?? ""] ?? 0, s.opened, rubric, w);
   else r = rate(s.merged, s.opened, rubric, w);
@@ -195,7 +202,7 @@ export function watchFor(metric: string, scope: string, o: OutcomesSnapshot | nu
 function expectedFor(c: Candidate, ctx: RoadmapContext): RoadmapItem["expected"] {
   const { rubric, outcomes, audit } = ctx;
   const scope = c.component === "*" ? "repo" : c.component;
-  if (c.template.startsWith("clean.") || c.template === "commands") {
+  if (c.template.startsWith("clean.") || c.template.startsWith("commands")) {
     return { outcome: `Agents can run ${scope === "repo" ? "the repo" : scope}'s checks before they push, so fewer agent PRs fail CI the first time.`, watch: watchFor("first_time_ci_pass", scope, outcomes, rubric) };
   }
   if (c.template === "faults") return { outcome: `Changes in ${scope} get a real pass-or-fail signal, so reviewers catch less by hand.`, watch: watchFor("changes_requested", scope, outcomes, rubric) };
@@ -208,6 +215,7 @@ function expectedFor(c: Candidate, ctx: RoadmapContext): RoadmapItem["expected"]
   if (c.template.startsWith("safety")) return { outcome: "Agents can do normal work without production access.", watch: watchFor("first_time_ci_pass", "repo", outcomes, rubric) };
   if (c.template === "toolchain" || c.template === "lockfile") return { outcome: "Agents, CI and laptops build with the same versions.", watch: watchFor("first_time_ci_pass", "repo", outcomes, rubric) };
   if (c.template === "delegate") return { outcome: `The next report has real agent PR numbers for ${scope}, which Level 3 is measured on.`, watch: watchFor("merged", scope, outcomes, rubric) };
+  if (c.template === "drive") return { outcome: `Agents can show a change working in the running ${scope}, not only in its tests, so fewer merged agent PRs need reverting.`, watch: watchFor("reverted", scope, outcomes, rubric) };
   if (c.template === "targets") return { outcome: "Each report shows how far agent PRs are from Level 3.", watch: watchFor("merged", "repo", outcomes, rubric) };
   return { outcome: "Approvals and targets have a named owner.", watch: watchFor("merged", "repo", outcomes, rubric) };
 }
@@ -287,9 +295,12 @@ export function updateRoadmap(prev: Roadmap | null, ctx: RoadmapContext): Roadma
   const cands = ctx.decisionsOnly ? [] : candidates(ctx);
   const decisions: Candidate[] = [];
   decisions.push({ id: "owner", template: "owner", kind: "decision", component: "*", fixes: [], vars: {}, evidence: [] });
+  const drive = rubric.templates.drive ? audit.signals?.find((s) => s.id === "drive_app") : undefined;
   if (!ctx.decisionsOnly) {
     for (const c of ctx.components.filter((x) => ctx.active.has(x.id) && provenLevels.get(x.id) === 2)) {
       decisions.push({ id: `delegate:${c.id}`, template: "delegate", kind: "rollout", component: c.id, fixes: [], vars: { component: c.id }, evidence: [] });
+      const undriven = drive?.undriven?.find((u) => u.id === c.id);
+      if (undriven) decisions.push({ id: `drive:${c.id}`, template: "drive", kind: "rollout", component: c.id, fixes: [], vars: { component: c.id, surface: undriven.surface }, evidence: [] });
     }
   }
   decisions.push({ id: "targets", template: "targets", kind: "decision", component: "*", fixes: [], vars: {}, evidence: [] });
@@ -318,7 +329,7 @@ export function updateRoadmap(prev: Roadmap | null, ctx: RoadmapContext): Roadma
     };
     if (existing) {
       Object.assign(existing, base);
-      if (existing.status === "done" && c.kind === "fix") {
+      if (existing.status === "done" && (c.kind === "fix" || c.template === "drive")) {
         existing.status = "later";
         existing.closedAt = null;
         existing.closedBy = null;
@@ -341,6 +352,17 @@ export function updateRoadmap(prev: Roadmap | null, ctx: RoadmapContext): Roadma
       item.closedBy = audit.id;
     }
     if (item.template === "delegate" && item.status !== "done") item.status = "later";
+    // Done once the signal finds a way to drive the component; a component that dropped below
+    // Level 2 or out of the audit keeps the step open.
+    if (item.template === "drive" && item.status !== "done") {
+      const comp = item.id.split(":").pop()!;
+      const nowDriven = drive !== undefined && ctx.components.some((c) => c.id === comp && c.assessed) && provenLevels.get(comp) === 2 && !drive.undriven?.some((u) => u.id === comp);
+      if (nowDriven) {
+        item.status = "done";
+        item.closedAt = date;
+        item.closedBy = audit.id;
+      } else item.status = "later";
+    }
   }
   const owner = byId.get("owner")!;
   const targets = byId.get("targets")!;
@@ -395,10 +417,13 @@ export function updateRoadmap(prev: Roadmap | null, ctx: RoadmapContext): Roadma
     if (item.template === "owner") item.unlocks = "a named owner for approvals, targets and the weekly recheck";
     else if (item.template === "targets") item.unlocks = "a definition of Level 3 for this repo";
     else if (item.template === "delegate") item.unlocks = `measured agent work in ${item.id.split(":").pop()}`;
+    else if (item.template === "drive") item.unlocks = `a way for agents to show a change working in the running ${item.id.split(":").pop()}; it changes no level`;
   }
+  // A drive step follows the step that gives agents work in the same component.
+  const rank = (i: RoadmapItem) => (i.kind === "fix" ? 0 : i.template === "owner" ? -1 : i.template === "drive" ? 2 : 1);
   for (const item of newOnes.sort((a, b) => {
-    const la = a.kind === "fix" ? 0 : a.template === "owner" ? -1 : 1;
-    const lb = b.kind === "fix" ? 0 : b.template === "owner" ? -1 : 1;
+    const la = rank(a);
+    const lb = rank(b);
     return la - lb || b.impact - a.impact || EFFORT_ORDER[a.effort] - EFFORT_ORDER[b.effort] || a.id.localeCompare(b.id);
   })) {
     item.order = ++order;

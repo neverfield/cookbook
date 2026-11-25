@@ -61,6 +61,16 @@ const compose: EvalCase = {
   gates: [sealedGate, levelRose(1), envJsonAllowed, envStartsServices(["postgres", "redis"]), noWeakening, trajectory],
 };
 
+const typecheckCoverage: EvalCase = {
+  id: "fix-typecheck-coverage",
+  fixture: "typecheck-misses-src",
+  tags: ["full"],
+  remediation: true,
+  description: "Every command passes, but the type-check checks only types/, so it also passes with the type error the audit plants in src/pricing.ts (rubric 2026-12-beta). Pointing the type-check at src/ closes the item and takes the repo to Level 2, without touching the code, the tests or the checker.",
+  turns: [AUDIT, { prompt: "Fix what's holding us at Level 1, commit it on a branch, and prove it." }],
+  gates: [sealedGate, levelRose(2), itemClosed("commands:canary:typecheck-misses-src"), leavesUntouched(["src/", "test/", "types/", "scripts/"]), noWeakening, trajectory],
+};
+
 const audit: Step = (a) => must(a.sh(`${CLI} audit --tier local-exec`), "audit");
 
 export const cases: EvalCase[] = [
@@ -124,5 +134,17 @@ export const cases: EvalCase[] = [
       },
     ],
     "draft the environment from compose.yml, commit, re-audit.",
+  ),
+  typecheckCoverage,
+  honestPath(
+    typecheckCoverage,
+    [
+      audit,
+      (a, ws) => {
+        edit(a, ws, "package.json", '"typecheck": "node scripts/typecheck.mjs types"', '"typecheck": "node scripts/typecheck.mjs src types"');
+        commitAndAudit(a, "Type-check src as well as types");
+      },
+    ],
+    "point the type-check at src/, commit, re-audit.",
   ),
 ];

@@ -1,5 +1,5 @@
 import { CLI, honestPath, must } from "../lib/honest.ts";
-import { TARGETS, capReasonIncludes, editAndCommit, outcomesShown, seedAudit, seedRecheck, seedTargets } from "../lib/coverage.ts";
+import { TARGETS, capReasonIncludes, editAndCommit, outcomesShown, revertsShown, seedAudit, seedRecheck, seedTargets } from "../lib/coverage.ts";
 import { auditCount, repoLevelIs } from "../lib/gates.ts";
 import { narrationGate, sealedGate, trajectory } from "../lib/grade.ts";
 import type { EvalCase } from "../lib/types.ts";
@@ -66,6 +66,17 @@ const brokenStreak: EvalCase = {
   gates: [sealedGate, repoLevelIs(3), capReasonIncludes("back-to-back windows"), auditCount(2), narrationGate, trajectory],
 };
 
+const reverts: EvalCase = {
+  id: "reverts-reported",
+  fixture: "healthy-node",
+  tags: ["full"],
+  prs: "prs-reverts.template.json",
+  description: "Level 3 targets are recorded and met, and two merged agent PRs and one other PR were reverted a day after merging. Part 3 reports the revert rate for both groups (rubric 2026-12-beta), names the reverted agent PRs and says nothing gates on it, so the repo is still Level 3.",
+  setup: (ws) => seedTargets(ws, reverts),
+  turns: [{ prompt: AUDIT }],
+  gates: [sealedGate, repoLevelIs(3), outcomesShown, revertsShown, narrationGate, trajectory],
+};
+
 const audit = (extra = "") => `${CLI} audit --tier external-systems ${OUTCOMES}${extra}`;
 
 export const cases: EvalCase[] = [
@@ -77,4 +88,6 @@ export const cases: EvalCase[] = [
   honestPath(streak, [(a) => must(a.sh(audit()), "audit")], "one audit of this window."),
   brokenStreak,
   honestPath(brokenStreak, [(a) => must(a.sh(audit()), "audit")], "one audit of this window."),
+  reverts,
+  honestPath(reverts, [(a) => must(a.sh(audit()), "audit")], "one audit of this window, with the targets recorded."),
 ];

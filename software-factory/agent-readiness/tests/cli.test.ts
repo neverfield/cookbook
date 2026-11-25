@@ -236,7 +236,7 @@ describe("CLI", { concurrency: 4 }, () => {
     const dir = join(repo, ".agent-readiness/feedback");
     const bundle = JSON.parse(readFileSync(join(dir, readdirSync(dir)[0]), "utf8"));
     assert.equal(bundle.check, "bootstrap.cold_replay");
-    assert.equal(bundle.rubric, "2026-11-beta");
+    assert.equal(bundle.rubric, "2026-12-beta");
     assert.ok(!JSON.stringify(bundle).includes("outputTail"));
     assert.ok(!JSON.stringify(bundle).includes("isAdult"));
   });
@@ -286,7 +286,7 @@ describe("CLI", { concurrency: 4 }, () => {
     assert.match(readiness(repo, ["validate", ".agent-readiness/roadmap.json"]).out, /valid roadmap/);
     writeFileSync(join(repo, "bad.json"), JSON.stringify({ schema: "agent-readiness/report@1" }));
     assert.match(readiness(repo, ["validate", "bad.json"]).out, /not a valid report/);
-    assert.match(readiness(repo, ["version"]).out, /agent-readiness skill 0\.2\.0 \(agent-readiness-v0\.2\.0\), rubric 2026-11-beta/);
+    assert.match(readiness(repo, ["version"]).out, /agent-readiness skill 0\.2\.0 \(agent-readiness-v0\.2\.0\), rubric 2026-12-beta/);
   });
 });
 

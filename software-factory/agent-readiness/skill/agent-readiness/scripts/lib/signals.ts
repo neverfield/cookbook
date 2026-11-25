@@ -1,9 +1,11 @@
 import { join } from "node:path";
+import { verifySkills } from "./assets.ts";
 import { readPackageJson } from "./profile.ts";
 import type { ContractCommand, Profile, Signal } from "./types.ts";
 import { listFiles, readText, wordCount } from "./util.ts";
 
-// Static signals for part 4. They inform; none sets a level or adds a roadmap item.
+// Static signals for part 4. They inform; none sets a level. Only drive_app adds a roadmap item, a
+// later rollout step for a component already at Level 2.
 
 const SKIP = /(^|\/)(node_modules|dist|build|vendor|fixtures?|testdata|bin|obj|target|\.git)\//;
 const SOURCE = /\.(m?[jt]sx?|cjs|py|cs|go|rb)$/;
@@ -106,6 +108,85 @@ function targetedSignal(profile: Profile, contract: ContractCommand[]): Signal {
   return { id: "targeted_tests", label: "A way to run one test file", found: parts.every((p) => p.ok), detail: parts.map((p) => p.text).join("; ") };
 }
 
+// Ways to start an app and use it as a user would, so an agent can show a change working in it.
+const DRIVER_FILES: { re: RegExp; what: string }[] = [
+  { re: /(^|\/)playwright\.config\.(m?[jt]s|cjs)$/, what: "Playwright config" },
+  { re: /(^|\/)cypress\.config\.(m?[jt]s|cjs)$|(^|\/)cypress\.json$/, what: "Cypress config" },
+  { re: /(^|\/)wdio\.conf\.(m?[jt]s|cjs)$/, what: "WebdriverIO config" },
+  { re: /(^|\/)scripts?\/[^/]*smoke[^/]*\.(sh|m?[jt]s|cjs|py)$/i, what: "smoke script" },
+];
+const DRIVER_DEPS: Record<string, string> = { "@playwright/test": "Playwright", playwright: "Playwright", cypress: "Cypress", webdriverio: "WebdriverIO", puppeteer: "Puppeteer", "node-pty": "a terminal harness (node-pty)" };
+const PY_DRIVERS = /^\s*["']?(pytest-playwright|playwright|selenium|pexpect)\b/im;
+const DRIVER_SCRIPT = /^(e2e|test:e2e|smoke|test:smoke)$/;
+// What says a component is an app someone runs, rather than a library.
+const APP_SCRIPTS = ["start", "dev", "serve", "preview"];
+const APP_DEPS = ["next", "react-dom", "vite", "express", "fastify", "koa", "hono", "@nestjs/core", "vue", "svelte", "@angular/core", "electron", "react-native"];
+const PY_APPS = /^\s*["']?(fastapi|flask|django|starlette|streamlit)\b/im;
+
+function within(c: { path: string }, f: string): boolean {
+  return c.path === "." || f.startsWith(`${c.path}/`);
+}
+
+function appSurface(tree: string, files: string[], c: Profile["components"][number], contract: ContractCommand[]): string | null {
+  const dir = c.path === "." ? tree : join(tree, c.path);
+  const pkg = readPackageJson(dir);
+  const script = APP_SCRIPTS.find((s) => pkg?.scripts?.[s]);
+  if (script) return `a \`${script}\` script`;
+  const deps = { ...pkg?.dependencies, ...pkg?.devDependencies };
+  const dep = APP_DEPS.find((d) => d in deps);
+  if (dep) return `it depends on ${dep}`;
+  if (contract.some((k) => k.component === c.id && k.kind === "start")) return "a start command";
+  if (c.language === "py") {
+    const manifests = ["pyproject.toml", "requirements.txt"].map((m) => (c.path === "." ? m : `${c.path}/${m}`)).filter((m) => files.includes(m));
+    const hit = manifests.map((m) => readText(join(tree, m)).match(PY_APPS)?.[1]).find(Boolean);
+    if (hit) return `it depends on ${hit}`;
+    if (files.includes(c.path === "." ? "manage.py" : `${c.path}/manage.py`)) return "a Django manage.py";
+  }
+  return null;
+}
+
+// Each driver found, and where: a file under a component applies to it, one outside every
+// component (a root config, a repo-level verify skill) to all of them.
+function drivers(tree: string, files: string[], profile: Profile): { path: string; what: string }[] {
+  const out: { path: string; what: string }[] = [];
+  for (const f of files.filter((x) => !SKIP.test(x))) {
+    const hit = DRIVER_FILES.find((d) => d.re.test(f));
+    if (hit) out.push({ path: f, what: hit.what });
+  }
+  for (const v of verifySkills(files)) {
+    const drives = v.features > 0 || /^#+\s*Drive\b/m.test(readText(join(tree, v.path)));
+    if (drives) out.push({ path: v.path, what: v.features ? `a verify skill with a feature map of ${v.features} ${v.features === 1 ? "feature" : "features"}` : "a verify skill with a Drive section" });
+  }
+  for (const m of profile.manifests.filter((x) => /(^|\/)package\.json$/.test(x))) {
+    const pkg = readPackageJson(join(tree, m.replace(/\/?package\.json$/, "") || "."));
+    const deps = { ...pkg?.dependencies, ...pkg?.devDependencies };
+    const dep = Object.keys(DRIVER_DEPS).find((d) => d in deps);
+    const script = Object.entries(pkg?.scripts ?? {}).find(([name, cmd]) => DRIVER_SCRIPT.test(name) || /\b(playwright|cypress|wdio)\b/.test(cmd));
+    if (dep) out.push({ path: m, what: DRIVER_DEPS[dep] });
+    else if (script) out.push({ path: m, what: `the \`${script[0]}\` script` });
+  }
+  for (const m of files.filter((x) => /(^|\/)(pyproject\.toml|requirements[^/]*\.txt)$/.test(x) && !SKIP.test(x))) {
+    const hit = readText(join(tree, m)).match(PY_DRIVERS)?.[1];
+    if (hit) out.push({ path: m, what: hit === "pexpect" ? "a terminal harness (pexpect)" : hit === "selenium" ? "Selenium" : "Playwright" });
+  }
+  return out;
+}
+
+function driveSignal(tree: string, files: string[], profile: Profile, contract: ContractCommand[]): Signal {
+  const label = "A scripted way to drive the app";
+  const comps = profile.components.filter((c) => c.assessed);
+  const found = drivers(tree, files, profile);
+  const owner = (path: string) => comps.filter((c) => c.path !== "." && within(c, path)).sort((a, b) => b.path.length - a.path.length)[0];
+  const driven = (c: (typeof comps)[number]) => found.some((d) => within(c, d.path) || !owner(d.path));
+  const apps = comps.map((c) => ({ id: c.id, surface: appSurface(tree, files, c, contract) })).filter((x): x is { id: string; surface: string } => x.surface !== null);
+  const undriven = apps.filter((a) => !driven(comps.find((c) => c.id === a.id)!));
+  const shown = found.slice(0, 4).map((d) => `${d.what} (${d.path})`).join("; ") + (found.length > 4 ? `; and ${found.length - 4} more` : "");
+  const gaps = undriven.map((u) => `${u.id} (${u.surface})`).join(", ");
+  if (found.length === 0 && apps.length === 0) return { id: "drive_app", label, found: null, detail: "no app to drive: no component has a start, dev, serve or preview script, a start command or a web framework" };
+  if (found.length === 0) return { id: "drive_app", label, found: false, detail: `none: no Playwright, Cypress or WebdriverIO specs, verify skill, smoke script or terminal harness, though there is an app to run in ${gaps}`, undriven };
+  return { id: "drive_app", label, found: undriven.length === 0, detail: `${shown}${undriven.length ? `; none for ${gaps}` : ""}`, ...(undriven.length ? { undriven } : {}) };
+}
+
 export function staticSignals(tree: string, profile: Profile, contract: ContractCommand[]): Signal[] {
   // The installed copy of this skill reads its own SA_READINESS_* settings; that is not the repo's code.
   const files = listFiles(tree, { includeHidden: true }).filter((f) => !f.startsWith(".cursor/skills/agent-readiness/"));
@@ -117,5 +198,5 @@ export function staticSignals(tree: string, profile: Profile, contract: Contract
   const length: Signal = agentsMd
     ? { id: "agents_md_length", label: "AGENTS.md length", found: words <= LONG_AGENTS_MD, detail: `${words} words${words > LONG_AGENTS_MD ? `, over ${LONG_AGENTS_MD}; agents load all of it on every task` : ""}` }
     : { id: "agents_md_length", label: "AGENTS.md length", found: null, detail: "no AGENTS.md at the root" };
-  return [ci, targetedSignal(profile, contract), envSignal(tree, files), isolationSignal(tree, files, profile), length];
+  return [ci, targetedSignal(profile, contract), envSignal(tree, files), isolationSignal(tree, files, profile), length, driveSignal(tree, files, profile, contract)];
 }

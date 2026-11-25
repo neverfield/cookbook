@@ -1,0 +1,18 @@
+{
+  "purpose": "A type-check that exits 0 and checks nothing agents change: its script checks types/ only, not src/. Every command passes, and before rubric 2026-12-beta that was Level 2. Now the audit plants a type error in src/pricing.ts, the file the tests import; the type-check still passes, so the commands condition isn't met and the component stays at Level 1, with a fix to make the type-check cover src/pricing.ts.",
+  "runs": [
+    {
+      "name": "default",
+      "level": 1,
+      "levels": {
+        "typecheck-misses-src": 1
+      },
+      "top": [
+        "commands:canary:typecheck-misses-src"
+      ],
+      "startNow": null,
+      "noBlocker": false,
+      "safety": "pass"
+    }
+  ]
+}

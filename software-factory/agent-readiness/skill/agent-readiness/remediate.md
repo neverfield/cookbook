@@ -41,7 +41,15 @@ For an item like "Make worker's tests catch wrong behavior":
 1. The report names the file and the kind of fault, never the line or the edit. Don't look for planted-fault details in `.agent-readiness/`. Faults are chosen from the code and its tests, so once the tests change the next audit plants different faults, and tests aimed at the old ones don't help.
 2. Decide the intended behavior of the named files with the user when it isn't obvious, then write tests that assert results and edge cases.
 3. Never delete tests, add skip markers or loosen assertions. `readiness diff` flags all three.
-4. Prove it with a new audit: the tests must catch at least the rubric's kill rate of the faults it plants in that component (60% under rubric 2026-11-beta).
+4. Prove it with a new audit: the tests must catch at least the rubric's kill rate of the faults it plants in that component (60% from rubric 2026-11-beta).
+
+## A type-check that doesn't cover the code
+
+For an item like "Make web's type-check cover src/cart.ts" (rubric 2026-12-beta):
+
+1. The report names the file and the line the audit planted. Add that line at the end of the file and run the type-check yourself: it should fail, and today it passes.
+2. Change the checker's config, not the code: include the source in the tsconfig `include` or `files`, or in the paths mypy or pyright check, and make sure the script runs a type checker rather than only loading the code (`node --experimental-strip-types` checks no types).
+3. Remove the line, commit, and prove it with a new audit. It plants the same error and expects the type-check to fail on it and pass once it is gone. Never make the checker skip the planted line or the named file.
 
 ## Stale agent instructions
 

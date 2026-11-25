@@ -9,7 +9,7 @@ import { addEvidence } from "./evidence.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
 import { ecosystemOf } from "./languages/index.ts";
-import { applySite, chooseSites, faultsVerdict, killRateOf } from "./mutate.ts";
+import { TYPE_CANARIES, applySite, chooseSites, faultsVerdict, killRateOf, typeCanarySite, withCanary } from "./mutate.ts";
 import { proxyPasswords, redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { SUDO_SHIM_MARK, runCommand, scrubbedEnv } from "./run.ts";
@@ -711,6 +711,61 @@ async function plantFaults(audit: Audit, repo: string, tree: string, ex: Executo
 
 const MISSED_AFTER_SEAL = " (the sealed report says where)";
 
+// A type-check that exits 0 proves nothing until it has been seen to fail: one known type error goes
+// at the end of a file the component's tests import, the type-check must fail on it, and it must
+// pass again once the line is removed. Runs only after every type-check of the component passed.
+async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Executor, comp: Component, results: PhaseResult[], budget: Budget, log: (s: string) => void): Promise<void> {
+  const typechecks = commandsFor(audit.contract, comp.id, "typecheck");
+  const runs = results.filter((r) => typechecks.some((c) => c.id === r.cmd.id));
+  if (typechecks.length === 0 || runs.length !== typechecks.length || runs.some((r) => r.status !== "pass")) return;
+  const base = { checkId: "verify.canonical_interface", condition: "commands" as CondId, component: comp.id, strength: ex.strength, where: ex.where, image: ex.image ?? undefined };
+  const site = typeCanarySite(repo, tree, comp, audit.repo.commit);
+  if (!site) {
+    const summary = `no type error was planted: ${comp.id}'s tests import no ${TYPE_CANARIES.map((c) => c.label).join(" or ")} file, so its type-check counts on its exit code alone`;
+    log(`  type-check canary in ${comp.id}: ${summary}`);
+    addEvidence(audit, { ...base, result: "not_run", summary, canary: { kind: "typecheck", file: null, exempt: true } });
+    return;
+  }
+  const canary = { kind: "typecheck" as const, file: site.file, line: site.line };
+  const cmd = typechecks[0];
+  const record = (result: Evidence["result"], summary: string, extra: Partial<Evidence> = {}) => {
+    log(`  type-check canary in ${comp.id}: ${summary}`);
+    addEvidence(audit, { ...base, result, summary, command: cmd.command, cwd: cmd.cwd, canary, ...extra });
+  };
+  if (overBudget(budget, comp.id) || budgetLeftSec(budget, comp.id) < 1) return record("not_run", "no type error was planted: the time budget ran out first", { blocked: BUDGET_OUT });
+  const fresh = ex.execFresh ?? ex.exec;
+  const filePath = join(ex.root, site.file);
+  const original = readText(filePath);
+  const caught: ContractCommand[] = [];
+  let stalled: string | null = null;
+  writeFileSync(filePath, withCanary(original, site.line));
+  try {
+    for (const c of typechecks) {
+      const limit = capped(budget, comp.id, c.timeoutSec);
+      const out = await fresh(c.command, c.cwd, limit.sec);
+      charge(budget, comp.id, out.durationMs);
+      if (out.timedOut) {
+        stalled = limit.byBudget ? BUDGET_OUT : `\`${c.command}\` timed out with the planted type error`;
+        break;
+      }
+      if (out.exitCode !== 0) caught.push(c);
+    }
+  } finally {
+    writeFileSync(filePath, original);
+  }
+  if (stalled) return record("not_run", `the type-check with a type error planted in ${site.file} didn't finish: ${stalled}`, stalled === BUDGET_OUT ? { blocked: BUDGET_OUT } : {});
+  const shown = `\`${site.line}\``;
+  if (caught.length === 0) return record("fail", `the type-check (\`${cmd.command}\`) passed with a type error planted in ${site.file} (${shown}), so it doesn't check that file`, { exitCode: 0 });
+  // The same command passing again without the line shows the failure came from the planted error.
+  for (const c of caught) {
+    const limit = capped(budget, comp.id, c.timeoutSec);
+    const again = await fresh(c.command, c.cwd, limit.sec);
+    charge(budget, comp.id, again.durationMs);
+    if (again.exitCode !== 0 || again.timedOut) return record("not_run", `the type-check failed with a type error planted in ${site.file}, but didn't pass again once it was removed, so the failure can't be pinned on it`);
+  }
+  record("pass", `the type-check (\`${caught[0].command}\`) failed on a type error planted in ${site.file} (${shown}) and passed again once it was removed`);
+}
+
 // Next to the audit tree, outside the repository, and deleted with it once the seal copies it in.
 export function mutantsFile(tree: string): string {
   return join(dirname(tree), "mutants.json");
@@ -1031,6 +1086,18 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
     else if (installs.some((r) => r.blocked) && installs.every((r) => r.status === "pass" || r.blocked)) {
       const blocked = installs.find((r) => r.blocked)!.blocked!;
       addEvidence(audit, { checkId: "bootstrap.cold_replay", condition: "lockfile", component: "*", strength: ex.strength, where: ex.where, result: "not_run", summary: "the frozen install couldn't run on this machine", blocked, image: ex.image ?? undefined });
+    }
+    if (rubric.canary?.typecheck) {
+      for (const comp of components) {
+        const c = profile.components.find((x) => x.id === comp)!;
+        try {
+          await typecheckCanary(audit, repo, tree, exs.forComponent(comp), c, results, budget, opts.log);
+        } catch (e) {
+          const why = (e as Error).message.split("\n")[0].slice(0, 200);
+          opts.log(`  type-check canary in ${comp}: couldn't be planted (${why}); the other results are kept`);
+          addEvidence(audit, { checkId: "verify.canonical_interface", condition: "commands", component: comp, strength: exs.forComponent(comp).strength, where: exs.forComponent(comp).where, result: "not_run", summary: `planting the type error failed: ${why}`, canary: { kind: "typecheck", file: null } });
+        }
+      }
     }
     if (opts.mutants) {
       for (const comp of components) {

@@ -224,7 +224,7 @@ describe("informational signals", () => {
     });
     const profile = buildProfile(repo, repo, rubric);
     const signals = Object.fromEntries(staticSignals(repo, profile, discoverContract(profile, repo, rubric, [])).map((s) => [s.id, s]));
-    assert.deepEqual(Object.fromEntries(Object.entries(signals).map(([k, s]) => [k, s.found])), { ci: true, targeted_tests: true, env_sample: false, isolation: false, agents_md_length: false });
+    assert.deepEqual(Object.fromEntries(Object.entries(signals).map(([k, s]) => [k, s.found])), { ci: true, targeted_tests: true, env_sample: false, isolation: false, agents_md_length: false, drive_app: false });
     assert.match(signals.ci.detail, /\.github\/workflows\/ci\.yml, and it runs tests/);
     assert.match(signals.targeted_tests.detail, /vitest takes a file or a name filter/);
     assert.match(signals.env_sample.detail, /none, though the code reads 2 environment variables \(DATABASE_URL, STRIPE_KEY\)/);

@@ -8,7 +8,7 @@ import { sampledScope } from "./scope.ts";
 import { blockedBy, checkCounts } from "./score.ts";
 import type { ComponentResult } from "./seal.ts";
 import { NOT_SUPPORTED, STACKS, SUPPORTED_DOC } from "./support.ts";
-import type { Asset, Audit, CondId, Component, ComponentLevel, HistoryLine, Level, OutcomeStats, OutcomesSnapshot, ReportAction, ReportChanges, ReportJson, Roadmap, RoadmapItem, ScenarioId } from "./types.ts";
+import type { Asset, Audit, CondId, Component, ComponentLevel, HistoryLine, Level, OutcomeStats, OutcomesSnapshot, ReportAction, ReportChanges, ReportJson, RevertsSnapshot, Roadmap, RoadmapItem, ScenarioId } from "./types.ts";
 import { EMOJI, fmtDate, fmtShortDate, pct, wordCount } from "./util.ts";
 import { serviceLabel } from "./diagnose.ts";
 import { explanationsOf, imagesUsed, waiversOf } from "./explain.ts";
@@ -89,7 +89,20 @@ function metricLabel(metric: string, scope = "repo"): string {
   if (m === "first_time_ci_pass") return `Share of ${prs} that pass CI the first time`;
   if (m === "changes_requested") return `Share of ${prs} where a reviewer requested changes`;
   if (m === "prs_adding_path") return `${prs.charAt(0).toUpperCase() + prs.slice(1)} that add a stray ${pattern}`;
+  if (m === "reverted") return `Share of merged ${prs} reverted soon after merging`;
   return `Merged ${prs}`;
+}
+
+// Signals never set a level; from 2026-12-beta the drive signal can add a later rollout step.
+export function signalsNote(r: ReportJson): string {
+  return r.details.signals.some((s) => s.id === "drive_app") ? "These don't set a level. Only the drive-the-app signal can add a roadmap step: a later one, for a component already at Level 2." : "These don't set a level or add a roadmap step.";
+}
+
+// How part 3's revert row was measured, so a reader knows what it can miss and that nothing gates on it.
+export function revertNote(r: RevertsSnapshot): string {
+  if (r.unavailable) return `Reverts weren't measured: ${r.unavailable}.`;
+  const recent = r.mergedRecently ? ` ${r.mergedRecently} of the merged agent PRs merged less than ${r.days} days before the window ended, so they had less time to be reverted.` : "";
+  return `Reverted within ${r.days} days counts merged PRs whose first revert landed within ${r.days} days of the merge. A revert is a merged PR whose body says "Reverts #123" or whose title is Revert "<the PR's title>", or a commit on the default branch that says "This reverts commit <the merge commit>"; a revert squashed without that line isn't seen, so these are detected reverts.${recent}${r.limited ? ` ${r.limited}.` : ""} Reported only: no level or target uses it yet.`;
 }
 
 function watchLine(item: RoadmapItem, rubric: Rubric, outcomes: OutcomesSnapshot | null): string {
@@ -128,7 +141,9 @@ function action(item: RoadmapItem, rank: number, rubric: Rubric, roadmap: Roadma
 // The level of the scale a roadmap step is part of reaching: the lowest level whose conditions it
 // fixes. Steps such as naming an owner serve every level.
 function itemLevel(rubric: Rubric, item: RoadmapItem): Level | null {
-  // Targets define Level 3, and giving agents work is what produces the PRs it is measured on.
+  // Targets define Level 3, and giving agents work is what produces the PRs it is measured on. A
+  // way to drive the app isn't scored, so it is part of no level.
+  if (item.template === "drive") return null;
   if (item.template === "targets" || item.kind === "rollout") return 3;
   const conds = item.fixes.map((f) => f.condition);
   if (conds.some((c) => rubric.level1.includes(c))) return 1;
@@ -344,8 +359,9 @@ function headlineFor(input: RenderInput, ready: string[], setByShare: number): s
     return (evs.find((e) => e.where === "container" || e.where === "fresh_copy") ?? evs[0])?.result;
   };
   const failingKinds = [...new Set(input.audit.contract.filter((c) => (rollup.setBy.includes(c.component) || c.component === "*") && ["build", "lint", "typecheck", "test"].includes(c.kind) && resultOf(c.id) === "fail").map((c) => (c.kind === "typecheck" ? "type-check" : c.kind)))];
+  const canaryMissed = input.audit.evidence.some((e) => e.canary?.kind === "typecheck" && e.result === "fail" && rollup.setBy.includes(e.component ?? ""));
   const why: Partial<Record<CondId, string>> = {
-    commands: failingKinds.length ? `${their} ${list(failingKinds)} ${failingKinds.length > 1 ? "commands fail" : "command fails"}` : `${their} checks don't all pass`,
+    commands: failingKinds.length ? `${their} ${list(failingKinds)} ${failingKinds.length > 1 ? "commands fail" : "command fails"}` : canaryMissed ? `${their} type-check passes with a type error planted in the code` : `${their} checks don't all pass`,
     faults: `${their} tests can't yet catch wrong changes`,
     instructions: `${their} agent instructions don't match the repo`,
     safety: input.audit.safety.filter((s) => s.blocking).every((s) => s.kind === "secret") ? "a secret is committed to the repo" : "normal work needs production access",
@@ -760,6 +776,7 @@ export function buildReport(input: RenderInput): ReportJson {
         firstTimeCi: rate(x.s.firstTimeCiPass, x.s.firstTimeCiKnown, rubric, x.w),
         changesRequested: rate(x.s.changesRequested, x.s.opened, rubric, x.w),
         medianDaysToMerge: x.s.medianDaysToMerge,
+        ...(rubric.outcomes.revertDays !== undefined ? { reverted: x.s.revertKnown === undefined ? null : rate(x.s.reverted ?? 0, x.s.revertKnown, rubric, x.w) } : {}),
       }))
     : [];
   const prevAudits = input.history.filter((h) => h.kind === "audit");
@@ -881,6 +898,7 @@ export function buildReport(input: RenderInput): ReportJson {
             multiComponentNote: o.multiComponentPrs ? `${o.multiComponentPrs} agent ${o.multiComponentPrs === 1 ? "PR" : "PRs"} touched more than one component, so the component rows can add up to more than the total.` : "No agent PR touched more than one component.",
             matchedPrs: o.matchedAgentPrs,
             caveat: input.previousOutcomes ? "A trend, not attribution. Model updates or a different mix of tasks could account for part of the change." : "A baseline, not proof that readiness explains these numbers. Model updates and the mix of tasks move them too.",
+            ...(o.reverts ? { reverts: { days: o.reverts.days, note: revertNote(o.reverts), agent: o.reverts.agent } } : {}),
           }
         : null,
       assets: audit.assets.map((a: Asset) => ({ kind: a.kind, path: a.path, authors: a.authors.map((x) => x.name), lastChanged: a.lastChanged, status: a.status, ok: a.ok })),
@@ -1613,10 +1631,12 @@ export function renderMarkdown(r: ReportJson, rubric: Rubric): string {
     out.push(`| Merged | ${oc.series.map((s) => describeRate(s.merged)).join(" | ")} |`);
     out.push(`| Passed CI the first time | ${oc.series.map((s) => describeRate(s.firstTimeCi)).join(" | ")} |`);
     out.push(`| Reviewer requested changes | ${oc.series.map((s) => describeRate(s.changesRequested)).join(" | ")} |`);
-    out.push(`| Median days to merge | ${oc.series.map((s) => (s.medianDaysToMerge === null ? "n/a" : String(s.medianDaysToMerge))).join(" | ")} |`, "");
-    out.push("| Component | Agent PRs | Passed CI the first time | Changes requested |", "|---|---|---|---|");
+    out.push(`| Median days to merge | ${oc.series.map((s) => (s.medianDaysToMerge === null ? "n/a" : String(s.medianDaysToMerge))).join(" | ")} |`);
+    if (oc.reverts) out.push(`| Reverted within ${oc.reverts.days} days | ${oc.series.map((s) => (s.reverted ? describeRate(s.reverted) : "not measured")).join(" | ")} |`);
+    out.push("", "| Component | Agent PRs | Passed CI the first time | Changes requested |", "|---|---|---|---|");
     for (const c of oc.byComponent) out.push(`| \`${c.component}\` | ${c.prs} | ${describeRate(c.firstTimeCi)} | ${describeRate(c.changesRequested)} |`);
     out.push("", `${oc.multiComponentNote} ${oc.caveat}`, "", `Matched PRs: ${oc.matchedPrs.map((n) => `#${n}`).join(", ") || "none"}.`, "");
+    if (oc.reverts) out.push(`${oc.reverts.note}${oc.reverts.agent.length ? ` Reverted agent PRs: ${oc.reverts.agent.map((x) => `#${x.number} (by ${x.by})`).join(", ")}.` : ""}`, "");
   } else out.push("Not measured: outcomes need the external-systems tier and `readiness outcomes`.", "");
   out.push("### Agent assets already in the repo", "");
   if (r.details.assets.length) {
@@ -1628,7 +1648,7 @@ export function renderMarkdown(r: ReportJson, rubric: Rubric): string {
   if (r.details.signals.length) {
     out.push("### Other signals (informational, not scored)", "", "| Signal | Found | Detail |", "|---|---|---|");
     for (const s of r.details.signals) out.push(`| ${s.label} | ${s.found === null ? "n/a" : s.found ? "yes" : "no"} | ${s.detail.replace(/\|/g, "\\|")} |`);
-    out.push("", "These don't set a level or add a roadmap step.", "");
+    out.push("", signalsNote(r), "");
   }
   out.push(...explanationLines(r));
   // Five columns: where a check ran goes with its result, and a check read from files names no command.

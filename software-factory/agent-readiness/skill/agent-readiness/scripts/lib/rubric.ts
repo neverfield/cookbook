@@ -50,9 +50,15 @@ export interface Rubric {
   // and the level stay fixed until the code changes; without it, a fresh seed each audit.
   mutation: { perComponent: number; minForPass: number; killRate?: number; seedFrom?: "audit" | "code"; languages: string[]; operators: string[]; runTimeoutSec: number; flakeRuns: number; targeting: string };
   budgets: { commandTimeoutSec: number; componentMinutes: number; totalMinutes: number };
+  // typecheck (from 2026-12-beta): a passing type-check meets the commands condition only once it
+  // failed on a type error the audit planted. Without it, exit 0 is enough.
+  canary?: { typecheck?: boolean };
   outcomes: {
     windowDays: number;
     minRateN: number;
+    // From 2026-12-beta: part 3 reports merged PRs reverted within this many days of merging. Reported
+    // only; no level or target reads it. Without it, reverts aren't looked for.
+    revertDays?: number;
     defaultFilter: { branchPrefixes: string[]; labels: string[]; authors: string[]; coAuthorTrailers: string[] };
     metrics: string[];
     activityLabels: Record<string, string[]>;

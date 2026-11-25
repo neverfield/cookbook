@@ -10,9 +10,9 @@
         "date": "2026-10-27",
         "commit": "7070f44",
         "dirtyTree": false,
-        "rubric": "2026-11-beta",
+        "rubric": "2026-12-beta",
         "tier": "local-exec",
-        "scriptsDigest": "8081444c7126a094ef71b3e7e3a73c6ebd4e93ce36a45d56b6932ea6bf553fb5",
+        "scriptsDigest": "2f1479f6539941d078b8e949752e12df9ca0fee1f1ffd9116b8e0f515d5ea7bf",
         "seedPinned": true,
         "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
         "staleCopy": null,
@@ -522,7 +522,7 @@
           {
             "id": "verify.canonical_interface",
             "name": "Build, lint, type-check and test commands pass",
-            "why": "Agents need one known way to check their own work.",
+            "why": "Agents need one known way to check their own work, and a type-check counts only once the audit has seen it fail on a type error it planted.",
             "sources": [],
             "result": "failed: api; passed: shared and worker",
             "ok": false,
@@ -606,7 +606,8 @@
           "Flaky tests",
           "The quality of error messages",
           "How easily code can be found",
-          "Outcome checks on held-out tasks"
+          "Outcome checks on held-out tasks",
+          "Whether the lint command catches anything"
         ],
         "levelRules": {
           "level1": "Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container",
@@ -639,7 +640,13 @@
                 "rate": 0.444,
                 "window": "Sep 27 to Oct 27, 2026"
               },
-              "medianDaysToMerge": 2
+              "medianDaysToMerge": 2,
+              "reverted": {
+                "count": 1,
+                "n": 7,
+                "rate": 0.143,
+                "window": "Sep 27 to Oct 27, 2026"
+              }
             },
             {
               "label": "Other PRs",
@@ -662,7 +669,13 @@
                 "rate": 0.171,
                 "window": "Sep 27 to Oct 27, 2026"
               },
-              "medianDaysToMerge": 2
+              "medianDaysToMerge": 2,
+              "reverted": {
+                "count": 1,
+                "n": 35,
+                "rate": 0.029,
+                "window": "Sep 27 to Oct 27, 2026"
+              }
             }
           ],
           "byComponent": [
@@ -727,7 +740,17 @@
             219,
             221
           ],
-          "caveat": "A baseline, not proof that readiness explains these numbers. Model updates and the mix of tasks move them too."
+          "caveat": "A baseline, not proof that readiness explains these numbers. Model updates and the mix of tasks move them too.",
+          "reverts": {
+            "days": 14,
+            "note": "Reverted within 14 days counts merged PRs whose first revert landed within 14 days of the merge. A revert is a merged PR whose body says \"Reverts #123\" or whose title is Revert \"<the PR's title>\", or a commit on the default branch that says \"This reverts commit <the merge commit>\"; a revert squashed without that line isn't seen, so these are detected reverts. 3 of the merged agent PRs merged less than 14 days before the window ended, so they had less time to be reverted. Reported only: no level or target uses it yet.",
+            "agent": [
+              {
+                "number": 203,
+                "by": "#230"
+              }
+            ]
+          }
         },
         "assets": [
           {
@@ -797,6 +820,12 @@
             "label": "AGENTS.md length",
             "found": true,
             "detail": "42 words"
+          },
+          {
+            "id": "drive_app",
+            "label": "A scripted way to drive the app",
+            "found": null,
+            "detail": "no app to drive: no component has a start, dev, serve or preview script, a start command or a web framework"
           }
         ],
         "evidence": [
@@ -983,7 +1012,7 @@
           },
           {
             "label": "Rubric",
-            "value": "2026-11-beta"
+            "value": "2026-12-beta"
           },
           {
             "label": "Permission tier",
@@ -995,7 +1024,7 @@
           },
           {
             "label": "Skill digest",
-            "value": "8081444c7126"
+            "value": "2f1479f65399"
           },
           {
             "label": "Planted faults",
@@ -1093,7 +1122,7 @@
           "ran": "`npm run lint` (pass) and `npm run test` (fail)",
           "where": "in a clean docker container (node:22-bookworm)",
           "happened": "test failed: connection refused on port 5432 (1 of 1 tests failed)",
-          "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Not met means it ran and failed, or the repo lacks what it needs."
+          "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Not met means it ran and failed, or the repo lacks what it needs. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone."
         },
         {
           "kind": "condition",
@@ -1174,7 +1203,7 @@
           "ran": "`npm run lint` (pass) and `npm run test` (pass)",
           "where": "in a clean docker container (node:22-bookworm)",
           "happened": "2 commands pass",
-          "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed."
+          "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone."
         },
         {
           "kind": "condition",
@@ -1219,7 +1248,7 @@
           "ran": "`npm run lint` (pass) and `npm run test` (pass)",
           "where": "in a clean docker container (node:22-bookworm)",
           "happened": "2 commands pass",
-          "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed."
+          "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone."
         },
         {
           "kind": "condition",
@@ -1304,9 +1333,9 @@
         "date": "2026-11-30",
         "commit": "9a2c092",
         "dirtyTree": false,
-        "rubric": "2026-11-beta",
+        "rubric": "2026-12-beta",
         "tier": "local-exec",
-        "scriptsDigest": "8081444c7126a094ef71b3e7e3a73c6ebd4e93ce36a45d56b6932ea6bf553fb5",
+        "scriptsDigest": "2f1479f6539941d078b8e949752e12df9ca0fee1f1ffd9116b8e0f515d5ea7bf",
         "seedPinned": true,
         "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
         "staleCopy": null,
@@ -1676,7 +1705,7 @@
               "worker": 1
             },
             "repoLevel": 0,
-            "rubric": "2026-11-beta"
+            "rubric": "2026-12-beta"
           },
           {
             "date": "2026-10-30",
@@ -1689,7 +1718,7 @@
               "worker": 1
             },
             "repoLevel": 1,
-            "rubric": "2026-11-beta"
+            "rubric": "2026-12-beta"
           },
           {
             "date": "2026-11-06",
@@ -1702,7 +1731,7 @@
               "worker": 1
             },
             "repoLevel": 1,
-            "rubric": "2026-11-beta"
+            "rubric": "2026-12-beta"
           },
           {
             "date": "2026-11-13",
@@ -1715,7 +1744,7 @@
               "worker": 1
             },
             "repoLevel": 1,
-            "rubric": "2026-11-beta"
+            "rubric": "2026-12-beta"
           },
           {
             "date": "2026-11-20",
@@ -1728,7 +1757,7 @@
               "worker": 1
             },
             "repoLevel": 1,
-            "rubric": "2026-11-beta"
+            "rubric": "2026-12-beta"
           },
           {
             "date": "2026-11-30",
@@ -1741,7 +1770,7 @@
               "worker": 1
             },
             "repoLevel": 1,
-            "rubric": "2026-11-beta"
+            "rubric": "2026-12-beta"
           }
         ],
         "closed": [
@@ -1867,7 +1896,7 @@
           {
             "id": "verify.canonical_interface",
             "name": "Build, lint, type-check and test commands pass",
-            "why": "Agents need one known way to check their own work.",
+            "why": "Agents need one known way to check their own work, and a type-check counts only once the audit has seen it fail on a type error it planted.",
             "sources": [],
             "result": "passed: api, shared and worker",
             "ok": true,
@@ -1951,7 +1980,8 @@
           "Flaky tests",
           "The quality of error messages",
           "How easily code can be found",
-          "Outcome checks on held-out tasks"
+          "Outcome checks on held-out tasks",
+          "Whether the lint command catches anything"
         ],
         "levelRules": {
           "level1": "Level 1 needs: installs from the lockfile in a clean container, builds in a clean container and passes every test in a clean container",
@@ -1990,7 +2020,13 @@
                 "rate": 0.235,
                 "window": "Oct 31 to Nov 30, 2026"
               },
-              "medianDaysToMerge": 1
+              "medianDaysToMerge": 1,
+              "reverted": {
+                "count": 1,
+                "n": 13,
+                "rate": 0.077,
+                "window": "Oct 31 to Nov 30, 2026"
+              }
             },
             {
               "label": "Other PRs",
@@ -2013,7 +2049,13 @@
                 "rate": 0.158,
                 "window": "Oct 31 to Nov 30, 2026"
               },
-              "medianDaysToMerge": 2
+              "medianDaysToMerge": 2,
+              "reverted": {
+                "count": 1,
+                "n": 33,
+                "rate": 0.03,
+                "window": "Oct 31 to Nov 30, 2026"
+              }
             },
             {
               "label": "Agent PRs, Sep 27 to Oct 27, 2026",
@@ -2036,7 +2078,13 @@
                 "rate": 0.444,
                 "window": "Sep 27 to Oct 27, 2026"
               },
-              "medianDaysToMerge": 2
+              "medianDaysToMerge": 2,
+              "reverted": {
+                "count": 1,
+                "n": 7,
+                "rate": 0.143,
+                "window": "Sep 27 to Oct 27, 2026"
+              }
             }
           ],
           "byComponent": [
@@ -2109,7 +2157,17 @@
             515,
             516
           ],
-          "caveat": "A trend, not attribution. Model updates or a different mix of tasks could account for part of the change."
+          "caveat": "A trend, not attribution. Model updates or a different mix of tasks could account for part of the change.",
+          "reverts": {
+            "days": 14,
+            "note": "Reverted within 14 days counts merged PRs whose first revert landed within 14 days of the merge. A revert is a merged PR whose body says \"Reverts #123\" or whose title is Revert \"<the PR's title>\", or a commit on the default branch that says \"This reverts commit <the merge commit>\"; a revert squashed without that line isn't seen, so these are detected reverts. 4 of the merged agent PRs merged less than 14 days before the window ended, so they had less time to be reverted. Reported only: no level or target uses it yet.",
+            "agent": [
+              {
+                "number": 512,
+                "by": "#912"
+              }
+            ]
+          }
         },
         "assets": [
           {
@@ -2199,6 +2257,12 @@
             "label": "AGENTS.md length",
             "found": true,
             "detail": "35 words"
+          },
+          {
+            "id": "drive_app",
+            "label": "A scripted way to drive the app",
+            "found": null,
+            "detail": "no app to drive: no component has a start, dev, serve or preview script, a start command or a web framework"
           }
         ],
         "evidence": [
@@ -2394,7 +2458,7 @@
           },
           {
             "label": "Rubric",
-            "value": "2026-11-beta"
+            "value": "2026-12-beta"
           },
           {
             "label": "Permission tier",
@@ -2406,7 +2470,7 @@
           },
           {
             "label": "Skill digest",
-            "value": "8081444c7126"
+            "value": "2f1479f65399"
           },
           {
             "label": "Planted faults",
@@ -2504,7 +2568,7 @@
           "ran": "`npm run lint` (pass) and `npm run test` (pass)",
           "where": "in a clean docker container (node:22-bookworm)",
           "happened": "2 commands pass",
-          "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed."
+          "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone."
         },
         {
           "kind": "condition",
@@ -2585,7 +2649,7 @@
           "ran": "`npm run lint` (pass) and `npm run test` (pass)",
           "where": "in a clean docker container (node:22-bookworm)",
           "happened": "2 commands pass",
-          "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed."
+          "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone."
         },
         {
           "kind": "condition",
@@ -2630,7 +2694,7 @@
           "ran": "`npm run lint` (pass) and `npm run test` (pass)",
           "where": "in a clean docker container (node:22-bookworm)",
           "happened": "2 commands pass",
-          "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed."
+          "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone."
         },
         {
           "kind": "condition",
