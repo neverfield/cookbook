@@ -13,7 +13,7 @@ Every audit reports levels in three tiers, in the report, the seal, `report.json
 | Level | Name | Measured by | Means |
 |---|---|---|---|
 | 0 | Not bootable | audit | A clean checkout can't install, build and pass its tests. |
-| 1 | Bootable | audit | A clean checkout installs, builds and passes every test, in a clean container. |
+| 1 | Bootable | audit | A clean checkout installs, builds and passes every test, in a clean environment: a clean container, or a disposable VM the audit detects. |
 | 2 | Verifiable | audit | Agents can check their own work: the commands pass, the tests catch planted faults, the instructions are accurate and normal work needs no production access. |
 | 3 | Delegable | outcomes | Agent PRs meet the outcome targets your team set, over at least 20 agent PRs in the window (never fewer than 10). |
 | 4 | Scalable | outcomes | Those targets held over two back-to-back windows while agent PR volume at least doubled. |
@@ -28,7 +28,7 @@ The test command comes from the most authoritative source that names one: a comm
 
 ## A component's standard level
 
-- **Level 1:** the frozen install, the build and every test pass in a clean container.
+- **Level 1:** the frozen install, the build and every test pass in a clean environment: a clean container, or (from rubric 2026-12-beta) a disposable VM the audit detects.
 - **Level 2:** Level 1, plus build, lint, type-check and test commands pass at `HEAD`, and (from 2026-12-beta) a passing type-check fails on a type error the audit plants in a TypeScript or Python file the tests import ([checks.md](checks.md#verifycanonical_interface-build-lint-type-check-and-test-commands-pass) has the rule); the planted-fault estimate is strong (from 2026-12-beta; [checks.md](checks.md#verifybehavioral_oracle-tests-catch-planted-faults) has the rule, and an inconclusive estimate leaves Level 2 undetermined), or under earlier rubrics the tests catch at least the rubric's kill rate of the planted faults that give a clear result (60% from 2026-11-beta, every one before; at least 3 must give a clear result); agent instructions are accurate (from 2026-12-beta, the commands in files written for agents); and normal work needs no production access.
 - **Level 1 per ecosystem:** what counts as a reproducible install depends on the package ecosystem, as the table below says. Level 1's clean install is that ecosystem's install passing in a clean container, in the component's own toolchain image. Level 2's lockfile condition adds that the committed files pin every dependency, the install is frozen, and it leaves every lockfile as committed. Under rubric 2026-11-beta every ecosystem in the table is scored; which stacks are supported is in [supported.md](supported.md).
 - **Levels 3 and 4:** measured on the agent PRs that touch the component, against the same control group of other PRs. Level 3 needs Level 2 and targets met over at least 20 agent PRs in a 30-day window. A team can lower the 20 with `--min-prs`, never below 10. Level 4 (rubric 2026-11-alpha) needs two back-to-back audit windows at Level 3 or above, each meeting the targets, with this window's agent PRs at least double the first window's and the change-request rate no higher. A window below Level 3 starts the count again; a Level 4 window stays in the run, so Level 4 holds while the volume does. Audits sealed under 2026-10-alpha compared with the last audit at Level 3 or above.

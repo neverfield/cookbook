@@ -8,12 +8,13 @@ import { describeRate, rate, windowLabel } from "./outcomes.ts";
 import { PREVIEW } from "./preview.ts";
 import { watchFor } from "./roadmap.ts";
 import type { Rubric } from "./rubric.ts";
+import { provingPlace } from "./rubric.ts";
 import type { CompStates } from "./score.ts";
 import { UNDETERMINED, blockedBy, checkCounts, gatingInstruction } from "./score.ts";
 import { sampledScope } from "./scope.ts";
 import type { ComponentResult } from "./seal.ts";
 import { NOT_SUPPORTED, STACKS, SUPPORTED_DOC } from "./support.ts";
-import type { Asset, Audit, CapReason, CommandKind, CondId, Component, ComponentLevel, Evidence, HistoryLine, Level, LevelStatus, MaskedValue, OutcomeStats, OutcomesSnapshot, ProofEnvKind, ReportAction, ReportChanges, ReportJson, RevertsSnapshot, Roadmap, RoadmapItem, ScenarioId, SettleBy } from "./types.ts";
+import type { Asset, Audit, CapReason, CommandKind, CondId, Component, ComponentLevel, Evidence, HistoryLine, Level, LevelStatus, MaskedValue, Narration, OutcomeStats, OutcomesSnapshot, ProofEnvKind, ReportAction, ReportChanges, ReportJson, RevertsSnapshot, Roadmap, RoadmapItem, ScenarioId, SettleBy } from "./types.ts";
 import { fmtShortDate, pct, shellQuote, wordCount } from "./util.ts";
 import { WAIVER_FILE } from "./waivers.ts";
 
@@ -46,7 +47,10 @@ export interface ModelInput {
   supportDoc?: string | null;
   // The previous audit's sealed report, for what changed since; null on a first audit or when it can't be read.
   previousReport?: ReportJson | null;
+  // The narration's valid slots, set by buildReport; the templates read them.
+  slots?: Narration | null;
 }
+
 
 const STATUS_TEXT: Record<RoadmapItem["status"], string> = { done: "done", in_progress: "in progress", next: "next", start_now: "can start now", waiting: "waiting", later: "later" };
 
@@ -297,7 +301,14 @@ function headlineFor(input: ModelInput, ready: string[], setByShare: number): st
   const { rollup, rubric } = input;
   const top = input.top;
   const active = [...input.active];
-  const fit = (...c: string[]) => c.find((x) => wordCount(x) <= rubric.part1.maxHeadlineWords) ?? c[c.length - 1];
+  const limit = rubric.part1.maxHeadlineWords;
+  // The narration's works clause may stand in for a variant's optional clauses; the not-assessed
+  // clause is added only where the chosen variant leaves room.
+  const works = worksText(input);
+  const fit = (...c: string[]) => {
+    if (works) for (const x of c) if (wordCount(withUnassessed(input, x) + works) <= limit) return withUnassessed(input, x) + works;
+    return withUnassessed(input, c.find((x) => wordCount(x) <= limit) ?? c[c.length - 1]);
+  };
   if (noneAssessed(input)) {
     const platform = platformBlocked(input);
     if (platform) return fit(...platform.map((why) => `No component could be assessed, so this audit can't give a level yet: ${why}.`));
@@ -312,13 +323,13 @@ function headlineFor(input: ModelInput, ready: string[], setByShare: number): st
     return fit(...(causes.length ? [`Nothing could be checked ${where}, so this audit gives no level: ${list(causes)}.${tail}`] : []), `Nothing could be checked ${where}, so this audit gives no level.${tail}`);
   }
   if (undetermined(input)) {
-    const held = capComps(input);
+    const held = leadFirst(input, capComps(input));
     const where = held.length <= 3 ? list(held) : `all ${held.length} ${held.length === active.length ? "active " : ""}components`;
     const cause = undeterminedCause(input);
     return fit(`Level 1 is undetermined for ${where}: no check failed for a reason in the repo, but ${cause}.`, `Level 1 is undetermined for ${where}: ${cause}.`, `Level 1 is undetermined for ${where}.`);
   }
   if (unproven(input)) {
-    const held = capComps(input);
+    const held = leadFirst(input, capComps(input));
     const where = held.length <= 3 ? list(held) : `all ${held.length} ${held.length === active.length ? "active " : ""}components`;
     const readOnly = input.audit.tier === "read-only";
     const causes = blockedCauses(input, held);
@@ -331,23 +342,24 @@ function headlineFor(input: ModelInput, ready: string[], setByShare: number): st
     return fit(`Level ${rollup.level + 1} couldn't be proved for ${where} because ${why}.${tail}`, `Level ${rollup.level + 1} couldn't be proved for ${where} because ${shortWhy}.${tail}`, `Level ${rollup.level + 1} couldn't be proved for ${where} on this machine.${tail}`);
   }
   if (rollup.level >= 2 && (top.length === 0 || top.every((t) => t.kind !== "fix"))) {
-    if (rollup.level >= 3) return "Agent PRs meet your Level 3 targets. Keep the weekly recheck running and widen the work agents take.";
+    if (rollup.level >= 3) return fit("Agent PRs meet your Level 3 targets. Keep the weekly recheck running and widen the work agents take.");
     const one = active.length === 1;
     const where = active.length <= 3 ? list(active) : `all ${active.length} active components`;
     // "builds" only when every active component has a build step that passed; many have none.
     const built = active.every((id) => input.audit.contract.some((c) => c.kind === "build" && (c.component === id || c.component === "*") && input.audit.evidence.some((e) => e.contractId === c.id && e.result === "pass")));
     const does = one ? (built ? "it installs, builds and passes its" : "it installs and passes its") : built ? "they install, build and pass their" : "they install and pass their";
-    return `Nothing blocks agents in ${where}: from a clean checkout ${does} tests, and ${one ? "its" : "their"} tests caught the planted bugs. Start giving agents work there.`;
+    return fit(`Nothing blocks agents in ${where}: from a clean checkout ${does} tests, and ${one ? "its" : "their"} tests caught the planted bugs. Start giving agents work there.`);
   }
-  const names = list(rollup.setBy);
+  const setBy = leadFirst(input, rollup.setBy);
+  const names = list(setBy);
   const share = active.length > 1 ? `, and ${pct(setByShare, 1)}% of recent changes land there` : "";
   const readyLine = ready.length ? ` ${list(ready)} ${ready.length > 1 ? "are" : "is"} already at Level 2.` : "";
-  const many = rollup.setBy.length > 1;
+  const many = setBy.length > 1;
   const their = many ? "their" : "its";
   if (rollup.level === 0) {
     // Each component is named with the Level 1 condition that failed for it, read from its states,
     // and one whose checks were only blocked is never said to fail.
-    const own = rollup.setBy.map((id) => ({ id, ...level0Hold(input, id) }));
+    const own = setBy.map((id) => ({ id, ...level0Hold(input, id) }));
     const failed = own.filter((o) => o.cond !== null);
     // An undetermined component is one fact about the repo short of a result, not a machine's limit.
     const undecided = own.filter((o) => o.cond === null && compLevel(input, o.id)?.undetermined).map((o) => o.id);
@@ -368,7 +380,7 @@ function headlineFor(input: ModelInput, ready: string[], setByShare: number): st
       const why = because(input, "clean.install", their);
       return fit(`${names} ${many ? "don't" : "doesn't"} install from a clean checkout${why}, so agents can't build or test ${many ? "them" : "it"} yet.${readyLine}`, `${names} ${many ? "don't" : "doesn't"} install from a clean checkout, so agents can't build or test ${many ? "them" : "it"} yet.${readyLine}`);
     }
-    if (blockers.has("clean.test:missing")) return `${names} ${many ? "have" : "has"} no tests, so agents can't check their own changes${share}.${readyLine}`;
+    if (blockers.has("clean.test:missing")) return fit(`${names} ${many ? "have" : "has"} no tests, so agents can't check their own changes${share}.${readyLine}`);
     if (blockers.has("clean.build")) return fit(`${names} ${many ? "don't" : "doesn't"} build from a clean checkout${because(input, "clean.build", their)}${share}.${readyLine}`, `${names} ${many ? "don't" : "doesn't"} build from a clean checkout${share}.${readyLine}`);
     // With no cause found, the failing tests the output names are the reader's best lead; the network
     // is named only when the output showed it.
@@ -389,11 +401,13 @@ function headlineFor(input: ModelInput, ready: string[], setByShare: number): st
   };
   // Only a condition that failed is a "but"; one blocked here is named as unchecked, never as failing.
   const stateOf = (c: CondId) => rollup.setBy.map((id) => input.states.get(id)?.[c].state ?? "unknown");
-  const failing = rubric.level2.filter((c) => why[c] && stateOf(c).includes("not_met")).map((c) => why[c]!);
+  const chosen = input.slots?.cause?.condition;
+  const order = chosen && rubric.level2.includes(chosen) ? [chosen, ...rubric.level2.filter((c) => c !== chosen)] : rubric.level2;
+  const failing = order.filter((c) => why[c] && stateOf(c).includes("not_met")).map((c) => why[c]!);
   const unchecked = rubric.level2.filter((c) => UNCHECKED[c] && !stateOf(c).includes("not_met") && stateOf(c).some((s) => s === "blocked" || s === "unknown")).map((c) => UNCHECKED[c]!);
   const but = failing.length ? list(failing) : `${their} checks can't yet catch wrong changes`;
   const off = failing.length && unchecked.length ? `; ${list(unchecked)} couldn't run on this machine` : "";
-  return fit(`Agents can build and test ${names}, but ${but}${off}${share}.${readyLine}`, `Agents can build and test ${names}, but ${but}${off}${share}.`, `Agents can build and test ${names}, but ${but}${share}.`);
+  return fit(`Agents can build and test ${names}, but ${but}${off}${share}.${readyLine}`, `Agents can build and test ${names}, but ${but}${off}${share}.`, `Agents can build and test ${names}, but ${but}${share}.`, `Agents can build and test ${names}, but ${but}.`);
 }
 
 const UNCHECKED: Partial<Record<CondId, string>> = { commands: "some of the commands", faults: "planted faults", instructions: "some agent instructions" };
@@ -438,9 +452,21 @@ function notMachineCause(input: ModelInput): string | null {
   return input.rubric.part1.bannedTerms.some((t) => plain.toLowerCase().includes(t.toLowerCase())) ? "a check that decides it didn't produce a result" : plain;
 }
 
+// The row the narration chose as the cause for this condition, else the lead's latest, else the latest.
+function causeRow(input: ModelInput, fails: Evidence[]): Evidence | undefined {
+  const chosen = input.slots?.cause?.evidence;
+  return fails.find((e) => e.id === chosen) ?? fails.filter((e) => input.rollup.setBy.includes(e.component ?? "")).at(-1) ?? fails.at(-1);
+}
+
+// Lead first, then the others in their order.
+function leadFirst(input: ModelInput, ids: string[]): string[] {
+  const lead = input.slots?.lead;
+  return lead && ids.includes(lead) ? [lead, ...ids.filter((x) => x !== lead)] : ids;
+}
+
 function because(input: ModelInput, cond: CondId, their: string): string {
   const fails = input.audit.evidence.filter((e) => e.condition === cond && e.result === "fail" && e.diagnosis);
-  const d = (fails.filter((e) => input.rollup.setBy.includes(e.component ?? "")).at(-1) ?? fails.at(-1))?.diagnosis;
+  const d = causeRow(input, fails)?.diagnosis;
   if (!d) return "";
   if (d.cause === "service") return ` because ${their} tests need ${serviceLabel(d, (p) => `a service on port ${p}`)} running, which the setup doesn't start`;
   if (d.cause === "registry") return " because private registry credentials weren't provided";
@@ -457,7 +483,7 @@ function quotable(input: ModelInput, text: string): boolean {
 // The failing tests an unexplained test failure names ("X and 5 more failed"), as a clause.
 function failedTests(input: ModelInput): string {
   const fails = input.audit.evidence.filter((e) => e.condition === "clean.test" && e.result === "fail" && e.diagnosis?.cause === "unknown");
-  const d = (fails.filter((e) => input.rollup.setBy.includes(e.component ?? "")).at(-1) ?? fails.at(-1))?.diagnosis;
+  const d = causeRow(input, fails)?.diagnosis;
   return d && / failed$/.test(d.detail) && !/\s/.test(d.detail.replace(/ and \d+ more failed$| failed$/, "")) && quotable(input, d.detail) ? `: ${d.detail}` : "";
 }
 
@@ -543,7 +569,7 @@ function stats3(input: ModelInput): ReportJson["executive"]["numbers"] {
     {
       label: unprovenOnly ? `Recent changes in components not yet proven at Level ${bar}` : someUnproven ? `Recent changes in components below or not yet proven at Level ${bar}` : `Recent changes in components below Level ${bar}`,
       value: `${pct(below, 1)}%`,
-      comparison: unprovenOnly ? `Proving Level 1 needs a clean container; counting the last ${days} days` : belowComparison,
+      comparison: unprovenOnly ? `Proving Level 1 needs ${provingPlace(rubric)}; counting the last ${days} days` : belowComparison,
     },
   ];
 }
@@ -736,10 +762,154 @@ function checkResult(input: ModelInput, checkId: string): { result: string; ok: 
   return { result: "", ok: null };
 }
 
+// The ids narration may choose from, each with what the template would make of it. The headline,
+// ask and gaps are written from the model's own reasons; a slot only picks among them.
+export interface NarrationChoices {
+  lead: string[];
+  cause: { component: string; condition: CondId; evidence: string; summary: string }[];
+  works: { component: string; evidence: string; says: string }[];
+  ask: { id: string; says: string }[];
+}
+
+const SLOTS = ["lead", "cause", "works", "ask"];
+const WORKS_VERB: Partial<Record<CommandKind, string>> = { install: "installs", build: "builds", lint: "lints", typecheck: "type-checks", test: "passes its tests" };
+const WORKS_WHERE: Partial<Record<Evidence["where"], string>> = { container: "in a clean container", disposable_vm: "on a disposable VM", fresh_copy: "in a fresh copy on this machine" };
+const WORKS_CONDITIONS: CondId[] = ["clean.install", "clean.build", "clean.test", "commands", "faults"];
+
+function worksVerb(e: Evidence): string | null {
+  if (e.condition === "faults") return "catches the planted faults";
+  return e.kind ? (WORKS_VERB[e.kind] ?? null) : null;
+}
+
+// The Level 1 condition the Level 0 headline names a cause for, or null when it names none: the
+// components differ, one has no tests, or one was only blocked.
+function level0Cause(input: ModelInput): CondId | null {
+  const own = input.rollup.setBy.map((id) => level0Hold(input, id));
+  if (own.some((o) => o.cond === null) || new Set(own.map((o) => o.says)).size > 1) return null;
+  const conds = new Set(own.map((o) => o.cond));
+  if (conds.has("clean.install")) return "clean.install";
+  if (conds.has("clean.test:missing")) return null;
+  return conds.has("clean.build") ? "clean.build" : "clean.test";
+}
+
+function repoSettleBy(input: ModelInput): SettleBy | null {
+  const none = notAssessed(input);
+  const caps = capReasons(input);
+  const L = input.rollup.level;
+  return settleBy(input, levelStatus(none ? null : L, !none && unprovenLevel1(L, input.rollup.couldBe, caps), undetermined(input)), caps);
+}
+
+function itemAsk(item: RoadmapItem, first: boolean): string {
+  const lower = item.decision ? item.decision.charAt(0).toLowerCase() + item.decision.slice(1) : "";
+  return item.decision ? `Decision needed: ${lower.replace(/\.$/, "")}.` : `Decision needed: who takes on "${gapText(item)}", ${first ? "the first step" : `step ${item.order}`} in part 3.`;
+}
+
+function settleAsk(input: ModelInput, s: SettleBy): string {
+  const text = s.text.replace(/`/g, "").replace(/\.$/, "");
+  return `Decision needed: who settles Level ${input.rollup.level + 1} for ${list(leadFirst(input, capComps(input)))}: ${text.charAt(0).toLowerCase()}${text.slice(1)}.`;
+}
+
+export function narrationChoices(raw: ModelInput): NarrationChoices {
+  const input: ModelInput = { ...raw, audit: { ...raw.audit, evidence: currentEvidence(raw.audit) } };
+  const none = notAssessed(input);
+  const setBy = none ? [] : input.rollup.setBy;
+  const evidence = input.audit.evidence;
+  const cause: NarrationChoices["cause"] = [];
+  const row = (e: Evidence, component: string, condition: CondId) => cause.push({ component, condition, evidence: e.id, summary: e.summary });
+  if (!none && !unproven(input) && !undetermined(input)) {
+    if (input.rollup.level === 0) {
+      const cond = level0Cause(input);
+      if (cond) for (const e of evidence) if (e.condition === cond && e.result === "fail" && e.diagnosis && setBy.includes(e.component ?? "")) row(e, e.component!, cond);
+    } else if (input.rollup.level === 1) {
+      for (const id of setBy) {
+        for (const c of input.rubric.level2) {
+          const s = input.states.get(id)?.[c];
+          if (s?.state !== "not_met") continue;
+          for (const e of evidence) if (s.evidence.includes(e.id) && e.result === "fail") row(e, id, c);
+        }
+      }
+    }
+  }
+  const assessed = new Set(input.components.filter((c) => c.assessed).map((c) => c.id));
+  const works = none
+    ? []
+    : evidence
+        .filter((e) => e.result === "pass" && !e.canary && e.network !== "on" && WORKS_WHERE[e.where] && e.condition && WORKS_CONDITIONS.includes(e.condition) && (e.component === "*" || assessed.has(e.component ?? "")) && worksVerb(e))
+        .map((e) => ({ component: e.component!, evidence: e.id, says: `${e.component === "*" ? "the repo" : e.component} ${worksVerb(e)} ${WORKS_WHERE[e.where]}` }));
+  const items = [...input.top, ...(input.startNow ? [input.startNow] : [])];
+  const ask = items.map((i, n) => ({ id: i.id, says: itemAsk(i, n === 0) }));
+  const s = noneAssessed(input) ? null : repoSettleBy(input);
+  if (s && capComps(input).length) ask.push({ id: "settle", says: settleAsk(input, s) });
+  return { lead: setBy, cause, works, ask };
+}
+
+// What is wrong with a narration, against the choices the model offers; empty when every slot is one.
+export function slotErrors(n: Narration | null | undefined, ch: NarrationChoices): string[] {
+  if (!n) return [];
+  const errors: string[] = [];
+  const shown = (xs: string[]) => xs.join(", ") || "none";
+  for (const k of Object.keys(n).filter((k) => !SLOTS.includes(k))) errors.push(`the narration sets "${k}", which isn't a slot. Narration picks ids (lead, cause, works, ask) and the report writes the words; say anything else in your reply`);
+  if (n.lead !== undefined && !ch.lead.includes(n.lead)) errors.push(`lead ${n.lead} isn't a component that sets the level (choices: ${shown(ch.lead)})`);
+  if (n.cause) {
+    const fits = ch.cause.filter((c) => !n.lead || c.component === n.lead);
+    if (!fits.some((c) => c.condition === n.cause!.condition && c.evidence === n.cause!.evidence)) errors.push(`cause ${n.cause.condition}=${n.cause.evidence} isn't a cause the headline can give${n.lead ? ` for ${n.lead}` : ""} (choices: ${shown(fits.map((c) => `${c.condition}=${c.evidence}`))})`);
+  }
+  if (n.works !== undefined && !Array.isArray(n.works)) errors.push("works is a list of evidence ids");
+  for (const w of Array.isArray(n.works) ? n.works : []) if (!ch.works.some((x) => x.evidence === w)) errors.push(`works ${w} isn't a step that passed where it proves something (choices: ${shown(ch.works.map((x) => x.evidence))})`);
+  if (n.ask !== undefined && !ch.ask.some((a) => a.id === n.ask)) errors.push(`ask ${n.ask} isn't an item part 1 can ask about (choices: ${shown(ch.ask.map((a) => a.id))})`);
+  return errors;
+}
+
+// The slots that are valid choices; a slot that isn't is left to the template's default.
+function validSlots(n: Narration | null | undefined, ch: NarrationChoices): Narration | null {
+  if (!n) return null;
+  const out: Narration = {};
+  if (n.lead !== undefined && ch.lead.includes(n.lead)) out.lead = n.lead;
+  if (n.cause && ch.cause.some((c) => c.condition === n.cause!.condition && c.evidence === n.cause!.evidence && (!out.lead || c.component === out.lead))) out.cause = n.cause;
+  const works = Array.isArray(n.works) ? n.works.filter((w) => ch.works.some((x) => x.evidence === w)) : [];
+  if (works.length) out.works = works;
+  if (n.ask !== undefined && ch.ask.some((a) => a.id === n.ask)) out.ask = n.ask;
+  return out;
+}
+
+// What already works, from the passing rows the narration chose, one clause per component and place.
+function worksText(input: ModelInput): string {
+  const groups = new Map<string, { who: string; where: string; verbs: string[] }>();
+  for (const id of input.slots?.works ?? []) {
+    const e = input.audit.evidence.find((x) => x.id === id);
+    const verb = e ? worksVerb(e) : null;
+    if (!e || !verb) continue;
+    const who = e.component === "*" ? "the repo" : e.component!;
+    const g = groups.get(`${who}|${e.where}`) ?? { who, where: WORKS_WHERE[e.where]!, verbs: [] };
+    if (!g.verbs.includes(verb)) g.verbs.push(verb);
+    groups.set(`${who}|${e.where}`, g);
+  }
+  return groups.size ? ` ${WORKS_LEAD} ${[...groups.values()].map((g) => `${g.who} ${list(g.verbs)} ${g.where}`).join("; ")}.` : "";
+}
+
+export const WORKS_LEAD = "Already passing:";
+
+// Components found but left out of the level, so the headline never speaks for the whole repo: the
+// first clause that keeps it within its word limit, or none.
+function withUnassessed(input: ModelInput, base: string): string {
+  if (notAssessed(input)) return base;
+  const left = input.components.filter((c) => !c.assessed && c.changeShare > 0).sort((a, b) => b.changeShare - a.changeShare);
+  if (!left.length) return base;
+  const skipped = left.map((c) => c.id);
+  const one = skipped.length === 1;
+  const where = left.every((c) => c.notAssessedReason?.startsWith("outside the ")) ? "outside this sampled audit" : "not assessed";
+  const clauses = [...(skipped.length <= 3 ? [`${list(skipped)} ${one ? "is" : "are"} ${where}.`] : []), `${skipped.length} found ${one ? "component is" : "components are"} ${where}.`];
+  const limit = input.rubric.part1.maxHeadlineWords;
+  const fits = clauses.map((c) => `${base} ${c}`).find((h) => wordCount(h) <= limit);
+  return fits ?? base;
+}
+
+
 // Every fact is read from the current evidence rows; the evidence log alone keeps the rows a later
 // result superseded, folded under it.
 export function buildReport(raw: ModelInput): ReportJson {
-  const input: ModelInput = { ...raw, audit: { ...raw.audit, evidence: currentEvidence(raw.audit) } };
+  const current: ModelInput = { ...raw, audit: { ...raw.audit, evidence: currentEvidence(raw.audit) } };
+  const input: ModelInput = { ...current, slots: validSlots(raw.audit.narration, narrationChoices(current)) };
   const { audit, rubric, roadmap, top, startNow } = input;
   const L = input.rollup.level;
   const ready = [...input.active].filter((id) => (compLevel(input, id)?.level ?? 0) >= 2 && !input.rollup.setBy.includes(id));
@@ -749,9 +919,8 @@ export function buildReport(raw: ModelInput): ReportJson {
   const caps = capReasons(input);
   const noBlocker = !none && !unproven(input) && !anyFailed(input) && top.every((t) => t.kind !== "fix");
   const failedCap = L < 2 ? caps.find((c) => c.state === "not_met") : undefined;
-  const narr = audit.narration ?? {};
   const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
-  const gaps = top.map((t, i) => ({ rank: i + 1, text: (narr.gaps?.[t.id] ?? gapText(t)).trim().replace(/\.+$/, ""), blocks: t.status === "start_now" ? `Can start now; ${lower(blocksText(rubric, t))}` : blocksText(rubric, t), itemId: t.id }));
+  const gaps = top.map((t, i) => ({ rank: i + 1, text: gapText(t).trim().replace(/\.+$/, ""), blocks: t.status === "start_now" ? `Can start now; ${lower(blocksText(rubric, t))}` : blocksText(rubric, t), itemId: t.id }));
   const first = top[0];
   const skippedIds = input.components.filter((c) => !c.assessed).map((c) => c.id);
   const defaultAsk = noneAssessed(input)
@@ -773,7 +942,10 @@ export function buildReport(raw: ModelInput): ReportJson {
         : first
           ? `Decision needed: who takes on "${gapText(first)}", the first step in part 3.`
           : `Decision needed: who fixes what holds ${failedCap && failedCap.component !== "*" ? failedCap.component : "the repo"} at Level ${L}: ${lower(failedCap?.label ?? "the conditions in part 5")}.`;
-  let ask = (narr.ask ?? defaultAsk).trim();
+  const chosenAsk = input.slots?.ask;
+  const askItem = chosenAsk && chosenAsk !== "settle" ? [...top, ...(startNow ? [startNow] : [])].find((i) => i.id === chosenAsk) : undefined;
+  const settle = chosenAsk === "settle" ? repoSettleBy(input) : null;
+  let ask = (askItem ? itemAsk(askItem, askItem === top[0]) : settle ? settleAsk(input, settle) : defaultAsk).trim();
   if (!/[.!?]$/.test(ask)) ask += ".";
   if (!roadmap.owner && !/\bowner\b/i.test(ask)) ask += " Also name an owner for agent readiness.";
   const actions: ReportAction[] = top.map((t, i) => action(t, i + 1, rubric, roadmap, t.status === "start_now", audit.outcomes));
@@ -876,7 +1048,7 @@ export function buildReport(raw: ModelInput): ReportJson {
         : none
           ? `Not assessed: ${audit.tier === "read-only" ? "the read-only tier runs no repo code" : "no check could run on this machine"}`
           : `${undetermined(input) ? undeterminedHeading(caps) : repoUnproven ? unprovenHeading(blockedHeld(components)) : `Level ${L} of 4, ${rubric.scale[L].plain}${outcome === "blocked" ? (failedCap ? `; Level ${L + 1} isn't met, and some of its checks were blocked on this machine` : `; Level ${L + 1} is blocked on this machine`) : ""}`}${mostlyUnassessed(input) ? `; it covers only ${pct(1 - input.partial.unassessedShare, 1)}% of recent changes, and the rest isn't assessed` : ""}`,
-      headline: narr.headline ?? headlineFor(input, ready, setByShare),
+      headline: headlineFor(input, ready, setByShare),
       numbers: stats3(input),
       nextLine: nextLine(input),
       gaps,

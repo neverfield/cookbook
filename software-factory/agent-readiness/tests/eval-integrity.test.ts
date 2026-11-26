@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { linkSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
@@ -492,22 +492,21 @@ describe("repo commands before the first audit: allowed with the user's yes to h
     assert.deepEqual(draftRecordReads(calls("ls .agent-readiness", "ls .agent-readiness/work/", `${CLI} status`)), []);
   });
 
-  test("a cause backed only by pre-audit output still fails the narration gate", () => {
+  test("a cause seen only in pre-audit output can't be narrated: narrate refuses text, and the trajectory gate still sees the pre-audit run", () => {
     const c = onHost(healthy);
     const w = prepare(c);
     const a = actor(w, c);
     a.sh("npm test; echo 'Error: connect ECONNREFUSED 127.0.0.1:6379 (redis)'");
     for (const step of ["init --tier local-exec", "scan", "replay"]) assert.equal(a.sh(`${CLI} ${step}`).code, 0, step);
-    assert.equal(a.sh(`${CLI} narrate --headline "healthy-node is held back because its tests need a Redis server that the setup never starts. A rerun with Docker can prove it." --ask "Approve adding Redis to the agent setup for healthy-node."`).code, 0);
+    assert.equal(a.sh(`${CLI} narrate --headline "healthy-node is held back because its tests need a Redis server that the setup never starts. A rerun with Docker can prove it."`).code, 2);
     assert.equal(a.sh(`${CLI} seal`).code, 0);
     const gate = trajectory(w, a.t, c);
     assert.equal(gate.pass, true, gate.detail);
     assert.match(gate.detail, /ran before the audit started, with the user's yes to host mode: npm test/);
     const noYes: EvalCase = { ...c, env: { ...c.env, SA_READINESS_ALLOW_HOST: "" } };
     assert.equal(trajectory(w, a.t, noYes).pass, false, "the same run without host mode allowed");
-    const n = narrationGate(w, a.t, c);
-    assert.equal(n.pass, false);
-    assert.match(n.detail, /names Redis as a cause, but no evidence row mentions it/);
+    assert.equal(narrationGate(w, a.t, c).pass, true);
+    assert.doesNotMatch(JSON.parse(readFileSync(join(w.dir, ".agent-readiness/latest/report.json"), "utf8")).executive.headline, /Redis/);
   });
 });
 

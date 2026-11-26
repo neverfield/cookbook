@@ -8,7 +8,7 @@ import { diagnose, rootError } from "../skill/agent-readiness/scripts/lib/diagno
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { scanText } from "../skill/agent-readiness/scripts/lib/secrets.ts";
 import { INSTALL_BLOCKED, environmentLimit, outputTail } from "../skill/agent-readiness/scripts/lib/replay.ts";
-import { validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { validatePart1 } from "../support/evals/lib/part1.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { instructionItems } from "../skill/agent-readiness/scripts/lib/static.ts";
 import type { Audit, ContractCommand, Diagnosis } from "../skill/agent-readiness/scripts/lib/types.ts";
@@ -88,7 +88,7 @@ describe("the network is named only when the output shows it", () => {
     const audit = makeAudit({ components: [{ id: "Src", share: 1, test: "fail", diagnosis: d, faults: "not_run" }] });
     const r = reportFor(audit);
     assert.equal(r.executive.headline, "Agents can't pass the tests in Src from a clean checkout: Newtonsoft.Json.Tests.Issues.Issue1619.Test and 5 more failed.");
-    assert.deepEqual(validatePart1(r, loadRubric(audit.rubric), null), []);
+    assert.deepEqual(validatePart1(r, loadRubric(audit.rubric)), []);
   });
 
   test("Surefire's failing tests are named from its summary", () => {
@@ -111,7 +111,7 @@ describe("headlines name the cause the output gave", () => {
     const audit = withStep(makeAudit({ components: [{ id: "app", share: 1, test: "fail", diagnosis: diagnose(out("maven-offline-jpms-module-not-found"), false, "test"), faults: "not_run" }] }), "build", "clean.build", d);
     const r = reportFor(audit);
     assert.equal(r.executive.headline, "app doesn't build from a clean checkout because surefire:test failed in module test-jpms: java.lang.NoClassDefFoundError: module-info is not a class because access_flag ACC_MODULE is set.");
-    assert.deepEqual(validatePart1(r, loadRubric(audit.rubric), null), []);
+    assert.deepEqual(validatePart1(r, loadRubric(audit.rubric)), []);
   });
 
   test("a tool's error that holds a term part 1 never uses stays out of the headline", () => {

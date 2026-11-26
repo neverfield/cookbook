@@ -4,7 +4,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 import { describe, test } from "node:test";
 import { renderHtml } from "../skill/agent-readiness/scripts/lib/render-html.ts";
-import { renderMarkdown, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { renderMarkdown } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { validatePart1 } from "../support/evals/lib/part1.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { EMOJI } from "../skill/agent-readiness/scripts/lib/util.ts";
 import type { AuditSpec } from "./helpers.ts";
@@ -62,11 +63,11 @@ describe("no emoji anywhere", () => {
     assert.deepEqual(emojiIn(out), []);
   });
 
-  test("the seal refuses narration with an emoji", () => {
+  test("the part 1 grader flags an emoji in the headline or the ask", () => {
     const r = reportFor(makeAudit(specs["a clean Level 2 repo"]));
     r.executive.headline = "app sets the level, and nothing blocks it \u{2705}";
-    assert.ok(validatePart1(r, rubric, null).some((e) => e === "headline uses an emoji; say the status in words"));
+    assert.ok(validatePart1(r, rubric).some((e) => e === "headline uses an emoji; say the status in words"));
     r.executive.ask = "Approve the targets \u{1F680}";
-    assert.ok(validatePart1(r, rubric, null).some((e) => e === "ask uses an emoji; say the status in words"));
+    assert.ok(validatePart1(r, rubric).some((e) => e === "ask uses an emoji; say the status in words"));
   });
 });

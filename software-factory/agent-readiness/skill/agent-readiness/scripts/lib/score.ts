@@ -1,7 +1,7 @@
 import { attributes, attributionOf } from "./attribute.ts";
 import { currentEvidence } from "./evidence.ts";
 import type { Rubric } from "./rubric.ts";
-import { strengthRank } from "./rubric.ts";
+import { provingPlace, strengthRank } from "./rubric.ts";
 import { agentFacing } from "./profile.ts";
 import { SECRET_PATTERN_COUNT } from "./secrets.ts";
 import type { Audit, CondId, CondState, Evidence } from "./types.ts";
@@ -105,7 +105,7 @@ function fromEvidence(rubric: Rubric, ev: Evidence | undefined, check: string, m
   if (ev.result === "not_run") return { state: "unknown", reason: ev.summary, evidence: [ev.id] };  const min = rubric.checks.find((c) => c.id === check)?.minStrengthForPass ?? "executed";
   if (strengthRank(rubric, ev.strength) < strengthRank(rubric, min)) {
     if (needsContainer(rubric, check) && ev.where === "disposable_vm") return { state: "blocked", reason: "passed on a disposable VM, which this audit's rubric doesn't count as proof; Level 1 needs a clean container", evidence: [ev.id] };
-    if (needsContainer(rubric, check)) return { state: "blocked", reason: "passed in host mode, which ran on this machine and could read its local files, so it isn't a sandbox; Level 1 needs a clean container", evidence: [ev.id] };
+    if (needsContainer(rubric, check)) return { state: "blocked", reason: `passed in host mode, which ran on this machine and could read its local files, so it isn't a sandbox; Level 1 needs ${provingPlace(rubric)}`, evidence: [ev.id] };
     return { state: "unknown", reason: `passed, but only ${rubric.strengthLabels[ev.strength]}`, evidence: [ev.id] };
   }
   return { state: "met", reason: ev.summary, evidence: [ev.id] };

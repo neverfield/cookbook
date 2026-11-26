@@ -11,9 +11,9 @@ import { activeComponents, capAt, componentLevel, level3Run, outcomeLevel, parti
 import { emptyStats } from "./outcomes.ts";
 import { budgetFloors, checkExecutors, makeExecutors, newBudget, reapOrphans, registryValuesOf, revealMutants, runContracts } from "./replay.ts";
 import type { Executors, PhaseResult } from "./replay.ts";
-import { allowedNumbers, danglingEvidence, narrationClaimErrors } from "./claims.ts";
-import { buildReport } from "./model.ts";
-import { renderMarkdown, validatePart1 } from "./render.ts";
+import type { ModelInput, NarrationChoices } from "./model.ts";
+import { buildReport, narrationChoices, slotErrors } from "./model.ts";
+import { renderMarkdown } from "./render.ts";
 import { renderHtml } from "./render-html.ts";
 import { updateRoadmap } from "./roadmap.ts";
 import type { Rubric } from "./rubric.ts";
@@ -104,6 +104,7 @@ export interface SealedReport {
   report: ReportJson;
   roadmap: Roadmap;
   line: HistoryLine;
+  choices: NarrationChoices;
 }
 
 // references/supported.md relative to the repo root, or null when the skill runs from elsewhere.
@@ -149,7 +150,7 @@ export function buildSealedReport(audit: Audit, rubric: Rubric, history: History
     outcomes: o ? { window: `${o.window.from} to ${o.window.to}`, agent: o.agent, control: o.control, byComponent: o.byComponent, source: o.source } : null,
     seedPinned: audit.seed.pinned,
   };
-  const report = buildReport({
+  const input: ModelInput = {
     audit,
     rubric,
     components: audit.profile.components,
@@ -172,13 +173,13 @@ export function buildSealedReport(audit: Audit, rubric: Rubric, history: History
     noResults,
     supportDoc: supportDocIn(repo),
     previousReport,
-  });
-  return { report, roadmap: rm.roadmap, line };
+  };
+  return { report: buildReport(input), roadmap: rm.roadmap, line, choices: narrationChoices(input) };
 }
 
-// A last pass before sealing: every contract command, evidence item and narration key must name
+// A last pass before sealing: every contract command, evidence item and narration slot must name
 // something the scan and the report know, so nothing an agent added is silently dropped.
-export function consistencyErrors(audit: Audit, report: ReportJson, roadmap: Roadmap): string[] {
+export function consistencyErrors(audit: Audit, report: ReportJson, roadmap: Roadmap, choices: NarrationChoices | null = null): string[] {
   const comps = audit.profile?.components ?? [];
   const known = new Set(comps.map((c) => c.id));
   const assessed = new Set(comps.filter((c) => c.assessed).map((c) => c.id));
@@ -192,15 +193,14 @@ export function consistencyErrors(audit: Audit, report: ReportJson, roadmap: Roa
   for (const s of audit.scenarios ?? []) {
     for (const id of s.components.filter((x) => x !== "*" && !assessed.has(x))) errors.push(`the ${s.id} scenario names ${id}, which ${known.has(id) ? "isn't assessed" : "the scan didn't find"}; remove it with \`readiness scenario remove ${s.id}\` and add it again`);
   }
-  const gaps = report.executive.gaps.map((g) => g.itemId);
-  const items = roadmap.items.map((i) => i.id);
-  for (const k of Object.keys(audit.narration?.gaps ?? {})) {
-    if (!gaps.includes(k)) errors.push(`the narration rewrites gap ${k}, which isn't in part 1 (part 1 gaps: ${gaps.join(", ") || "none"}); run \`readiness status\` for the ids`);
-  }
-  for (const k of Object.keys(audit.narration?.titles ?? {})) {
-    if (!items.includes(k)) errors.push(`the narration retitles ${k}, which isn't a roadmap item (items: ${items.join(", ") || "none"})`);
-  }
+  if (choices) errors.push(...slotErrors(audit.narration, choices).map((e) => `${e}; run \`readiness status\` for the choices`));
   return errors;
+}
+
+export function danglingEvidence(report: ReportJson, audit: Audit): string[] {
+  const known = new Set(audit.evidence.map((e) => e.id));
+  const cited = new Set([...JSON.stringify(report).matchAll(/\bev-\d{3,}\b/g)].map((m) => m[0]));
+  return [...cited].filter((id) => !known.has(id)).sort();
 }
 
 // Earlier audit lines feed the active set and the Level 4 run, so only lines that match their
@@ -276,13 +276,12 @@ export function seal(audit: Audit, local: LocalInfo, p: Paths, log: (s: string) 
   const report = maskSecrets("the report", built.report, named).value;
   const roadmap = maskSecrets("roadmap.json", built.roadmap, named).value;
   const line = maskSecrets("history.jsonl", built.line, named).value;
+  const choices = built.choices;
   if (audit.masked?.length) log(`Masked ${audit.masked.length} secret-shaped ${audit.masked.length === 1 ? "value" : "values"} the repo's own text carried into the records; "About this report" says where.`);
   const errors = [
-    ...consistencyErrors(audit, report, roadmap),
+    ...consistencyErrors(audit, report, roadmap, choices),
     ...danglingEvidence(report, audit).map((id) => `the report cites ${id}, which isn't in the audit`),
     ...explanationGaps(report, audit),
-    ...validatePart1(report, rubric, audit.narration ? allowedNumbers(report) : null),
-    ...narrationClaimErrors(report, audit),
     ...validateAgainst("report", report).map((e) => `report.json ${e}`),
     ...validateAgainst("roadmap", roadmap).map((e) => `roadmap.json ${e}`),
   ];

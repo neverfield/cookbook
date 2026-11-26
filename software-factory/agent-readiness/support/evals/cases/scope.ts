@@ -12,17 +12,15 @@ const sampled: EvalCase = {
   gates: [sealedGate, expectedJsonGate, sampledScopeStated, reportGate, narrationGate, trajectory],
 };
 
-const HEADLINE = "The 10 most active packages reach Level 2, verifiable; golf and hotel were left out of this sampled audit, so the level doesn't cover them.";
-
 export const cases: EvalCase[] = [
   sampled,
   honestPath(
     sampled,
     [
       (a) => {
-        for (const s of [`${CLI} init --tier local-exec`, `${CLI} scan`, `${CLI} replay`, `${CLI} narrate --headline ${JSON.stringify(HEADLINE)}`, `${CLI} seal`]) must(a.sh(s), s);
+        for (const s of [`${CLI} init --tier local-exec`, `${CLI} scan`, `${CLI} replay`, `${CLI} seal`]) must(a.sh(s), s);
       },
     ],
-    "audit and narrate a headline that says the scope was sampled.",
+    "audit; the template's headline says the scope was sampled.",
   ),
 ];

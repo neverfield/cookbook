@@ -446,7 +446,7 @@ function details(r: ReportJson): string {
     const result = `<span class="${cls}"><strong>${esc(e.result)}</strong></span>: ${esc(e.summary)}`;
     out.push(`<tr id="${esc(e.id)}"${current ? "" : ' class="muted"'}><td><code class="id">${esc(e.id)}</code></td><td><code class="id">${esc(e.check)}</code></td><td>${esc(e.component ?? "repo")}</td><td>${ran}</td><td>${current ? result : `superseded by <a href="#${esc(e.supersededBy!)}"><code class="id">${esc(e.supersededBy!)}</code></a>; was ${result}`}</td></tr>`);
   }
-  out.push(`</tbody></table><p class="small muted">Evidence strength, weakest to strongest: stated in docs, read from files, ran on host, ran in a clean container, confirmed by outcomes. A check passes only at its required strength.</p></section>`);
+  out.push(`</tbody></table><p class="small muted">Evidence strength, weakest to strongest: stated in docs, read from files, ran on host, ran in a clean container or on a disposable VM, confirmed by outcomes. A check passes only at its required strength.</p></section>`);
   return out.join("");
 }
 

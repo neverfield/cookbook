@@ -40,7 +40,7 @@ const DONE_WHEN = ["commands", "faults", "instructions"];
 describe("rubric 2026-12-beta", () => {
   test("is the rubric new audits use, and lists what changed", () => {
     assert.equal(latestRubricVersion(), "2026-12-beta");
-    assert.equal((next.changes ?? []).length, 12);
+    assert.equal((next.changes ?? []).length, 13);
   });
 
   test("is written as JSON.stringify(rubric, null, 2), so a reformat never moves its digest", () => {
@@ -48,7 +48,7 @@ describe("rubric 2026-12-beta", () => {
     assert.equal(JSON.stringify(JSON.parse(text), null, 2) + "\n", text);
   });
 
-  test("changes only the type-check canary, the revert window, where a pass proves Level 1, the fault estimate, secret classes, instruction severities, three templates, three done-whens, one check's why, the not-assessed list, the unowned share, the folder-name hint's share and the Level 0 attribution rule", () => {
+  test("changes only the type-check canary, the revert window, where a pass proves Level 1, the fault estimate, secret classes, instruction severities, three templates, three done-whens, one check's why, the not-assessed list, the unowned share, the folder-name hint's share, the Level 0 attribution rule, part 1's narration limits and the clean-environment labels", () => {
     const strip = (r: typeof next) => {
       const c = structuredClone(r) as Partial<typeof next> & Record<string, unknown>;
       delete c.version;
@@ -68,6 +68,8 @@ describe("rubric 2026-12-beta", () => {
       c.checks = r.checks.map((k) => (k.id === "verify.canonical_interface" ? { ...k, why: "" } : k));
       c.notAssessed = r.notAssessed.filter((n) => n !== "Whether the lint command catches anything");
       c.components = { ...r.components, unowned: undefined, satelliteHintShare: undefined };
+      c.part1 = { maxHeadlineWords: r.part1.maxHeadlineWords, maxGaps: r.part1.maxGaps, bannedTerms: r.part1.bannedTerms };
+      c.conditions = Object.fromEntries(Object.entries(r.conditions).map(([k, v]) => [k, { ...v, label: v.label.replace("in a clean environment", "in a clean container") }])) as typeof r.conditions;
       return JSON.parse(JSON.stringify(c));
     };
     assert.deepEqual(strip(next), strip(beta));
@@ -79,6 +81,8 @@ describe("rubric 2026-12-beta", () => {
     assert.equal(Object.keys(next.templates).indexOf("drive"), Object.keys(next.templates).indexOf("delegate") + 1, "the drive step comes right after giving agents work");
     assert.deepEqual([next.components.unowned, next.components.satelliteHintShare, beta.components.unowned, beta.components.satelliteHintShare], ["counted", 0.5, undefined, undefined]);
     assert.deepEqual([next.attribution, beta.attribution], [{ level0: "attributed", reruns: ["network", "tool"] }, undefined]);
+    assert.deepEqual([next.part1.maxHeadlineWords, next.part1.maxGapWords, next.part1.levelNames, beta.part1.maxGapWords], [40, undefined, undefined, 22]);
+    assert.deepEqual(["clean.install", "clean.build", "clean.test"].map((c) => next.conditions[c as keyof typeof next.conditions].label), ["installs from the lockfile in a clean environment", "builds in a clean environment", "passes every test in a clean environment"]);
   });
 
   // Production-readiness review B6: the printed bar has to be the rule the estimate applies, and the

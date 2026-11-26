@@ -18,10 +18,7 @@ import { ACCOUNT_CREDENTIAL, scrubbedEnv } from "../skill/agent-readiness/script
 import { componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
 import type { ContractCommand } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { commitAll, materialize, readiness } from "../support/tools/fixture.ts";
-import { guards } from "../support/tools/known-failures.ts";
 import { makeAudit } from "./helpers.ts";
-
-const guard = guards(import.meta.url);
 
 const rubric = loadRubric();
 const HOST = { [ALLOW_HOST_ENV]: "1" };
@@ -81,41 +78,46 @@ describe("no silent host fallback: without a container nothing runs, and the res
     assert.ok(report.maturity.capReasons.some((c: { reason: string }) => c.reason.includes(HOST_NOT_ALLOWED)));
   });
 
-  test("the seal refuses narration the audit's records contradict, and accepts it once it matches them", () => {
+  test("narration is ids: narrate refuses text and ids that aren't choices, and the seal takes a choice", () => {
     const repo = materialize("healthy-node");
     for (const step of [["init", "--tier", "local-exec"], ["scan"], ["replay", "--runtime", "none"]]) assert.equal(readiness(repo, step).code, 0, step.join(" "));
-    const sealWith = (headline: string) => {
-      assert.equal(readiness(repo, ["narrate", "--headline", headline, "--ask", "Approve running this audit in CI, where Docker is available."]).code, 0);
-      return readiness(repo, ["seal"]);
-    };
-    const noResult = sealWith("healthy-node sets the level: no check produced a real result here, because this machine has no container runtime. A rerun with Docker can prove it.");
-    assert.notEqual(noResult.code, 0);
-    assert.match(noResult.out, /the headline says no check gave a result, but .*normal work needs no production access/i);
-    const noRerun = sealWith("healthy-node sets the level: Level 1 couldn't be proved, because this machine has no container runtime and its install and tests didn't run.");
-    assert.match(noRerun.out, /must say where a rerun can prove it/);
-    const delegate = sealWith("healthy-node sets the level: Level 1 couldn't be proved, because this machine has no container runtime. A rerun with Docker can prove it, and then you can delegate work.");
-    assert.match(delegate.out, /says "delegate", but Delegable is Level 3's name and the repo is at Level 0/);
-    const ok = sealWith("healthy-node sets the level: Level 1 couldn't be proved, because this machine has no container runtime. A rerun where Docker is available, such as CI, can prove it.");
+    const text = readiness(repo, ["narrate", "--headline", "healthy-node sets the level. A rerun with Docker can prove it."]);
+    assert.equal(text.code, 2);
+    assert.match(text.out, /narrate takes no text \(--headline\)/);
+    assert.match(readiness(repo, ["narrate", "--lead", "ghost"]).out, /lead ghost isn't a component that sets the level \(choices: healthy-node\)/);
+    assert.match(readiness(repo, ["narrate", "--ask", "Approve running this audit in CI, where Docker is available."]).out, /isn't an item part 1 can ask about \(choices: .*settle/);
+    assert.match(readiness(repo, ["narrate", "--cause", "clean.test=ev-999"]).out, /cause clean.test=ev-999 isn't a cause the headline can give \(choices: none\)/);
+    const ok = readiness(repo, ["narrate", "--lead", "healthy-node", "--ask", "settle"]);
     assert.equal(ok.code, 0, ok.out);
+    assert.match(ok.out, /Ask: Decision needed: who settles Level 1 for healthy-node: a rerun where Docker is available, such as CI, can prove it\./);
+    const sealed = readiness(repo, ["seal"]);
+    assert.equal(sealed.code, 0, sealed.out);
+    const report = JSON.parse(readFileSync(join(repo, ".agent-readiness/latest/report.json"), "utf8"));
+    assert.match(report.executive.ask, /^Decision needed: who settles Level 1 for healthy-node: /);
+    assert.match(report.executive.headline, /A rerun where Docker is available, such as CI, can prove it\./);
   });
 
   // This used to assert that the first sentence below must be refused, which locked in the misfire
-  // the Nov 24 sims hit: a sentence that says nothing ran in a clean container is true here.
-  guard("the seal accepts negated, modal and future container wording", () => {
-    const refused: string[] = [];
+  // the Nov 24 sims hit: a sentence that says nothing ran in a clean container is true here. No rule
+  // reads narrated wording now: narrate refuses every text alike, and the seal reads none.
+  test("no rule refuses negated, modal and future container wording: narrate refuses every text alike, and the seal reads none", () => {
+    const repo = materialize("healthy-node");
+    for (const step of [["init", "--tier", "local-exec"], ["scan"], ["replay", "--runtime", "none"]]) assert.equal(readiness(repo, step).code, 0, step.join(" "));
+    const answers = new Set<string>();
     for (const headline of [
       "healthy-node sets the level: its install and tests couldn't run in a clean container on this machine. A rerun where Docker is available, such as CI, can prove it.",
       "healthy-node sets the level: Level 1 couldn't be proved, because nothing ran in a clean container here. A rerun where Docker is available, such as CI, can prove it.",
       "healthy-node sets the level: this machine has no container runtime, so it isn't a clean container. A rerun where Docker is available, such as CI, can prove it.",
       "healthy-node sets the level: Level 1 couldn't be proved here. A rerun in a clean container, such as CI with Docker, can prove it.",
+      "healthy-node is fine.",
     ]) {
-      const repo = materialize("healthy-node");
-      for (const step of [["init", "--tier", "local-exec"], ["scan"], ["replay", "--runtime", "none"]]) assert.equal(readiness(repo, step).code, 0, step.join(" "));
-      assert.equal(readiness(repo, ["narrate", "--headline", headline, "--ask", "Approve running this audit in CI, where Docker is available."]).code, 0);
-      const r = readiness(repo, ["seal"]);
-      if (r.code !== 0) refused.push(`${headline} -> ${r.out.trim().split("\n").pop()}`);
+      const r = readiness(repo, ["narrate", "--headline", headline]);
+      answers.add(`${r.code} ${r.out.trim()}`);
     }
-    assert.deepEqual(refused, []);
+    assert.equal(answers.size, 1, [...answers].join("\n"));
+    const sealed = readiness(repo, ["seal"]);
+    assert.equal(sealed.code, 0, sealed.out);
+    assert.doesNotMatch(readFileSync(join(repo, ".agent-readiness/latest/report.md"), "utf8"), /healthy-node sets the level:/);
   });
 
   test("a runtime that is missing, rather than turned off, is named as missing", () => {

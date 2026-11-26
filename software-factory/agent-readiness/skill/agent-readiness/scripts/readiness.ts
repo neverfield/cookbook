@@ -24,7 +24,9 @@ import { cleanupLeftovers } from "./lib/cleanup.ts";
 import { composeServices, renderEnvFiles, renderVerifySkill, serviceKey, writeFiles } from "./lib/skill.ts";
 import { staticSignals } from "./lib/signals.ts";
 import { instructionItems, safetyScan } from "./lib/static.ts";
-import type { Audit, CommandKind, Level, Narration, Result, Roadmap, ScanBound, ScenarioId, ScenarioSpec, Strength, Tier } from "./lib/types.ts";
+import type { NarrationChoices } from "./lib/model.ts";
+import { WORKS_LEAD, slotErrors } from "./lib/model.ts";
+import type { Audit, CommandKind, CondId, Level, Narration, Result, Roadmap, ScanBound, ScenarioId, ScenarioSpec, Strength, Tier } from "./lib/types.ts";
 import { addDays, exists, fail, git, nowIso, randomHex, readJson, readText, sha256, today, writeJson } from "./lib/util.ts";
 import { WAIVER_FILE, applyWaivers, loadWaivers } from "./lib/waivers.ts";
 import { commitReader, currentDraftId, initAudit, loadDraft, paths, refreshTree, releaseManifest, resolveRepo, saveDraft, scratchTree, writeRecordsIgnore } from "./lib/workspace.ts";
@@ -353,23 +355,31 @@ async function cmdOutcomes(a: Args): Promise<void> {
   if (o.filesIncomplete) log(`${o.filesIncomplete} agent ${o.filesIncomplete === 1 ? "PR changes" : "PRs change"} more files than GitHub lists, so ${o.filesIncomplete === 1 ? "it isn't" : "they aren't"} counted toward any component.`);
 }
 
+const SLOTS_HINT = "Narration picks ids from the report model, and the report writes the words from the audit's own records. Run `readiness status` for the choices, and say anything else in your reply.";
+
 function cmdNarrate(a: Args): void {
   const repo = repoOf(a);
   const { audit, paths: p } = loadDraft(repo);
+  if (!audit.profile) fail("Run `readiness scan` before narrating.");
+  const text = ["headline", "gap", "title"].filter((f) => opt(a, f));
+  if (text.length) fail(`narrate takes no text (--${text.join(", --")}). ${SLOTS_HINT}`, 2);
   const n: Narration = opt(a, "file") ? readJson<Narration>(resolve(str(a, "file"))) : { ...(audit.narration ?? {}) };
-  if (opt(a, "headline")) n.headline = str(a, "headline");
+  if (opt(a, "lead")) n.lead = str(a, "lead");
+  if (opt(a, "cause")) {
+    const [condition, evidence] = str(a, "cause").split("=");
+    n.cause = { condition: condition as CondId, evidence: evidence ?? "" };
+  }
+  if (opt(a, "works")) n.works = csv(opt(a, "works"));
   if (opt(a, "ask")) n.ask = str(a, "ask");
-  for (const kv of csv(opt(a, "gap"))) {
-    const [k, v] = kv.split("=");
-    n.gaps = { ...(n.gaps ?? {}), [k]: v };
-  }
-  for (const kv of csv(opt(a, "title"))) {
-    const [k, v] = kv.split("=");
-    n.titles = { ...(n.titles ?? {}), [k]: v };
-  }
+  const rubric = loadRubric(audit.rubric);
+  const draft = JSON.parse(JSON.stringify({ ...audit, narration: n })) as Audit;
+  const preview = buildSealedReport(draft, rubric, readHistory(p), readRoadmap(p), repo, "");
+  const errors = slotErrors(n, preview.choices);
+  if (!errors.length && n.works?.length && !preview.report.executive.headline.includes(WORKS_LEAD)) errors.push("works would take the headline past its word limit; choose fewer");
+  if (errors.length) fail(`Narration refused:\n- ${errors.join("\n- ")}\n${SLOTS_HINT}`, 2);
   audit.narration = n;
   saveDraft(p, audit);
-  log("Narration saved. `readiness seal` checks it against the part 1 rules and the computed numbers.");
+  log(`Narration saved. Part 1 now reads:\n  Headline: ${preview.report.executive.headline}\n  Ask: ${preview.report.executive.ask}`);
 }
 
 // One wording for a level wherever status prints it, matching part 4 of the report.
@@ -385,7 +395,7 @@ function cmdStatus(a: Args): void {
   const comps = audit.profile?.components.filter((c) => c.assessed) ?? [];
   // The ids narration may use, from the report the seal would build right now.
   const preview = audit.profile ? buildSealedReport(JSON.parse(JSON.stringify(audit)) as Audit, rubric, readHistory(p), readRoadmap(p), repo, "") : null;
-  const part1 = preview ? { heading: preview.report.executive.heading, gaps: preview.report.executive.gaps.map((g) => ({ itemId: g.itemId, text: g.text })), roadmapItems: preview.roadmap.items.map((i) => i.id) } : null;
+  const part1 = preview ? { heading: preview.report.executive.heading, headline: preview.report.executive.headline, ask: preview.report.executive.ask, gaps: preview.report.executive.gaps.map((g) => ({ itemId: g.itemId, text: g.text })), roadmapItems: preview.roadmap.items.map((i) => i.id) } : null;
   const levels = preview?.report.components.included ?? [];
   const summary = {
     id: audit.id,
@@ -411,6 +421,7 @@ function cmdStatus(a: Args): void {
     safety: audit.safety.map((s) => `${s.blocking ? "BLOCKING" : "listed"} ${s.kind} ${s.file}${s.line ? ":" + s.line : ""}: ${s.detail}`),
     outcomes: audit.outcomes ? { window: audit.outcomes.window, agent: audit.outcomes.agent.opened, control: audit.outcomes.control.opened } : null,
     part1,
+    narration: preview ? { chosen: audit.narration, choices: preview.choices } : null,
   };
   if (a.flags.json) log(JSON.stringify(summary, null, 2));
   else {
@@ -419,10 +430,21 @@ function cmdStatus(a: Args): void {
     if (summary.instructionsWrong.length) log(`Wrong instructions:\n  ${summary.instructionsWrong.join("\n  ")}`);
     if (summary.safety.length) log(`Safety:\n  ${summary.safety.join("\n  ")}`);
     if (part1) {
-      log(`Part 1 now: ${part1.heading}`);
-      log(part1.gaps.length ? `Part 1 gaps (narrate with --gap <id>=<text>):\n  ${part1.gaps.map((g) => `${g.itemId}: ${g.text}`).join("\n  ")}` : "Part 1 has no gaps to narrate.");
+      log(`Part 1 now: ${part1.heading}\n  Headline: ${part1.headline}\n  Ask: ${part1.ask}`);
+      if (part1.gaps.length) log(`Part 1 gaps:\n  ${part1.gaps.map((g) => `${g.itemId}: ${g.text}`).join("\n  ")}`);
     }
+    if (preview) log(narrationText(preview.choices));
   }
+}
+
+// The slots narrate accepts, each with what part 1 would say for it.
+function narrationText(ch: NarrationChoices): string {
+  const lines = ["Narration choices (readiness narrate --lead <id> --cause <condition>=<evidence> --works <id,id> --ask <id>):"];
+  lines.push(`  lead: ${ch.lead.join(", ") || "none"}`);
+  lines.push(ch.cause.length ? `  cause:\n${ch.cause.map((c) => `    ${c.condition}=${c.evidence} (${c.component}): ${c.summary.slice(0, 160)}`).join("\n")}` : "  cause: none");
+  lines.push(ch.works.length ? `  works:\n${ch.works.map((w) => `    ${w.evidence}: ${w.says}`).join("\n")}` : "  works: none");
+  lines.push(ch.ask.length ? `  ask:\n${ch.ask.map((x) => `    ${x.id}: ${x.says}`).join("\n")}` : "  ask: none");
+  return lines.join("\n");
 }
 
 function cmdSeal(a: Args): void {
@@ -716,7 +738,7 @@ Audit
   run [--component C] [--id cmd-id] [--instructions] [--cmd "..." --kind K --component C --reason "..."]
   record --check ID --result pass|fail|not_run --summary "..." [--component C] [--strength static|asserted]
   outcomes [--input prs.json] [--window-days 30] [--branch-prefix a,b] [--label L] [--author A] [--co-author T]
-  narrate [--file narration.json] [--headline "..."] [--ask "..."] [--gap id=text] [--title id=text]
+  narrate [--file narration.json] [--lead C] [--cause condition=ev-id] [--works ev-id,ev-id] [--ask item-id|settle]   picks the ids part 1's templates use; status lists them
   status [--json]
   seal
   audit --tier T [--scenario S] [--outcomes-input f] [--narration f] [--budget-scan M] [--budget-total M] [--memory MB] [--force]   init, scan, replay, outcomes and seal in one go; --force abandons an open draft

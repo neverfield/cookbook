@@ -140,15 +140,19 @@ describe("coverage gates on recorded history", () => {
     assert.equal(scenarioLevelsMatch({ web: { bug_fixes: 2 }, api: { bug_fixes: 1 } })(ws, none, anyCase).pass, false);
   });
 
-  test("a sampled report passes only when the headline or the agent's reply says so", () => {
+  test("a sampled report passes when the headline or the agent's reply says so, and the scripts' headline does", () => {
     const a = makeAudit({ components: [{ id: "a", share: 0.5, faults: "pass" }, { id: "b", share: 0.45, faults: "pass" }, { id: "c", share: 0.05, assessed: false }] });
     a.profile!.components[2].notAssessedReason = "outside the 6 most active components";
     const r = reportFor(a);
     const ws = records([audit("a1")], r);
     assert.equal(r.components.shape, "sampled_monorepo");
-    assert.equal(sampledScopeStated(ws, { ...none, text: "Both packages reach Level 2." }, anyCase).pass, false, "the scripts' headline doesn't say it, so the agent has to");
-    assert.equal(sampledScopeStated(ws, { ...none, text: "This was a sampled audit: c was left out." }, anyCase).pass, true);
-    assert.equal(sampledScopeStated(ws, { ...none, driver: "scripted", text: "c: not assessed: outside the 6 most active components" }, anyCase).pass, false, "CLI output in a scripted trajectory doesn't count as saying so");
+    assert.match(r.executive.headline, / c is outside this sampled audit\.$/);
+    assert.equal(sampledScopeStated(ws, { ...none, driver: "scripted", text: "" }, anyCase).pass, true, "the scripts' headline says it");
+    const quiet = { ...r, executive: { ...r.executive, headline: r.executive.headline.replace(/ c is outside this sampled audit\.$/, "") } };
+    const qws = records([audit("a1")], quiet);
+    assert.equal(sampledScopeStated(qws, { ...none, text: "Both packages reach Level 2." }, anyCase).pass, false, "a headline that doesn't say it needs the reply to");
+    assert.equal(sampledScopeStated(qws, { ...none, text: "This was a sampled audit: c was left out." }, anyCase).pass, true);
+    assert.equal(sampledScopeStated(qws, { ...none, driver: "scripted", text: "c: not assessed: outside the 6 most active components" }, anyCase).pass, false, "CLI output in a scripted trajectory doesn't count as saying so");
   });
 });
 

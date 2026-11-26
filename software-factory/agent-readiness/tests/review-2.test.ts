@@ -7,8 +7,6 @@ import { fileURLToPath } from "node:url";
 import { mergeHistory } from "../skill/agent-readiness/scripts/lib/history.ts";
 import { level3Run, outcomeLevel } from "../skill/agent-readiness/scripts/lib/levels.ts";
 import { fetchPrs } from "../skill/agent-readiness/scripts/lib/outcomes.ts";
-import { allowedNumbers } from "../skill/agent-readiness/scripts/lib/claims.ts";
-import { validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
 import type { Audit, HistoryLine, Level } from "../skill/agent-readiness/scripts/lib/types.ts";
@@ -106,17 +104,6 @@ describe("fixes from the second independent review", () => {
     assert.equal(componentStates(noOwn, rubric, "app")["clean.test"].state, "not_met", "a component with no test of its own gets the repo's");
   });
 
-  test("the seal refuses a narrated headline that calls a component below Level 2 ready", () => {
-    const audit = makeAudit({ components: [{ id: "api", share: 0.6, test: "fail" }, { id: "shared", share: 0.4, faults: "fail" }] });
-    audit.rubric = "2026-11-alpha";
-    audit.narration = { headline: "api sets the level: its tests need Postgres. shared is ready for agents." };
-    const r = reportFor(audit);
-    assert.match(validatePart1(r, next, allowedNumbers(r)).join("; "), /the headline calls shared ready, but shared is at Level 1/);
-    audit.narration = { headline: "api sets the level: its tests need Postgres. shared installs and its tests run, but they miss planted bugs, so it isn't ready yet." };
-    const fine = reportFor(audit);
-    assert.deepEqual(validatePart1(fine, next, allowedNumbers(fine)).filter((e) => /calls .* ready/.test(e)), []);
-  });
-
   test("SKILL.md says to seal without a registry token instead of stopping to ask", () => {
     assert.match(readFileSync(join(__dirname, "../skill/agent-readiness/SKILL.md"), "utf8"), /If the variable isn't set in this shell, don't stop to ask for it: narrate and seal the audit as it stands/);
   });
@@ -125,12 +112,11 @@ describe("fixes from the second independent review", () => {
     assert.match(readFileSync(join(__dirname, "../skill/agent-readiness/SKILL.md"), "utf8"), /\*\*Seal one audit per request\.\*\* .*Once an audit is sealed, its narration is final: don't run another audit to reword it/);
   });
 
-  test("SKILL.md says to narrate only what the audit recorded", () => {
+  test("SKILL.md says narration is ids and the agent's own words go in its reply", () => {
     const skill = readFileSync(join(__dirname, "../skill/agent-readiness/SKILL.md"), "utf8");
-    assert.match(skill, /\*\*Only what the audit recorded\.\*\* .*What you learned only by reading the repo isn't in those records, so leave it out even when it's true/);
-    assert.match(skill, /A refused connection on port 5432 is "a service on port 5432 the setup doesn't start" unless a line names the service/);
-    assert.match(skill, /Describe only this audit\. Leave out "now", "new", "again"/);
-    assert.match(skill, /say so and where a rerun can prove it/);
+    assert.match(skill, /Narrate by choosing ids; the report writes the words from the audit's own records/);
+    assert.match(skill, /It takes no text: what you want to say in your own words goes in your reply/);
+    assert.doesNotMatch(skill, /\*\*Only what the audit recorded\.\*\*/);
   });
 
   test("verify-seal fails when the latest audit's roadmap.json is gone", () => {
@@ -250,10 +236,9 @@ describe("fixes from the second independent review", () => {
     for (const field of [r.executive.headline, r.executive.ask]) assert.doesNotMatch(field, /replay/i, field);
   });
 
-  test("narration may use the share of changes the default headline gives for the components that set the level", () => {
+  test("the default headline gives the share of changes for the components that set the level", () => {
     const r = reportFor(makeAudit({ components: [{ id: "api", share: 0.35, test: "fail" }, { id: "worker", share: 0.25, test: "fail" }, { id: "web", share: 0.4, faults: "fail" }] }));
     assert.match(r.executive.headline, /60% of recent changes/);
-    assert.ok(allowedNumbers(r).has("60%"));
   });
 
   test("the coverage line names the fallback only when no component reaches 10%", () => {

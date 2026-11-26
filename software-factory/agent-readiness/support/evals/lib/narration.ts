@@ -1,6 +1,7 @@
 import type { Audit, ReportJson } from "../../../skill/agent-readiness/scripts/lib/types.ts";
 
-// The agent writes the headline, ask, gaps and titles; the scripts write everything else. A
+// Through rubric 2026-11-beta the agent wrote the headline, ask, gaps and titles, and the label set
+// still holds headlines written that way; the scripts write everything else. A
 // narrated cause the evidence never mentions ("its tests need Redis" when they need Postgres), a
 // change share that isn't the component's, or a level that isn't the one the scripts computed
 // reads as true to a judge that can't see the evidence. These checks need no model.
@@ -67,10 +68,10 @@ export function evidenceCorpus(r: ReportJson, audit: Audit | null): { where: str
   return out;
 }
 
-export function narratedTexts(audit: Audit | null): string[] {
-  const n = audit?.narration;
-  if (!n) return [];
-  return [n.headline, n.ask, ...Object.values(n.gaps ?? {}), ...Object.values(n.titles ?? {})].filter((t): t is string => Boolean(t && t.trim()));
+// From rubric 2026-12-beta the narration is a choice of ids the seal checks against the report
+// model, and templates write the words, so an agent leaves no narrated text to check.
+export function narratedTexts(_audit: Audit | null): string[] {
+  return [];
 }
 
 function escape(s: string): string {

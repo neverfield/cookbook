@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { renderHtml } from "../skill/agent-readiness/scripts/lib/render-html.ts";
 import { ladderLine, nextMove, pageNumbers, shortReason, trendLine } from "../skill/agent-readiness/scripts/lib/format.ts";
-import { renderMarkdown, scaleLine, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { renderMarkdown, scaleLine } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { validatePart1 } from "../support/evals/lib/part1.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { validateAgainst } from "../skill/agent-readiness/scripts/lib/schema.ts";
 import type { HistoryLine } from "../skill/agent-readiness/scripts/lib/types.ts";
@@ -69,7 +70,7 @@ describe("the sign-off fixes", () => {
     const r = reportFor(makeAudit({ components: [{ id: "a", share: 0.5, faults: "pass" }, { id: "b", share: 0.45, faults: "pass" }, { id: "c", share: 0.05, faults: "pass" }] }));
     assert.equal(r.executive.numbers[0].value, "2 of 2");
     assert.match(r.executive.numbers[0].comparison, /; c gets under 10% of changes, so it isn't counted$/);
-    assert.deepEqual(validatePart1(r, rubric, null), []);
+    assert.deepEqual(validatePart1(r, rubric), []);
   });
 
   test("a sampled-out component reads \"because it's outside\"", () => {

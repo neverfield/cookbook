@@ -81,31 +81,25 @@ For a private registry, ask for the variable names (never values) and pass `--re
 
 ## 6. Narrate, then seal
 
-1. `readiness status` shows every condition, the levels the scripts computed, and part 1 as the seal would build it now, with the ids of its gaps. Key narration by those ids only: the seal refuses a gap or title id that isn't in the report, a contract command for a component that isn't assessed, and evidence for a component the scan didn't find.
-2. Always write the headline and the ask with `readiness narrate`. Write the JSON file outside the repository, for example `$TMPDIR/readiness-narration.json`, and pass `--file <path>`, or pass `--headline "..." --ask "..."` directly. `narrate` copies the text into the audit, so nothing is left in the working tree. The scripts' default wording is a fallback: it can't say in plain words why a check failed or what the audit proved.
+1. `readiness status` shows every condition, the levels the scripts computed, part 1 as the seal would build it now, and the narration choices: the ids `readiness narrate` takes, each with what part 1 would say for it.
+2. Narrate by choosing ids; the report writes the words from the audit's own records. Narration is optional, and part 1 reads well without it:
 
-   ```json
-   { "headline": "...", "ask": "...", "gaps": { "clean.test:api": "..." } }
+   ```bash
+   readiness narrate --lead api --cause clean.test=ev-014 --works ev-003,ev-007 --ask settle
    ```
 
-   - **Headline:** one message in at most 40 words for an engineering director. Say which component sets the level in those words ("api sets the level") and why in plain words, from the failing condition's reason in `readiness status`: what failed and what it needs. Then say what already works, in that component (it installs, lints, builds, its tests pass) and in any component already at Level 2, which is ready for agents. When nothing blocks, name the component, say what the audit proved, and recommend giving agents work there. Don't say "delegate" below Level 3: Delegable is Level 3's name, and the seal refuses it. Don't frame the headline by an activity such as bug fixes: the levels are standard, and scenario breakdowns belong in part 5. The heading already shows the level, so don't restate it or the size of the scale, and with a single component leave out its share of changes, which is always 100%. When no component could be assessed, or no repo command produced a result (every install, build and test was blocked on this machine, or the tier ran no repo code), say that, name what was skipped or blocked and why, and give no level. When a level is unproven or blocked on this machine, say so and where a rerun can prove it, such as a machine with Docker. When `readiness status` says a level is undetermined, it names the one fact that settles it; when that is a test command the repo declares (in a CI step, a Makefile target or a script), add it with `readiness contract add` and run the replay again before sealing, and otherwise say what would settle it. A check blocked on this machine, such as a tool the host lacks, is never a repo gap. When a component the scan found isn't assessed, name it, so the headline doesn't speak for the whole repo.
-   - **Only what the audit recorded.** The reader checks every cause, name and number in your narration against the report's own records: the levels, condition reasons and evidence lines `readiness status` prints. What you learned only by reading the repo isn't in those records, so leave it out even when it's true:
-     - Give a cause in the words of its reason or evidence line. A refused connection on port 5432 is "a service on port 5432 the setup doesn't start" unless a line names the service. Tests that miss planted faults "caught 0 of 5 planted bugs"; don't explain why from reading the tests.
-     - Describe only this audit. Leave out "now", "new", "again", "still", "no longer", "fixed" and "restored": the report doesn't show the earlier audit, so a change over time can't be checked.
-     - Leave out what CI, a README or AGENTS.md says, and any file, package, function, variable or token name, count of pull requests or target that no status line gives.
-     - Say where checks ran as status says it, "in a clean container" or "on this machine", not "offline", "a fresh copy" or "a clean checkout".
-     - For a component that isn't assessed, give its reason. Don't list what wasn't installed, built or tested.
-     - Take every share of changes from status, for the component the sentence names.
-   - **Ask:** the one decision that unblocks the top gap, naming the change to approve, for example "approve adding the service the tests expect on port 5432 to the agent setup for api". Name the service itself only when a status line names it. The report adds "name an owner" when none is recorded, so leave it out.
-   - **Gaps** (optional): one plain line per top item, keyed `<condition>:<component>` as in the example.
+   - `--lead`: which of the components that set the level the headline names first.
+   - `--cause <condition>=<evidence>`: the failure the headline gives as the cause, when status offers more than one.
+   - `--works`: passing steps the headline names as already working.
+   - `--ask`: the roadmap item part 1's decision is about, or `settle` for what settles a level that isn't proven.
 
-   Follow [references/report.md](references/report.md): no jargon, no code formatting, no emoji, and no number the audit didn't compute. Say a status in words ("passed", "blocked on this machine"), never with an emoji or check-mark symbol; the seal refuses narration that contains one.
-3. `readiness seal`. If it refuses, it lists what broke the rules. Fix the narration and seal again.
+   `narrate` refuses an id that isn't a choice and prints part 1 as it will read. It takes no text: what you want to say in your own words goes in your reply (step 7). When status says a level is undetermined, it names the one fact that settles it; when that is a test command the repo declares (in a CI step, a Makefile target or a script), add it with `readiness contract add` and run the replay again before sealing.
+3. `readiness seal`. If it refuses, it says which id broke the rules. Fix the narration and seal again.
 
 ## 7. Report back
 
 1. `readiness verify-seal`.
-2. Read `.agent-readiness/latest/report.md` and reply with part 1 and the top of part 3 in your own words: the level and what it means, the headline, the next move and the three numbers from part 1, and the gaps and the one ask from part 3. Give the confidence too, and its reasons, but never as part of the level. Link the report. Don't paste the whole report, and use no emoji in the reply.
+2. Read `.agent-readiness/latest/report.md` and reply with part 1 and the top of part 3 in your own words: the level and what it means, the headline, the next move and the three numbers from part 1, and the gaps and the one ask from part 3. Give the confidence too, and its reasons, but never as part of the level. Explain causes from the reasons and evidence lines `readiness status` printed, and say nothing the report contradicts. Link the report. Don't paste the whole report, and use no emoji in the reply.
 3. When the report finds no blocker, say so plainly and recommend giving agents work there. Don't invent work. When part 1 says something isn't supported yet, say so in those words and link [references/supported.md](references/supported.md); don't offer a fix for it or guess a level.
 4. Offer the next step in one line, for example: "Say 'fix the primary blocker' and I'll set up the service the tests expect on port 5432 and prove it with a new audit."
 5. Say what to commit: `.agent-readiness/roadmap.json` and `.agent-readiness/latest/` go on the main branch. The sealed audits and `history.jsonl` go to the `agent-readiness/history` branch with `readiness history push --push`, or to CI artifacts.

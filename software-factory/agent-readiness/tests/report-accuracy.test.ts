@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { blocksText, startFailureCause } from "../skill/agent-readiness/scripts/lib/model.ts";
-import { headlineCauseErrors, renderMarkdown, validatePart1 } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { renderMarkdown } from "../skill/agent-readiness/scripts/lib/render.ts";
+import { headlineCauseErrors, validatePart1 } from "../support/evals/lib/part1.ts";
 import { renderHtml } from "../skill/agent-readiness/scripts/lib/render-html.ts";
 import { latestRubricVersion, loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import type { Audit, HistoryLine, ReportJson, RoadmapItem } from "../skill/agent-readiness/scripts/lib/types.ts";
@@ -79,7 +80,7 @@ describe("headline causes match the condition states", () => {
     assert.doesNotMatch(r.executive.headline, /cli fails its tests/);
     assert.match(r.executive.headline, /^docs has no tests and cli couldn't be checked on this machine/);
     assert.deepEqual(headlineCauseErrors(r), []);
-    assert.deepEqual(validatePart1(r, rubric, null), []);
+    assert.deepEqual(validatePart1(r, rubric), []);
   });
 
   test("the check catches the headline the pinned changesets trial recorded before", () => {
@@ -158,7 +159,7 @@ describe("the report says tests ran with the network off", () => {
     assert.doesNotMatch(r.executive.headline, /network/, "the headline names the network only when the output showed it");
     const cond = (r.explanations ?? []).find((e) => e.kind === "condition" && e.subject.startsWith("pocketbase: ") && /test/i.test(e.subject) && /network switched off/.test(e.rule));
     assert.ok(cond, "the test condition's rule names the network");
-    assert.deepEqual(validatePart1(r, rubric, null), []);
+    assert.deepEqual(validatePart1(r, rubric), []);
   });
 
   test("not when nothing ran in a container", () => {

@@ -58,23 +58,26 @@ A repo lists findings it has reviewed as false positives in `.agent-readiness/wa
 - A waived finding stops counting, keeps what it was, and is listed in part 5 with the waiver's reason and reviewer. Part 5 also lists waivers that matched nothing and waivers that were refused. The coverage note counts the waived findings. The waivers are sealed with the audit.
 6. **About this report.** When and where it ran, the seal status, its integrity in one word (unsigned or keyed), eval-mode notes and the audit record. The footer names `SA_READINESS_SEAL_KEY` for signed reports when the seal is unkeyed.
 
-## Part 1 rules (enforced by `seal`)
+## Part 1 wording
 
-- The headline is at most 40 words. It names the component that sets the level and what already works elsewhere. It never pairs a level change with an outcome change in the same sentence.
-- At most three gaps, each at most 22 words, each about what holds a component's standard level.
+Templates write part 1 from the audit's own records; the seal reads no narrated text. The templates keep to these rules, and the eval graders check them:
+
+- The headline is at most 40 words. It names the component that sets the level, and the components found but not assessed. It never pairs a level change with an outcome change in the same sentence.
+- At most three gaps, each about what holds a component's standard level.
 - No code formatting, check IDs, evidence IDs or emoji. Status is a word, not a symbol.
 - No banned jargon: "first-push", "oracle", "replay", "bootstrap", "canonical", "mutant", "mutation", "seal", "trajectory", "CI parity".
 - A level name ("Bootable", "Verifiable") appears only with its number, as in "Level 1, bootable".
-- Narrated text may contain only numbers the audit computed.
 
-## Writing a narration
+## Narration slots
 
-Narration is optional. The default wording passes the rules. When you narrate, aim for something a director reads in ten seconds:
+Narration is optional, and it is a choice of ids, never text. `readiness status` lists the choices with what part 1 would say for each, and `readiness narrate` takes them:
 
-- Good: "Agents can't pass the tests in api from a clean checkout, and 56% of recent changes land there. shared is already at Level 2."
-- Bad: "Bootstrap replay failed for api; oracle coverage is 0/5 in worker." That uses jargon, names checks and gives the reader no message.
+- **lead:** which of the components that set the level the headline names first.
+- **cause:** the condition and evidence row the headline gives as the cause, for a component that sets the level.
+- **works:** passing steps, by evidence id, that the headline names as already working: "Already passing: api installs and builds in a clean container."
+- **ask:** the roadmap item part 1's decision is about, or `settle` for what would settle a level that isn't proven.
 
-The headline says what holds the repo level and where. It doesn't list everything that's wrong; part 5 does that.
+`narrate` and the seal refuse an id that isn't a choice. Anything else, such as why a check failed in your own words, goes in the agent's reply, not the report.
 
 ## Outcome honesty
 

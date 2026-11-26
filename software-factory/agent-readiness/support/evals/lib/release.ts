@@ -14,8 +14,9 @@ import { PANEL_SIZE, family } from "./judge.ts";
 //   bound must reach the floor.
 // - Lift: the agent must beat the scripted run (`readiness audit` alone) on the same cases. The
 //   per-case all-gates lift and the headline judge's lift each need a 95% bootstrap interval (over
-//   cases) whose lower bound is above 0. If the agent's narration shows no lift on the pinned repos,
-//   narrationLift goes to false and the headline lift is reported only; the judges are not retuned.
+//   cases) whose lower bound is above 0. narrationLift is false from rubric 2026-12-beta (Andrew,
+//   November 24): the sealed headline is a template filled from the narration's slots in both arms,
+//   so the headline lift is reported only, and the lift criterion rests on the hard gates.
 // - Headline judge: pooled mean at least 0.8 and lower bound at least 0.75. Page judge: pooled
 //   mean above 0.667, run 6's.
 // - Judges: a panel of at least two models, of other families than the driver and each other,
@@ -31,7 +32,7 @@ export const RELEASE_POLICY = {
   pooledFloor: POOLED_FLOOR,
   maxFlagShare: 0.1,
   liftOver: "scripted",
-  narrationLift: true,
+  narrationLift: false,
   judges: PANEL_SIZE,
   calibration: { agree: 0.8, auc: 0.9 },
 } as const;

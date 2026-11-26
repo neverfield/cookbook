@@ -464,11 +464,16 @@ export interface Signal {
   undriven?: { id: string; surface: string }[];
 }
 
+// The agent's narration is a choice of ids from the report model; templates write the words.
+// lead: the component the headline names first, one of the components that set the level.
+// cause: the condition and evidence row the headline gives as the cause, for the lead.
+// works: passing evidence rows the headline names as already working.
+// ask: the roadmap item part 1's decision is about, or "settle" for what settles the level.
 export interface Narration {
-  headline?: string;
-  gaps?: Record<string, string>;
+  lead?: string;
+  cause?: { condition: CondId; evidence: string } | null;
+  works?: string[];
   ask?: string;
-  titles?: Record<string, string>;
 }
 
 export interface Watch {
