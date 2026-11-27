@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
@@ -11,7 +11,9 @@ import { renderHtml } from "../skill/agent-readiness/scripts/lib/render-html.ts"
 import { renderMarkdown } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { startSession } from "../skill/agent-readiness/scripts/lib/session.ts";
-import { materialize, readiness } from "../support/tools/fixture.ts";
+import type { Audit } from "../skill/agent-readiness/scripts/lib/types.ts";
+import { SKILL_ROOT } from "../skill/agent-readiness/scripts/lib/util.ts";
+import { commitAll, materialize, readiness } from "../support/tools/fixture.ts";
 import { makeAudit, reportFor } from "./helpers.ts";
 
 // Fixes for the should-fix items S1 to S17 of the offline production-readiness review of 0.2.
@@ -92,4 +94,33 @@ describe("S2: a rerun command runs the step as the audit did", () => {
     assert.match(readFileSync(join(dir, "out.txt"), "utf8"), /^v22\./);
     assert.equal(statSync(join(dir, "out.txt")).uid, process.getuid!());
   });
+});
+
+function draftAudit(repo: string): Audit {
+  const work = join(repo, ".agent-readiness", "work");
+  return JSON.parse(readFileSync(join(work, readFileSync(join(work, "CURRENT"), "utf8").trim(), "audit.json"), "utf8")) as Audit;
+}
+
+describe("S3: the skill excludes itself in any agent's skills folder", () => {
+  for (const at of [".claude/skills/agent-readiness", ".agents/skills/agent-readiness"]) {
+    test(`installed under ${at}, none of its files counts as the repo's`, () => {
+      const repo = materialize("healthy-node");
+      const scan = () => {
+        assert.equal(readiness(repo, ["init", "--tier", "read-only", "--force"]).code, 0);
+        const r = readiness(repo, ["scan"]);
+        assert.equal(r.code, 0, r.out);
+        return draftAudit(repo);
+      };
+      const before = scan();
+      cpSync(SKILL_ROOT, join(repo, at), { recursive: true, filter: (src) => !src.includes("node_modules") });
+      writeFileSync(join(repo, at, "references", "token-example.md"), `npx tool --token ghp_${"x".repeat(36)}\n`);
+      commitAll(repo, "Install the readiness skill");
+      const after = scan();
+      const inSkill = (f: string | undefined) => Boolean(f?.startsWith(`${at}/`));
+      assert.deepEqual(after.instructions.filter((i) => inSkill(i.source)), [], "its SKILL.md isn't the repo's instructions");
+      assert.deepEqual(after.assets.filter((a) => inSkill(a.path)), [], "it isn't one of the repo's assets");
+      assert.deepEqual(after.safety.filter((s) => inSkill(s.file)), [], "its examples aren't the repo's secrets");
+      assert.equal(after.profile!.totalChanges, before.profile!.totalChanges, "installing it isn't work in the repo");
+    });
+  }
 });

@@ -7,7 +7,7 @@ import type { Rubric } from "./rubric.ts";
 import { STACKS, notSupportedReason, stack, supported } from "./support.ts";
 import type { Component, Language, PackageManager, Profile, Unit } from "./types.ts";
 import { capCutReason } from "./scope.ts";
-import { MAX_FILES, containedPath, exists, listFilesScoped, readJson, readText, workspaceDirs } from "./util.ts";
+import { MAX_FILES, containedPath, exists, listFilesScoped, ownSkillPath, readJson, readText, workspaceDirs } from "./util.ts";
 import { OUTPUT_SEGMENT, SKIP_SEGMENT, inventory, namesByDir, pythonManifest, skipSegment } from "./discover/inventory.ts";
 import { assignShares, changeCounts, shareUnder } from "./discover/ownership.ts";
 import type { ChangeCounts } from "./discover/ownership.ts";
@@ -645,7 +645,7 @@ function instructionRank(f: string): number {
 
 export function instructionFiles(files: string[]): string[] {
   return files
-    .filter((f) => INSTRUCTION_PATTERNS.some((p) => p.test(f)) && !f.startsWith(".cursor/skills/agent-readiness/"))
+    .filter((f) => INSTRUCTION_PATTERNS.some((p) => p.test(f)) && !ownSkillPath(f))
     .map((f, i) => ({ f, i }))
     .sort((a, b) => instructionRank(a.f) - instructionRank(b.f) || a.i - b.i)
     .map((x) => x.f);

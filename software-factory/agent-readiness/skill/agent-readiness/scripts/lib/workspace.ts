@@ -7,7 +7,7 @@ import { tempDir } from "./teardown.ts";
 import { latestRubricVersion, loadRubric, rubricDigest } from "./rubric.ts";
 import { attachAudit, endSession, lease, renewSession } from "./session.ts";
 import type { Audit, ScenarioSpec, Tier } from "./types.ts";
-import { SKILL_ROOT, ensureDir, exists, fail, git, gitOrThrow, isShallow, nowIso, randomHex, readJson, readText, sha256, stableStringify, today, writeJson, writeText } from "./util.ts";
+import { SKILL_ROOT, ensureDir, ownSkillPath, exists, fail, git, gitOrThrow, isShallow, nowIso, randomHex, readJson, readText, sha256, stableStringify, today, writeJson, writeText } from "./util.ts";
 
 export interface Paths {
   repo: string;
@@ -103,7 +103,7 @@ export function isDirty(repo: string): boolean {
     .split("\n")
     .filter((l) => l.trim())
     .map((l) => l.slice(3).replace(/^"/, ""))
-    .some((f) => !/^(\.agent-readiness\/|\.cursor\/skills\/agent-readiness\/)/.test(f) && !(installed && (f.startsWith(installed) || installed.startsWith(f))));
+    .some((f) => !f.startsWith(".agent-readiness/") && !ownSkillPath(f) && !(installed && (f.startsWith(installed) || installed.startsWith(f))));
 }
 
 export interface TreeInfo {

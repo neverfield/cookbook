@@ -2,7 +2,7 @@ import { basename } from "node:path";
 import type { Rubric } from "../rubric.ts";
 import { STACKS } from "../support.ts";
 import type { Component, Profile } from "../types.ts";
-import { addDays, git, today } from "../util.ts";
+import { addDays, git, ownSkillPath, today } from "../util.ts";
 
 // Who owns each change in the history window: the deepest component under which it lies, else the
 // satellite or cut folder that lists it, else nobody. Every counted change lands in exactly one of
@@ -32,7 +32,7 @@ export function changeCounts(repo: string, rubric: Rubric, commit = "HEAD"): Cha
     if (!isBot && !lockOnly) {
       for (const f of commitFiles) {
         // Installing this skill, or committing its records, isn't work in the repo's components.
-        if (f.startsWith(".cursor/skills/agent-readiness/") || f.startsWith(".agent-readiness/")) continue;
+        if (ownSkillPath(f) || f.startsWith(".agent-readiness/")) continue;
         if (rubric.components.lockfiles.includes(basename(f))) continue;
         if (rubric.components.generatedPatterns.some((g) => f.includes(g))) {
           generated.set(f, (generated.get(f) ?? 0) + 1);

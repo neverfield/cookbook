@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { ghJson } from "./gh.ts";
 import { ELEVATED } from "./static.ts";
 import type { Asset, InstructionItem, ScanBound } from "./types.ts";
-import { addDays, git, inTreePath, lastChanged, listFiles, readText, today } from "./util.ts";
+import { addDays, git, inTreePath, lastChanged, listFiles, ownSkillPath, readText, today } from "./util.ts";
 
 const KINDS: { re: RegExp; kind: Asset["kind"] }[] = [
   { re: /(^|\/)(AGENTS|CLAUDE)\.md$/, kind: "agents_md" },
@@ -82,7 +82,7 @@ export function refreshAssetStatus(assets: Asset[], items: InstructionItem[]): v
 // Each asset's authors and last change come from git history, which `--follow` makes slow on a
 // large repo. Past the scan's time bound an asset is still listed and checked, without its history.
 export function inventory(repo: string, tree: string, items: InstructionItem[], bound?: ScanBound): Asset[] {
-  const files = listFiles(tree, { includeHidden: true }).filter((f) => !f.startsWith(".cursor/skills/agent-readiness/"));
+  const files = listFiles(tree, { includeHidden: true }).filter((f) => !ownSkillPath(f));
   const assets: Asset[] = [];
   const listed = new Set(files);
   const dates = lastChanged(repo, files.filter((f) => KINDS.some((k) => k.re.test(f))), bound ? { timeoutMs: Math.max(1000, bound.until - Date.now()) } : {});

@@ -6,6 +6,21 @@ import { fileURLToPath } from "node:url";
 
 export const SKILL_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
+// This skill's own files in a repo: under any agent's skills folder (.cursor/skills/,
+// .claude/skills/, .agents/skills/ and the like), or wherever in its checkout this copy sits. They
+// are the audit's, not the repo's: no change share, instruction, asset or secret comes from them.
+const SKILL_FOLDERS = /^(?:[^/]+\/)*skills\/agent-readiness\//;
+let installedAt: string | null | undefined;
+
+export function ownSkillPath(file: string): boolean {
+  if (SKILL_FOLDERS.test(file)) return true;
+  if (installedAt === undefined) {
+    const r = spawnSync("git", ["rev-parse", "--show-prefix"], { cwd: SKILL_ROOT, encoding: "utf8" });
+    installedAt = r.status === 0 && r.stdout.trim() ? r.stdout.trim() : null;
+  }
+  return installedAt !== null && file.startsWith(installedAt);
+}
+
 // A repo-controlled path, refused when it or a symlink along it leaves the tree. The repo's own
 // files decide these paths, and tar and git keep symlinks, so the check follows links.
 export function containedPath(root: string, parts: string[], what: string): string {
