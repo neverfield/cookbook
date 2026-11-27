@@ -15,13 +15,24 @@ export function quickstartMismatch(readme: string, tag: string): string | null {
   return null;
 }
 
+// The example CI workflows tell a reader which release to pin, so they name the same tag.
+export const PINNED_WORKFLOWS = ["scheduled-recheck.yml", "static-checks.yml"];
+
+export function workflowMismatch(name: string, text: string, tag: string): string | null {
+  if (/No release tag exists yet/.test(text)) return `support/examples/github-workflows/${name} says no release tag exists, but the manifest names ${tag}`;
+  if (!text.includes(tag)) return `support/examples/github-workflows/${name} doesn't name ${tag}`;
+  return null;
+}
+
 function main(): void {
   const pkg = readJson<{ version?: string }>(join(SKILL, "..", "..", "package.json"));
   const version = process.argv[2] ?? pkg.version ?? "0.1.0";
   const manifest = { version, tag: `agent-readiness-v${version}`, scriptsDigest: skillDigest() };
-  const mismatch = quickstartMismatch(readFileSync(join(SKILL, "..", "..", "README.md"), "utf8"), manifest.tag);
+  const root = join(SKILL, "..", "..");
+  const workflows = PINNED_WORKFLOWS.map((n) => workflowMismatch(n, readFileSync(join(root, "support", "examples", "github-workflows", n), "utf8"), manifest.tag));
+  const mismatch = quickstartMismatch(readFileSync(join(root, "README.md"), "utf8"), manifest.tag) ?? workflows.find((m) => m !== null);
   if (mismatch) {
-    process.stderr.write(`RELEASE.json not written: ${mismatch}. Point the Quickstart at the release first.\n`);
+    process.stderr.write(`RELEASE.json not written: ${mismatch}. Point the Quickstart and the example workflows at the release first.\n`);
     process.exit(1);
   }
   writeJson(join(SKILL, "RELEASE.json"), manifest);

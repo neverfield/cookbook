@@ -827,3 +827,22 @@ The round-2 targeted check at `351f3e9` passed 68 of 70 agent runs, with 12 of 1
 - **Seal:** fix-instructions #2 said "its instructions check out" when one of five items didn't run. The seal now refuses that claim while the instructions check shows items wrong or not run, unless the text gives the count.
 - **Remeasure:** not run; the API key's allow list blocks this machine. Recalibrate, then run the targeted cases.
 - **Verdict:** pending.
+
+## Round 21 (pending measurement): the 0.2 wording, as one round (November 27, 2026)
+
+Andrew's decision of November 24: the 0.2 stack logs one round for its wording changes instead of one per change. The lever is SKILL.md, the references and the report templates (lever 1). Scoring rules, level rules, each fixture's `expected.json`, the judge prompts and the calibration are unchanged, so the judge-prompt digest stands.
+
+- **Failure mode:** narrated headlines claimed what the audit didn't record (rounds 13 to 16 and 18 to 20). The seal's English rules caught some claims and refused true ones (the sims' negated and modal container sentences).
+- **Change (PR G, [#66](https://github.com/neverfield/cookbook/pull/66)):**
+  - Narration is slots: `lead`, `cause`, `works` and `ask`, each an id from `readiness status`. Templates write the headline, ask and gaps; free text stays in the agent's reply.
+  - SKILL.md step 6 is rewritten around the slots (119 to 113 lines), and the "Only what the audit recorded" block is gone. Step 7 asks the agent to explain causes from the status lines in its reply.
+  - The headline names components found but not assessed ("X is not assessed." or "X is outside this sampled audit.") when it fits the 40-word limit.
+  - The Level 1 template has a shortest variant without the change share.
+  - The Level 1 condition labels say "in a clean environment".
+  - "a clean container or a disposable VM" replaces "a clean container" in three places: the host-mode reason, the unproven roadmap "unlocks" text and the third part 1 number, when the rubric's `proof.environments` lists `disposable_vm`.
+  - `ask: settle` renders the `settleBy` text: "Decision needed: who settles Level N for X: …".
+- **Riding along (the stack's other SKILL.md wording):** the preflight opens a session and leaves the guard to the user, rule 2 says a detected disposable VM is still this machine, step 4.3 describes the environment self-check (PR C, [#59](https://github.com/neverfield/cookbook/pull/59)), and step 6.2 says to add a declared test command with `contract add` when status says undetermined (PR E, [#63](https://github.com/neverfield/cookbook/pull/63)).
+- **Tests:** `tests/narration-slots.test.ts` (choices, ordering, `works` and its word-limit fallback, `ask` and `settle`, refusal of each bad id), and `tests/safety.test.ts`, where `narrate` refuses every text alike, byte for byte, and the seal reads none.
+- **Expected:** both arms seal template text, so the headline judge lift should be near 0. It is reported, not gated (`RELEASE_POLICY.narrationLift` is false). The narration gate always reads "nothing narrated". The risk to watch is in the reply: agents still give causes, from status lines, and say nothing the report contradicts.
+- **Remeasure:** at the Mac release session, a 1-repeat dry run, then the overnight 5-repeat re-baseline with both arms (`--arm agent,scripted`) and `--release-check`. Report the hard gates per case, the headline and page judges with their intervals, and the lift.
+- **Verdict:** pending.
