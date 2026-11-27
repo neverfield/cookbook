@@ -6,7 +6,9 @@ import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { ContainerSession, detectRuntime, pullTimeoutMs } from "../skill/agent-readiness/scripts/lib/container.ts";
+import { changeCounts } from "../skill/agent-readiness/scripts/lib/discover/ownership.ts";
 import { diagnose, privatePackage } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
+import { MASKED_COMMAND } from "../skill/agent-readiness/scripts/lib/seal.ts";
 import { HOOKS_FILE, guardDecision, installGuard, probeGuard, uninstallGuard } from "../skill/agent-readiness/scripts/lib/guard.ts";
 import { reproOf } from "../skill/agent-readiness/scripts/lib/model.ts";
 import type { Executor, Executors } from "../skill/agent-readiness/scripts/lib/replay.ts";
@@ -466,6 +468,71 @@ describe("S14: smaller security and hygiene points", () => {
     const readme = readFileSync(join(SKILL_ROOT, "..", "..", "README.md"), "utf8");
     assert.match(readme, /instance metadata address \(169\.254\.169\.254\)/);
     assert.match(readme, /a service the repo's start step leaves running in the background is stopped when the replay ends/);
+  });
+});
+
+describe("S16: narrate's cause takes one condition and one id", () => {
+  test("text is refused, and a cause with a second = isn't cut into a valid one", () => {
+    const repo = materialize("healthy-node");
+    for (const step of [["init", "--tier", "local-exec"], ["scan"]]) assert.equal(readiness(repo, step).code, 0);
+    const gap = readiness(repo, ["narrate", "--gap", "clean.install=needs a=b"]);
+    assert.equal(gap.code, 2);
+    assert.match(gap.out, /narrate takes no text \(--gap\)/);
+    const cut = readiness(repo, ["narrate", "--cause", "clean.install=ev-001=extra"]);
+    assert.equal(cut.code, 2, cut.out);
+    assert.match(cut.out, /ev-001=extra/);
+  });
+});
+
+describe("S17: change shares that can't be read say so", () => {
+  test("a git log that fails is logged at scan and marked on the coverage line", () => {
+    const repo = materialize("healthy-node");
+    assert.equal(readiness(repo, ["init", "--tier", "local-exec"]).code, 0);
+    // A history git can't walk: the commit's parent objects are gone.
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
+    const counts = changeCounts(repo, loadRubric("2026-12-beta"), "0".repeat(40));
+    assert.match(counts.failed ?? "", /^git log didn't finish/);
+    assert.equal(changeCounts(repo, loadRubric("2026-12-beta"), head).failed, undefined);
+    const audit = makeAudit({ components: [{ id: "app", share: 1 }] });
+    audit.profile!.sharesUnread = "git log didn't finish: fatal: bad object";
+    const md = renderMarkdown(reportFor(audit), loadRubric(audit.rubric));
+    assert.match(md, /Change shares couldn't be read \(git log didn't finish: fatal: bad object\), so every component's share reads 0%\./);
+  });
+
+  test("the scan logs it", () => {
+    const repo = materialize("healthy-node");
+    assert.equal(readiness(repo, ["init", "--tier", "local-exec"]).code, 0);
+    const r = readiness(repo, ["scan"], { SA_READINESS_HISTORY_SECONDS: "0.001" });
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /Change shares couldn't be read \(git log didn't finish in 0 s/);
+  });
+});
+
+describe("#65 follow-up: recheck blocks a command the seal masked, and runs the rest", () => {
+  test("a contract command carrying a token is masked at the seal, and recheck records it as blocked, never failed", () => {
+    const token = ["ghp_", "b".repeat(36)].join("");
+    const repo = materialize("healthy-node");
+    writeFileSync(join(repo, "AGENTS.md"), `${readFileSync(join(repo, "AGENTS.md"), "utf8")}- Release build: \`node scripts/build.mjs --token ${token}\`\n`);
+    commitAll(repo, "document the release build");
+    const line = readFileSync(join(repo, "AGENTS.md"), "utf8").split("\n").findIndex((l) => l.includes(token)) + 1;
+    const HOST = { SA_READINESS_ALLOW_HOST: "1" };
+    for (const step of [["init", "--tier", "local-exec"], ["scan"], ["contract", "add", "--kind", "build", "--component", "healthy-node", "--cmd", `node scripts/build.mjs --token ${token}`, "--source", `AGENTS.md:${line}`, "--reason", "the documented release build"], ["replay", "--runtime", "none", "--no-mutants"], ["seal"]]) {
+      const r = readiness(repo, step, HOST);
+      assert.equal(r.code, 0, `${step.join(" ")}: ${r.out}`);
+    }
+    const { audit } = sealedAudit(repo);
+    assert.ok(audit.contract.some((c) => c.command === "node scripts/build.mjs --token [redacted:GitHub token]"), "the seal masked the command");
+    const r = readiness(repo, ["recheck", "--runtime", "none"], HOST);
+    assert.equal(r.code, 0, r.out);
+    const rechecks = join(repo, ".agent-readiness", "history", "rechecks");
+    const record = JSON.parse(readFileSync(join(rechecks, readdirSync(rechecks)[0]), "utf8"));
+    const masked = record.results.find((x: { kind: string; status: string; note: string }) => x.kind === "build" && x.note === MASKED_COMMAND);
+    assert.ok(masked, JSON.stringify(record.results));
+    assert.equal(masked.status, "not_run");
+    assert.ok(record.results.some((x: { kind: string; status: string }) => x.kind === "test" && x.status === "pass"), "the other commands still ran");
+    assert.ok(!readFileSync(join(rechecks, readdirSync(rechecks)[0]), "utf8").includes(token));
+    const history = readFileSync(join(repo, ".agent-readiness", "history", "history.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.notEqual(history.at(-1).result, "failed", "a masked command never lowers a level");
   });
 });
 

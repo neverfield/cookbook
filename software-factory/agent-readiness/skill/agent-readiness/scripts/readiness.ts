@@ -140,6 +140,7 @@ function cmdScan(a: Args): void {
   refreshTree(repo, audit.repo.commit, local.tree);
   const profile = buildProfile(repo, local.tree, rubric, audit.repo.commit);
   profile.scope = bound.scope;
+  if (profile.sharesUnread) log(`Change shares couldn't be read (${profile.sharesUnread}), so every component's share reads 0% and the coverage line says so.`);
   audit.profile = profile;
   audit.safety = safetyScan(local.tree, profile, bound, rubric.safety?.blockingSecretClasses);
   audit.instructions = instructionItems(local.tree, profile);
@@ -376,8 +377,9 @@ function cmdNarrate(a: Args): void {
   const n: Narration = opt(a, "file") ? readJson<Narration>(resolve(str(a, "file"))) : { ...(audit.narration ?? {}) };
   if (opt(a, "lead")) n.lead = str(a, "lead");
   if (opt(a, "cause")) {
-    const [condition, evidence] = str(a, "cause").split("=");
-    n.cause = { condition: condition as CondId, evidence: evidence ?? "" };
+    const cause = str(a, "cause");
+    const at = cause.indexOf("=");
+    n.cause = { condition: (at < 0 ? cause : cause.slice(0, at)) as CondId, evidence: at < 0 ? "" : cause.slice(at + 1) };
   }
   if (opt(a, "works")) n.works = csv(opt(a, "works"));
   if (opt(a, "ask")) n.ask = str(a, "ask");

@@ -659,6 +659,7 @@ function coverageLine(input: ModelInput): string {
   const sampled = sampledScope(audit);
   if (sampled) line += ` Sampled scope: ${sampled}.`;
   if (audit.repo.shallow) line += " The clone is shallow, so change shares come only from the commits it has.";
+  if (audit.profile?.sharesUnread) line += ` Change shares couldn't be read (${audit.profile.sharesUnread}), so every component's share reads 0%.`;
   if (audit.repo.submodulesMissing?.length) line += ` Submodules not checked out on this machine aren't in the audit: ${list(audit.repo.submodulesMissing)}.`;
   if (audit.repo.lfsPointers) line += ` ${audit.repo.lfsPointers} Git LFS ${audit.repo.lfsPointers === 1 ? "file stayed a pointer" : "files stayed pointers"} in the audit tree.`;
   if (audit.tier !== "read-only" && !audit.environment.containerRuntime && audit.evidence.some((e) => e.where === "fresh_copy")) {

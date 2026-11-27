@@ -290,6 +290,10 @@ export function workspacePackages(root: string, profile: Profile): WorkspacePack
 
 const ONLINE_KINDS = new Set<CommandKind>(["doctor", "install", "build", "start"]);
 
+function memoryNote(n: number): string {
+  return n ? `; ${n} ${n === 1 ? "run with a planted fault was" : "runs with planted faults were"} stopped at the audit's memory limit, so ${n === 1 ? "it counts" : "they count"} neither way` : "";
+}
+
 // The repo's declared environment image didn't build. A base image the runtime couldn't pull is
 // this machine's network or registry access, so the install is blocked; any other failure is the
 // Dockerfile's, so the install fails for the repo. Either way nothing else runs, and the audit seals.
@@ -833,6 +837,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
     return scopes.get(scoped) ? scoped : testCmd.command;
   };
   let lookedAt = 0;
+  let memoryStops = 0;
   for (const site of sites) {
     if (rule) {
       const d = decided().length;
@@ -883,6 +888,13 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
           break;
         }
         stalls = 0;
+        // Stopped at the audit's memory limit or a full disk: the run says nothing about the tests,
+        // as an install, build or test stopped there doesn't, so it counts neither way.
+        if (out.exitCode !== 0 && diagnose(out.output, false, "test", out.exitCode).cause === "resource") {
+          memoryStops++;
+          result = "not_run";
+          break;
+        }
         if (out.exitCode === 0 && !((countTests(audit.profile, comp.id, out.output)?.failed ?? 0) > 0)) {
           result = run === 0 ? "survived" : "discarded";
           break;
@@ -910,7 +922,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   let est: ReturnType<typeof faultEstimate> | null = null;
   if (rule) {
     est = estimate();
-    const cutNote = (cut ? "; the time budget ran out before the estimate was decided" : "") + (stalledOut ? "; planting stopped after two runs with planted faults timed out" : "");
+    const cutNote = (cut ? "; the time budget ran out before the estimate was decided" : "") + (stalledOut ? "; planting stopped after two runs with planted faults timed out" : "") + memoryNote(memoryStops);
     const carried = est.carried ? `, ${est.carried} of them planted again from the last audit` : "";
     const scopedNote = [...scopes.values()].some(Boolean) ? "; each ran only the tests that import its file" : "";
     const share = `caught ${caught} of ${counted.length} planted faults (${pct(est.rate)})${carried}`;
@@ -923,7 +935,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
           ? `${share}: weak, at most ${pct(est.high)} with ${confidence(rule.weakConfidence)} confidence${scopedNote}${cutNote}${missedNote}`
           : `${share}: inconclusive, between ${pct(est.low)} and ${pct(est.high)}, too few to tell strong tests from weak ones${why}${scopedNote}${cutNote}${missedNote}`;
   } else {
-    const cutNote = (cut ? `; the time budget cut off ${cut} of ${sites.length}` : "") + (stalledOut ? `; ${stalledOut} weren't run after two runs with planted faults timed out` : "");
+    const cutNote = (cut ? `; the time budget cut off ${cut} of ${sites.length}` : "") + (stalledOut ? `; ${stalledOut} weren't run after two runs with planted faults timed out` : "") + memoryNote(memoryStops);
     const need = killRateOf(rubric.mutation);
     result = faultsVerdict(caught, counted.length, rubric.mutation);
     const share = need < 1 ? ` the ${Math.round(need * 100)}% the rubric requires` : "";
@@ -938,7 +950,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   }
   log(`  faults in ${comp.id}: ${summary}`);
   // Too few results because the budget ran out is the audit's limit, not weak tests.
-  const blocked = cut && result === "not_run" ? { blocked: BUDGET_OUT } : stalledOut && result === "not_run" ? { blocked: "test runs with planted faults kept timing out, so the fault check couldn't finish" } : {};
+  const blocked = cut && result === "not_run" ? { blocked: BUDGET_OUT } : stalledOut && result === "not_run" ? { blocked: "test runs with planted faults kept timing out, so the fault check couldn't finish" } : memoryStops && result === "not_run" ? { blocked: `test runs with planted faults were stopped at the audit's memory limit, so the fault check couldn't finish; ${ex.where === "container" ? "give the container more with `readiness replay --memory <MB>`" : "rerun on a machine with more memory"}` } : {};
   addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp.id, strength: ex.strength, where: ex.where, result, summary, image: ex.image ?? undefined, ...(missed.length ? { missedFaults: missed } : {}), ...(est ? { estimate: est } : {}), ...blocked });
 }
 

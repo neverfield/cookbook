@@ -14,13 +14,23 @@ export interface ChangeCounts {
   // Files a generated pattern (dist/, build/) matched, held apart: one under a component whose own
   // folder carries the pattern, such as services/build, is that component's source, not output.
   generated: Map<string, number>;
+  // Why the history couldn't be read, when it couldn't: every share then reads 0.
+  failed?: string;
+}
+
+// How long the walk of the change window may take, apart from the scan's own bound.
+export const HISTORY_SECONDS_ENV = "SA_READINESS_HISTORY_SECONDS";
+function historyTimeoutMs(): number {
+  const s = Number(process.env[HISTORY_SECONDS_ENV]);
+  return (Number.isFinite(s) && s > 0 ? s : 600) * 1000;
 }
 
 // Counted up to the audited commit, so a commit made after `init` can't move the shares. Bots,
 // lockfile-only commits, generated files and the audit's own records don't count.
 export function changeCounts(repo: string, rubric: Rubric, commit = "HEAD"): ChangeCounts {
   const since = addDays(today(), -rubric.components.historyDays);
-  const r = git(["log", commit, `--since=${since}`, "--no-merges", "--name-status", "--no-renames", "--format=@@%an%x09%ae"], repo);
+  const limit = historyTimeoutMs();
+  const r = git(["log", commit, `--since=${since}`, "--no-merges", "--name-status", "--no-renames", "--format=@@%an%x09%ae"], repo, limit);
   const byFile = new Map<string, number>();
   const generated = new Map<string, number>();
   let total = 0;
@@ -54,6 +64,10 @@ export function changeCounts(repo: string, rubric: Rubric, commit = "HEAD"): Cha
       }
     }
     flush();
+  }
+  if (!r.ok) {
+    const said = r.stderr.trim().split("\n").pop() ?? "";
+    return { byFile, total, generated, failed: `git log didn't finish${said ? `: ${said.slice(0, 160)}` : ` in ${Math.round(limit / 1000)} s (${HISTORY_SECONDS_ENV} raises the limit)`}` };
   }
   return { byFile, total, generated };
 }

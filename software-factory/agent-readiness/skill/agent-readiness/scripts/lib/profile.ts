@@ -691,6 +691,7 @@ export function buildProfile(repo: string, tree: string, rubric: Rubric, commit 
     }
   }
   return {
+    ...(counts.failed ? { sharesUnread: counts.failed } : {}),
     repoType: components.filter((c) => c.manifest).length > 1 ? "monorepo" : "single",
     packageManager: pm,
     manifests: files.filter((f) => /(^|\/)(package\.json|pyproject\.toml|setup\.py|requirements[^/]*\.txt|go\.mod|Cargo\.toml|pom\.xml|build\.gradle(\.kts)?|Gemfile|composer\.json|Package\.swift|pubspec\.yaml|[^/]+\.(csproj|fsproj|vbproj|sln))$/.test(f) && !f.split("/").slice(0, -1).some((s) => SKIP_SEGMENT.test(s))),

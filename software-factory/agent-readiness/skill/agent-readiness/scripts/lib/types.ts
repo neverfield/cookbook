@@ -84,6 +84,8 @@ export interface Profile {
   units?: Unit[];
   // Every counted change in the window, and the share no component or satellite holds.
   ownership?: { changes: number; unowned: number; unownedShare: number; unownedTop: string[]; counted: boolean };
+  // Why the change history couldn't be read, so every share reads 0.
+  sharesUnread?: string;
   historyDays: number;
   totalChanges: number;
   scope?: ScanScope;

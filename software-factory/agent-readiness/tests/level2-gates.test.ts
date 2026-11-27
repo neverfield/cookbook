@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
+import { OOM_MARK } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { atLook, chooseSites, faultEstimate, faultId, keepPlanting, scopedCommand, testsReaching } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import type { EstimateRule } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { charge, newBudget, plantFaults } from "../skill/agent-readiness/scripts/lib/replay.ts";
@@ -240,6 +241,24 @@ describe("planting faults within the budget", () => {
     assert.equal(ev.result, "not_run");
     assert.match(ev.summary, /caught 12 of 20 planted faults \(60%\): inconclusive, between \d+% and \d+%.*the cap of 20 was reached/);
     assert.equal(componentStates(audit, next, "app").faults.state, "unknown");
+  });
+
+  test("a run with a planted fault stopped at the audit's memory limit counts neither way, and the check says why", async () => {
+    const oom = (root: string): Executor => ({
+      ...fakeExecutor(root, 1000, () => true),
+      async exec() {
+        return { exitCode: 137, timedOut: false, durationMs: 1000, output: `Killed\n${OOM_MARK}: the kernel stopped a process at the container's 2048 MB memory limit\n` };
+      },
+    });
+    const repo = gitRepo(files);
+    const audit = faultAudit(repo, "2026-12-beta");
+    await plantFaults(audit, repo, repo, oom(repo), next, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {});
+    const ev = audit.evidence.find((e) => e.condition === "faults")!;
+    assert.equal(audit.mutants.filter((m) => m.result === "caught").length, 0, "a process the kernel killed caught nothing");
+    assert.equal(ev.result, "not_run", ev.summary);
+    assert.match(ev.summary, /runs with planted faults were stopped at the audit's memory limit, so they count neither way/);
+    assert.match(ev.blocked ?? "", /stopped at the audit's memory limit.*readiness replay --memory <MB>/);
+    assert.equal(componentStates(audit, next, "app").faults.state, "blocked");
   });
 
   test("a strong suite stops after the first batch, a weak one too", async () => {
