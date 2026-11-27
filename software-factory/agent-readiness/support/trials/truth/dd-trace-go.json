@@ -1,0 +1,118 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "DataDog/dd-trace-go",
+  "commit": "48d446a8f02c83ec30a1067a471218606593a4a5",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/DataDog/dd-trace-go/commits/48d446a8f02c83ec30a1067a471218606593a4a5/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/DataDog/dd-trace-go/commits/48d446a8f02c83ec30a1067a471218606593a4a5/status (241 check runs, 238 success and 3 skipped bots: 'Test dd-trace-go' (smoke-tests.yml, go test of the core packages), the go get -u and build-and-deployment smoke tests, CodeQL and Build Metrics succeeded; GitLab statuses (dd-gitlab/default-pipeline, microbenchmarks, SLO checks) all success. The full unit-integration and orchestrion workflows do not run on main pushes; they were green on PR #5754's head 89a26ca9 (414 success, 6 skipped))"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "go",
+      "placement": "component",
+      "changeShare": 0.915,
+      "hasTests": true,
+      "install": [
+        "go mod download",
+        "make tools-install"
+      ],
+      "test": [
+        "./scripts/ci_test_core.sh",
+        "go test -v -race ./...",
+        "go test ./...",
+        "make test/unit"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Root module github.com/DataDog/dd-trace-go/v2 (0.318 of events on its own). The other ~152 go.mod modules (contrib integrations, orchestrion/all, otelc/all, instrumentation/testutils, tools, scripts) are each below 0.02 and are folded in here; contrib modules are tested per module by scripts/ci_test_contrib.sh and mostly need the .github/testservices/docker-compose.yaml services. Core tests skip their agent/integration cases unless INTEGRATION=true, which CI sets with the compose services; the smoke job runs them without services and passed."
+    },
+    {
+      "path": "internal/orchestrion/_integration",
+      "ecosystem": "go",
+      "placement": "component",
+      "changeShare": 0.085,
+      "hasTests": true,
+      "install": [
+        "go mod download",
+        "go install github.com/DataDog/orchestrion"
+      ],
+      "test": [
+        "orchestrion go test -shuffle=on ./...",
+        "go test -shuffle=on -toolexec='orchestrion toolexec' ./..."
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "undetermined",
+      "notes": "Separate module of orchestrion integration suites, run by orchestrion.yml from its own directory with service containers from ci-services.json (redis, kafka, aerospike, ...). That workflow does not run on main pushes; it was green on the PR head, not at this commit."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "instrumentation/httptrace/httptrace_test.go",
+      "line": 1250,
+      "real": false,
+      "why": "truncated fake PEM block as redaction test input"
+    },
+    {
+      "file": "instrumentation/httptrace/httptrace_test.go",
+      "line": 1251,
+      "real": false,
+      "why": "truncated fake PEM block as redaction test input"
+    },
+    {
+      "file": "instrumentation/httptrace/httptrace_test.go",
+      "line": 1252,
+      "real": false,
+      "why": "truncated fake PEM block as redaction test input"
+    },
+    {
+      "file": "instrumentation/httptrace/httptrace_test.go",
+      "line": 1326,
+      "real": false,
+      "why": "fake GitHub token shape as redaction test input"
+    },
+    {
+      "file": "instrumentation/httptrace/httptrace_test.go",
+      "line": 1407,
+      "real": false,
+      "why": "fake PEM block as redaction test input"
+    },
+    {
+      "file": "ddtrace/tracer/context_test.go",
+      "line": 332,
+      "real": false,
+      "why": "test value 'super-secret-value'"
+    },
+    {
+      "file": "openfeature/agentless_endpoint_test.go",
+      "line": 165,
+      "real": false,
+      "why": "test token literal"
+    },
+    {
+      "file": "openfeature/agentless_source_httptest_test.go",
+      "line": 526,
+      "real": false,
+      "why": "test token literal"
+    },
+    {
+      "file": "openfeature/debug_logging_test.go",
+      "line": 447,
+      "real": false,
+      "why": "test token literal"
+    },
+    {
+      "file": ".github/workflows/test-apps.cue",
+      "line": 161,
+      "real": false,
+      "why": "GitHub Actions expression reading a step output, no literal"
+    }
+  ],
+  "nextAction": {
+    "kind": "declare_environment",
+    "text": "State in AGENTS.md which modules' tests need the .github/testservices/docker-compose.yaml services and INTEGRATION=true, and the per-module test commands CI uses (scripts/ci_test_core.sh, scripts/ci_test_contrib.sh)."
+  },
+  "dropped": 0
+}
