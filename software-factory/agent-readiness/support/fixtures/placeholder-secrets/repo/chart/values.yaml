@@ -1,0 +1,12 @@
+# Extra secrets the chart creates. An example, commented out:
+#
+# extraSecrets:
+#   'proxy-config':
+#     stringData: |
+#        HTTP_PROXY: http://proxy_user:proxy_password@192.168.0.10:2080
+#        HTTPS_PROXY: http://proxy_user:proxy_password@192.168.0.10:2080
+#        NO_PROXY: "localhost,127.0.0.1,.svc.cluster.local"
+#   'backup':
+#     stringData: |
+#        BACKUP_URL: postgres://backup:Qm7vT2xK9pLw@db.acme-corp.io:5432/pricing
+extraSecrets: {}

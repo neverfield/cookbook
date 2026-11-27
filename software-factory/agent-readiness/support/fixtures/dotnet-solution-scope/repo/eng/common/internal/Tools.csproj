@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Vendored build tooling that restores internal packages on Windows CI only; not part of the solution. -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <ImportDirectoryBuildProps>false</ImportDirectoryBuildProps>
+  </PropertyGroup>
+
+</Project>

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, test } from "node:test";
@@ -21,7 +22,7 @@ const corpus = (JSON.parse(readFileSync(join(FIXTURES, "secrets-corpus", "corpus
 const textOf = (c: Case) => c.lines.map((l) => (Array.isArray(l) ? l.join("") : l)).join("\n");
 
 describe("secret classes on the labelled corpus", () => {
-  const found = corpus.flatMap((c) => secretFindings(c.file, textOf(c), notShipped(c.file), BLOCKING).map((f) => ({ c, f })));
+  const found = corpus.flatMap((c) => secretFindings(c.file, textOf(c), notShipped(c.file, textOf(c)), BLOCKING).map((f) => ({ c, f })));
 
   test("precision on blocking findings is 1.0: every blocking finding is labelled blocking", () => {
     const wrong = found.filter(({ c, f }) => f.blocking && !c.expect.some((e) => e.line === f.line && e.blocking)).map(({ f }) => `${f.file}:${f.line} ${f.class}`);
@@ -89,6 +90,19 @@ describe("advice conditioned on class and file", () => {
     assert.match(text, /rotate/i);
     assert.doesNotMatch(text, /gitignore/i);
     assert.match(text, /src\/mediabot\/settings\.py, read the value from an environment variable/);
+  });
+
+  test("placeholder credentials in a commented example and a key in a test file named its own way are listed; a real password in a comment and a key in shipped code still block", () => {
+    const repo = materialize("placeholder-secrets");
+    const pem = generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey.export({ type: "pkcs8", format: "pem" }).toString().trim();
+    for (const f of ["src/auth/verifier.servertest.js", "src/auth/signer.js"]) writeFileSync(join(repo, f), readFileSync(join(repo, f), "utf8").replace("__PRIVATE_KEY__", pem));
+    commitAll(repo, "add the signing keys");
+    auditReports(repo);
+    const report = JSON.parse(readFileSync(join(repo, ".agent-readiness", "latest", "report.json"), "utf8"));
+    const audit = JSON.parse(readFileSync(join(repo, report.audit.storedAt, "audit.json"), "utf8"));
+    const secrets = (audit.safety as { kind: string; file: string; line: number; blocking: boolean; rule: string }[]).filter((s) => s.kind === "secret");
+    assert.deepEqual(secrets.filter((s) => s.blocking).map((s) => `${s.file}:${s.line}`).sort(), ["chart/values.yaml:11", "src/auth/signer.js:2"]);
+    assert.deepEqual(secrets.filter((s) => !s.blocking).map((s) => `${s.file}:${s.line} ${s.rule}`), ["src/auth/verifier.servertest.js:6 secret-not-shipped"]);
   });
 
   test("only generic assignments: no rotate and no .gitignore advice anywhere, and safety states its coverage", () => {

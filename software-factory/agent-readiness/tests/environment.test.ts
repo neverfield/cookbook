@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { ContainerSession, HOME_DIR, SETUP_HOME, detectRuntime, homeCommand, hostUser, imageUserArgs } from "../skill/agent-readiness/scripts/lib/container.ts";
 import { containerImage, discoverContract, requiredPython } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { diagnose } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
+import { lockedEngineGap, olderThanRange } from "../skill/agent-readiness/scripts/lib/languages/node.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { environmentLimit } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import type { ContractCommand } from "../skill/agent-readiness/scripts/lib/types.ts";
+import { materialize, readiness } from "../support/tools/fixture.ts";
 
 const rubric = loadRubric("2026-11-alpha");
 const cmd = (kind: ContractCommand["kind"]): ContractCommand => ({ id: `cmd-app-${kind}`, kind, component: "app", cwd: ".", command: "x", source: "readiness", reason: "x", timeoutSec: 600 });
@@ -104,6 +106,50 @@ describe("a Python or Playwright the image doesn't have is blocked, not a repo f
     const d = diagnose(PLAYWRIGHT, false, "test");
     assert.deepEqual(d, { cause: "missing_tool", detail: "Playwright's browsers are not installed" });
     assert.equal(environmentLimit(audit, cmd("test"), d, []), "Playwright's browsers are not installed in the audit's image (node:22-bookworm)");
+  });
+});
+
+// zustand and umami on a Cursor VM or a GitHub runner with Node 22.14: green upstream and in a
+// container, a false Level 0 in host mode.
+describe("host mode on a Node or corepack older than the repo's dependencies is blocked, not a repo failure", () => {
+  const vm = { where: "disposable_vm" as const, image: null, imageSource: null };
+
+  test("an engines range is too old only below every alternative's floor", () => {
+    assert.equal(olderThanRange("v22.14.0", ">=22.19.0"), true);
+    assert.equal(olderThanRange("v22.14.0", "^22.22.2 || ^24.15.0 || >=26.0.0"), true);
+    assert.equal(olderThanRange("v22.23.4", "^22.22.2 || ^24.15.0 || >=26.0.0"), false);
+    assert.equal(olderThanRange("v22.14.0", "^20.19.0 || >=22.12.0"), false);
+    assert.equal(olderThanRange("v22.14.0", ">=10 <16"), false, "a stale upper bound is never a gap");
+    assert.equal(olderThanRange("v22.14.0", "*"), false);
+  });
+
+  test("the nearest pnpm or npm lockfile names the locked package the machine's Node is too old for", () => {
+    const pnpm = tree({ "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\npackages:\n\n  jsdom@31.0.0:\n    resolution: {integrity: sha512-x}\n    engines: {node: '^22.22.2 || ^24.15.0 || >=26.0.0'}\n\n  '@types/node@25.9.9':\n    resolution: {integrity: sha512-y}\n", "packages/app/package.json": "{}" });
+    assert.deepEqual(lockedEngineGap(pnpm, "packages/app", "v22.14.0"), { pkg: "jsdom 31.0.0", range: "^22.22.2 || ^24.15.0 || >=26.0.0" });
+    assert.equal(lockedEngineGap(pnpm, ".", "v24.15.0"), null);
+    const npm = materialize("host-node-too-old");
+    assert.deepEqual(lockedEngineGap(npm, ".", "v22.14.0"), { pkg: "vendor/fetch-compat 8.0.0", range: ">=99.0.0" });
+    assert.equal(lockedEngineGap(materialize("healthy-node"), ".", "v22.14.0"), null);
+  });
+
+  test("in host mode, tests that fail on a Node older than a locked dependency allows are blocked on this machine, and the audit gives no Level 0", () => {
+    const repo = materialize("host-node-too-old");
+    const r = readiness(repo, ["audit", "--tier", "local-exec"], { SA_READINESS_EVAL_SEED: "fixture-seed", SA_READINESS_RUNTIME: "none", SA_READINESS_ALLOW_HOST: "1" });
+    assert.equal(r.code, 0, r.out.slice(-3000));
+    const report = JSON.parse(readFileSync(join(repo, ".agent-readiness", "latest", "report.json"), "utf8"));
+    const audit = JSON.parse(readFileSync(join(repo, report.audit.storedAt, "audit.json"), "utf8"));
+    const test = (audit.evidence as { kind?: string; result: string; blocked?: string; supersededBy?: string }[]).find((e) => e.kind === "test" && !e.supersededBy)!;
+    assert.equal(test.result, "fail");
+    assert.match(test.blocked ?? "", new RegExp(`^Node >=99\\.0\\.0, which the locked vendor/fetch-compat 8\\.0\\.0 needs, is not installed; Node ${process.version.replace(/\./g, "\\.")} is on this machine$`));
+    assert.equal(report.components.included.find((c: { id: string }) => c.id === "host-node-too-old").unproven, true, report.executive.heading);
+    assert.match(report.executive.heading, /^Unproven on this machine/);
+  });
+
+  test("a corepack that can't start the package manager it fetched is a missing tool, blocked on this machine", () => {
+    const out = "! The local project doesn't define a 'packageManager' field. Corepack will now add one referencing pnpm@12.23.0+sha512.02da.\n\nnode:internal/modules/cjs/loader:1228\n  throw err;\n  ^\n\nError: Cannot find module '/tmp/readiness-home-xZ6CBv/cache/corepack/v1/pnpm/12.23.0/bin/pnpm.cjs'\n    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)\n  code: 'MODULE_NOT_FOUND',\n";
+    const d = diagnose(out, false, "install");
+    assert.deepEqual(d, { cause: "missing_tool", detail: "a corepack that can run pnpm 12.23.0 is not installed" });
+    assert.equal(environmentLimit(vm, cmd("install"), d, []), "a corepack that can run pnpm 12.23.0 is not installed on this machine");
   });
 });
 

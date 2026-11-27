@@ -57,6 +57,67 @@ export const NODE_LOCKFILES = ["package-lock.json", "npm-shrinkwrap.json", "pnpm
 
 const NO_LOCKFILE = "no lockfile is committed";
 
+type Semver = [number, number, number];
+const semver = (v: string): Semver | null => {
+  const m = v.trim().match(/^v?(\d+)(?:\.(\d+|x|\*))?(?:\.(\d+|x|\*))?/);
+  return m ? [Number(m[1]), Number(m[2]) || 0, Number(m[3]) || 0] : null;
+};
+const below = (a: Semver, b: Semver) => (a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1] : a[2] < b[2]);
+
+// Whether `version` is older than every alternative of an engines range allows: `>=22.19.0`,
+// `^20.19.0 || >=22.12.0`. Only a lower bound counts, so a stale upper bound on an old package
+// never reads as a gap.
+export function olderThanRange(version: string, range: string): boolean {
+  const have = semver(version);
+  if (!have) return false;
+  const alternatives = range.split("||").map((either) => {
+    const alt = either.split(" - ")[0];
+    const floors = [...alt.matchAll(/(>=|>|\^|~|=)?\s*v?(\d+(?:\.(?:\d+|x|\*)){0,2})/g)]
+      .filter((m) => !/[<]\s*$/.test(alt.slice(0, m.index)))
+      .flatMap((m) => {
+        const v = semver(m[2]);
+        return v ? [{ v, strict: m[1] === ">" }] : [];
+      });
+    return floors.length ? floors.reduce((a, b) => (below(a.v, b.v) ? b : a)) : null;
+  });
+  if (alternatives.some((a) => a === null)) return false;
+  return alternatives.every((a) => below(have, a!.v) || (a!.strict && !below(a!.v, have)));
+}
+
+// The first locked dependency whose engines.node the given Node is too old for, from the nearest
+// pnpm-lock.yaml or package-lock.json at or above `dir`.
+export function lockedEngineGap(root: string, dir: string, version: string): { pkg: string; range: string } | null {
+  const parts = dir === "." ? [] : dir.split("/");
+  for (let i = parts.length; i >= 0; i--) {
+    const at = join(root, ...parts.slice(0, i));
+    const pnpm = join(at, "pnpm-lock.yaml");
+    if (exists(pnpm)) {
+      let pkg = "";
+      for (const line of readText(pnpm).split("\n")) {
+        const head = line.match(/^ {2}'?((?:@[^/\s']+\/)?[^@\s']+)@([^:'(\s]+)/);
+        if (head) pkg = `${head[1]} ${head[2]}`;
+        const range = line.match(/^ {4}engines: \{[^}]*\bnode: '?([^',}]+)'?/)?.[1];
+        if (pkg && range && olderThanRange(version, range)) return { pkg, range };
+      }
+      return null;
+    }
+    const npm = join(at, "package-lock.json");
+    if (exists(npm)) {
+      try {
+        const lock = readJson<{ packages?: Record<string, { version?: string; engines?: unknown }> }>(npm);
+        for (const [path, p] of Object.entries(lock.packages ?? {})) {
+          const range = typeof p.engines === "object" && p.engines !== null && !Array.isArray(p.engines) ? (p.engines as Record<string, unknown>).node : undefined;
+          if (path && typeof range === "string" && olderThanRange(version, range)) return { pkg: `${path.replace(/^.*node_modules\//, "")} ${p.version ?? ""}`.trim(), range };
+        }
+      } catch {
+        return null;
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
 function lockedBy(names: string[]) {
   return (tree: string, path: string) => (names.some((n) => exists(join(tree, path, n))) ? null : NO_LOCKFILE);
 }

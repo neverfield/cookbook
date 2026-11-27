@@ -286,6 +286,12 @@ function toolchainGap(text: string): string | null {
   // A Gradle toolchain the image's JDK doesn't satisfy, as moshi's languageVersion=21 under JDK 17.
   const jdk = text.match(/(?:Cannot find a Java installation on your machine[^\n]*?matching|No matching toolchains found for requested specification): \{languageVersion=(\d+)/);
   if (jdk) return `JDK ${jdk[1]} is not installed`;
+  // A global.json SDK pin, such as a prerelease only the repo's own build script installs, that the
+  // image's SDK doesn't satisfy; NETSDK1045 is a target framework newer than the SDK.
+  const sdkPin = text.match(/A compatible (?:installed )?\.NET (?:Core )?SDK (?:for global\.json version:? \[?([\w.-]+?)\]?(?: from \S+)? )?was not found/);
+  if (sdkPin) return `.NET SDK ${sdkPin[1] ?? text.match(/Requested SDK version: ([\w.-]+)/)?.[1] ?? "pinned in global.json"} is not installed`;
+  const target = text.match(/NETSDK1045: The current \.NET SDK does not support targeting \.NET (?:Core )?(\d+(?:\.\d+)*)/);
+  if (target) return `a .NET SDK that targets .NET ${target[1]} is not installed`;
   // guzzlehttp/test-server starts its server with node and, when node is missing, says only that it
   // can't reach it.
   if (/Unable to contact node\.js server/.test(text)) return "node is not installed";
@@ -293,6 +299,10 @@ function toolchainGap(text: string): string | null {
   if (pnpmNode) return `Node ${pnpmNode[1]} or later is not installed`;
   const engine = text.match(/The engine "node" is incompatible with this module\. Expected version "([^"]+)"/) ?? text.match(/Unsupported engine[\s\S]{0,200}?required: \{[^}]*node: '([^']+)'/) ?? text.match(/ERR_PNPM_UNSUPPORTED_ENGINE[\s\S]{0,200}?Expected version: ([^\n]+)/);
   if (engine) return `Node ${engine[1].trim()} is not installed`;
+  // Corepack fetched a release it can't start, as an older corepack does with pnpm 12, which ships
+  // without bin/pnpm.cjs; with no packageManager pin it fetches the newest.
+  const fetched = text.match(/Cannot find module '[^'\n]*\/corepack\/v\d+\/(\w+)\/([\w.+-]+)\/[^'\n]*'/);
+  if (fetched) return `a corepack that can run ${fetched[1]} ${fetched[2]} is not installed`;
   const corepack = text.match(/This project is configured to use (\w+)(?: because [^\n]*)?/) ?? text.match(/Usage Error: This project's package\.json defines "packageManager": "(\w+)@/);
   if (corepack) return `${corepack[1]} is not installed`;
   if (/Please tell me who you are|Author identity unknown|unable to auto-detect email address/.test(text)) return "git has no user identity (user.name and user.email) on this machine";

@@ -61,14 +61,33 @@ function projects(tree: string, path: string): { file: string; locked: boolean }
     .map((f) => ({ file: f, locked: exists(join(tree, path, dirname(f), "packages.lock.json")) }));
 }
 
+// The folder's projects its solutions list, relative to the folder, or null with no solution that
+// lists one of them. A project outside them, such as a stale benchmark or Arcade's vendored eng/common
+// tooling, isn't part of the repo's build.
+function solutionProjects(tree: string, path: string): Set<string> | null {
+  const listed = readdirSync(join(tree, path))
+    .filter((n) => SOLUTION.test(n))
+    .flatMap((n) => [...readText(join(tree, path, n)).matchAll(/<Project\s+Path="([^"]+)"|^Project\("[^"]*"\)\s*=\s*"[^"]*",\s*"([^"]+\.(?:cs|fs|vb)proj)"/gm)].map((m) => posix.normalize((m[1] ?? m[2]).replace(/\\/g, "/"))));
+  const own = projectFiles(tree, path).filter((f) => listed.includes(f));
+  return own.length ? new Set(own) : null;
+}
+
+// What the repo's build covers: the projects its solution lists, or every project with no solution.
+function inBuild(tree: string, path: string): (file: string) => boolean {
+  const listed = solutionProjects(tree, path);
+  return (f) => !listed || listed.has(f);
+}
+
+const buildWindows = (tree: string, path: string) => windowsProjects(tree, path).filter((p) => inBuild(tree, path)(p.file));
+
 // What `dotnet` builds in a folder: nothing to name when the folder has one solution or project,
 // else the one named after the folder, or the shortest name, as the scan names the component. A
 // solution that also holds Windows-only projects can't be built whole on Linux, so the portable
 // projects no other portable project references are named instead, and build the rest through
 // their references.
 function targets(tree: string, path: string): string[] {
-  if (windowsProjects(tree, path).length) {
-    const own = portable(tree, path);
+  if (buildWindows(tree, path).length) {
+    const own = portable(tree, path).filter(inBuild(tree, path));
     const referenced = new Set(own.flatMap((f) => [...readText(join(tree, path, f)).matchAll(/<ProjectReference\s+Include="([^"]+)"/g)].map((m) => posix.normalize(posix.join(dirname(f), m[1].replace(/\\/g, "/"))))));
     return own.filter((f) => !referenced.has(f)).sort().map((f) => ` ${f}`);
   }
@@ -230,10 +249,10 @@ function testProjects(tree: string, path: string): string[] {
 
 function dotnetCommands(tree: string, path: string): DraftCommand[] {
   const on = targets(tree, path);
-  const windows = windowsProjects(tree, path);
+  const windows = buildWindows(tree, path);
   const left = windows.length ? `; ${windows.map((p) => basename(p.file)).join(", ")} ${windows.length === 1 ? "needs" : "need"} Windows and ${windows.length === 1 ? "is" : "are"} listed apart` : "";
   const out: DraftCommand[] = [{ kind: "build", command: each("build", on, " --no-restore"), source: "readiness", reason: `the .NET SDK's build of the restored projects${left}` }];
-  const tests = testProjects(tree, path);
+  const tests = testProjects(tree, path).filter(inBuild(tree, path));
   if (tests.length) out.push({ kind: "test", command: each("test", windows.length ? tests.map((t) => ` ${t}`) : on, " --no-restore"), source: "readiness", reason: `the .NET SDK's test run of ${tests.length === 1 ? tests[0] : `${tests.length} test projects`}, offline${left}` });
   return out;
 }

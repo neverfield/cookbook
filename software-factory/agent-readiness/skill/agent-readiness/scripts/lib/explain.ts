@@ -49,8 +49,14 @@ export function resultWord(e: Evidence): string {
   return blockedBy(e) ? "blocked" : e.result === "not_run" ? "not run" : e.result;
 }
 
+// Components in their own folders often run the same command line, such as `corepack pnpm run
+// test`, so the folder tells one result from another.
+function commandAt(command: string, cwd: string | undefined): string {
+  return cwd && cwd !== "." ? `\`${command}\` in \`${cwd}\`` : `\`${command}\``;
+}
+
 function ranOf(evs: Evidence[]): string {
-  const all = [...new Set(evs.map((e) => (e.command ? `\`${e.command}\` (${resultWord(e)})` : e.summary)))];
+  const all = [...new Set(evs.map((e) => (e.command ? `${commandAt(e.command, e.cwd)} (${resultWord(e)})` : e.summary)))];
   return all.length ? list(all) : "nothing ran for it";
 }
 
@@ -100,7 +106,7 @@ function componentLevel(input: ModelInput, report: ReportJson): Explanation[] {
   for (const c of report.components.included) {
     const contract = audit.contract.filter((k) => k.component === c.id || k.component === "*");
     const evs = contract.map((k) => [...audit.evidence].reverse().find((e) => e.contractId === k.id)).filter((e): e is Evidence => Boolean(e));
-    const ran = contract.length ? list(contract.map((k) => { const e = evs.find((x) => x.contractId === k.id); return `\`${k.command}\` (${e ? resultWord(e) : "not run"})`; }), 6) : "no command: the scan found none to run";
+    const ran = contract.length ? list(contract.map((k) => { const e = evs.find((x) => x.contractId === k.id); return `${commandAt(k.command, k.cwd)} (${e ? resultWord(e) : "not run"})`; }), 6) : "no command: the scan found none to run";
     const result = levelResult(c);
     const held = c.capReasons.map((k) => `${k.label}: ${STATE_WORD[k.state]} (${k.reason})`);
     const happened = c.level === null ? "no level: the audit has no real check results to give one from" : held.length ? `Held ${c.unproven ? "unproven" : `at Level ${c.level}`} by ${list(held, 6)}` : c.level >= 4 ? "every condition up to Level 4 is met" : `every Level ${c.level} condition is met`;
