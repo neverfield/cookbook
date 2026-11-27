@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
@@ -209,6 +209,29 @@ describe("S5: a container that can't see the temp folder gets a second folder, a
     }, bases);
     assert.match(audit.environment.notRun ?? "", new RegExp(`mount visible: the container runtime couldn't see the work tree under ${bases[0]} or ${bases[1]}.*set TMPDIR to a folder it shares`));
     scratch.dispose();
+  });
+});
+
+describe("S7: history push runs none of the repo's hooks and no commit signing", () => {
+  test("a failing pre-commit and pre-push hook, a post-checkout hook and gpgsign don't stop it or run", () => {
+    const repo = materialize("healthy-node");
+    const r = readiness(repo, ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants"]);
+    assert.equal(r.code, 0, r.out);
+    const remote = mkdtempSync(join(tmpdir(), "remote-"));
+    execFileSync("git", ["init", "-q", "--bare", remote]);
+    execFileSync("git", ["remote", "add", "origin", remote], { cwd: repo });
+    const ran = join(repo, "..", "hooks-ran");
+    for (const hook of ["pre-commit", "commit-msg", "post-checkout", "pre-push"]) {
+      writeFileSync(join(repo, ".git", "hooks", hook), `#!/bin/sh\necho ${hook} >> ${JSON.stringify(ran)}\nexit 1\n`);
+      chmodSync(join(repo, ".git", "hooks", hook), 0o755);
+    }
+    execFileSync("git", ["config", "commit.gpgsign", "true"], { cwd: repo });
+    execFileSync("git", ["config", "gpg.program", "false"], { cwd: repo });
+    const pushed = readiness(repo, ["history", "push", "--push"]);
+    assert.equal(pushed.code, 0, pushed.out);
+    assert.match(pushed.out, /committed history to agent-readiness\/history and pushed to origin/);
+    assert.equal(existsSync(ran), false, "no hook ran");
+    assert.match(execFileSync("git", ["ls-tree", "--name-only", "agent-readiness/history"], { cwd: remote, encoding: "utf8" }), /history\.jsonl/);
   });
 });
 
