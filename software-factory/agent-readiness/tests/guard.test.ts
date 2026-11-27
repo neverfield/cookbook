@@ -130,6 +130,8 @@ describe("the readiness shell guard", () => {
 
   test("it refuses reads of the draft records and the fault store, by shell or by the read tool, and logs each refusal", () => {
     const repo = materialize("healthy-node");
+    assert.equal(readiness(repo, ["session", "start"]).code, 0);
+    const status = execFileSync("git", ["status", "--porcelain"], { cwd: repo, encoding: "utf8" });
     for (const cmd of ["cat .agent-readiness/work/aud-2026-11-23-abc1234-0f0f/local.json", `node -e "console.log(require('./.agent-readiness/work/aud-x/audit.json').evidence)"`, "cat .agent-readiness/work/CURRENT", "ls /tmp/readiness-aud-2026-11-23-abc1234-0f0f-Xy12", "cat $TMPDIR/readiness-aud-x/mutants.json"]) {
       const d = guardDecision({ command: cmd, cwd: repo }, {});
       assert.equal(d.permission, "deny", cmd);
@@ -142,7 +144,7 @@ describe("the readiness shell guard", () => {
     assert.equal(log.length, 6);
     assert.deepEqual(log[0].kind, "shell");
     assert.equal(log[5].kind, "read");
-    assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: repo, encoding: "utf8" }), "", "the log changes no repo file");
+    assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: repo, encoding: "utf8" }), status, "the log changes no repo file");
   });
 
   test("the grader leaves out a call the guard refused, by its error result or by the guard's log, and only that call", () => {

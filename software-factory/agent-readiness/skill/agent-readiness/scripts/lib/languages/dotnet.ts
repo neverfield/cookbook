@@ -5,6 +5,16 @@ import { namedAfter } from "./coverage.ts";
 import { cLikeQuoted, cLikeSites } from "./jvm.ts";
 import type { DraftCommand, Ecosystem, LanguageDef, ToolSetup } from "./language.ts";
 
+// Microsoft's install script, pinned to a commit of dotnet/install-scripts and checked against its
+// digest before it runs as root in the audit's container: the pattern the audit flags in a repo's
+// own setup (a script piped from the network into a shell) never runs unchecked here. The commit is
+// the one dot.net/v1/dotnet-install.sh served on Nov 27, 2026.
+export const DOTNET_INSTALL_SCRIPT = {
+  url: "https://raw.githubusercontent.com/dotnet/install-scripts/ee83f9c42135205be4e0503bd472b6f99c9b7d51/src/dotnet-install.sh",
+  sha256: "082f7685e156738a1b2e2ed8381a621870d4ce8e8c59278034556f05c186eb2e",
+};
+const FETCH_INSTALL_SCRIPT = `curl -fsSL ${DOTNET_INSTALL_SCRIPT.url} -o /tmp/dotnet-install.sh && echo "${DOTNET_INSTALL_SCRIPT.sha256}  /tmp/dotnet-install.sh" | sha256sum -c --quiet -`;
+
 // Owned by the Java, Kotlin and .NET group. C# projects built with the .NET SDK are scored.
 
 const PROJECT = /\.(csproj|fsproj|vbproj)$/;
@@ -320,7 +330,7 @@ export const dotnet: LanguageDef = {
       const pin = sdkPin(tree, dir);
       if (pin && parse(pin.version) && !sdkSatisfies(IMAGE_SDK[sdkFor(tree, dir)], pin.version, pin.rollForward)) {
         const v = pin.version;
-        out.push({ tool: `dotnet-sdk-${v}`, spec: `dotnet-sdk@${v}`, install: `curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && bash /tmp/dotnet-install.sh --version ${v} --install-dir /usr/share/dotnet --no-path && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet-sdk-${v}` });
+        out.push({ tool: `dotnet-sdk-${v}`, spec: `dotnet-sdk@${v}`, install: `${FETCH_INSTALL_SCRIPT} && bash /tmp/dotnet-install.sh --version ${v} --install-dir /usr/share/dotnet --no-path && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet-sdk-${v}` });
       }
       // A test project that also targets an older .NET, such as net8.0 next to net10.0, needs that
       // runtime to run its tests; the SDK image ships only its own.
@@ -331,7 +341,7 @@ export const dotnet: LanguageDef = {
         out.push({
           tool: `dotnet-runtime-${major}.0`,
           spec: `.NET ${major}.0 runtime${aspnet ? " and ASP.NET Core runtime" : ""}`,
-          install: `curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && ${runtimes.map((r) => `bash /tmp/dotnet-install.sh --runtime ${r} --channel ${major}.0 --install-dir /usr/share/dotnet --no-path`).join(" && ")} && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet-runtime-${major}.0`,
+          install: `${FETCH_INSTALL_SCRIPT} && ${runtimes.map((r) => `bash /tmp/dotnet-install.sh --runtime ${r} --channel ${major}.0 --install-dir /usr/share/dotnet --no-path`).join(" && ")} && ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet-runtime-${major}.0`,
         });
       }
       // A NativeAOT project links with the platform's C toolchain, which the SDK image doesn't ship;

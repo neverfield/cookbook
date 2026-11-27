@@ -6,7 +6,9 @@ export const PATTERNS: { type: string; re: RegExp; keyShaped?: (match: string) =
   { type: "GitHub fine-grained token", re: /\bgithub_pat_[A-Za-z0-9_]{60,}\b/g },
   { type: "Slack token", re: /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g },
   { type: "Stripe live key", re: /\b[sr]k_live_[A-Za-z0-9]{16,}\b/g },
-  { type: "Private key", re: /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/g },
+  // The whole key, through its END line; with no END line in sight, as in a cut-off tail, every
+  // base64 line after the header.
+  { type: "Private key", re: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----(?:[\s\S]*?-----END (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----|(?:\s|\\n|[A-Za-z0-9+/=:,-])*)/g },
   { type: "Cursor API key", re: /\bcrsr_[A-Za-z0-9]{20,}\b/g },
   // Not inside a hyphenated name: `k3-am68-sk-base-board-csi2-dual-imx219-dtbs` is a Linux device-tree target.
   { type: "OpenAI API key", re: /(?<![\w-])sk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{32,}\b/g, keyShaped: randomLooking },

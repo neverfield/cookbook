@@ -1,4 +1,5 @@
-import { cpSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { ContainerSession, HOME_DIR, buildImage, detectRuntime, hostUser, probeLimits, removeOrphanedContainers } from "./container.ts";
 import { hooked, imagePlan, toolchainCopies, toolSetup } from "./contract.ts";
@@ -15,20 +16,22 @@ import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule
 import { Progress, budgetSummary } from "./progress.ts";
 import { redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
-import { SUDO_SHIM_MARK, disposeHome, runCommand, scrubbedEnv } from "./run.ts";
+import { SUDO_SHIM_MARK, disposeHome, endGroups, runCommand, scrubbedEnv } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
 import type { Attribution, Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Language, Mutant, Profile, Strength, Where } from "./types.ts";
-import { removeOrphanedTempDirs, tempDir } from "./teardown.ts";
-import { containedPath, exists, fail, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
+import { onTeardown, removeOrphanedTempDirs, tempDir } from "./teardown.ts";
+import type { TempDir } from "./teardown.ts";
+import { assertFreeSpace, containedPath, exists, fail, treeBytes, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
 import { commandsFor } from "./score.ts";
 import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
 import { makeRecipe } from "./static.ts";
 import { SUPPORTED_DOC, notSupportedReason } from "./support.ts";
 import { loadSealedAudit } from "./history.ts";
 import { paths, plantSeed, refreshTree } from "./workspace.ts";
-import { GIT_IDENTITY_CONFIG, canCutNetwork, canaryFailure, detectDisposableVm, normalizedEnv, offlineCommand, provesIn, runCanary } from "./proofenv.ts";
+import { GIT_IDENTITY_CONFIG, canCutNetwork, canaryFailure, detectDisposableVm, normalizedEnv, offlineCommand, provesIn, runCanary, vmNotDetectedNote } from "./proofenv.ts";
 import type { Canary, ProofEnv, VmDetection } from "./proofenv.ts";
 import { loadRubric } from "./rubric.ts";
+import { lease } from "./session.ts";
 
 export interface Executor {
   where: Where;
@@ -92,6 +95,16 @@ export function hostAllowed(explicit?: boolean): boolean {
   return explicit ?? process.env[ALLOW_HOST_ENV] === "1";
 }
 
+// The user's yes to host mode, as the session holds it, copied into the audit: the seal deletes the
+// session, and the report has to show whether anyone was asked. Null when host mode ran on the flag
+// alone. Untouched when nothing ran on the host.
+export function recordHostConsent(audit: Audit, repo: string): void {
+  if (!audit.environment.hostMode && !audit.evidence.some((e) => e.where === "host")) return;
+  const l = lease(repo);
+  const grant = l.valid ? l.session?.grant : null;
+  audit.environment.hostConsent = grant ? { note: redact(grant.note).slice(0, 300), at: grant.at } : null;
+}
+
 export const HOST_NOT_ALLOWED = `host mode wasn't allowed (--allow-host), so no repo command ran outside a container`;
 
 // Why no runtime was found. With --runtime none (or SA_READINESS_RUNTIME=none) a runtime may well be
@@ -103,7 +116,7 @@ export function noRuntimeReason(preference: string): string {
 }
 export const HOST_MODE_NOTE = "host mode was allowed: the repo's commands ran on this machine as this user, outside a container, with a throwaway home and no account credentials, but they could read this user's local files; it isn't a sandbox, and Level 1 can't be proved there";
 export function vmModeNote(vm: VmDetection): string {
-  return `host mode was allowed on ${vm.label}, detected by ${vm.signals.join(" and ")}: the repo's commands ran on that machine as its user, outside a container, with a throwaway home and no account credentials; they could read its local files, which a disposable VM holds only for this run`;
+  return `host mode was allowed on ${vm.label}, detected by ${vm.signals.join(" and ")}: the repo's commands ran on that machine as its user, outside a container, with a throwaway home and no account credentials; they could read its local files, which a disposable VM holds only for this run, and the secrets injected into it. A pass there proves the VM as provisioned, including its preinstalled tools and running services, which a clean container may not have`;
 }
 
 // Linux, macOS and cloud agents. The audit drives its container through bash on the host and its
@@ -131,16 +144,24 @@ export function hostExecutor(root: string, registryEnv: string[], inheritEnv: bo
   Object.assign(setupEnv, normalizedEnv(gitConfig));
   const env = { ...setupEnv };
   for (const k of registryEnv) delete env[k];
+  // Each command's process group, so a service a start step left in the background on this machine
+  // ends with the replay, or when it is stopped, instead of outliving the audit.
+  const groups = new Set<number>();
+  const dropGroups = onTeardown(() => endGroups(groups));
   return {
     where,
     strength: "executed",
     image: null,
     imageSource: null,
     root,
-    exec: (command, cwd, timeoutSec, opts) => (SUDO.test(command) ? Promise.resolve({ exitCode: null, timedOut: false, durationMs: 0, output: `readiness: ${SUDO_REFUSED}` }) : runCommand(command, join(root, cwd), { ...(opts?.registry ? setupEnv : env), ...opts?.env }, timeoutSec)),
+    exec: (command, cwd, timeoutSec, opts) => (SUDO.test(command) ? Promise.resolve({ exitCode: null, timedOut: false, durationMs: 0, output: `readiness: ${SUDO_REFUSED}` }) : runCommand(command, join(root, cwd), { ...(opts?.registry ? setupEnv : env), ...opts?.env }, timeoutSec, groups)),
     offline: () => false,
     networkOff: null,
-    close: () => disposeHome(setupEnv),
+    close: () => {
+      dropGroups();
+      endGroups(groups);
+      disposeHome(setupEnv);
+    },
     runUser: process.getuid ? String(process.getuid()) : null,
   };
 }
@@ -268,6 +289,24 @@ export function workspacePackages(root: string, profile: Profile): WorkspacePack
 }
 
 const ONLINE_KINDS = new Set<CommandKind>(["doctor", "install", "build", "start"]);
+
+function memoryNote(n: number): string {
+  return n ? `; ${n} ${n === 1 ? "run with a planted fault was" : "runs with planted faults were"} stopped at the audit's memory limit, so ${n === 1 ? "it counts" : "they count"} neither way` : "";
+}
+
+// The repo's declared environment image didn't build. A base image the runtime couldn't pull is
+// this machine's network or registry access, so the install is blocked; any other failure is the
+// Dockerfile's, so the install fails for the repo. Either way nothing else runs, and the audit seals.
+export function declaredBuildFailure(output: string, dockerfile: string): { result: "fail" | "not_run"; summary: string; blocked?: string; reason: string } {
+  const lines = output.replace(/\x1b\[[0-9;]*m/g, "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const last = ([...lines].reverse().find((l) => /error|failed|denied|not found/i.test(l)) ?? lines[lines.length - 1] ?? "no output").slice(0, 200);
+  const file = `.cursor/${dockerfile}`;
+  if (/pull access denied|failed to resolve source metadata|manifest unknown|failed to do request|dial tcp|i\/o timeout|TLS handshake timeout|no such host|toomanyrequests|unauthorized: authentication required/i.test(output)) {
+    const blocked = `the base image of the declared environment ${file} couldn't be pulled on this machine (${last})`;
+    return { result: "not_run", summary: `install not run: ${blocked}`, blocked, reason: blocked };
+  }
+  return { result: "fail", summary: `install failed: the declared environment image ${file} doesn't build (${last})`, reason: `the repo's declared environment image ${file} didn't build` };
+}
 
 // Support entries the replay reports as blocked, rather than the scan as not assessed.
 export const REPLAY_STACKS = ["task-graph"];
@@ -569,7 +608,7 @@ export function evidenceFromPhase(audit: Audit, ex: Executor, r: PhaseResult, re
   if (r.status === "pass") summary = `${r.cmd.kind} passed${counts ? ` (${counts.passed} of ${counts.total} tests)` : ""}`;
   else if (r.status === "not_run") summary = r.note.startsWith("not run") ? `${r.cmd.kind} ${r.note}` : `${r.cmd.kind} not run: ${r.note}`;
   else summary = `${r.cmd.kind} failed: ${r.diagnosis?.detail ?? "non-zero exit"}${counts && counts.failed ? ` (${counts.failed} of ${counts.total} tests failed)` : ""}`;
-  if (r.status === "fail" && r.diagnosis?.cause === "registry" && audit.environment.registryEnv.length === 0) summary = `${r.cmd.kind} failed: registry credentials not provided (pass them with --registry-env)`;
+  if (r.status === "fail" && r.diagnosis?.detail === "registry credentials not provided" && audit.environment.registryEnv.length === 0) summary = `${r.cmd.kind} failed: registry credentials not provided (pass them with --registry-env)`;
   if (r.cmd.declared && r.status !== "not_run") summary += `; ran check-only, without the write flags in \`${r.cmd.declared}\``;
   if (r.networkOn) summary = r.status === "pass" ? `${summary}, with the network on, after failing with it cut` : `${summary}; it failed again with the network on`;
   else if (/once the audit added /.test(r.note)) summary += `, ${r.note.replace(/^(passed|ran) /, "")}`;
@@ -798,6 +837,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
     return scopes.get(scoped) ? scoped : testCmd.command;
   };
   let lookedAt = 0;
+  let memoryStops = 0;
   for (const site of sites) {
     if (rule) {
       const d = decided().length;
@@ -848,6 +888,13 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
           break;
         }
         stalls = 0;
+        // Stopped at the audit's memory limit or a full disk: the run says nothing about the tests,
+        // as an install, build or test stopped there doesn't, so it counts neither way.
+        if (out.exitCode !== 0 && diagnose(out.output, false, "test", out.exitCode).cause === "resource") {
+          memoryStops++;
+          result = "not_run";
+          break;
+        }
         if (out.exitCode === 0 && !((countTests(audit.profile, comp.id, out.output)?.failed ?? 0) > 0)) {
           result = run === 0 ? "survived" : "discarded";
           break;
@@ -875,7 +922,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   let est: ReturnType<typeof faultEstimate> | null = null;
   if (rule) {
     est = estimate();
-    const cutNote = (cut ? "; the time budget ran out before the estimate was decided" : "") + (stalledOut ? "; planting stopped after two runs with planted faults timed out" : "");
+    const cutNote = (cut ? "; the time budget ran out before the estimate was decided" : "") + (stalledOut ? "; planting stopped after two runs with planted faults timed out" : "") + memoryNote(memoryStops);
     const carried = est.carried ? `, ${est.carried} of them planted again from the last audit` : "";
     const scopedNote = [...scopes.values()].some(Boolean) ? "; each ran only the tests that import its file" : "";
     const share = `caught ${caught} of ${counted.length} planted faults (${pct(est.rate)})${carried}`;
@@ -888,7 +935,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
           ? `${share}: weak, at most ${pct(est.high)} with ${confidence(rule.weakConfidence)} confidence${scopedNote}${cutNote}${missedNote}`
           : `${share}: inconclusive, between ${pct(est.low)} and ${pct(est.high)}, too few to tell strong tests from weak ones${why}${scopedNote}${cutNote}${missedNote}`;
   } else {
-    const cutNote = (cut ? `; the time budget cut off ${cut} of ${sites.length}` : "") + (stalledOut ? `; ${stalledOut} weren't run after two runs with planted faults timed out` : "");
+    const cutNote = (cut ? `; the time budget cut off ${cut} of ${sites.length}` : "") + (stalledOut ? `; ${stalledOut} weren't run after two runs with planted faults timed out` : "") + memoryNote(memoryStops);
     const need = killRateOf(rubric.mutation);
     result = faultsVerdict(caught, counted.length, rubric.mutation);
     const share = need < 1 ? ` the ${Math.round(need * 100)}% the rubric requires` : "";
@@ -903,7 +950,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   }
   log(`  faults in ${comp.id}: ${summary}`);
   // Too few results because the budget ran out is the audit's limit, not weak tests.
-  const blocked = cut && result === "not_run" ? { blocked: BUDGET_OUT } : stalledOut && result === "not_run" ? { blocked: "test runs with planted faults kept timing out, so the fault check couldn't finish" } : {};
+  const blocked = cut && result === "not_run" ? { blocked: BUDGET_OUT } : stalledOut && result === "not_run" ? { blocked: "test runs with planted faults kept timing out, so the fault check couldn't finish" } : memoryStops && result === "not_run" ? { blocked: `test runs with planted faults were stopped at the audit's memory limit, so the fault check couldn't finish; ${ex.where === "container" ? "give the container more with `readiness replay --memory <MB>`" : "rerun on a machine with more memory"}` } : {};
   addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp.id, strength: ex.strength, where: ex.where, result, summary, image: ex.image ?? undefined, ...(missed.length ? { missedFaults: missed } : {}), ...(est ? { estimate: est } : {}), ...blocked });
 }
 
@@ -1017,6 +1064,8 @@ export interface Executors {
   // active component's when nothing repo-wide runs.
   repo: Executor;
   close(): void;
+  // Set when the repo's declared environment image didn't build, so nothing ran in it.
+  declaredFailure?: ReturnType<typeof declaredBuildFailure>;
 }
 
 function executorSet(groups: ExecutorGroup[], profile: Profile): Executors {
@@ -1078,7 +1127,7 @@ export function containerLifetimeSec(budgetTotalMinutes: number): number {
 // Starts one clean container and adds what the audit's own image lacks for these components.
 function startContainer(audit: Audit, runtime: NonNullable<ReturnType<typeof detectRuntime>>, image: string, imageSource: Executor["imageSource"], copyDir: string, limits: ReturnType<typeof probeLimits>, comps: Component[], forWhom: string, log: (s: string) => void, lifetimeSec: number): Executor | { error: string } {
   const session = new ContainerSession(runtime, `readiness-${audit.id}-${randomHex(3)}`, image, copyDir, audit.environment.registryEnv, hostUser(), limits, lifetimeSec);
-  const started = session.start();
+  const started = session.start(log);
   if (!started.ok) {
     session.remove();
     log(`Could not start a container${forWhom}: ${startError(started.output)}`);
@@ -1152,12 +1201,14 @@ function recordProofEnv(audit: Audit, ex: Executor, vm: VmDetection | null): voi
 
 // Runs the canary in every executor before any repo command. One that fails is replaced by an
 // executor that runs nothing, so every result it would have given is blocked with the reason.
-export async function checkExecutors(audit: Audit, exs: Executors, profile: Profile, log: (s: string) => void): Promise<Executors> {
+// mountHint: what to say instead of "the work tree is empty" once a second folder was tried too.
+export async function checkExecutors(audit: Audit, exs: Executors, profile: Profile, log: (s: string) => void, mountHint?: string): Promise<Executors> {
   const checks: Canary["checks"] = [];
   let failed: string | null = null;
   const groups: ExecutorGroup[] = [];
   for (const g of exs.groups) {
     const c = await runCanary(g.ex, g.ex.runUser ?? null);
+    if (mountHint) for (const k of c.checks) if (k.id === "mount_visible" && !k.ok) k.detail = mountHint;
     checks.push(...c.checks.filter((k) => !checks.some((x) => x.id === k.id && x.ok === k.ok)));
     if (c.ok) {
       groups.push(g);
@@ -1220,7 +1271,18 @@ function pickExecutors(audit: Audit, copyDir: string, runtimePref: string, log: 
     const tag = `readiness-env-${sha256(readText(dockerfile)).slice(0, 12)}`;
     log(`Building the repo's declared environment image from .cursor/${declared.dockerfile}.`);
     const built = buildImage(runtime, context, dockerfile, tag);
-    if (!built.ok) fail(`The declared environment image didn't build:\n${tail(built.output, 2000)}`);
+    if (!built.ok) {
+      const found = declaredBuildFailure(built.output, declared.dockerfile);
+      log(`The repo's declared environment image didn't build: ${found.summary}. Nothing else runs in it; the audit goes on to the seal.`);
+      audit.environment.containerRuntime = runtime.bin;
+      audit.environment.image = tag;
+      audit.environment.notRun = found.reason;
+      delete audit.environment.limits;
+      delete audit.environment.imageDigest;
+      delete audit.environment.images;
+      const ids = profile.components.filter((c) => c.assessed).map((c) => c.id);
+      return { ...executorSet([{ ex: unavailableExecutor(copyDir, found.reason), components: ids, repoWide: true }], profile), declaredFailure: found };
+    }
     single = tag;
     imageSource = "repo";
   }
@@ -1276,6 +1338,8 @@ function pickExecutors(audit: Audit, copyDir: string, runtimePref: string, log: 
   delete audit.environment.imageDigest;
   delete audit.environment.images;
   const image = wanted[0]?.image ?? plan[0].image;
+  const unseen = !runtime && !vm ? vmNotDetectedNote() : null;
+  if (unseen) log(unseen);
   if (hostAllowed(allowHost)) {
     audit.environment.containerRuntime = null;
     audit.environment.image = null;
@@ -1322,26 +1386,76 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
   for (const gone of reapOrphans(opts.runtime)) opts.log(`Removed ${gone}, left by an audit that was stopped before it could clean up.`);
   refreshTree(repo, audit.repo.commit, tree);
   // Everything from the copy on is undone in the finally, and on a signal or crash by teardown.ts.
-  const scratch = tempDir("readiness-replay-");
-  let exs: Executors | null = null;
+  if (opts.image) audit.environment.imageOverride = opts.image;
+  const before = new Map<string, string>();
+  for (const f of lockfilesToCompare(profile, tree, audit.contract)) before.set(f, sha256(readText(join(tree, f))));
+  const bytes = treeBytes(repo, audit.repo.commit);
+  assertFreeSpace(tmpdir(), bytes === null ? null : 2 * bytes, "the replay's copy of the tree and the dependencies it installs there");
+  const { exs, scratch, copyDir } = await openWithMountRetry(audit, tree, opts.log, (dir, hint) =>
+    checkExecutors(audit, makeExecutors(audit, dir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost, audit.contract.some((c) => c.component === "*"), opts.vm, opts.budgetTotalMinutes), profile, opts.log, hint),
+  );
   try {
-    const copyDir = join(scratch.path, "work");
-    copyWorkTree(tree, copyDir);
-    const before = new Map<string, string>();
-    for (const f of lockfilesToCompare(profile, tree, audit.contract)) before.set(f, sha256(readText(join(copyDir, f))));
-    if (opts.image) audit.environment.imageOverride = opts.image;
-    exs = await checkExecutors(audit, makeExecutors(audit, copyDir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost, audit.contract.some((c) => c.component === "*"), opts.vm, opts.budgetTotalMinutes), profile, opts.log);
+    recordHostConsent(audit, repo);
     await replayIn(audit, repo, tree, rubric, opts, exs, copyDir, before, components);
+    // Recorded after the install rows the replay wrote as blocked, so it is the install's result.
+    const found = exs.declaredFailure;
+    if (found) addEvidence(audit, { checkId: "bootstrap.cold_replay", condition: "clean.install", component: "*", kind: "install", contractId: audit.contract.find((c) => c.kind === "install" && c.component === "*")?.id, strength: "clean_replay", where: "container", result: found.result, summary: found.summary, ...(found.blocked ? { blocked: found.blocked } : { attribution: { verdict: "repo" as const, basis: "known_cause" as const, detail: found.summary } }) });
   } finally {
-    exs?.close();
+    exs.close();
     scratch.dispose();
+  }
+}
+
+// Where the work tree goes when the runtime can't see the temp folder: Colima's default mounts, snap
+// Docker and a remote DOCKER_HOST share the home folder, or nothing, but not /tmp.
+export function cacheBase(): string {
+  return join(homedir(), ".cache", "agent-readiness");
+}
+
+export function mountUnseen(audit: Audit): boolean {
+  const pe = audit.environment.proofEnv;
+  return pe?.kind === "container" && pe.canary.checks.some((c) => c.id === "mount_visible" && !c.ok);
+}
+
+export function mountHint(folders: string[]): string {
+  return `the container runtime couldn't see the work tree under ${folders.join(" or ")}, as it mounts only folders it shares with this machine; set TMPDIR to a folder it shares and run the audit again`;
+}
+
+// Opens the executors on a copy of the tree, and when the container's self-check finds the copy
+// empty, once more on a copy under cacheBase(). The scratch folder in use is returned for disposal.
+export async function openWithMountRetry(
+  audit: Audit,
+  tree: string,
+  log: (s: string) => void,
+  open: (copyDir: string, hint?: string) => Promise<Executors>,
+  bases: string[] = [tmpdir(), cacheBase()],
+): Promise<{ exs: Executors; scratch: TempDir; copyDir: string }> {
+  let scratch = tempDir("readiness-replay-", bases[0]);
+  try {
+    let copyDir = join(scratch.path, "work");
+    copyWorkTree(tree, copyDir);
+    let exs = await open(copyDir);
+    if (!mountUnseen(audit) || bases.length < 2) return { exs, scratch, copyDir };
+    log(`The container couldn't see the audit's copy of the repo under ${bases[0]}; trying again under ${bases[1]}.`);
+    exs.close();
+    scratch.dispose();
+    mkdirSync(bases[1], { recursive: true });
+    scratch = tempDir("readiness-replay-", bases[1]);
+    copyDir = join(scratch.path, "work");
+    copyWorkTree(tree, copyDir);
+    delete audit.environment.notRun;
+    exs = await open(copyDir, mountHint(bases));
+    return { exs, scratch, copyDir };
+  } catch (e) {
+    scratch.dispose();
+    throw e;
   }
 }
 
 // Containers and temp folders of audits on this machine whose process is gone, whatever their age.
 // With container runtimes turned off, the runtime isn't asked.
 export function reapOrphans(runtimePref = "auto"): string[] {
-  return [...(runtimePref === "none" ? [] : removeOrphanedContainers()), ...removeOrphanedTempDirs()];
+  return [...(runtimePref === "none" ? [] : removeOrphanedContainers()), ...removeOrphanedTempDirs(), ...removeOrphanedTempDirs(cacheBase())];
 }
 
 async function replayIn(audit: Audit, repo: string, tree: string, rubric: Rubric, opts: ReplayOptions, exs: Executors, copyDir: string, before: Map<string, string>, components: Set<string>): Promise<void> {

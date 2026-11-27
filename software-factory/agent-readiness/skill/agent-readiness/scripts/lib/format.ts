@@ -3,6 +3,9 @@ import type { Level, ReportJson } from "./types.ts";
 import { EMOJI, fmtDate, fmtShortDate, wordCount } from "./util.ts";
 import { WAIVER_FILE } from "./waivers.ts";
 
+// Above the rerun commands: what they keep from the audit, and what they don't.
+export const RERUN_NOTE = "Each command keeps the network on, where the audit ran tests and planted faults offline, and it writes into the folder it runs in: run it in a fresh clone, not your working checkout.";
+
 // Formatters over the sealed report.json. Every fact is derived once, in model.ts; the renderers
 // (render.ts and render-html.ts) import only these and types, so they can select and phrase a fact
 // but never derive it a second way.

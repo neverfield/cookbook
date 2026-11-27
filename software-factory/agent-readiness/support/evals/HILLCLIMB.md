@@ -846,3 +846,19 @@ Andrew's decision of November 24: the 0.2 stack logs one round for its wording c
 - **Expected:** both arms seal template text, so the headline judge lift should be near 0. It is reported, not gated (`RELEASE_POLICY.narrationLift` is false). The narration gate always reads "nothing narrated". The risk to watch is in the reply: agents still give causes, from status lines, and say nothing the report contradicts.
 - **Remeasure:** at the Mac release session, a 1-repeat dry run, then the overnight 5-repeat re-baseline with both arms (`--arm agent,scripted`) and `--release-check`. Report the hard gates per case, the headline and page judges with their intervals, and the lift.
 - **Verdict:** pending.
+
+## Round 22 (pending measurement): the production-readiness should-fix wording (November 27, 2026)
+
+The 17 should-fix items of the offline production-readiness review land before the upstream PR (Andrew, Nov 27). Most are script fixes; these change what the agent does or what the reader sees, logged as one round under the Nov 24 decision. Scoring rules, level rules, each fixture's `expected.json`, the judge prompts and the calibration are unchanged.
+
+- **Failure mode:** the report and SKILL.md left a reader or an agent with a wrong or missing fact: rerun commands that fail in Go, Rust and JVM images, no record of the user's yes, no way to correct a scanned command, a cloud-VM pass that reads as a clean environment, and a replay "of a few minutes" that a shell timeout kills.
+- **Change:**
+  - Part 5's rerun list opens with one sentence: the network stays on and the commands belong in a fresh clone (S2).
+  - "About this report" gains a "Host mode" row quoting the recorded yes or saying none was recorded (S4), and a "Command config" row when `.agent-readiness/config.json` named commands (S9).
+  - The disposable-VM replay environment and its "how it was reached" place say "as provisioned, including its preinstalled tools and running services"; the host-mode finding on a VM names its injected secrets (S10).
+  - SKILL.md: step 3.2 points a wrong scanned command to `.agent-readiness/config.json`, which the agent never writes (S9); rule 2's VM sentence adds the injected secrets to the consent question (S10); step 4.1 says a replay can take up to an hour and to run it where a shell timeout won't stop it (S15).
+  - `references/report.md` documents the command config (S9).
+- **Tests:** `tests/should-fix.test.ts`, one block per item.
+- **Expected:** no change on the hard gates; the rerun sentence and the new rows sit below part 1, so the headline and page judges shouldn't move. The risk to watch is an agent writing `.agent-readiness/config.json` itself.
+- **Remeasure:** with round 21, at the Mac release session.
+- **Verdict:** pending.

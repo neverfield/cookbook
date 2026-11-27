@@ -133,6 +133,13 @@ export const CAPS_ADDED = ["CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL", 
 // pnpm_config_*, older pnpm only npm_config_*, so both are set.
 export const PNPM_STORE = "/tmp/home/.pnpm-store";
 
+// How long a first pull of an image may take, apart from starting the container.
+export const PULL_MINUTES_ENV = "SA_READINESS_PULL_MINUTES";
+export function pullTimeoutMs(env: Record<string, string | undefined> = process.env): number {
+  const m = Number(env[PULL_MINUTES_ENV]);
+  return (Number.isFinite(m) && m > 0 ? m : 30) * 60000;
+}
+
 // How long a container may live: past it, its `sleep` ends and --rm removes it, so one an audit
 // couldn't stop still goes away on its own.
 export const DEFAULT_LIFETIME_SEC = 4 * 3600;
@@ -273,6 +280,7 @@ export class ContainerSession {
   lifetimeSec: number;
   // Processes the kernel stopped at the memory limit so far, from the container's cgroup.
   oomKills = 0;
+  pullTimeoutMs = pullTimeoutMs();
   private dropTeardown: (() => void) | null = null;
 
   constructor(runtime: Runtime, name: string, image: string, hostDir: string, registryEnv: string[], user: string | null = hostUser(), limits: Limits | null = null, lifetimeSec = DEFAULT_LIFETIME_SEC) {
@@ -286,9 +294,26 @@ export class ContainerSession {
     this.lifetimeSec = lifetimeSec;
   }
 
-  start(): { ok: boolean; output: string } {
+  // Pulls the image when this machine doesn't have it yet, with its own limit and the runtime's
+  // progress lines on stderr: a first pull of a large image on a slow link can outlast `run`'s.
+  pullImage(log: (s: string) => void = () => {}): { ok: boolean; output: string } {
+    const ref = pinnedRef(this.image);
+    if (spawnSync(this.runtime.bin, ["image", "inspect", "--format", "{{.Id}}", ref], { encoding: "utf8", timeout: 30000 }).status === 0) return { ok: true, output: "" };
+    const limit = this.pullTimeoutMs >= 60000 ? `${Math.round(this.pullTimeoutMs / 60000)} minutes` : `${Math.round(this.pullTimeoutMs / 1000)} seconds`;
+    log(`Pulling ${this.image}, which this machine doesn't have yet (up to ${limit}; ${this.runtime.bin}'s progress follows on stderr).`);
+    const t0 = Date.now();
+    const r = spawnSync(this.runtime.bin, ["pull", ref], { encoding: "utf8", timeout: this.pullTimeoutMs, stdio: ["ignore", 2, "pipe"] });
+    if (r.error && (r.error as NodeJS.ErrnoException).code === "ETIMEDOUT") return { ok: false, output: `the image pull didn't finish in ${limit}; pull ${ref} by hand, or set ${PULL_MINUTES_ENV} higher, and run it again` };
+    if (r.status !== 0) return { ok: false, output: r.stderr ?? "" };
+    log(`Pulled ${this.image} in ${Math.max(1, Math.round((Date.now() - t0) / 1000))} s.`);
+    return { ok: true, output: "" };
+  }
+
+  start(log: (s: string) => void = () => {}): { ok: boolean; output: string } {
     const env = { ...process.env } as Record<string, string>;
     this.dropTeardown = onTeardown(() => this.stop(60000));
+    const pulled = this.pullImage(log);
+    if (!pulled.ok) return pulled;
     const r = spawnSync(this.runtime.bin, startArgs(this.name, this.image, this.hostDir, this.limits, process.env, existsSync, this.lifetimeSec), { encoding: "utf8", env, timeout: 300000 });
     if (r.status === 0) {
       if (this.user) {

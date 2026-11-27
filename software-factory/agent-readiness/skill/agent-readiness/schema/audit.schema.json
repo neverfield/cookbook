@@ -32,6 +32,7 @@
       "type": "object",
       "required": ["containerRuntime", "image", "registryEnv", "inheritEnv"],
       "properties": {
+        "hostConsent": { "type": ["object", "null"], "required": ["note", "at"], "properties": { "note": { "type": "string" }, "at": { "type": "string" } } },
         "registryEnv": { "type": "array", "items": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" } },
         "images": { "type": "array", "items": { "type": "object", "required": ["image", "components", "started"], "properties": { "image": { "type": "string" }, "digest": { "type": "string" }, "components": { "type": "array", "items": { "type": "string" } }, "started": { "type": "boolean" }, "notRun": { "type": "string" } } } },
         "toolchains": { "type": "array", "items": { "type": "object", "required": ["spec", "image", "reason", "added"], "properties": { "spec": { "type": "string" }, "image": { "type": "string" }, "reason": { "type": "string" }, "added": { "type": "boolean" } } } },
@@ -39,6 +40,7 @@
         "proofEnv": { "type": "object", "required": ["kind", "id", "imageSource", "network", "canary", "proves"], "properties": { "kind": { "enum": ["container", "disposable_vm", "host"] }, "id": { "type": "string" }, "imageSource": { "enum": ["audit", "repo", "override", null] }, "detectedBy": { "type": "array", "items": { "type": "string" } }, "network": { "enum": ["cut", "on", null] }, "canary": { "type": "object", "required": ["ok", "checks"], "properties": { "ok": { "type": "boolean" }, "checks": { "type": "array", "items": { "type": "object", "required": ["id", "ok", "detail"], "properties": { "id": { "enum": ["mount_visible", "mount_writable", "run_user", "network_cut", "git_identity"] }, "ok": { "type": "boolean" }, "detail": { "type": "string" } } } } } }, "proves": { "type": "boolean" } } }
       }
     },
+    "commandConfig": { "type": "object", "required": ["digest", "entries", "rejected", "ignored"], "properties": { "digest": { "type": ["string", "null"] }, "entries": { "type": "array", "items": { "type": "object", "required": ["component", "kind", "cmd", "cwd", "reason", "by"] } }, "rejected": { "type": "array" }, "ignored": { "type": ["string", "null"] } } },
     "masked": { "type": "array", "items": { "type": "object", "required": ["type", "where"], "properties": { "type": { "type": "string" }, "where": { "type": "string" } } } },
     "profile": { "type": ["object", "null"] },
     "contract": {

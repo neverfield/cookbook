@@ -41,6 +41,18 @@ New audits use rubric `2026-12-beta`. Audits sealed under earlier rubrics are ne
 - **A scripted way to drive the app (informational).** A new signal in part 5 looks for Playwright, Cypress or WebdriverIO specs, a `verify-<app>` skill with a Drive section or a feature map, a smoke script or a terminal harness, for each component that is an app. It is never scored. When a component at Level 2 is an app with none of these, the roadmap adds a later step, "Give agents a way to drive `<component>`", after "Give agents work in" it. The agent assets list marks `verify-<app>` skills and the size of their feature maps.
 - **Templates say what the agent used to add.** The headline names components found but not assessed, or outside a sampled audit, when it fits the 40-word limit; the Level 1 template has a shortest variant without the change share; `--ask settle` renders what settles an unproven or undetermined level.
 
+### Machines, consent and edge cases
+
+- **The guard holds only during a session.** Outside one it refuses nothing, so a repo's own `db/seed.txt` or `mutants.json` stays readable; in one, a read is held only when it points into the audit's own folders. Uninstall restores `.cursor/hooks.json` byte for byte when nothing else in it changed, and `guard status` runs the hook to show it answers.
+- **The user's yes is on the record.** "About this report" quotes the yes recorded with `readiness allow-host --note`, or says host mode ran on the flag alone.
+- **A maintainer can correct a command.** `.agent-readiness/config.json`, committed, names the install, build, lint, type-check or test command for a component, with a reason and a reviewer; it replaces the scan's commands of that kind there.
+- **Rerun commands that work.** Part 5's rerun commands use the pinned image, run as your user with the audit's home and `CI=1`, keep the image's PATH, and say the network stays on and to use a fresh clone.
+- **Any skills folder.** The skill excludes itself under `.claude/skills/`, `.agents/skills/` or wherever it is installed, not only `.cursor/skills/`.
+- **Clear machine limits.** A full temp disk stops before the copy with what it needs (`TMPDIR` moves it); a container that can't see the temp folder gets a second try under `~/.cache/agent-readiness/`; a first image pull has its own 30-minute limit (`SA_READINESS_PULL_MINUTES`); a planted-fault run stopped at the memory limit counts neither way; change shares that can't be read say so.
+- **Private packages.** A "not found" for a scoped npm package or from an internal Maven, NuGet, pip or Go registry reads as a private package that needs its credential.
+- **A broken declared image is a finding.** A `.cursor/Dockerfile` that doesn't build fails the install and the audit seals; a base image that can't be pulled blocks it.
+- **Hygiene.** `history push` runs none of the repo's hooks or signing; `cleanup` removes only folders an audit marked; host-mode background processes end with the replay; a printed private key is redacted whole; Microsoft's .NET install script is pinned and checked.
+
 ### Install and release
 
 - The README Quickstart clones `--branch agent-readiness-v0.2.0`, and the example CI workflows name that release and ask you to pin the commit it points to. `npm run release-manifest` refuses to write `RELEASE.json` when the Quickstart or either workflow names another release.

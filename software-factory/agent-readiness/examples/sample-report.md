@@ -2,6 +2,8 @@
 
 > Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.
 
+> **Action needed:** This audit ran with scripts that differ from the released skill (agent-readiness-v0.2.0), so it isn't a released result. Reinstall the released skill and rerun the audit.
+
 ## 1. Where am I now
 
 **Level 1 of 4, bootable.** Unchanged since Oct 30; 3 steps closed.
@@ -324,22 +326,22 @@ Every level, every unproven or not-assessed result and every finding, with what 
 | `ev-019` | `context.instructions_verified` | repo | node --version && npm --version (ran in a clean container, under 1 s) | pass: .cursor/skills/verify/SKILL.md:15 `node --version && npm --version` replays |
 | `ev-020` | `context.instructions_verified` | repo | npm run test (ran in a clean container, under 1 s) | pass: .cursor/skills/verify/SKILL.md:56 `npm run test` replays |
 
-Rerun a step from a clean checkout of `9a2c092`:
+Rerun a step from a clean checkout of `9a2c092`. Each command keeps the network on, where the audit ran tests and planted faults offline, and it writes into the folder it runs in: run it in a fresh clone, not your working checkout.
 
-- `ev-003`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'node --version && npm --version'`
-- `ev-004`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh'`
-- `ev-005`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/api && npm run lint)'`
-- `ev-006`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/shared && npm run lint)'`
-- `ev-007`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/worker && npm run lint)'`
-- `ev-008`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && bash scripts/agent-start.sh'`
-- `ev-009`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/api && npm run test)'`
-- `ev-010`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/shared && npm run test)'`
-- `ev-011`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/worker && npm run test)'`
-- `ev-016`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run lint -w api'`
-- `ev-017`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run test -w shared'`
-- `ev-018`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm test'`
-- `ev-019`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && node --version && npm --version'`
-- `ev-020`: `docker run --rm -v "$PWD":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run test'`
+- `ev-003`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && node --version && npm --version'\'''`
+- `ev-004`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && bash scripts/agent-install.sh'\'''`
+- `ev-005`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && bash scripts/agent-install.sh && (cd packages/api && npm run lint)'\'''`
+- `ev-006`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && bash scripts/agent-install.sh && (cd packages/shared && npm run lint)'\'''`
+- `ev-007`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && bash scripts/agent-install.sh && (cd packages/worker && npm run lint)'\'''`
+- `ev-008`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && bash scripts/agent-install.sh && bash scripts/agent-start.sh'\'''`
+- `ev-009`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && bash scripts/agent-install.sh && (cd packages/api && npm run test)'\'''`
+- `ev-010`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && bash scripts/agent-install.sh && (cd packages/shared && npm run test)'\'''`
+- `ev-011`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && bash scripts/agent-install.sh && (cd packages/worker && npm run test)'\'''`
+- `ev-016`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && bash scripts/agent-install.sh && npm run lint -w api'\'''`
+- `ev-017`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && bash scripts/agent-install.sh && npm run test -w shared'\'''`
+- `ev-018`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && bash scripts/agent-install.sh && npm test'\'''`
+- `ev-019`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && bash scripts/agent-install.sh && node --version && npm --version'\'''`
+- `ev-020`: `docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -e CI=1 -v "$PWD":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH="$PATH" exec bash -lc '\''export PATH="$SA_READINESS_IMAGE_PATH:$PATH"; unset SA_READINESS_IMAGE_PATH; mkdir -p "$HOME" && bash scripts/agent-install.sh && npm run test'\'''`
 
 </details>
 
@@ -347,15 +349,15 @@ Evidence strength, weakest to strongest: stated in docs, read from files, ran on
 
 ## About this report
 
-Audited Nov 30, 2026 at 9a2c092. Eval run with a pinned seed; not a production result. Outcomes come from a recorded PR file, not GitHub; not a production result. Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it.
+Audited Nov 30, 2026 at 9a2c092. Eval run with a pinned seed; not a production result. Outcomes come from a recorded PR file, not GitHub; not a production result. Seal not verified: the scripts differ from release agent-readiness-v0.2.0; the seal is an unkeyed digest, which shows edits but not who sealed it.
 
 - **Audit:** aud-2026-11-30-9a2c092-ae7a
 - **Commit:** 9a2c092 (clean tree)
 - **Rubric:** 2026-12-beta
 - **Permission tier:** local-exec
-- **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
+- **Seal:** Seal not verified: the scripts differ from release agent-readiness-v0.2.0; the seal is an unkeyed digest, which shows edits but not who sealed it
 - **Integrity:** unsigned: the seal is a digest that shows edits, but anyone with the scripts could reseal an edited audit
-- **Skill digest:** 8f8a031bfe12
+- **Skill digest:** 66f5529188ba
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here
 - **Environment self-check:** passed: mount visible, mount writable, run user, git identity, network cut

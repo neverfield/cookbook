@@ -1,6 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { VmDetection } from "../../skill/agent-readiness/scripts/lib/proofenv.ts";
+import { replay } from "../../skill/agent-readiness/scripts/lib/replay.ts";
+import { loadRubric } from "../../skill/agent-readiness/scripts/lib/rubric.ts";
+import { loadDraft, saveDraft } from "../../skill/agent-readiness/scripts/lib/workspace.ts";
 import { ACCELERATOR, materialize, materializePrs, readiness } from "./fixture.ts";
 
 const args = process.argv.slice(2);
@@ -78,3 +82,45 @@ writeFileSync(join(out, "sample-report.html"), relink(latest.html));
 writeFileSync(join(out, "sample-report.json"), latest.json);
 writeFileSync(join(out, "sample-snapshots.json"), JSON.stringify({ generatedFrom: "fixtures/monorepo-mixed via npm run sample", snapshots: [JSON.parse(first.json), JSON.parse(latest.json)] }, null, 2) + "\n");
 process.stdout.write(`Wrote examples/sample-report.md, sample-report.html, sample-report.json, sample-report-first.md, sample-report-first.html, sample-report-first.json and sample-snapshots.json\n`);
+
+// The results most first-time users get: no Docker, host mode on a laptop, and a cloud agent's VM.
+const CLOUD_VM: VmDetection = { kind: "cursor_cloud_agent", label: "a Cursor Cloud Agent VM", signals: ["/exec-daemon", "CLOUD_AGENT_INJECTED_SECRET_NAMES"] };
+const firstRuns: { name: string; run: (dir: string, env: Record<string, string>) => Promise<void> }[] = [
+  { name: "no-docker", run: async (dir, env) => void must(readiness(dir, ["audit", "--tier", "local-exec", "--runtime", "none"], env)) },
+  {
+    name: "host-mode",
+    run: async (dir, env) => {
+      must(readiness(dir, ["allow-host", "--note", "yes, run the tests on my laptop"], env));
+      must(readiness(dir, ["audit", "--tier", "local-exec", "--runtime", "none", "--allow-host"], env));
+    },
+  },
+  {
+    name: "cloud-vm",
+    run: async (dir, env) => {
+      must(readiness(dir, ["allow-host", "--note", "you may run this repo's commands on this VM"], env));
+      for (const step of [["init", "--tier", "local-exec"], ["scan"]]) must(readiness(dir, step, env));
+      const saved = { ...process.env };
+      Object.assign(process.env, env, { SA_READINESS_ALLOW_HOST: "1" });
+      try {
+        const { audit, local, paths: p } = loadDraft(dir);
+        await replay(audit, dir, local.tree, loadRubric(audit.rubric), { runtime: "none", allowHost: true, vm: CLOUD_VM, mutants: true, instructions: true, budgetComponentMinutes: 15, budgetTotalMinutes: 60, log: () => {} });
+        saveDraft(p, audit);
+      } finally {
+        process.env = saved;
+      }
+      must(readiness(dir, ["seal"], env));
+    },
+  },
+];
+function must(r: { code: number; out: string }): void {
+  if (r.code !== 0) throw new Error(r.out);
+}
+for (const f of firstRuns) {
+  const dir = materialize("healthy-node", { now: T0 });
+  await f.run(dir, { SA_READINESS_NOW: T0, SA_READINESS_EVAL_SEED: SEED, SA_READINESS_VM_DETECT: "off" });
+  const r = (ext: string) => readFileSync(join(dir, ".agent-readiness", "latest", `report.${ext}`), "utf8");
+  writeFileSync(join(out, `sample-report-${f.name}.md`), relink(r("md")));
+  writeFileSync(join(out, `sample-report-${f.name}.html`), relink(r("html")));
+  writeFileSync(join(out, `sample-report-${f.name}.json`), r("json"));
+}
+process.stdout.write(`Wrote examples/sample-report-{${firstRuns.map((f) => f.name).join(",")}}.{md,html,json}\n`);

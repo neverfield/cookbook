@@ -1,0 +1,782 @@
+{
+  "schema": "agent-readiness/report@1",
+  "repo": "healthy-node",
+  "preview": "Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.",
+  "audit": {
+    "id": "aud-2026-10-27-dc50d7a-58b8",
+    "date": "2026-10-27",
+    "commit": "dc50d7a",
+    "dirtyTree": false,
+    "rubric": "2026-12-beta",
+    "tier": "local-exec",
+    "scriptsDigest": "66f5529188ba1aa6fe5da9bd70985249019cd1a32da3f4a3ab35c1a19be858c7",
+    "seedPinned": true,
+    "sealStatus": "Seal not verified: the scripts differ from release agent-readiness-v0.2.0; the seal is an unkeyed digest, which shows edits but not who sealed it",
+    "staleCopy": null,
+    "previous": null,
+    "storedAt": ".agent-readiness/history/audits/aud-2026-10-27-dc50d7a-58b8",
+    "integrity": "unsigned"
+  },
+  "scale": [
+    {
+      "level": 0,
+      "name": "Not bootable",
+      "plain": "not bootable",
+      "meaning": "A clean checkout can't install, build and pass its tests.",
+      "measuredBy": "audit"
+    },
+    {
+      "level": 1,
+      "name": "Bootable",
+      "plain": "bootable",
+      "meaning": "A clean checkout installs, builds and passes every test.",
+      "measuredBy": "audit"
+    },
+    {
+      "level": 2,
+      "name": "Verifiable",
+      "plain": "verifiable",
+      "meaning": "Agents can check their own work: the commands pass, the tests catch planted faults, the instructions are accurate and normal work needs no production access.",
+      "measuredBy": "audit"
+    },
+    {
+      "level": 3,
+      "name": "Delegable",
+      "plain": "delegable",
+      "meaning": "Agent PRs meet the outcome targets your team set, over at least 20 agent PRs in the window (never fewer than 10).",
+      "measuredBy": "outcomes"
+    },
+    {
+      "level": 4,
+      "name": "Scalable",
+      "plain": "scalable",
+      "meaning": "Those targets held over two back-to-back windows while agent PR volume at least doubled.",
+      "measuredBy": "outcomes"
+    }
+  ],
+  "assumptions": {
+    "components": [
+      {
+        "id": "healthy-node",
+        "path": ".",
+        "manifest": "package.json",
+        "assessed": true,
+        "note": null
+      }
+    ],
+    "commands": [
+      {
+        "component": "*",
+        "kind": "install",
+        "command": "npm ci",
+        "cwd": ".",
+        "source": "readiness",
+        "reason": "frozen install from package-lock.json"
+      },
+      {
+        "component": "healthy-node",
+        "kind": "build",
+        "command": "npm run build",
+        "cwd": ".",
+        "source": "package.json scripts.build",
+        "reason": "discovered build script"
+      },
+      {
+        "component": "healthy-node",
+        "kind": "lint",
+        "command": "npm run lint",
+        "cwd": ".",
+        "source": "package.json scripts.lint",
+        "reason": "discovered lint script"
+      },
+      {
+        "component": "healthy-node",
+        "kind": "test",
+        "command": "npm run test",
+        "cwd": ".",
+        "source": "package.json scripts.test",
+        "reason": "discovered test script"
+      }
+    ],
+    "environment": {
+      "kind": "none",
+      "text": "none: no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container"
+    },
+    "toolchains": []
+  },
+  "scenarios": [],
+  "maturity": {
+    "level": 0,
+    "rule": "The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it.",
+    "couldBe": 1,
+    "couldBeReason": "a check that would decide it couldn't run here",
+    "setBy": [
+      "healthy-node"
+    ],
+    "partialCoverage": false,
+    "assessedComponents": 1,
+    "outcome": "blocked",
+    "confidence": {
+      "level": "low",
+      "reasons": [
+        "a check that decides Level 1 was blocked on this machine"
+      ]
+    },
+    "capReasons": [
+      {
+        "component": "healthy-node",
+        "condition": "clean.install",
+        "label": "installs from the lockfile in a clean environment",
+        "state": "blocked",
+        "reason": "no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect"
+      },
+      {
+        "component": "healthy-node",
+        "condition": "clean.build",
+        "label": "builds in a clean environment",
+        "state": "blocked",
+        "reason": "no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect"
+      },
+      {
+        "component": "healthy-node",
+        "condition": "clean.test",
+        "label": "passes every test in a clean environment",
+        "state": "blocked",
+        "reason": "no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect"
+      }
+    ],
+    "unproven": true,
+    "status": "unproven",
+    "provenIn": null,
+    "settleBy": {
+      "kind": "rerun",
+      "text": "A rerun where Docker is available, such as CI, can prove it."
+    },
+    "next": {
+      "level": 1,
+      "name": "Bootable",
+      "met": [],
+      "unmet": []
+    }
+  },
+  "components": {
+    "shape": "single",
+    "included": [
+      {
+        "id": "healthy-node",
+        "path": ".",
+        "toolchain": "Node",
+        "manifest": "package.json",
+        "lockfile": "package-lock.json",
+        "changeShare": 1,
+        "placement": "component",
+        "active": true,
+        "level": 0,
+        "couldBe": 1,
+        "unproven": true,
+        "status": "unproven",
+        "provenIn": null,
+        "settleBy": {
+          "kind": "rerun",
+          "text": "A rerun where Docker is available, such as CI, can prove it."
+        },
+        "capReasons": [
+          {
+            "component": "healthy-node",
+            "condition": "clean.install",
+            "label": "installs from the lockfile in a clean environment",
+            "state": "blocked",
+            "reason": "no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect"
+          },
+          {
+            "component": "healthy-node",
+            "condition": "clean.build",
+            "label": "builds in a clean environment",
+            "state": "blocked",
+            "reason": "no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect"
+          },
+          {
+            "component": "healthy-node",
+            "condition": "clean.test",
+            "label": "passes every test in a clean environment",
+            "state": "blocked",
+            "reason": "no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect"
+          }
+        ],
+        "scenarios": []
+      }
+    ],
+    "excluded": [],
+    "unownedShare": 0,
+    "unownedTop": []
+  },
+  "executive": {
+    "heading": "Unproven on this machine: no Level 1 check failed, and 3 were blocked here",
+    "headline": "Level 1 couldn't be proved for healthy-node because container runtimes were turned off for this audit. A rerun where Docker is available, such as CI, can prove it.",
+    "numbers": [
+      {
+        "label": "Components ready for agents",
+        "value": "0 of 1",
+        "comparison": "Level 2 needs 1 of 1"
+      },
+      {
+        "label": "Agent PRs that pass CI the first time",
+        "value": "not measured",
+        "comparison": "The audit needs read access to pull requests to compare agent PRs with other PRs"
+      },
+      {
+        "label": "Recent changes in components not yet proven at Level 2",
+        "value": "100%",
+        "comparison": "Proving Level 1 needs a clean container or a disposable VM; counting the last 90 days"
+      }
+    ],
+    "nextLine": "Next: Level 1, bootable. Blocked on this machine: healthy-node installs from the lockfile in a clean environment, healthy-node builds in a clean environment and healthy-node passes every test in a clean environment.",
+    "gaps": [],
+    "ask": "Decision needed: where to rerun this audit so it can prove Level 1, for example a CI job. Also name an owner for agent readiness.",
+    "coverage": "The level covers 1 component.",
+    "noBlocker": false,
+    "unassessed": null
+  },
+  "actions": [],
+  "matrix": {
+    "quadrants": [
+      "Do first",
+      "Big unlocks",
+      "Quick fills",
+      "Later"
+    ],
+    "points": []
+  },
+  "roadmap": {
+    "owner": null,
+    "doneCount": 0,
+    "total": 2,
+    "items": [
+      {
+        "id": "owner",
+        "order": 1,
+        "title": "Name an owner for agent readiness",
+        "status": "later",
+        "statusText": "later",
+        "unlocks": "a named owner for approvals, targets and the weekly recheck",
+        "decision": "Who owns agent readiness for this repo",
+        "level": null
+      },
+      {
+        "id": "targets",
+        "order": 2,
+        "title": "Set your Level 3 targets",
+        "status": "later",
+        "statusText": "later",
+        "unlocks": "a definition of Level 3 for this repo",
+        "decision": "The merge rate, first-time CI pass rate and review load that mean agents handle work here",
+        "level": 3
+      }
+    ]
+  },
+  "progress": null,
+  "details": {
+    "steps": [],
+    "checks": [
+      {
+        "id": "scope.profile",
+        "name": "Components and where changes land",
+        "why": "Levels follow the work, so the audit finds each package and its share of recent changes.",
+        "sources": [],
+        "result": "1 component found, 1 assessed",
+        "ok": null,
+        "counts": {
+          "passed": 0,
+          "failed": 0,
+          "notRun": 0
+        },
+        "evidence": []
+      },
+      {
+        "id": "scope.agent_assets",
+        "name": "Agent assets in the repo",
+        "why": "Shows what agent setup already exists and who maintains it. Not scored.",
+        "sources": [],
+        "result": "1 asset, 1 author",
+        "ok": null,
+        "counts": {
+          "passed": 0,
+          "failed": 0,
+          "notRun": 0
+        },
+        "evidence": []
+      },
+      {
+        "id": "bootstrap.cold_replay",
+        "name": "Setup works from a clean checkout",
+        "why": "Every agent starts from a clean checkout, so setup that only works on a prepared machine breaks every agent run.",
+        "sources": [
+          {
+            "claim": "In the BootstrapAgent study, a reusable, verified setup cut later agents' token use by 25.9% and build time by 22.3%.",
+            "caveat": "Measured on the study's benchmark repositories.",
+            "url": "https://arxiv.org/abs/2605.15815"
+          }
+        ],
+        "result": "blocked on this machine: healthy-node",
+        "ok": null,
+        "counts": {
+          "passed": 1,
+          "failed": 0,
+          "notRun": 5
+        },
+        "evidence": [
+          "ev-002",
+          "ev-003",
+          "ev-004",
+          "ev-006",
+          "ev-007",
+          "ev-008"
+        ]
+      },
+      {
+        "id": "verify.canonical_interface",
+        "name": "Build, lint, type-check and test commands pass",
+        "why": "Agents need one known way to check their own work, and a type-check counts only once the audit has seen it fail on a type error it planted.",
+        "sources": [],
+        "result": "blocked on this machine: healthy-node",
+        "ok": null,
+        "counts": {
+          "passed": 0,
+          "failed": 0,
+          "notRun": 3
+        },
+        "evidence": [
+          "ev-005",
+          "ev-006",
+          "ev-007"
+        ]
+      },
+      {
+        "id": "verify.behavioral_oracle",
+        "name": "Tests catch planted faults",
+        "why": "Green tests aren't proof that a change is right.",
+        "sources": [
+          {
+            "claim": "OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass.",
+            "caveat": "An audit of one benchmark, not of customer repositories.",
+            "url": "https://openai.com/index/separating-signal-from-noise-coding-evaluations"
+          }
+        ],
+        "result": "healthy-node: tests must pass before faults can be planted",
+        "ok": null,
+        "counts": {
+          "passed": 0,
+          "failed": 0,
+          "notRun": 1
+        },
+        "evidence": [
+          "ev-009"
+        ]
+      },
+      {
+        "id": "context.instructions_verified",
+        "name": "Agent instructions are accurate",
+        "why": "Agents follow AGENTS.md, rules and skills literally, so a stale command costs more than a missing one. No outcome study yet measures how much these files help.",
+        "sources": [],
+        "result": "2 of 5 instruction items check out, 3 not run",
+        "ok": null,
+        "counts": {
+          "passed": 2,
+          "failed": 0,
+          "notRun": 3,
+          "skipped": 0
+        },
+        "evidence": []
+      },
+      {
+        "id": "safety.execution_boundary",
+        "name": "Normal work needs no production access",
+        "why": "Agents run with whatever access setup gives them, so normal work must never need production credentials.",
+        "sources": [],
+        "result": "passed",
+        "ok": true,
+        "counts": {
+          "passed": 1,
+          "failed": 0,
+          "notRun": 0
+        },
+        "evidence": [
+          "ev-001"
+        ]
+      }
+    ],
+    "notAssessed": [
+      "Whether CI matches the local commands",
+      "Flaky tests",
+      "The quality of error messages",
+      "How easily code can be found",
+      "Outcome checks on held-out tasks",
+      "Whether the lint command catches anything"
+    ],
+    "levelRules": {
+      "level1": "Level 1 needs: installs from the lockfile in a clean environment, builds in a clean environment and passes every test in a clean environment",
+      "level2": "Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access",
+      "scenarios": []
+    },
+    "outcomes": null,
+    "assets": [
+      {
+        "kind": "agents_md",
+        "path": "AGENTS.md",
+        "authors": [
+          "Contributor A"
+        ],
+        "lastChanged": "2026-06-29",
+        "status": "3 commands not checked",
+        "ok": false
+      }
+    ],
+    "missingAssets": [
+      "an environment setup",
+      "skills",
+      "hooks"
+    ],
+    "signals": [
+      {
+        "id": "ci",
+        "label": "CI config",
+        "found": false,
+        "detail": "no GitHub Actions, GitLab CI, CircleCI or Buildkite config"
+      },
+      {
+        "id": "targeted_tests",
+        "label": "A way to run one test file",
+        "found": true,
+        "detail": "healthy-node: node --test takes file paths"
+      },
+      {
+        "id": "env_sample",
+        "label": "Sample env file",
+        "found": null,
+        "detail": "the code reads no environment variables of its own"
+      },
+      {
+        "id": "isolation",
+        "label": "Worktree and port isolation",
+        "found": true,
+        "detail": "no fixed ports or machine-specific absolute paths in the setup and scripts"
+      },
+      {
+        "id": "agents_md_length",
+        "label": "AGENTS.md length",
+        "found": true,
+        "detail": "27 words"
+      },
+      {
+        "id": "drive_app",
+        "label": "A scripted way to drive the app",
+        "found": null,
+        "detail": "no app to drive: no component has a start, dev, serve or preview script, a start command or a web framework"
+      }
+    ],
+    "evidence": [
+      {
+        "id": "ev-001",
+        "check": "safety.execution_boundary",
+        "component": null,
+        "ran": "no blocking findings; 0 items listed for review",
+        "where": "read from files",
+        "result": "pass",
+        "summary": "no blocking findings; 0 items listed for review",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
+      },
+      {
+        "id": "ev-002",
+        "check": "bootstrap.cold_replay",
+        "component": null,
+        "ran": "toolchain pinned in .nvmrc",
+        "where": "read from files",
+        "result": "pass",
+        "summary": "toolchain pinned in .nvmrc",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
+      },
+      {
+        "id": "ev-003",
+        "check": "bootstrap.cold_replay",
+        "component": null,
+        "ran": "node --version && npm --version",
+        "where": "not run",
+        "result": "blocked",
+        "summary": "doctor not run: no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
+      },
+      {
+        "id": "ev-004",
+        "check": "bootstrap.cold_replay",
+        "component": null,
+        "ran": "npm ci",
+        "where": "not run",
+        "result": "blocked",
+        "summary": "install not run: no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
+      },
+      {
+        "id": "ev-005",
+        "check": "verify.canonical_interface",
+        "component": "healthy-node",
+        "ran": "npm run lint",
+        "where": "not run",
+        "result": "blocked",
+        "summary": "lint not run: no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
+      },
+      {
+        "id": "ev-006",
+        "check": "bootstrap.cold_replay",
+        "component": "healthy-node",
+        "ran": "npm run build",
+        "where": "not run",
+        "result": "blocked",
+        "summary": "build not run: no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
+      },
+      {
+        "id": "ev-007",
+        "check": "bootstrap.cold_replay",
+        "component": "healthy-node",
+        "ran": "npm run test",
+        "where": "not run",
+        "result": "blocked",
+        "summary": "test not run: no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
+      },
+      {
+        "id": "ev-008",
+        "check": "bootstrap.cold_replay",
+        "component": null,
+        "ran": "the frozen install couldn't run on this machine",
+        "where": "not run",
+        "result": "blocked",
+        "summary": "the frozen install couldn't run on this machine; blocked: no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
+      },
+      {
+        "id": "ev-009",
+        "check": "verify.behavioral_oracle",
+        "component": "healthy-node",
+        "ran": "tests must pass before faults can be planted",
+        "where": "not run",
+        "result": "not_run",
+        "summary": "tests must pass before faults can be planted",
+        "durationMs": null,
+        "repro": null,
+        "supersededBy": null
+      }
+    ],
+    "record": [
+      {
+        "label": "Audit",
+        "value": "aud-2026-10-27-dc50d7a-58b8"
+      },
+      {
+        "label": "Commit",
+        "value": "dc50d7a (clean tree)"
+      },
+      {
+        "label": "Rubric",
+        "value": "2026-12-beta"
+      },
+      {
+        "label": "Permission tier",
+        "value": "local-exec"
+      },
+      {
+        "label": "Seal",
+        "value": "Seal not verified: the scripts differ from release agent-readiness-v0.2.0; the seal is an unkeyed digest, which shows edits but not who sealed it"
+      },
+      {
+        "label": "Integrity",
+        "value": "unsigned: the seal is a digest that shows edits, but anyone with the scripts could reseal an edited audit"
+      },
+      {
+        "label": "Skill digest",
+        "value": "66f5529188ba"
+      },
+      {
+        "label": "Planted faults",
+        "value": "seed pinned (eval run; not a production result)"
+      },
+      {
+        "label": "Replay environment",
+        "value": "none: no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container"
+      },
+      {
+        "label": "Stored in",
+        "value": ".agent-readiness/history/audits/aud-2026-10-27-dc50d7a-58b8"
+      }
+    ]
+  },
+  "notices": [
+    {
+      "text": "This audit ran with scripts that differ from the released skill (agent-readiness-v0.2.0), so it isn't a released result. Reinstall the released skill and rerun the audit."
+    }
+  ],
+  "waivers": null,
+  "explanations": [
+    {
+      "kind": "level",
+      "subject": "repo",
+      "result": "Unproven on this machine (could be 1)",
+      "ran": "the level rules over the active component, healthy-node",
+      "where": "nowhere: no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container",
+      "happened": "Set by healthy-node, held by healthy-node: installs from the lockfile in a clean environment, blocked on this machine (no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect), healthy-node: builds in a clean environment, blocked on this machine (no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect) and healthy-node: passes every test in a clean environment, blocked on this machine (no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect).",
+      "rule": "The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it. Unproven is a result of its own, not Level 0: no Level 1 check failed, and the ones left were blocked on this machine."
+    },
+    {
+      "kind": "level",
+      "subject": "healthy-node",
+      "result": "Unproven on this machine (could be 1)",
+      "ran": "`node --version && npm --version` (blocked), `npm ci` (blocked), `npm run build` (blocked), `npm run lint` (blocked) and `npm run test` (blocked)",
+      "where": "not run",
+      "happened": "Held unproven by installs from the lockfile in a clean environment: blocked on this machine (no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect), builds in a clean environment: blocked on this machine (no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect) and passes every test in a clean environment: blocked on this machine (no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect)",
+      "rule": "Level 1 needs: installs from the lockfile in a clean environment, builds in a clean environment and passes every test in a clean environment. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets. Unproven is its own result: no Level 1 check failed, and the ones left were blocked on this machine."
+    },
+    {
+      "kind": "condition",
+      "subject": "healthy-node: installs from the lockfile in a clean environment",
+      "result": "blocked on this machine",
+      "ran": "`npm ci` (blocked)",
+      "where": "not run",
+      "happened": "no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect",
+      "rule": "Level 1 needs it: installs from the lockfile in a clean environment (Setup works from a clean checkout). Blocked means a limit of this machine kept it from running; that never counts against the repo."
+    },
+    {
+      "kind": "condition",
+      "subject": "healthy-node: builds in a clean environment",
+      "result": "blocked on this machine",
+      "ran": "`npm run build` (blocked)",
+      "where": "not run",
+      "happened": "no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect",
+      "rule": "Level 1 needs it: builds in a clean environment (Setup works from a clean checkout). Blocked means a limit of this machine kept it from running; that never counts against the repo."
+    },
+    {
+      "kind": "condition",
+      "subject": "healthy-node: passes every test in a clean environment",
+      "result": "blocked on this machine",
+      "ran": "`npm run test` (blocked)",
+      "where": "not run",
+      "happened": "no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect",
+      "rule": "Level 1 needs it: passes every test in a clean environment (Setup works from a clean checkout). Blocked means a limit of this machine kept it from running; that never counts against the repo."
+    },
+    {
+      "kind": "condition",
+      "subject": "healthy-node: build, lint, type-check and test commands pass",
+      "result": "blocked on this machine",
+      "ran": "`npm run lint` (blocked), `npm run build` (blocked) and `npm run test` (blocked)",
+      "where": "not run",
+      "happened": "no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect",
+      "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Blocked means a limit of this machine kept it from running; that never counts against the repo. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone."
+    },
+    {
+      "kind": "condition",
+      "subject": "healthy-node: tests catch planted faults",
+      "result": "blocked on this machine",
+      "ran": "tests must pass before faults can be planted",
+      "where": "not run",
+      "happened": "not checked: the clean test run was blocked on this machine",
+      "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Blocked means a limit of this machine kept it from running; that never counts against the repo."
+    },
+    {
+      "kind": "condition",
+      "subject": "repo: agent instructions are accurate",
+      "result": "blocked on this machine",
+      "ran": "nothing ran for it",
+      "where": "read from the audited commit's files, nothing ran",
+      "happened": "3 instruction commands couldn't be replayed: no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container",
+      "rule": "Level 2 needs it: agent instructions are accurate (Agent instructions are accurate). Blocked means a limit of this machine kept it from running; that never counts against the repo."
+    },
+    {
+      "kind": "condition",
+      "subject": "repo: normal work needs no production access",
+      "result": "met",
+      "ran": "nothing ran for it",
+      "where": "read from the audited commit's files, nothing ran",
+      "happened": "no blocking safety findings from 12 secret patterns over 8 files",
+      "rule": "Level 2 needs it: normal work needs no production access (Normal work needs no production access). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "repo: toolchain versions are pinned",
+      "result": "met",
+      "ran": "nothing ran for it",
+      "where": "read from the audited commit's files, nothing ran",
+      "happened": "pinned in .nvmrc",
+      "rule": "Reported with Level 1; no level waits on it alone: toolchain versions are pinned (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed."
+    },
+    {
+      "kind": "condition",
+      "subject": "repo: a frozen install reproduces the lockfile",
+      "result": "blocked on this machine",
+      "ran": "the frozen install couldn't run on this machine",
+      "where": "not run",
+      "happened": "no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container, a limit of the audit's environment rather than a repo defect",
+      "rule": "Reported with Level 1; no level waits on it alone: a frozen install reproduces the lockfile (Setup works from a clean checkout). Blocked means a limit of this machine kept it from running; that never counts against the repo."
+    },
+    {
+      "kind": "instruction",
+      "subject": "AGENTS.md:3",
+      "result": "checks out",
+      "ran": "checked that `src/pricing.js` exists",
+      "where": "read from the audited commit's files, nothing ran",
+      "happened": "it exists",
+      "rule": "A file or folder the instructions name must exist in the repo, next to the instruction file, at the root or inside the package that owns it."
+    },
+    {
+      "kind": "instruction",
+      "subject": "AGENTS.md:3",
+      "result": "checks out",
+      "ran": "checked that `test/` exists",
+      "where": "read from the audited commit's files, nothing ran",
+      "happened": "it exists",
+      "rule": "A file or folder the instructions name must exist in the repo, next to the instruction file, at the root or inside the package that owns it."
+    },
+    {
+      "kind": "instruction",
+      "subject": "AGENTS.md:5",
+      "result": "not run",
+      "ran": "`npm test`",
+      "where": "not run",
+      "happened": "not replayed because the install was blocked on this machine",
+      "rule": "Instructions replay only after the clean install succeeds."
+    },
+    {
+      "kind": "instruction",
+      "subject": "AGENTS.md:6",
+      "result": "not run",
+      "ran": "`npm run build`",
+      "where": "not run",
+      "happened": "not replayed because the install was blocked on this machine",
+      "rule": "Instructions replay only after the clean install succeeds."
+    },
+    {
+      "kind": "instruction",
+      "subject": "AGENTS.md:7",
+      "result": "not run",
+      "ran": "`npm run lint`",
+      "where": "not run",
+      "happened": "not replayed because the install was blocked on this machine",
+      "rule": "Instructions replay only after the clean install succeeds."
+    }
+  ]
+}

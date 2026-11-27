@@ -336,7 +336,7 @@ describe("B4: an interrupted or crashed audit leaves nothing behind", () => {
     assert.equal(readiness(repo, ["init", "--tier", "local-exec"], { TMPDIR: tmp }).code, 0);
     assert.equal(readiness(repo, ["scan"], { TMPDIR: tmp }).code, 0);
     const r = readiness(repo, ["replay", "--no-mutants"], { TMPDIR: tmp });
-    assert.notEqual(r.code, 0);
+    assert.equal(r.code, 0, r.out);
     assert.match(r.out, /declared environment image didn't build/);
     assert.deepEqual(readdirSync(tmp).filter((n) => n.startsWith("readiness-replay-")), []);
   });

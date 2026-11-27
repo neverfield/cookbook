@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { removeEnvImages, removeLeftoverContainers } from "./container.ts";
 import { LEASE_HOURS, lease } from "./session.ts";
+import { TEMP_MARK } from "./teardown.ts";
 import { exists, readJson } from "./util.ts";
 import type { LocalInfo, Paths } from "./workspace.ts";
 import { currentDraftId, discardDraft, strayDrafts } from "./workspace.ts";
@@ -24,6 +25,7 @@ export function cleanupLeftovers(p: Paths, opts: { images?: boolean } = {}, now 
   for (const name of readdirSync(tmp)) {
     if (!name.startsWith("readiness-") || name === keepTree) continue;
     const full = join(tmp, name);
+    if (!exists(join(full, TEMP_MARK))) continue;
     try {
       if (!(now - statSync(full).mtimeMs > age)) continue;
       rmSync(full, { recursive: true, force: true });

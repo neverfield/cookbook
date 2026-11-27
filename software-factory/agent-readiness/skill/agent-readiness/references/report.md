@@ -56,6 +56,23 @@ A repo lists findings it has reviewed as false positives in `.agent-readiness/wa
 - `match` is a file and line, or a file for every finding in it. `reason` and `by` are required; `expires` is optional, and an expired waiver is refused. At most 50 waivers count.
 - The audit reads the file from the audited commit only. A copy edited during the audit, by the agent or anyone else, doesn't count, and the report says so. The agent never writes this file.
 - A waived finding stops counting, keeps what it was, and is listed in part 5 with the waiver's reason and reviewer. Part 5 also lists waivers that matched nothing and waivers that were refused. The coverage note counts the waived findings. The waivers are sealed with the audit.
+
+## Command config
+
+When the scan picks the wrong install, build, lint, type-check or test command for a component, a maintainer names the right one in `.agent-readiness/config.json`:
+
+```json
+{
+  "schema": "agent-readiness/config@1",
+  "commands": [
+    { "component": "api", "kind": "test", "cmd": "npm run test:unit", "reason": "test runs the e2e suite, which needs staging", "by": "Contributor A" }
+  ]
+}
+```
+
+- A named command replaces every command the scan found of that kind for that component, which then doesn't run. `cwd` is optional and defaults to the component's folder; `component` is `*` or an assessed component.
+- `reason` and `by` are required. The audit reads the file from the audited commit only, like the waivers; the agent never writes it.
+- "About this report" lists each named command with its reviewer and reason, and any entry that was refused.
 6. **About this report.** When and where it ran, the seal status, its integrity in one word (unsigned or keyed), eval-mode notes and the audit record. The footer names `SA_READINESS_SEAL_KEY` for signed reports when the seal is unkeyed.
 
 ## Part 1 wording

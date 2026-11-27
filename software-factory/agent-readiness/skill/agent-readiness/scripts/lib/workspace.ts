@@ -7,7 +7,7 @@ import { tempDir } from "./teardown.ts";
 import { latestRubricVersion, loadRubric, rubricDigest } from "./rubric.ts";
 import { attachAudit, endSession, lease, renewSession } from "./session.ts";
 import type { Audit, ScenarioSpec, Tier } from "./types.ts";
-import { SKILL_ROOT, ensureDir, exists, fail, git, gitOrThrow, isShallow, nowIso, randomHex, readJson, readText, sha256, stableStringify, today, writeJson, writeText } from "./util.ts";
+import { SKILL_ROOT, assertFreeSpace, ensureDir, ownSkillPath, treeBytes, exists, fail, git, gitOrThrow, isShallow, nowIso, randomHex, readJson, readText, sha256, stableStringify, today, writeJson, writeText } from "./util.ts";
 
 export interface Paths {
   repo: string;
@@ -103,7 +103,7 @@ export function isDirty(repo: string): boolean {
     .split("\n")
     .filter((l) => l.trim())
     .map((l) => l.slice(3).replace(/^"/, ""))
-    .some((f) => !/^(\.agent-readiness\/|\.cursor\/skills\/agent-readiness\/)/.test(f) && !(installed && (f.startsWith(installed) || installed.startsWith(f))));
+    .some((f) => !f.startsWith(".agent-readiness/") && !ownSkillPath(f) && !(installed && (f.startsWith(installed) || installed.startsWith(f))));
 }
 
 export interface TreeInfo {
@@ -195,6 +195,8 @@ function fillLfs(repo: string, dest: string, hooks: string, info: TreeInfo): voi
 export function exportTree(repo: string, commit: string, dest: string): TreeInfo {
   if (!/^[0-9a-f]{40}$/.test(commit)) fail(`Not a commit id: ${commit}`);
   ensureDir(dest);
+  const bytes = treeBytes(repo, commit);
+  assertFreeSpace(dest, bytes === null ? null : 2 * bytes, `a clean checkout of ${commit.slice(0, 7)}, which keeps a one-commit git copy beside the files`);
   const hooksDir = tempDir("readiness-nohooks-");
   const hooks = hooksDir.path;
   try {

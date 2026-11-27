@@ -6,14 +6,14 @@ import { compareAudits, weakeningFlags } from "./lib/diff.ts";
 import { addEvidence, recordObservation } from "./lib/evidence.ts";
 import { levelResult } from "./lib/format.ts";
 import { ghAvailable, ghJson } from "./lib/gh.ts";
-import { HOOKS_FILE, guardInstalled, installGuard, uninstallGuard } from "./lib/guard.ts";
+import { HOOKS_FILE, guardInstalled, installGuard, probeGuard, uninstallGuard } from "./lib/guard.ts";
 import { auditIds, loadSealedAudit, pushHistory, readHistory, readRoadmap, writeRoadmap } from "./lib/history.ts";
 import { MAX_PRS, computeOutcomes, fetchPrs, loadPrsFile } from "./lib/outcomes.ts";
 import { PREVIEW } from "./lib/preview.ts";
 import { buildProfile } from "./lib/profile.ts";
 import { redact } from "./lib/redact.ts";
 import { MEMORY_ENV, memoryOverride } from "./lib/container.ts";
-import { ALLOW_HOST_ENV, HOST_NOT_ALLOWED, assertPlatformSupported, evidenceFromPhase, hostAllowed, hostExecutor, newBudget, reapOrphans, registryValuesOf, replay, runContract } from "./lib/replay.ts";
+import { ALLOW_HOST_ENV, HOST_NOT_ALLOWED, assertPlatformSupported, evidenceFromPhase, hostAllowed, hostExecutor, newBudget, reapOrphans, recordHostConsent, registryValuesOf, replay, runContract } from "./lib/replay.ts";
 import { latestRubricVersion, loadRubric } from "./lib/rubric.ts";
 import { SCAN_BOUND_MINUTES, capCutFolders, sampledScope } from "./lib/scope.ts";
 import { validateAgainst } from "./lib/schema.ts";
@@ -29,6 +29,7 @@ import { WORKS_LEAD, slotErrors } from "./lib/model.ts";
 import type { Audit, CommandKind, CondId, Level, Narration, Result, Roadmap, ScanBound, ScenarioId, ScenarioSpec, Strength, Tier } from "./lib/types.ts";
 import { addDays, exists, fail, git, nowIso, randomHex, readJson, readText, sha256, today, writeJson } from "./lib/util.ts";
 import { WAIVER_FILE, applyWaivers, loadWaivers } from "./lib/waivers.ts";
+import { CONFIG_FILE, applyCommandConfig, isConfigCommand, loadCommandConfig } from "./lib/config.ts";
 import { commitReader, currentDraftId, initAudit, loadDraft, paths, refreshTree, releaseManifest, resolveRepo, saveDraft, scratchTree, writeRecordsIgnore } from "./lib/workspace.ts";
 
 const BOOLEAN = new Set(["images", "force", "remediate", "inherit-env", "allow-host", "no-mutants", "no-instructions", "no-outcomes", "json", "push", "allow-eval", "allow-unkeyed", "dockerfile", "instructions", "strict", "help"]);
@@ -139,6 +140,7 @@ function cmdScan(a: Args): void {
   refreshTree(repo, audit.repo.commit, local.tree);
   const profile = buildProfile(repo, local.tree, rubric, audit.repo.commit);
   profile.scope = bound.scope;
+  if (profile.sharesUnread) log(`Change shares couldn't be read (${profile.sharesUnread}), so every component's share reads 0% and the coverage line says so.`);
   audit.profile = profile;
   audit.safety = safetyScan(local.tree, profile, bound, rubric.safety?.blockingSecretClasses);
   audit.instructions = instructionItems(local.tree, profile);
@@ -165,9 +167,17 @@ function cmdScan(a: Args): void {
     log(`Warning: the scan stops at ${bound.scope.fileCap.toLocaleString("en-US")} files, and this commit tracks more. ${unreached.length ? `It didn't list everything in ${unreached.slice(0, 8).join(", ")}${unreached.length > 8 ? ` and ${unreached.length - 8} more` : ""}, so components there may be missing from this audit; each is listed as not assessed.` : "Components in the files past the cap are missing from this audit."}`);
   }
   const assessedIds = new Set(profile.components.filter((c) => c.assessed).map((c) => c.id));
-  const agentCmds = audit.contract.filter((c) => c.source !== "readiness" && !c.source.includes("scripts.") && !c.source.startsWith(".cursor/environment.json"));
+  const agentCmds = audit.contract.filter((c) => c.source !== "readiness" && !c.source.includes("scripts.") && !c.source.startsWith(".cursor/environment.json") && !isConfigCommand(c));
   for (const c of agentCmds.filter((x) => x.component !== "*" && !assessedIds.has(x.component))) log(`Dropped ${c.id} (${c.command}): ${c.component} isn't an assessed component after this scan.`);
   audit.contract = [...discoverContract(profile, local.tree, rubric, audit.safety), ...agentCmds.filter((x) => x.component === "*" || assessedIds.has(x.component))];
+  const workingConfig = join(repo, CONFIG_FILE);
+  const config = loadCommandConfig(local.tree, profile, existsSync(workingConfig) ? readFileSync(workingConfig, "utf8") : null);
+  if (config) {
+    for (const line of applyCommandConfig(audit.contract, config, profile)) log(`${line}.`);
+    if (config.ignored) log(`Command config: ${config.ignored}.`);
+    for (const r of config.rejected) log(`Command config ${r.at} refused: ${r.reason}`);
+    audit.commandConfig = { digest: config.digest, entries: config.entries.map(({ line: _line, ...e }) => e), rejected: config.rejected, ignored: config.ignored };
+  } else delete audit.commandConfig;
   audit.signals = staticSignals(local.tree, profile, audit.contract);
   saveDraft(p, audit);
   log(`Scanned ${audit.repo.name}: ${profile.repoType}, package manager ${profile.packageManager ?? "none"}.`);
@@ -256,6 +266,7 @@ async function cmdRun(a: Args): Promise<void> {
     ex = hostExecutor(scratch.dir, audit.environment.registryEnv, audit.environment.inheritEnv, "host");
     const results = await runContract(ex, selected, { components: comps, budget: newBudget(rubric.budgets.componentMinutes, rubric.budgets.totalMinutes), registryValues, onResult: (r) => log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.status}${r.diagnosis ? ` (${r.diagnosis.detail})` : ""}`) });
     for (const r of results) evidenceFromPhase(audit, ex, r, registryValues);
+    recordHostConsent(audit, repo);
     if (a.flags.instructions) {
       for (const item of audit.instructions.filter((i) => i.category === "replay" && i.staticResult === "pass")) {
         const out = await ex.exec(item.text, ".", 300);
@@ -366,8 +377,9 @@ function cmdNarrate(a: Args): void {
   const n: Narration = opt(a, "file") ? readJson<Narration>(resolve(str(a, "file"))) : { ...(audit.narration ?? {}) };
   if (opt(a, "lead")) n.lead = str(a, "lead");
   if (opt(a, "cause")) {
-    const [condition, evidence] = str(a, "cause").split("=");
-    n.cause = { condition: condition as CondId, evidence: evidence ?? "" };
+    const cause = str(a, "cause");
+    const at = cause.indexOf("=");
+    n.cause = { condition: (at < 0 ? cause : cause.slice(0, at)) as CondId, evidence: at < 0 ? "" : cause.slice(at + 1) };
   }
   if (opt(a, "works")) n.works = csv(opt(a, "works"));
   if (opt(a, "ask")) n.ask = str(a, "ask");
@@ -637,7 +649,7 @@ function cmdGuard(a: Args): void {
   if (sub === "install") {
     const r = installGuard(repo);
     if (r.status === "tracked") log(`${HOOKS_FILE} is committed in this repo, so it was left alone. To refuse the repo's own commands on this machine during an audit, add this command as a beforeShellExecution and a beforeReadFile hook: node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scripts/guard.ts`);
-    else log(`${r.status === "installed" ? "Added" : "Already in place:"} the readiness guard in ${HOOKS_FILE}, kept out of git. While an audit's session is open, it refuses the repo's own install, build and test commands on this machine until the user's yes is recorded with \`readiness allow-host\`, and at any time once the draft is open. Outside a session it lets them run. New agent sessions load it; \`readiness guard uninstall\` takes it out.`);
+    else log(`${r.status === "installed" ? "Added" : "Already in place:"} the readiness guard in ${HOOKS_FILE}, kept out of git. While an audit's session is open, it refuses the repo's own install, build and test commands on this machine until the user's yes is recorded with \`readiness allow-host\`, and at any time once the draft is open, and reads of the audit's draft records and planted faults. Outside a session it lets everything run. New agent sessions on this machine load it; a cloud agent, which starts from the committed tree, never does. \`readiness guard uninstall\` takes it out.`);
     return;
   }
   if (sub === "uninstall") {
@@ -648,7 +660,13 @@ function cmdGuard(a: Args): void {
   }
   if (sub !== "status") fail("Use `readiness guard install`, `readiness guard uninstall` or `readiness guard status`.");
   const l = lease(repo);
-  log(`Guard ${guardInstalled(repo) ? `installed in ${HOOKS_FILE}` : "not installed"}. ${l.valid ? `Enforcing: session ${l.session!.id} is open${l.session!.auditId ? ` with draft ${l.session!.auditId}` : ""}, until ${l.session!.expiresAt}.` : `Not enforcing: ${l.why}.`}`);
+  const installed = guardInstalled(repo);
+  const probe = installed ? probeGuard(repo) : null;
+  if (probe && !probe.answers) {
+    log(`Guard listed in ${HOOKS_FILE}, but ${probe.detail}, so it enforces nothing. Cursor runs it with its own PATH, which needs Node ${MIN_NODE.join(".")} or later.`);
+    return;
+  }
+  log(`Guard ${installed ? `installed in ${HOOKS_FILE}` : "not installed"}. ${l.valid ? `Enforcing: session ${l.session!.id} is open${l.session!.auditId ? ` with draft ${l.session!.auditId}` : ""}, until ${l.session!.expiresAt}.` : `Not enforcing: ${l.why}.`}`);
 }
 
 function cmdSession(a: Args): void {
@@ -730,7 +748,7 @@ async function cmdAudit(a: Args): Promise<void> {
 const HELP = `readiness <command> [options]
 
 Audit
-  init --tier <read-only|local-exec|external-systems> [--scenario first_pr,bug_fixes,features,repo_wide] [--registry-env A,B] [--force]
+  init --tier <read-only|local-exec|external-systems> [--scenario first_pr,bug_fixes,features,repo_wide] [--registry-env A,B] [--inherit-env] [--force]
   scan [--strict] [--budget-scan M]   profile, agent assets, static checks and the verification contract; --strict exits 1 on wrong instructions or blocking safety findings; past M minutes (default ${SCAN_BOUND_MINUTES}) the secret scan and asset history are sampled
   contract [list|add --kind K --component C --cmd "..." --reason "..." [--cwd D] [--source file:line]]
   scenario [list|add <id> [--components a,b]|remove <id>]   optional breakdowns reported under the components they name
@@ -741,10 +759,12 @@ Audit
   narrate [--file narration.json] [--lead C] [--cause condition=ev-id] [--works ev-id,ev-id] [--ask item-id|settle]   picks the ids part 1's templates use; status lists them
   status [--json]
   seal
-  audit --tier T [--scenario S] [--outcomes-input f] [--narration f] [--budget-scan M] [--budget-total M] [--memory MB] [--force]   init, scan, replay, outcomes and seal in one go; --force abandons an open draft
+  audit --tier T [--scenario S] [--registry-env A,B] [--inherit-env] [--runtime auto|docker|none] [--image ref] [--no-mutants] [--outcomes-input f] [--narration f] [--budget-scan M] [--budget-total M] [--memory MB] [--force]   init, scan, replay, outcomes and seal in one go; --force abandons an open draft
 
 --allow-host (replay, recheck, run, audit) lets repo commands run on the host when no container can,
 in a scrubbed copy that can still read local files. It is not a sandbox: use it only with the user's approval.
+--inherit-env (init, audit) passes this shell's variables to those host commands, except account credentials
+such as cloud, GitHub and SSH ones; a container never inherits them.
 
 After an audit
   verify-seal [audit-id|latest] [--release-repo owner/repo --release-ref tag --tier external-systems] [--allow-eval] [--allow-unkeyed]   with SA_READINESS_SEAL_KEY set, only keyed seals pass unless --allow-unkeyed

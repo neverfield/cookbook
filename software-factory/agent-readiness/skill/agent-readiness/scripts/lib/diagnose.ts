@@ -148,6 +148,44 @@ export function networkFailure(output: string): string | null {
   return NETWORK.find((n) => n.re.test(output))?.detail ?? mirrorRefused(output);
 }
 
+// Registries anyone can read: a package they don't have is a typo or a missing version, the repo's own.
+const PUBLIC_REGISTRY = /^(registry\.npmjs\.org|registry\.yarnpkg\.com|repo\.yarnpkg\.com|pypi\.org|files\.pythonhosted\.org|repo\.maven\.apache\.org|repo1\.maven\.org|maven\.google\.com|dl\.google\.com|plugins\.gradle\.org|jitpack\.io|(s01\.)?oss\.sonatype\.org|repo\.spring\.io|api\.nuget\.org|proxy\.golang\.org|sum\.golang\.org|github\.com)$/;
+const publicUrl = (url: string) => {
+  try {
+    const u = new URL(url);
+    return PUBLIC_REGISTRY.test(u.hostname) || (/maven-central|maven2\/?$/.test(u.pathname) && /(^|\.)(googleapis|google)\.com$/.test(u.hostname));
+  } catch {
+    return false;
+  }
+};
+
+// A registry that answers "not found" for a package it would show to someone with the credential:
+// npmjs.org does that for a scoped private package, and an internal Nexus, Artifactory, NuGet feed
+// or Python index does it without a token. Returns the package, or null. A missing version or an
+// unscoped package on a public registry stays the repo's failure.
+export function privatePackage(output: string): string | null {
+  // npm: "404 Not Found - GET https://registry.npmjs.org/@acme%2fwidgets"; pnpm: "ERR_PNPM_FETCH_404  GET <url>"; yarn: "<url>: Not found"
+  for (const m of output.matchAll(/(?:\b404\b[^\n]*?|ERR_PNPM_FETCH_404\s+)GET (https?:\/\/[^\s:]+)|"(https?:\/\/[^\s"]+): Not found"/gi)) {
+    const url = (m[1] ?? m[2]).replace(/[.,;)]+$/, "");
+    const name = decodeURIComponent(url.replace(/^https?:\/\/[^/]+\//, "")).replace(/\/-\/.*$/, "");
+    if (name.startsWith("@") || !publicUrl(url)) return name || url;
+  }
+  // Maven: "Could not find artifact com.acme:widgets:jar:1.0 in internal (https://nexus.acme.corp/...)"
+  const maven = output.match(/Could not find artifact (\S+) in [\w.-]+ \((https?:\/\/[^)\s]+)\)/);
+  if (maven && !publicUrl(maven[2])) return maven[1];
+  // NuGet: "NU1101: Unable to find package Acme.Widgets. No packages exist with this id in source(s): nuget.org, AcmeFeed"
+  const nuget = output.match(/\bNU1101\b[^\n]*?Unable to find package ([\w.-]+)\.[^\n]*?source\(s\): ([^\n]+)/);
+  if (nuget && nuget[2].split(/,\s*/).some((s) => !/^nuget\.org$/i.test(s.trim()))) return nuget[1];
+  // pip: "Looking in indexes: https://pypi.org/simple, https://pypi.acme.corp/simple" and "(from versions: none)"
+  const pip = output.match(/Could not find a version that satisfies the requirement ([\w.\-[\]]+)[^\n]*\(from versions: none\)/);
+  const indexes = output.match(/Looking in (?:indexes|links): ([^\n]+)/)?.[1].split(/,\s*/) ?? [];
+  if (pip && indexes.some((u) => !publicUrl(u.trim()))) return pip[1];
+  // Go: a module behind a private host, which the proxy can't see and git can't reach without a login.
+  const go = output.match(/go: (?:downloading )?([\w.-]+\.[a-z]{2,}\/\S+?)@\S+: [^\n]*(terminal prompts disabled|could not read Username|410 Gone|404 Not Found)/);
+  if (go && (/terminal prompts|Username/.test(go[2]) || !/^(github\.com|gitlab\.com|bitbucket\.org|golang\.org|google\.golang\.org|gopkg\.in|go\.uber\.org|k8s\.io|sigs\.k8s\.io|cloud\.google\.com)\//.test(go[1]))) return go[1];
+  return null;
+}
+
 // A package mirror or registry answering an HTTP error, such as apt's "403  Forbidden" from
 // deb.debian.org behind a firewall, or a 5xx or rate limit from npm or PyPI. 401 is missing registry
 // credentials and 404 can be a typo in the repo's own dependencies, so neither is here.
@@ -534,6 +572,8 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string, ex
   if ((phase === "install" || phase === "doctor") && (/\b(E?401|Unauthorized|authentication required|no auth token)\b/i.test(output) || /Failed to replace env in config: \$\{[A-Z_]+\}/.test(output))) {
     return { cause: "registry", detail: "registry credentials not provided" };
   }
+  const priv = phase === "install" || phase === "doctor" ? privatePackage(output) : null;
+  if (priv) return { cause: "registry", detail: `${priv} looks like a private package the registry answered "not found" for, as one does without its credential; pass the credential with --registry-env` };
   // A refused package download explains whatever is missing after it.
   const mirror = mirrorRefused(output);
   if (mirror) return { cause: "network", detail: mirror };

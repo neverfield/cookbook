@@ -84,6 +84,8 @@ export interface Profile {
   units?: Unit[];
   // Every counted change in the window, and the share no component or satellite holds.
   ownership?: { changes: number; unowned: number; unownedShare: number; unownedTop: string[]; counted: boolean };
+  // Why the change history couldn't be read, so every share reads 0.
+  sharesUnread?: string;
   historyDays: number;
   totalChanges: number;
   scope?: ScanScope;
@@ -425,6 +427,8 @@ export interface Audit {
     limits?: { cpus: number | null; memoryMb: number; pids: number };
     // The user allowed repo commands to run on this machine, outside a container.
     hostMode?: boolean;
+    // The user's yes to that, as `readiness allow-host --note` recorded it; null when none was.
+    hostConsent?: { note: string; at: string } | null;
     // Where the replay's results were proved, and the canary that checked that environment first.
     proofEnv?: ProofEnv;
     // Why no repo command ran: no container runtime, or a container that didn't start, and host mode not allowed.
@@ -448,6 +452,9 @@ export interface Audit {
   signals?: Signal[];
   // Read by the scan from the audited commit's waiver file; sealed with the rest of the audit.
   waivers?: WaiverRecord;
+  // The commands a maintainer named in the audited commit's .agent-readiness/config.json, which
+  // replaced the scan's of the same component and kind.
+  commandConfig?: { digest: string | null; entries: { component: string; kind: CommandKind; cmd: string; cwd: string; reason: string; by: string }[]; rejected: { at: string; reason: string }[]; ignored: string | null };
   // Secret-shaped values in the repo's own text that the seal masked as [redacted:<type>].
   masked?: MaskedValue[];
   sealed?: { at: string; digest: string; reportJsonDigest: string; reportMdDigest: string; reportHtmlDigest?: string; roadmapItemsDigest?: string; historyLineDigest?: string; keyed?: boolean };

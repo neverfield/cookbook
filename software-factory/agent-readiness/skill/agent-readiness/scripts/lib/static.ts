@@ -4,7 +4,7 @@ import { checkOnly, makeRuleFor, makeTargets as targetsIn } from "./contract.ts"
 import { pyproject, readPackageJson } from "./profile.ts";
 import { secretFindings } from "./secrets.ts";
 import type { InstructionItem, Profile, SafetyFinding, ScanBound, SecretClass } from "./types.ts";
-import { MAX_FILES, existsExact, inTreePath, listFiles, readText, sha256 } from "./util.ts";
+import { MAX_FILES, existsExact, inTreePath, listFiles, ownSkillPath, readText, sha256 } from "./util.ts";
 
 // The PHP, Ruby, JVM and .NET tools are commands only when a version doesn't follow (`ruby 3.3`,
 // `gradle 8.5` are prose), and `ruby` and `php` only with a flag or a file to run.
@@ -897,6 +897,7 @@ export function safetyScan(tree: string, profile: Profile, bound?: ScanBound, bl
   for (const file of files) {
     if (bound && Date.now() > bound.until) break;
     if (bound) bound.scope.secrets.scanned++;
+    if (ownSkillPath(file)) continue;
     if (/(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|uv\.lock|poetry\.lock|bun\.lock)$/.test(file)) continue;
     const full = join(tree, file);
     if (!isText(full)) continue;

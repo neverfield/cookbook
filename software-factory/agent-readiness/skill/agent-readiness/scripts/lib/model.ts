@@ -1,7 +1,9 @@
+import { HOME_DIR, loginShell } from "./container.ts";
 import { serviceLabel } from "./diagnose.ts";
 import { currentEvidence } from "./evidence.ts";
 import { explanationsOf, imagesUsed, waiversOf } from "./explain.ts";
 import { list } from "./format.ts";
+import { pinnedRef } from "./images.ts";
 import { LANGUAGE_LABELS } from "./languages/index.ts";
 import type { LevelResult } from "./levels.ts";
 import { describeRate, rate, windowLabel } from "./outcomes.ts";
@@ -17,6 +19,7 @@ import { NOT_SUPPORTED, STACKS, SUPPORTED_DOC } from "./support.ts";
 import type { Asset, Audit, CapReason, CommandKind, CondId, Component, ComponentLevel, Evidence, HistoryLine, Level, LevelStatus, MaskedValue, Narration, OutcomeStats, OutcomesSnapshot, ProofEnvKind, ReportAction, ReportChanges, ReportJson, RevertsSnapshot, Roadmap, RoadmapItem, ScenarioId, SettleBy } from "./types.ts";
 import { fmtShortDate, pct, shellQuote, wordCount } from "./util.ts";
 import { WAIVER_FILE } from "./waivers.ts";
+import { CONFIG_FILE } from "./config.ts";
 
 // The report model, built once from the audit: every state, count, level and sentence the report
 // shows. report.json is this model; render.ts and render-html.ts only lay it out.
@@ -206,7 +209,7 @@ function vmEnvironmentNote(audit: Audit): string {
   const pe = audit.environment.proofEnv;
   const by = pe?.detectedBy?.length ? `, detected by ${pe.detectedBy.join(" and ")}` : "";
   const net = pe?.network === "cut" ? "network cut for the tests" : pe?.network === "on" ? "network on for the tests, because the VM couldn't cut it" : "network not switched";
-  return `fresh copy on a disposable VM (no container runtime${by}), ${net}${pe?.proves ? "" : "; this audit's rubric doesn't count a disposable VM as proof"}`;
+  return `fresh copy on a disposable VM as provisioned, including its preinstalled tools and running services (no container runtime${by}), ${net}${pe?.proves ? "" : "; this audit's rubric doesn't count a disposable VM as proof"}`;
 }
 
 function canaryNote(c: NonNullable<Audit["environment"]["proofEnv"]>["canary"]): string {
@@ -656,6 +659,7 @@ function coverageLine(input: ModelInput): string {
   const sampled = sampledScope(audit);
   if (sampled) line += ` Sampled scope: ${sampled}.`;
   if (audit.repo.shallow) line += " The clone is shallow, so change shares come only from the commits it has.";
+  if (audit.profile?.sharesUnread) line += ` Change shares couldn't be read (${audit.profile.sharesUnread}), so every component's share reads 0%.`;
   if (audit.repo.submodulesMissing?.length) line += ` Submodules not checked out on this machine aren't in the audit: ${list(audit.repo.submodulesMissing)}.`;
   if (audit.repo.lfsPointers) line += ` ${audit.repo.lfsPointers} Git LFS ${audit.repo.lfsPointers === 1 ? "file stayed a pointer" : "files stayed pointers"} in the audit tree.`;
   if (audit.tier !== "read-only" && !audit.environment.containerRuntime && audit.evidence.some((e) => e.where === "fresh_copy")) {
@@ -1142,6 +1146,8 @@ export function buildReport(raw: ModelInput): ReportJson {
         ...(audit.environment.proofEnv?.canary.checks.length ? [{ label: "Environment self-check", value: canaryNote(audit.environment.proofEnv.canary) }] : []),
         ...(audit.environment.registryEnv.length ? [{ label: "Registry variables", value: `${audit.environment.registryEnv.join(", ")}, passed to the setup steps by name; their values are never recorded` }] : []),
         ...(audit.masked?.length ? [{ label: "Masked values", value: maskedNote(audit.masked) }] : []),
+        ...(audit.commandConfig ? [{ label: "Command config", value: commandConfigNote(audit.commandConfig) }] : []),
+        ...(audit.environment.hostConsent !== undefined ? [{ label: "Host mode", value: hostConsentNote(audit.environment.hostConsent) }] : []),
         { label: "Stored in", value: input.storedAt },
       ],
     },
@@ -1207,6 +1213,20 @@ export function changesOf(prev: ReportJson, now: ReportJson, rubric: Rubric): Re
   return { since: { audit: prev.audit.id, date: prev.audit.date }, repo: { from: repoLevel(prev), to: repoLevel(now) }, components, nowMet, nowFailing, checks };
 }
 
+// The commands a maintainer named instead of the scan's, each with who reviewed it and why.
+export function commandConfigNote(c: NonNullable<Audit["commandConfig"]>): string {
+  const named = c.entries.map((e) => `\`${e.cmd}\` as the ${e.kind} command for ${e.component === "*" ? "the repo" : e.component}, reviewed by ${e.by}: ${e.reason}`);
+  const parts = [named.length ? `${CONFIG_FILE} in the audited commit named ${named.join("; ")}; each replaced the scan's ${named.length === 1 ? "command" : "commands"} of that kind` : `${CONFIG_FILE} named no command the audit used`];
+  if (c.rejected.length) parts.push(`${c.rejected.length} ${c.rejected.length === 1 ? "entry was" : "entries were"} refused (${c.rejected.map((r) => `${r.at}: ${r.reason}`).join("; ")})`);
+  if (c.ignored) parts.push(c.ignored);
+  return parts.join("; ") + ".";
+}
+
+// Whether anyone said yes before the repo's commands ran outside a container, in the user's words.
+export function hostConsentNote(consent: { note: string; at: string } | null): string {
+  return consent ? `the repo's commands ran on this machine on the user's yes, recorded at ${consent.at}: "${consent.note}"` : "the repo's commands ran on this machine with no recorded yes: --allow-host was passed, and no `readiness allow-host --note` was recorded in the session";
+}
+
 // The secret-shaped values the seal masked in the repo's own text, by type and place.
 export function maskedNote(masked: MaskedValue[]): string {
   const counts = new Map<string, number>();
@@ -1235,9 +1255,11 @@ function integrityOf(sealStatus: string): "keyed" | "unsigned" {
 const SETUP_BEFORE: Record<CommandKind, CommandKind[]> = { doctor: [], install: [], lint: ["install"], build: ["install"], typecheck: ["install", "build"], test: ["install", "build"], start: ["install", "build"] };
 
 // A pasteable command that reruns one step as the audit did, from a clean checkout of the audited
-// commit: the setup steps that passed before it in the same place, then the step. The audit cuts the
-// network for tests and planted faults; the command leaves it on. Null when no command ran, and for a
-// type-check canary, which ran on a copy with a planted error.
+// commit: the setup steps that passed before it in the same place, then the step. In a container it
+// runs on the pinned image, as the host's own user with the audit's home and CI=1, and keeps the
+// image's PATH past the login profile, as the audit's own shell does. The audit cuts the network for
+// tests and planted faults; the command leaves it on, and the report says so above the list. Null
+// when no command ran, and for a type-check canary, which ran on a copy with a planted error.
 export function reproOf(audit: Pick<Audit, "evidence" | "environment">, e: Evidence): string | null {
   if (!e.command || e.result === "not_run" || e.where === "static" || e.canary) return null;
   const at = audit.evidence.indexOf(e);
@@ -1250,8 +1272,11 @@ export function reproOf(audit: Pick<Audit, "evidence" | "environment">, e: Evide
   const dir = (d: string) => (/^[\w./@+-]+$/.test(d) ? d : shellQuote(d));
   const step = (x: Evidence) => (x.cwd && x.cwd !== "." ? `(cd ${dir(x.cwd)} && ${x.command})` : x.command!);
   const script = [...setup.values(), e].map(step).join(" && ");
+  if (e.where !== "container") return `bash -lc ${shellQuote(script)}`;
   const rt = audit.environment.containerRuntime ?? "docker";
-  return e.where === "container" ? `${rt} run --rm -v "$PWD":/work -w /work ${e.image ?? audit.environment.image ?? "<image>"} bash -lc ${shellQuote(script)}` : `bash -lc ${shellQuote(script)}`;
+  const image = pinnedRef(e.image ?? audit.environment.image ?? "<image>");
+  const shell = loginShell(`mkdir -p "$HOME" && ${script}`, false).map((w, i) => (i < 2 ? w : shellQuote(w))).join(" ");
+  return `${rt} run --rm --user "$(id -u):$(id -g)" -e HOME=${HOME_DIR} -e CI=1 -v "$PWD":/work -w /work ${image} ${shell}`;
 }
 
 // What the audit took as given, on the first screen: the component map, each command with where it

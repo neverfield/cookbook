@@ -1,4 +1,4 @@
-import { EXPERIMENTAL_NOTE, assumptionLines, evidenceLog, fmtDuration, levelResult, levelShort, changeMove, describeRate, fmtDate, fmtShortDate, groupedSteps, isExperimental, levelDefinition, levelText, list, markedLevel, nextMove, nowLevelText, pageNumbers, shortReason, signalsNote, stepOf, waiverHint } from "./format.ts";
+import { EXPERIMENTAL_NOTE, RERUN_NOTE, assumptionLines, evidenceLog, fmtDuration, levelResult, levelShort, changeMove, describeRate, fmtDate, fmtShortDate, groupedSteps, isExperimental, levelDefinition, levelText, list, markedLevel, nextMove, nowLevelText, pageNumbers, shortReason, signalsNote, stepOf, waiverHint } from "./format.ts";
 import type { Level, ReportJson } from "./types.ts";
 
 // report.html: the same sealed report.json as report.md, as one self-contained page. Inline CSS and
@@ -446,7 +446,7 @@ function details(r: ReportJson): string {
     const result = `<span class="${cls}"><strong>${esc(e.result)}</strong></span>: ${esc(e.summary)}`;
     out.push(`<tr id="${esc(e.id)}"${current ? "" : ' class="muted"'}><td><code class="id">${esc(e.id)}</code></td><td><code class="id">${esc(e.check)}</code></td><td>${esc(e.component ?? "repo")}</td><td>${ran}</td><td>${current ? result : `superseded by <a href="#${esc(e.supersededBy!)}"><code class="id">${esc(e.supersededBy!)}</code></a>; was ${result}`}</td></tr>`);
   }
-  out.push(`</tbody></table><p class="small muted">Evidence strength, weakest to strongest: stated in docs, read from files, ran on host, ran in a clean container or on a disposable VM, confirmed by outcomes. A check passes only at its required strength.</p></section>`);
+  out.push(`</tbody></table><p class="small muted">Evidence strength, weakest to strongest: stated in docs, read from files, ran on host, ran in a clean container or on a disposable VM, confirmed by outcomes. A check passes only at its required strength.${evidenceLog(r).some(({ row, current }) => row.repro && current) ? ` ${esc(RERUN_NOTE)}` : ""}</p></section>`);
   return out.join("");
 }
 

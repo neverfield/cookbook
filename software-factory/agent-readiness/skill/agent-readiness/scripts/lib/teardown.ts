@@ -52,6 +52,9 @@ export function pendingTeardown(): number {
 
 // The file in each of a run's temp folders that names the process that made it.
 export const OWNER_FILE = ".readiness-owner.json";
+// The file in every temp folder an audit made, kept for the folder's life, so `readiness cleanup`
+// removes only those and never someone's own folder that happens to start with "readiness-".
+export const TEMP_MARK = ".agent-readiness-temp";
 
 interface Owner {
   pid: number;
@@ -66,10 +69,11 @@ export interface TempDir {
 }
 
 // A temp folder that is removed when it is disposed of or when the process stops, whichever comes first.
-export function tempDir(prefix: string): TempDir {
-  const path = mkdtempSync(join(tmpdir(), prefix));
+export function tempDir(prefix: string, base: string = tmpdir()): TempDir {
+  const path = mkdtempSync(join(base, prefix));
   const owner: Owner = { pid: process.pid, host: hostname() };
   writeFileSync(join(path, OWNER_FILE), JSON.stringify(owner) + "\n");
+  writeFileSync(join(path, TEMP_MARK), "");
   const drop = onTeardown(() => rmSync(path, { recursive: true, force: true }));
   return {
     path,

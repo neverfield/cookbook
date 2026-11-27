@@ -1,6 +1,6 @@
 import type { Rubric } from "./rubric.ts";
 import type { Level, ReportJson } from "./types.ts";
-import { EXPERIMENTAL_NOTE, assumptionLines, evidenceLog, fmtDuration, levelResult, levelShort, WAIVER_FILE, changeSummary, describeRate, fmtDate, fmtShortDate, groupedSteps, isExperimental, ladderLine, levelDefinition, levelText, list, markedLevel, nextMove, nowLevelText, pageNumbers, shortReason, signalsNote, sparkline, stepOf, trendLine, waiverHint } from "./format.ts";
+import { EXPERIMENTAL_NOTE, RERUN_NOTE, assumptionLines, evidenceLog, fmtDuration, levelResult, levelShort, WAIVER_FILE, changeSummary, describeRate, fmtDate, fmtShortDate, groupedSteps, isExperimental, ladderLine, levelDefinition, levelText, list, markedLevel, nextMove, nowLevelText, pageNumbers, shortReason, signalsNote, sparkline, stepOf, trendLine, waiverHint } from "./format.ts";
 
 export { scaleLine } from "./format.ts";
 
@@ -253,7 +253,7 @@ export function renderMarkdown(r: ReportJson, rubric: Rubric): string {
     out.push(`| \`${e.id}\` | \`${e.check}\` | ${e.component ?? "repo"} | ${ran} | ${current ? result : `superseded by \`${e.supersededBy}\`; was ${result}`} |`);
   }
   const reruns = r.details.evidence.filter((e) => e.repro && !e.supersededBy);
-  if (reruns.length) out.push("", `Rerun a step from a clean checkout of \`${r.audit.commit}\`:`, "", ...reruns.map((e) => `- \`${e.id}\`: \`${e.repro!.replace(/`/g, "'")}\``));
+  if (reruns.length) out.push("", `Rerun a step from a clean checkout of \`${r.audit.commit}\`. ${RERUN_NOTE}`, "", ...reruns.map((e) => `- \`${e.id}\`: \`${e.repro!.replace(/`/g, "'")}\``));
   out.push("", "</details>", "", "Evidence strength, weakest to strongest: stated in docs, read from files, ran on host, ran in a clean container or on a disposable VM, confirmed by outcomes. A check passes only at its required strength.", "");
 
   out.push("## About this report", "", `Audited ${fmtDate(r.audit.date)} at ${r.audit.commit}. ${aboutLines(r).join(" ")}`, "");

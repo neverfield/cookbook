@@ -1,8 +1,8 @@
-import { cpSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { redact } from "./redact.ts";
 import { scanText } from "./secrets.ts";
+import { tempDir } from "./teardown.ts";
 import type { Audit, HistoryLine, MaskedValue, ReportJson, Roadmap } from "./types.ts";
 import { ensureDir, exists, fail, git, nowIso, readJson, readText, writeJson, writeText } from "./util.ts";
 import type { Paths } from "./workspace.ts";
@@ -182,15 +182,21 @@ export function storeRecheck(p: Paths, id: string, record: unknown, named: Named
   return f;
 }
 
+// The history branch is the audit's own: the repo's hooks (a pre-commit framework's .git/hooks, a
+// post-checkout hook) and the user's commit signing never run on it, as a worktree without the
+// repo's config would fail them or a signing prompt would hang.
+const hg = (args: string[], cwd: string) => git(["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", ...args], cwd);
+
 export function pushHistory(p: Paths, opts: { push: boolean; remote: string }): string {
   if (!exists(p.history)) fail(`Nothing to push: ${p.history} doesn't exist`);
-  const wt = join(mkdtempSync(join(tmpdir(), "readiness-history-")), "wt");
-  const hasLocal = git(["rev-parse", "--verify", HISTORY_BRANCH], p.repo).ok;
-  const hasRemote = git(["rev-parse", "--verify", `${opts.remote}/${HISTORY_BRANCH}`], p.repo).ok;
+  const scratch = tempDir("readiness-history-");
+  const wt = join(scratch.path, "wt");
+  const hasLocal = hg(["rev-parse", "--verify", HISTORY_BRANCH], p.repo).ok;
+  const hasRemote = hg(["rev-parse", "--verify", `${opts.remote}/${HISTORY_BRANCH}`], p.repo).ok;
   const remoteRef = `${opts.remote}/${HISTORY_BRANCH}`;
-  const localSha = hasLocal ? git(["rev-parse", HISTORY_BRANCH], p.repo).stdout.trim() : "";
+  const localSha = hasLocal ? hg(["rev-parse", HISTORY_BRANCH], p.repo).stdout.trim() : "";
   const show = (ref: string) => {
-    const r = git(["show", `${ref}:history.jsonl`], p.repo);
+    const r = hg(["show", `${ref}:history.jsonl`], p.repo);
     return r.ok ? r.stdout : "";
   };
   const branchText = hasLocal ? show(HISTORY_BRANCH) : "";
@@ -199,35 +205,35 @@ export function pushHistory(p: Paths, opts: { push: boolean; remote: string }): 
     // Commit on the remote's tip, so a push after CI's rechecks fast-forwards instead of failing,
     // and lay the local branch's files over it so nothing sealed locally is lost.
     if (hasRemote) {
-      const r = git(["worktree", "add", "-B", HISTORY_BRANCH, wt, remoteRef], p.repo);
+      const r = hg(["worktree", "add", "-B", HISTORY_BRANCH, wt, remoteRef], p.repo);
       if (!r.ok) fail(r.stderr);
-      if (localSha) git(["checkout", localSha, "--", "."], wt);
-    } else if (hasLocal) git(["worktree", "add", wt, HISTORY_BRANCH], p.repo);
+      if (localSha) hg(["checkout", localSha, "--", "."], wt);
+    } else if (hasLocal) hg(["worktree", "add", wt, HISTORY_BRANCH], p.repo);
     else {
-      const r = git(["worktree", "add", "--detach", wt], p.repo);
+      const r = hg(["worktree", "add", "--detach", wt], p.repo);
       if (!r.ok) fail(r.stderr);
-      git(["checkout", "--orphan", HISTORY_BRANCH], wt);
-      git(["rm", "-rf", "--quiet", "."], wt);
+      hg(["checkout", "--orphan", HISTORY_BRANCH], wt);
+      hg(["rm", "-rf", "--quiet", "."], wt);
     }
     const localText = exists(join(p.history, "history.jsonl")) ? readText(join(p.history, "history.jsonl")) : "";
     cpSync(p.history, wt, { recursive: true });
     writeText(join(wt, "history.jsonl"), mergeHistory(remoteText, branchText, localText));
-    git(["add", "-A"], wt);
-    const status = git(["status", "--porcelain"], wt).stdout.trim();
+    hg(["add", "-A"], wt);
+    const status = hg(["status", "--porcelain"], wt).stdout.trim();
     let message = "history branch already up to date";
     if (status) {
-      const c = git(["-c", "user.name=agent-readiness", "-c", "user.email=agent-readiness@example.com", "commit", "-q", "-m", `Agent readiness history ${nowIso().slice(0, 10)}`], wt);
+      const c = hg(["-c", "user.name=agent-readiness", "-c", "user.email=agent-readiness@example.com", "commit", "-q", "--no-verify", "-m", `Agent readiness history ${nowIso().slice(0, 10)}`], wt);
       if (!c.ok) fail(`Could not commit history: ${c.stderr}`);
       message = `committed history to ${HISTORY_BRANCH}`;
     }
     if (opts.push) {
-      const pr = git(["push", opts.remote, HISTORY_BRANCH], wt);
+      const pr = hg(["push", "--no-verify", opts.remote, HISTORY_BRANCH], wt);
       if (!pr.ok) fail(`Could not push ${HISTORY_BRANCH}: ${pr.stderr}`);
       message += ` and pushed to ${opts.remote}`;
     }
     return message;
   } finally {
-    git(["worktree", "remove", "--force", wt], p.repo);
-    rmSync(join(wt, ".."), { recursive: true, force: true });
+    hg(["worktree", "remove", "--force", wt], p.repo);
+    scratch.dispose();
   }
 }
