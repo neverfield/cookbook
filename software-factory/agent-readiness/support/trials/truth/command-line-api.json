@@ -1,0 +1,174 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "dotnet/command-line-api",
+  "commit": "1b0c04a4ac1651129c72533ceae51e791430429e",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/dotnet/command-line-api/commits/1b0c04a4ac1651129c72533ceae51e791430429e/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/dotnet/command-line-api/commits/1b0c04a4ac1651129c72533ceae51e791430429e/status (Azure Pipelines check runs 'command-line-api', '(Build and Test Ubuntu Release)', '(Build and Test Windows Release)', '(Build and Test MacOS Release)' and '(Build and Test Source-Build (Managed))' succeeded; the rest are copilot reviewer and backport bots; combined status pending with no statuses)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "dotnet",
+      "placement": "component",
+      "changeShare": 0.212,
+      "hasTests": true,
+      "install": [
+        "./build.sh --restore",
+        "eng/common/build.sh --restore",
+        "./build.sh"
+      ],
+      "test": [
+        "eng/common/cibuild.sh --configuration Release --prepareMachine",
+        "./build.sh --test",
+        "eng/common/build.sh --restore --build --test",
+        "dotnet test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Arcade repo: .vsts-ci.yml runs eng/common/cibuild.sh (restore, build, test, pack) on Linux, macOS and Windows over System.CommandLine.slnx. global.json pins SDK 12.0.100-alpha.1.26555.106, which build.sh installs into .dotnet from ci.dot.net; plain dotnet test needs that SDK on PATH."
+    },
+    {
+      "path": "src/System.CommandLine",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.04,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/System.CommandLine.Tests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.04,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/System.CommandLine.Suggest",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/System.CommandLine.Suggest.Tests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/System.CommandLine.StaticCompletions",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/System.CommandLine.StaticCompletions.Tests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/System.CommandLine.ApiCompatibility.Tests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/System.CommandLine.Benchmarks",
+      "ecosystem": "dotnet",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "BenchmarkDotNet project, not in the solution."
+    },
+    {
+      "path": "docs",
+      "ecosystem": "other",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined"
+    },
+    {
+      "path": "eng/common",
+      "ecosystem": "other",
+      "placement": "excluded",
+      "changeShare": 0.707,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Arcade's shared build scripts, synced from dotnet/arcade by dependency-flow PRs; vendored, never edited here."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "eng/common/internal-feed-operations.ps1",
+      "line": 61,
+      "real": false,
+      "why": "assigns a runtime $AuthToken variable, no literal"
+    },
+    {
+      "file": "eng/common/init-tools-native.sh",
+      "line": 136,
+      "real": false,
+      "why": "shell variable concatenation, no literal"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add a root AGENTS.md saying to restore, build and test with ./build.sh --restore --build --test, which installs the pinned alpha SDK, and that packages come only from the public dnceng Azure Artifacts feeds."
+  },
+  "dropped": 0
+}

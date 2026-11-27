@@ -1,0 +1,314 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "getsentry/sentry-javascript",
+  "commit": "0ac5dd117b622998783a1fa1b1694e409d3233ca",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/getsentry/sentry-javascript/commits/0ac5dd117b622998783a1fa1b1694e409d3233ca/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv' and gh api repos/getsentry/sentry-javascript/commits/0ac5dd117b622998783a1fa1b1694e409d3233ca/status; 408 check runs, 403 success and 5 skipped (unexpanded optional matrices, Check PR branches): Build, Browser/Node/Bun/Deno Unit Tests, Playwright, Node/Bun/Deno/Cloudflare/Bundler Plugin integration tests, all E2E apps and 'All required jobs passed or were skipped' succeeded; the commit status API has no statuses"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.306,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile",
+        "pnpm install",
+        "pnpm i"
+      ],
+      "test": [
+        "pnpm run test:ci:node",
+        "pnpm run test:ci:browser",
+        "pnpm test",
+        "pnpm run test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "pnpm + Nx workspace root. CI runs pnpm run build:ci, then every packages/* vitest suite through nx run-many (scripts/ci-unit-tests.ts splits node vs browser packages; jsdom, no real browser). @sentry/bun runs via nx -p @sentry/bun with Bun installed. Plain pnpm test also runs @sentry/deno, which downloads Deno."
+    },
+    {
+      "path": "packages/server-utils",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.065,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published @sentry/server-utils; vitest run via the root nx test graph (Node Unit Tests)."
+    },
+    {
+      "path": "packages/core",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.033,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published @sentry/core; vitest run via the root nx test graph."
+    },
+    {
+      "path": "packages/nextjs",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.023,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Published @sentry/nextjs; vitest run via the root nx test graph. The other ~45 packages/* SDKs are members of . below 0.02 each and are folded into the root."
+    },
+    {
+      "path": "packages/deno",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.009,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile",
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm run test",
+        "pnpm test"
+      ],
+      "testsNeed": "network",
+      "cleanPasses": "yes",
+      "notes": "Excluded from the root unit-test run; CI's Deno Unit Tests job does cd packages/deno && pnpm run build && pnpm run test. The test script downloads Deno (install:deno) and Deno type definitions (deno-types) unless present."
+    },
+    {
+      "path": "dev-packages/e2e-tests",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.367,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile",
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm test:e2e",
+        "pnpm run test:e2e",
+        "pnpm test:run"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "176 test applications; each is installed from npm against packed SDK tarballs (pnpm run build:tarballs first), some start DBs with docker compose, and assertions run in Playwright browsers. CI copies each app to a temp dir and runs pnpm test:build then pnpm test:assert per matrix entry."
+    },
+    {
+      "path": "dev-packages/node-integration-tests",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.08,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile",
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm run test",
+        "pnpm test",
+        "vitest run"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "CI runs pnpm run test (sharded) with working-directory set here, after the root build; DB suites start Docker containers (describeWithDockerCompose: Postgres, MySQL, Redis, mssql, etc.)."
+    },
+    {
+      "path": "dev-packages/browser-integration-tests",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.046,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile",
+        "npx playwright install --with-deps"
+      ],
+      "test": [
+        "pnpm run test:all",
+        "pnpm test",
+        "pnpm run test:loader"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "Playwright suites (chromium, firefox, webkit) against the built CDN bundles; needs the root build and build:bundle first."
+    },
+    {
+      "path": "dev-packages/bundler-plugin-integration-tests",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.032,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile"
+      ],
+      "test": [
+        "pnpm run test",
+        "pnpm test"
+      ],
+      "testsNeed": "network",
+      "cleanPasses": "yes",
+      "notes": "setup.mjs builds and packs @sentry/core and @sentry/bundler-plugins, then installs each fixture's dependencies from npm before vitest runs."
+    },
+    {
+      "path": "dev-packages/cloudflare-integration-tests",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.023,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile"
+      ],
+      "test": [
+        "pnpm run test",
+        "pnpm test",
+        "vitest run"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Vitest suites that start workers locally with wrangler dev (workerd from node_modules)."
+    },
+    {
+      "path": "dev-packages/bun-integration-tests",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.007,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile"
+      ],
+      "test": [
+        "pnpm run test",
+        "pnpm test",
+        "vitest run"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Needs the Bun runtime on PATH (CI uses oven-sh/setup-bun, Bun 1.3.14 and 1.4)."
+    },
+    {
+      "path": "dev-packages/deno-integration-tests",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.008,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile"
+      ],
+      "test": [
+        "pnpm run test",
+        "pnpm test",
+        "pnpm run test:node-suites"
+      ],
+      "testsNeed": "network",
+      "cleanPasses": "yes",
+      "notes": "Runs deno test suites then shared Node suites with vitest; the test script downloads Deno and Deno types when absent."
+    },
+    {
+      "path": "dev-packages/browser-min-version-tests",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [
+        "./install-deps.sh"
+      ],
+      "test": [
+        "node run.mjs"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "Not a pnpm workspace package; CI runs node dev-packages/browser-min-version-tests/run.mjs, which downloads Chromium 80 and drives it over CDP against the built bundles."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "packages/google-cloud-serverless/test/integrations/private.pem",
+      "line": 1,
+      "real": false,
+      "why": "RSA key fixture for Google Cloud integration unit tests"
+    },
+    {
+      "file": "packages/node/test/transports/test-server-certs.ts",
+      "line": 2,
+      "real": false,
+      "why": "self-signed key for a local HTTPS test server"
+    },
+    {
+      "file": "packages/deno/lib.deno.d.ts",
+      "line": 5509,
+      "real": false,
+      "why": "elided PEM placeholder in Deno type-definition doc comments (also lines 6429, 13276, 13477)"
+    },
+    {
+      "file": "packages/server-utils/test/utils/sql.test.ts",
+      "line": 932,
+      "real": false,
+      "why": "fake sk_live_abc123 inside a SQL string used to test query scrubbing"
+    },
+    {
+      "file": "dev-packages/node-integration-tests/suites/tracing/tedious/scenario.mjs",
+      "line": 11,
+      "real": false,
+      "why": "password for a throwaway SQL Server test container"
+    },
+    {
+      "file": "dev-packages/node-integration-tests/suites/tracing/mysql2/scenario.mjs",
+      "line": 7,
+      "real": false,
+      "why": "password for a local MySQL test container"
+    },
+    {
+      "file": "dev-packages/e2e-tests/test-applications/deno/src/app.ts",
+      "line": 48,
+      "real": false,
+      "why": "local test database password"
+    },
+    {
+      "file": "dev-packages/e2e-tests/test-applications/nextjs-14-supabase/pages/api/create-test-user.ts",
+      "line": 17,
+      "real": false,
+      "why": "test user password for a local Supabase"
+    },
+    {
+      "file": "dev-packages/e2e-tests/test-applications/nextjs-14-supabase/supabase/config.toml",
+      "line": 76,
+      "real": false,
+      "why": "env(...) reference, no value"
+    },
+    {
+      "file": "dev-packages/browser-integration-tests/suites/integrations/supabase/auth/test.ts",
+      "line": 12,
+      "real": false,
+      "why": "mock access token in a mocked response"
+    },
+    {
+      "file": "packages/core/test/lib/integrations/mcp-server/oauthClient.test.ts",
+      "line": 16,
+      "real": false,
+      "why": "test-access-token unit-test fixture"
+    },
+    {
+      "file": "packages/react/test/redux.test.ts",
+      "line": 145,
+      "real": false,
+      "why": "joke string used to test state redaction"
+    }
+  ],
+  "nextAction": {
+    "kind": "declare_environment",
+    "text": "Document in AGENTS.md (or a devcontainer) what the dev-packages suites need: root build and tarballs first, Docker for node-integration and e2e databases, Playwright browsers, and Bun/Deno runtimes, with the per-suite commands CI runs."
+  },
+  "dropped": 0
+}
