@@ -9,7 +9,7 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "6bc9673bcf7af5eb8554d8db1ead1f77357b12763b045053679cbbd42090ba5a",
+    "scriptsDigest": "8f8a031bfe122cb94bece22b2a89ab756726766a8c642030e64cd68fe140b06c",
     "seedPinned": true,
     "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
@@ -1105,7 +1105,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "doctor passed",
-        "durationMs": 136,
+        "durationMs": 130,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'node --version && npm --version'",
         "supersededBy": null
       },
@@ -1117,7 +1117,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "install passed",
-        "durationMs": 8999,
+        "durationMs": 8941,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh'",
         "supersededBy": null
       },
@@ -1129,7 +1129,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 194,
+        "durationMs": 182,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/api && npm run lint)'",
         "supersededBy": null
       },
@@ -1141,7 +1141,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 196,
+        "durationMs": 172,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/shared && npm run lint)'",
         "supersededBy": null
       },
@@ -1153,7 +1153,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 191,
+        "durationMs": 170,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/worker && npm run lint)'",
         "supersededBy": null
       },
@@ -1165,7 +1165,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "start passed",
-        "durationMs": 2291,
+        "durationMs": 2279,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && bash scripts/agent-start.sh'",
         "supersededBy": null
       },
@@ -1177,7 +1177,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "test passed (1 of 1 tests)",
-        "durationMs": 265,
+        "durationMs": 230,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/api && npm run test)'",
         "supersededBy": null
       },
@@ -1189,7 +1189,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "test passed (3 of 3 tests)",
-        "durationMs": 251,
+        "durationMs": 224,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/shared && npm run test)'",
         "supersededBy": null
       },
@@ -1201,7 +1201,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "test passed (2 of 2 tests)",
-        "durationMs": 246,
+        "durationMs": 222,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/worker && npm run test)'",
         "supersededBy": null
       },
@@ -1261,7 +1261,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": ".cursor/rules/style.mdc:6 `npm run lint -w api` replays",
-        "durationMs": 190,
+        "durationMs": 170,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run lint -w api'",
         "supersededBy": null
       },
@@ -1273,7 +1273,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "AGENTS.md:6 `npm run test -w shared` replays",
-        "durationMs": 250,
+        "durationMs": 213,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run test -w shared'",
         "supersededBy": null
       },
@@ -1285,7 +1285,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "AGENTS.md:7 `npm test` replays",
-        "durationMs": 473,
+        "durationMs": 451,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm test'",
         "supersededBy": null
       },
@@ -1297,7 +1297,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": ".cursor/skills/verify/SKILL.md:15 `node --version && npm --version` replays",
-        "durationMs": 139,
+        "durationMs": 115,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && node --version && npm --version'",
         "supersededBy": null
       },
@@ -1309,7 +1309,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": ".cursor/skills/verify/SKILL.md:56 `npm run test` replays",
-        "durationMs": 482,
+        "durationMs": 446,
         "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run test'",
         "supersededBy": null
       }
@@ -1341,7 +1341,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "6bc9673bcf7a"
+        "value": "8f8a031bfe12"
       },
       {
         "label": "Planted faults",

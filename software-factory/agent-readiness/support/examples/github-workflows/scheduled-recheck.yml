@@ -13,7 +13,8 @@ permissions:
 env:
   SA_ACCELERATOR_REPO: cursor/cookbook
   # The cursor/cookbook commit you copied the skill from: the hash `git -C /tmp/cookbook rev-parse HEAD`
-  # printed in the README's quickstart. No release tag exists yet, so pin that commit, not a branch.
+  # printed in the README's quickstart, which clones release agent-readiness-v0.2.0. Pin that commit,
+  # not the tag or a branch, since a commit can't move.
   SA_ACCELERATOR_REF: ""
   SA_READINESS: node --experimental-strip-types --no-warnings .readiness-accelerator/software-factory/agent-readiness/skill/agent-readiness/scripts/readiness.ts
   # The key the audits were sealed with. Without it, seals are unkeyed digests: they catch edits,

@@ -5,7 +5,7 @@ import { describe, test } from "node:test";
 import { LANGUAGES } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { guards } from "../support/tools/known-failures.ts";
-import { quickstartMismatch } from "../support/tools/release-manifest.ts";
+import { PINNED_WORKFLOWS, quickstartMismatch, workflowMismatch } from "../support/tools/release-manifest.ts";
 
 const SKILL = join(import.meta.dirname, "..", "skill/agent-readiness");
 const read = (rel: string) => readFileSync(join(SKILL, rel), "utf8");
@@ -59,5 +59,15 @@ describe("the README Quickstart agrees with the release", () => {
     assert.match(quickstartMismatch(`git clone --depth 1 --branch ${tag} https://github.com/cursor/cookbook /tmp/cookbook\nNo release tag exists yet.`, tag) ?? "", /says no release tag exists/);
     const readme = readFileSync(join(import.meta.dirname, "..", "README.md"), "utf8");
     assert.equal(quickstartMismatch(readme, (JSON.parse(read("RELEASE.json")) as { tag: string }).tag), null);
+  });
+
+  test("the example workflows name the release RELEASE.json names, and the manifest script refuses one that doesn't", () => {
+    const tag = (JSON.parse(read("RELEASE.json")) as { tag: string }).tag;
+    for (const name of PINNED_WORKFLOWS) {
+      const text = readFileSync(join(import.meta.dirname, "..", "support", "examples", "github-workflows", name), "utf8");
+      assert.equal(workflowMismatch(name, text, tag), null);
+    }
+    assert.match(workflowMismatch("static-checks.yml", `# ${tag}\n# No release tag exists yet, so pin that commit.\n`, tag) ?? "", /says no release tag exists/);
+    assert.match(workflowMismatch("static-checks.yml", "# agent-readiness-v0.1.0\n", tag) ?? "", /doesn't name agent-readiness-v0\.2\.0/);
   });
 });

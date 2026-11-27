@@ -2,7 +2,9 @@ import { languageImages } from "./languages/index.ts";
 
 // The audit's own images, pinned to the multi-arch index digest (amd64 and arm64) read on Nov 15,
 // 2026, so a replay runs on the same bytes on every machine until the table is refreshed. An image
-// the repo declares, or one passed with --image, is used as given.
+// the repo declares, or one passed with --image, is used as given. The uv images, read on Nov 27,
+// are on Debian trixie like python:*-slim, so the git the audit adds to them is trixie's 2.47, not
+// bookworm's 2.39, which fails tests that pass with the git on current CI runners.
 // A language file's own images (languages/*.ts `replay.images`) are added to these.
 const BASE_DIGESTS: Record<string, string> = {
   "node:16-bookworm": "sha256:73e677f85fbc56d22c817b4e5d7f72086c5343c0859f3bf8aaadab22aab29ce6",
@@ -17,12 +19,12 @@ const BASE_DIGESTS: Record<string, string> = {
   "python:3.12-slim": "sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b",
   "python:3.13-slim": "sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90",
   "python:3.14-slim": "sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f",
-  "ghcr.io/astral-sh/uv:python3.9-bookworm-slim": "sha256:6821835eb4e0eb94d6a720d14a18ebcc3823ed323e61d346557a705cacf4757d",
-  "ghcr.io/astral-sh/uv:python3.10-bookworm-slim": "sha256:a041b350d5d9483b538d5af07e9553ee8cbc7fc7fa90c2f7d20d93f18ce9bbd1",
-  "ghcr.io/astral-sh/uv:python3.11-bookworm-slim": "sha256:4f5d923c9dcea037f57bda425dd209f3ec643da2f0b74227f68d09dab0b3bb36",
-  "ghcr.io/astral-sh/uv:python3.12-bookworm-slim": "sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58",
-  "ghcr.io/astral-sh/uv:python3.13-bookworm-slim": "sha256:531f855bda2c73cd6ef67d56b733b357cea384185b3022bd09f05e002cd144ca",
-  "ghcr.io/astral-sh/uv:python3.14-bookworm-slim": "sha256:7cf77f594be8042dab6daa9fe326f90962252268b4f120a7f5dccce4d947e6c1",
+  "ghcr.io/astral-sh/uv:python3.9-trixie-slim": "sha256:8f0d49ccab34876916fe67c6190fdf14c31cf64153dc08b73664162342f50feb",
+  "ghcr.io/astral-sh/uv:python3.10-trixie-slim": "sha256:059b33d17906ee8536034962b0b6eb82b0551584fb849a14e417bb86dbb27087",
+  "ghcr.io/astral-sh/uv:python3.11-trixie-slim": "sha256:e91362c13eaf2fbe46161077a5a0092d14a01f5de3684e78d9f66484988e8fce",
+  "ghcr.io/astral-sh/uv:python3.12-trixie-slim": "sha256:a3fdff607889036fef414975e3701d14a2b6734ffec10cbdd5ce60d2b6c8853a",
+  "ghcr.io/astral-sh/uv:python3.13-trixie-slim": "sha256:00e2b362982a5ce19eb3a51453ed76af92ccaaedccc0236fae83b27d994ae0f3",
+  "ghcr.io/astral-sh/uv:python3.14-trixie-slim": "sha256:b093dbbd7963c765325ecdf866d42915f5327e135569f9dae9c77cac63559bf2",
 };
 
 export const IMAGE_DIGESTS: Record<string, string> = { ...BASE_DIGESTS, ...languageImages() };

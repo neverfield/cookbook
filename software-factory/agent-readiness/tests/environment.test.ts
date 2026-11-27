@@ -91,13 +91,13 @@ describe("a Python or Playwright the image doesn't have is blocked, not a repo f
   test("the audit picks a Python image new enough for requires-python", () => {
     const uv = tree({ "pyproject.toml": "[project]\nname = \"app\"\nrequires-python = \">=3.14,<4.0\"\n", "uv.lock": "", "app/main.py": "" });
     assert.equal(requiredPython(uv), "3.14");
-    assert.equal(containerImage(buildProfile(uv, uv, rubric), uv), "ghcr.io/astral-sh/uv:python3.14-bookworm-slim");
+    assert.equal(containerImage(buildProfile(uv, uv, rubric), uv), "ghcr.io/astral-sh/uv:python3.14-trixie-slim");
     const poetry = tree({ "pyproject.toml": "[tool.poetry]\nname = \"app\"\n\n[tool.poetry.dependencies]\npython = \"^3.13\"\n", "poetry.lock": "", "app/main.py": "" });
     assert.equal(containerImage(buildProfile(poetry, poetry, rubric), poetry), "python:3.13-slim");
     const old = tree({ "pyproject.toml": "[project]\nname = \"app\"\nrequires-python = \">=3.9\"\n", "requirements.txt": "", "app/main.py": "" });
     assert.equal(containerImage(buildProfile(old, old, rubric), old), "python:3.12-slim", "an older floor keeps the default");
     const pinned = tree({ "pyproject.toml": "[project]\nname = \"app\"\nrequires-python = \">=3.14\"\n", ".python-version": "3.13\n", "uv.lock": "", "app/main.py": "" });
-    assert.equal(containerImage(buildProfile(pinned, pinned, rubric), pinned), "ghcr.io/astral-sh/uv:python3.13-bookworm-slim", ".python-version wins");
+    assert.equal(containerImage(buildProfile(pinned, pinned, rubric), pinned), "ghcr.io/astral-sh/uv:python3.13-trixie-slim", ".python-version wins");
   });
 
   test("Playwright's missing browsers are a missing tool, blocked in the audit's image", () => {
@@ -127,6 +127,20 @@ describe("in a container, setup as root leaves the shared home writable", { skip
       const out = await session.exec('mkdir -p "$HOME/.npm/_cacache/x" "$HOME/.cache/pypoetry" && npm cache verify >/dev/null && echo ok', ".", 60);
       assert.equal(out.exitCode, 0, out.output);
       assert.match(out.output, /ok/);
+    } finally {
+      session.stop();
+    }
+  });
+
+  test("a test that commits gets the audit's git identity, and one that sets its own keeps it", { timeout: 120000 }, async () => {
+    const work = mkdtempSync(join(tmpdir(), "readiness-env-git-"));
+    const session = new ContainerSession(runtime!, `readiness-env-git-${process.pid}`, "node:22-bookworm", work, [], user);
+    assert.ok(session.start().ok, "container starts");
+    try {
+      const fallback = await session.exec("cd \"$(mktemp -d)\" && git init -q && git commit -q --allow-empty -m x && git log -1 --format='%an <%ae>'", ".", 60);
+      assert.equal(fallback.output.trim(), "Agent Readiness <readiness@audit.invalid>", fallback.output);
+      const own = await session.exec("cd \"$(mktemp -d)\" && git init -q && git config user.name 'Test User' && git config user.email test@example.com && git commit -q --allow-empty -m x && git log -1 --format='%an <%ae>'", ".", 60);
+      assert.equal(own.output.trim(), "Test User <test@example.com>", own.output);
     } finally {
       session.stop();
     }

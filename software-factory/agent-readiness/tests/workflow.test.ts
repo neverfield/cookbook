@@ -35,7 +35,7 @@ describe("the example workflows that run a pinned accelerator", () => {
   for (const name of ["static-checks.yml", "scheduled-recheck.yml"]) {
     const text = readFileSync(join(EXAMPLES, name), "utf8");
     test(`${name} ships no pin and stops until one is set`, () => {
-      // No release tag exists, so any shipped ref would point at nothing.
+      // The pin is the commit the reader copied, which only the reader knows.
       assert.match(text, /^  SA_ACCELERATOR_REF: ""$/m);
       assert.match(text, /if \[ -z "\$SA_ACCELERATOR_REF" \]; then[\s\S]*?exit 1/);
       assert.ok(text.indexOf("Check the pin") < text.indexOf("Check out the pinned accelerator"), "the pin is checked before the checkout");
