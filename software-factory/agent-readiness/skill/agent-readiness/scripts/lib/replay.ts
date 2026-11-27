@@ -282,6 +282,20 @@ export function workspacePackages(root: string, profile: Profile): WorkspacePack
 
 const ONLINE_KINDS = new Set<CommandKind>(["doctor", "install", "build", "start"]);
 
+// The repo's declared environment image didn't build. A base image the runtime couldn't pull is
+// this machine's network or registry access, so the install is blocked; any other failure is the
+// Dockerfile's, so the install fails for the repo. Either way nothing else runs, and the audit seals.
+export function declaredBuildFailure(output: string, dockerfile: string): { result: "fail" | "not_run"; summary: string; blocked?: string; reason: string } {
+  const lines = output.replace(/\x1b\[[0-9;]*m/g, "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const last = ([...lines].reverse().find((l) => /error|failed|denied|not found/i.test(l)) ?? lines[lines.length - 1] ?? "no output").slice(0, 200);
+  const file = `.cursor/${dockerfile}`;
+  if (/pull access denied|failed to resolve source metadata|manifest unknown|failed to do request|dial tcp|i\/o timeout|TLS handshake timeout|no such host|toomanyrequests|unauthorized: authentication required/i.test(output)) {
+    const blocked = `the base image of the declared environment ${file} couldn't be pulled on this machine (${last})`;
+    return { result: "not_run", summary: `install not run: ${blocked}`, blocked, reason: blocked };
+  }
+  return { result: "fail", summary: `install failed: the declared environment image ${file} doesn't build (${last})`, reason: `the repo's declared environment image ${file} didn't build` };
+}
+
 // Support entries the replay reports as blocked, rather than the scan as not assessed.
 export const REPLAY_STACKS = ["task-graph"];
 
@@ -1030,6 +1044,8 @@ export interface Executors {
   // active component's when nothing repo-wide runs.
   repo: Executor;
   close(): void;
+  // Set when the repo's declared environment image didn't build, so nothing ran in it.
+  declaredFailure?: ReturnType<typeof declaredBuildFailure>;
 }
 
 function executorSet(groups: ExecutorGroup[], profile: Profile): Executors {
@@ -1235,7 +1251,18 @@ function pickExecutors(audit: Audit, copyDir: string, runtimePref: string, log: 
     const tag = `readiness-env-${sha256(readText(dockerfile)).slice(0, 12)}`;
     log(`Building the repo's declared environment image from .cursor/${declared.dockerfile}.`);
     const built = buildImage(runtime, context, dockerfile, tag);
-    if (!built.ok) fail(`The declared environment image didn't build:\n${tail(built.output, 2000)}`);
+    if (!built.ok) {
+      const found = declaredBuildFailure(built.output, declared.dockerfile);
+      log(`The repo's declared environment image didn't build: ${found.summary}. Nothing else runs in it; the audit goes on to the seal.`);
+      audit.environment.containerRuntime = runtime.bin;
+      audit.environment.image = tag;
+      audit.environment.notRun = found.reason;
+      delete audit.environment.limits;
+      delete audit.environment.imageDigest;
+      delete audit.environment.images;
+      const ids = profile.components.filter((c) => c.assessed).map((c) => c.id);
+      return { ...executorSet([{ ex: unavailableExecutor(copyDir, found.reason), components: ids, repoWide: true }], profile), declaredFailure: found };
+    }
     single = tag;
     imageSource = "repo";
   }
@@ -1350,6 +1377,9 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
   try {
     recordHostConsent(audit, repo);
     await replayIn(audit, repo, tree, rubric, opts, exs, copyDir, before, components);
+    // Recorded after the install rows the replay wrote as blocked, so it is the install's result.
+    const found = exs.declaredFailure;
+    if (found) addEvidence(audit, { checkId: "bootstrap.cold_replay", condition: "clean.install", component: "*", kind: "install", contractId: audit.contract.find((c) => c.kind === "install" && c.component === "*")?.id, strength: "clean_replay", where: "container", result: found.result, summary: found.summary, ...(found.blocked ? { blocked: found.blocked } : { attribution: { verdict: "repo" as const, basis: "known_cause" as const, detail: found.summary } }) });
   } finally {
     exs.close();
     scratch.dispose();

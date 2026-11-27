@@ -10,7 +10,7 @@ import { diagnose, privatePackage } from "../skill/agent-readiness/scripts/lib/d
 import { HOOKS_FILE, guardDecision, installGuard, probeGuard, uninstallGuard } from "../skill/agent-readiness/scripts/lib/guard.ts";
 import { reproOf } from "../skill/agent-readiness/scripts/lib/model.ts";
 import type { Executor, Executors } from "../skill/agent-readiness/scripts/lib/replay.ts";
-import { checkExecutors, mountHint, mountUnseen, openWithMountRetry, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { checkExecutors, declaredBuildFailure, mountHint, mountUnseen, openWithMountRetry, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import type { VmDetection } from "../skill/agent-readiness/scripts/lib/proofenv.ts";
 import { vmNotDetectedNote } from "../skill/agent-readiness/scripts/lib/proofenv.ts";
 import { loadDraft, saveDraft } from "../skill/agent-readiness/scripts/lib/workspace.ts";
@@ -391,6 +391,31 @@ describe("S12: cleanup removes only the folders an audit marked as its own", () 
     assert.equal(r.code, 0, r.out);
     assert.equal(existsSync(join(mine, "notes.txt")), true, "not the audit's, whatever its name and age");
     assert.equal(existsSync(audits.path), false);
+  });
+});
+
+describe("S13: a declared image that doesn't build is a finding, and the audit seals", () => {
+  test("a Dockerfile step that fails is the repo's failed install, with the step's error", docker, () => {
+    const repo = materialize("healthy-node");
+    mkdirSync(join(repo, ".cursor"), { recursive: true });
+    writeFileSync(join(repo, ".cursor", "Dockerfile"), "FROM node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb\nRUN echo 'setup script missing' >&2 && false\n");
+    writeFileSync(join(repo, ".cursor", "environment.json"), JSON.stringify({ build: { dockerfile: "Dockerfile", context: ".." } }));
+    commitAll(repo, "declared image that can't build");
+    const r = readiness(repo, ["audit", "--tier", "local-exec", "--no-mutants"]);
+    assert.equal(r.code, 0, r.out);
+    const { audit, md } = sealedAudit(repo);
+    const ev = audit.evidence.find((e) => e.condition === "clean.install" && e.result === "fail")!;
+    assert.match(ev.summary, /^install failed: the declared environment image \.cursor\/Dockerfile doesn't build \(.*\)/);
+    assert.equal(ev.attribution?.verdict, "repo");
+    assert.match(audit.environment.notRun ?? "", /declared environment image \.cursor\/Dockerfile didn't build/);
+    assert.match(md, /declared environment image \.cursor\/Dockerfile doesn't build/);
+  });
+
+  test("a base image that can't be pulled blocks the install on this machine instead", () => {
+    const f = declaredBuildFailure("#3 [internal] load metadata for registry.acme.corp/base:1\nERROR: failed to solve: registry.acme.corp/base:1: failed to resolve source metadata for registry.acme.corp/base:1: dial tcp: lookup registry.acme.corp: no such host", "Dockerfile");
+    assert.equal(f.result, "not_run");
+    assert.match(f.blocked ?? "", /^the base image of the declared environment \.cursor\/Dockerfile couldn't be pulled on this machine \(ERROR: failed to solve/);
+    assert.equal(declaredBuildFailure("#5 [2/2] RUN ./setup.sh\n#5 0.2 /bin/sh: ./setup.sh: not found\nERROR: failed to solve: process \"/bin/sh -c ./setup.sh\" did not complete successfully: exit code: 127", "Dockerfile").result, "fail");
   });
 });
 
