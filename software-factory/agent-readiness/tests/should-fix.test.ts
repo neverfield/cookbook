@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
@@ -18,6 +18,7 @@ import { renderHtml } from "../skill/agent-readiness/scripts/lib/render-html.ts"
 import { renderMarkdown } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { startSession } from "../skill/agent-readiness/scripts/lib/session.ts";
+import { TEMP_MARK, tempDir } from "../skill/agent-readiness/scripts/lib/teardown.ts";
 import type { Audit } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { SKILL_ROOT, assertFreeSpace, freeSpaceProblem, treeBytes } from "../skill/agent-readiness/scripts/lib/util.ts";
 import { commitAll, materialize, readiness } from "../support/tools/fixture.ts";
@@ -369,6 +370,27 @@ describe("S11: an image pull gets its own limit and says when it ran out", () =>
   test("the pull limit defaults to 30 minutes and SA_READINESS_PULL_MINUTES sets it", () => {
     assert.equal(pullTimeoutMs({}), 30 * 60000);
     assert.equal(pullTimeoutMs({ SA_READINESS_PULL_MINUTES: "90" }), 90 * 60000);
+  });
+});
+
+describe("S12: cleanup removes only the folders an audit marked as its own", () => {
+  test("a developer's old readiness-check folder stays; an audit's old folder goes; a kept draft keeps its mark", () => {
+    const repo = materialize("healthy-node");
+    const tmp = mkdtempSync(join(tmpdir(), "cleanup-mark-"));
+    assert.equal(readiness(repo, ["init", "--tier", "local-exec"], { TMPDIR: tmp }).code, 0);
+    const tree = JSON.parse(readFileSync(join(repo, ".agent-readiness/work", readFileSync(join(repo, ".agent-readiness/work/CURRENT"), "utf8").trim(), "local.json"), "utf8")).tree as string;
+    assert.equal(existsSync(join(dirname(tree), TEMP_MARK)), true, "the draft's folder outlives init and keeps its mark");
+    const mine = join(tmp, "readiness-check");
+    mkdirSync(mine);
+    writeFileSync(join(mine, "notes.txt"), "mine");
+    const audits = tempDir("readiness-replay-", tmp);
+    audits.keep();
+    const past = new Date(Date.now() - 6 * 3600e3);
+    for (const d of [mine, audits.path]) utimesSync(d, past, past);
+    const r = readiness(repo, ["cleanup"], { TMPDIR: tmp });
+    assert.equal(r.code, 0, r.out);
+    assert.equal(existsSync(join(mine, "notes.txt")), true, "not the audit's, whatever its name and age");
+    assert.equal(existsSync(audits.path), false);
   });
 });
 

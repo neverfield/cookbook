@@ -10,6 +10,7 @@ import { NETWORK_ON, checkExecutors, evidenceFromPhase, hostExecutor, newBudget,
 import type { Executor, Executors } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { latestRubricVersion, loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
+import { TEMP_MARK } from "../skill/agent-readiness/scripts/lib/teardown.ts";
 import type { Audit } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { loadDraft, saveDraft } from "../skill/agent-readiness/scripts/lib/workspace.ts";
 import { materialize, readiness } from "../support/tools/fixture.ts";
@@ -195,6 +196,7 @@ describe("proof environments", () => {
     const fresh = join(tmp, "readiness-replay-fresh");
     mkdirSync(old);
     mkdirSync(fresh);
+    for (const d of [old, fresh]) writeFileSync(join(d, TEMP_MARK), "");
     const past = new Date(Date.now() - 6 * 3600e3);
     utimesSync(old, past, past);
     const r = readiness(repo, ["cleanup"], { TMPDIR: tmp });

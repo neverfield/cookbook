@@ -1,8 +1,8 @@
-import { cpSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { redact } from "./redact.ts";
 import { scanText } from "./secrets.ts";
+import { tempDir } from "./teardown.ts";
 import type { Audit, HistoryLine, MaskedValue, ReportJson, Roadmap } from "./types.ts";
 import { ensureDir, exists, fail, git, nowIso, readJson, readText, writeJson, writeText } from "./util.ts";
 import type { Paths } from "./workspace.ts";
@@ -189,7 +189,8 @@ const hg = (args: string[], cwd: string) => git(["-c", "core.hooksPath=/dev/null
 
 export function pushHistory(p: Paths, opts: { push: boolean; remote: string }): string {
   if (!exists(p.history)) fail(`Nothing to push: ${p.history} doesn't exist`);
-  const wt = join(mkdtempSync(join(tmpdir(), "readiness-history-")), "wt");
+  const scratch = tempDir("readiness-history-");
+  const wt = join(scratch.path, "wt");
   const hasLocal = hg(["rev-parse", "--verify", HISTORY_BRANCH], p.repo).ok;
   const hasRemote = hg(["rev-parse", "--verify", `${opts.remote}/${HISTORY_BRANCH}`], p.repo).ok;
   const remoteRef = `${opts.remote}/${HISTORY_BRANCH}`;
@@ -233,6 +234,6 @@ export function pushHistory(p: Paths, opts: { push: boolean; remote: string }): 
     return message;
   } finally {
     hg(["worktree", "remove", "--force", wt], p.repo);
-    rmSync(join(wt, ".."), { recursive: true, force: true });
+    scratch.dispose();
   }
 }
