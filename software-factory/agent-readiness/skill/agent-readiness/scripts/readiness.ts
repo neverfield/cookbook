@@ -6,7 +6,7 @@ import { compareAudits, weakeningFlags } from "./lib/diff.ts";
 import { addEvidence, recordObservation } from "./lib/evidence.ts";
 import { levelResult } from "./lib/format.ts";
 import { ghAvailable, ghJson } from "./lib/gh.ts";
-import { HOOKS_FILE, guardInstalled, installGuard, uninstallGuard } from "./lib/guard.ts";
+import { HOOKS_FILE, guardInstalled, installGuard, probeGuard, uninstallGuard } from "./lib/guard.ts";
 import { auditIds, loadSealedAudit, pushHistory, readHistory, readRoadmap, writeRoadmap } from "./lib/history.ts";
 import { MAX_PRS, computeOutcomes, fetchPrs, loadPrsFile } from "./lib/outcomes.ts";
 import { PREVIEW } from "./lib/preview.ts";
@@ -637,7 +637,7 @@ function cmdGuard(a: Args): void {
   if (sub === "install") {
     const r = installGuard(repo);
     if (r.status === "tracked") log(`${HOOKS_FILE} is committed in this repo, so it was left alone. To refuse the repo's own commands on this machine during an audit, add this command as a beforeShellExecution and a beforeReadFile hook: node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scripts/guard.ts`);
-    else log(`${r.status === "installed" ? "Added" : "Already in place:"} the readiness guard in ${HOOKS_FILE}, kept out of git. While an audit's session is open, it refuses the repo's own install, build and test commands on this machine until the user's yes is recorded with \`readiness allow-host\`, and at any time once the draft is open. Outside a session it lets them run. New agent sessions load it; \`readiness guard uninstall\` takes it out.`);
+    else log(`${r.status === "installed" ? "Added" : "Already in place:"} the readiness guard in ${HOOKS_FILE}, kept out of git. While an audit's session is open, it refuses the repo's own install, build and test commands on this machine until the user's yes is recorded with \`readiness allow-host\`, and at any time once the draft is open, and reads of the audit's draft records and planted faults. Outside a session it lets everything run. New agent sessions on this machine load it; a cloud agent, which starts from the committed tree, never does. \`readiness guard uninstall\` takes it out.`);
     return;
   }
   if (sub === "uninstall") {
@@ -648,7 +648,13 @@ function cmdGuard(a: Args): void {
   }
   if (sub !== "status") fail("Use `readiness guard install`, `readiness guard uninstall` or `readiness guard status`.");
   const l = lease(repo);
-  log(`Guard ${guardInstalled(repo) ? `installed in ${HOOKS_FILE}` : "not installed"}. ${l.valid ? `Enforcing: session ${l.session!.id} is open${l.session!.auditId ? ` with draft ${l.session!.auditId}` : ""}, until ${l.session!.expiresAt}.` : `Not enforcing: ${l.why}.`}`);
+  const installed = guardInstalled(repo);
+  const probe = installed ? probeGuard(repo) : null;
+  if (probe && !probe.answers) {
+    log(`Guard listed in ${HOOKS_FILE}, but ${probe.detail}, so it enforces nothing. Cursor runs it with its own PATH, which needs Node ${MIN_NODE.join(".")} or later.`);
+    return;
+  }
+  log(`Guard ${installed ? `installed in ${HOOKS_FILE}` : "not installed"}. ${l.valid ? `Enforcing: session ${l.session!.id} is open${l.session!.auditId ? ` with draft ${l.session!.auditId}` : ""}, until ${l.session!.expiresAt}.` : `Not enforcing: ${l.why}.`}`);
 }
 
 function cmdSession(a: Args): void {

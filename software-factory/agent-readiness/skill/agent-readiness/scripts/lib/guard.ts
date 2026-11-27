@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import { grantRecorded, lease } from "./session.ts";
 
 // An opt-in shell hook (Cursor's beforeShellExecution) that, while an audit's session is open,
@@ -9,7 +10,7 @@ import { grantRecorded, lease } from "./session.ts";
 // to host mode is recorded, and at any time once the draft is open. With beforeReadFile it also
 // refuses reads of the draft records and the planted-fault store. SKILL.md rule 2 asks for that
 // yes; this makes the rule hold before the agent has read any output of the scripts. Outside a
-// session it lets the repo's commands run, so the repo works as before once the audit is sealed. It
+// session it lets every command and read through, so the repo works as before once the audit is sealed. It
 // only refuses: the scripts never depend on it, and an input it can't read is let through.
 
 // Host mode's opt-in variable (`--allow-host` sets it). Defined here so the hook loads no more
@@ -34,9 +35,14 @@ export const FAULT_STORE = /(^|[\s/"'=])mutants?[^\s/"']*\.json\b|readiness-aud-
 // read them; an agent reading them before the seal sees records the report hasn't vetted.
 export const DRAFT_RECORDS = /\.agent-readiness\/work\/(CURRENT\b|[^\s"'\/*]+\/[^\s"'\/*]+)/;
 
-// Why a command or a file read touches records the agent must leave to the scripts, or null.
-export function recordsRead(target: string): string | null {
-  if (FAULT_STORE.test(target)) return "names where the audit plants its faults, which stays hidden until the seal";
+// A file read names the fault store only by a path into the audit's own folder: a repo's own
+// db/seed.txt or mutants.json is the repo's to read.
+export const FAULT_STORE_PATH = /readiness-aud-[^\s"'/]*\/(?!tree(\/|$))[^\s"']*/;
+
+// Why a command or a file read touches records the agent must leave to the scripts, or null. A
+// command is held to the bare file names too, as `find / -name mutants.json` would find the store.
+export function recordsRead(target: string, kind: "shell" | "read" = "shell"): string | null {
+  if ((kind === "read" ? FAULT_STORE_PATH : FAULT_STORE).test(target)) return "names where the audit plants its faults, which stays hidden until the seal";
   if (DRAFT_RECORDS.test(target)) return "reads the draft audit's own records under .agent-readiness/work/, which the report hasn't vetted; `readiness status` shows the draft";
   return null;
 }
@@ -268,20 +274,20 @@ function refuse(repo: string, kind: "shell" | "read", target: string, why: strin
 export function guardDecision(input: GuardInput, env: NodeJS.ProcessEnv = process.env): GuardDecision {
   const cwd = input.cwd || input.workspace_roots?.[0] || process.cwd();
   const repo = repoRoot(cwd) ?? input.workspace_roots?.[0] ?? cwd;
+  const l = lease(repo);
+  if (!l.valid) return { permission: "allow" };
   if (typeof input.file_path === "string" && input.command === undefined) {
-    const why = recordsRead(input.file_path);
+    const why = recordsRead(input.file_path, "read");
     return why ? refuse(repo, "read", input.file_path, `This read ${why}.`) : { permission: "allow" };
   }
   const read = recordsRead(input.command ?? "");
   if (read) return refuse(repo, "shell", input.command ?? "", `This command ${read}.`);
   const found = repoCommands(input.command ?? "", cwd, repo);
   if (!found.length) return { permission: "allow" };
-  const l = lease(repo);
-  if (!l.valid) return { permission: "allow" };
   const shown = found.slice(0, 2).map((c) => `\`${c.length > 80 ? c.slice(0, 77) + "..." : c}\``).join(" and ");
   let why: string;
   if (l.session?.auditId) {
-    why = `${shown} runs the repo's own code outside the readiness scripts while an audit is open. Until it is sealed, only the scripts run repo code: \`readiness replay\` in a clean container, or \`readiness run --component <id> --allow-host\` after the user's yes.`;
+    why = `${shown} runs the repo's own code outside the readiness scripts while an audit is open. Until it is sealed, only the scripts run repo code: \`readiness replay\` in a clean container, or \`readiness run --component <id> --allow-host\` after the user's yes. \`readiness session end\` or \`readiness init --force\` ends the audit without a seal.`;
   } else if (!hostYesRecorded(repo, env)) {
     why = `${shown} runs the repo's own code on this machine, outside a container, during an audit's session, and the user's yes to that isn't recorded (SKILL.md rule 2). To see what the repo's commands do, run the audit: its scripts run them in a clean container. If the user says yes to running them here, record it with \`readiness allow-host --note "<their words>"\` and run the command again. \`readiness session end\` ends the session without an audit.`;
   } else return { permission: "allow" };
@@ -319,6 +325,8 @@ interface InstallState {
   exclude: string | null;
   excludeBefore: string | null;
   excludeCreated?: boolean;
+  // The hooks file's bytes before install, put back when nothing but the guard changed in it.
+  fileBefore?: string | null;
 }
 
 const EXCLUDE_LINE = `/${HOOKS_FILE}`;
@@ -340,7 +348,7 @@ export function installGuard(repo: string, script = GUARD_SCRIPT): { status: "in
   const file = join(repo, HOOKS_FILE);
   if (tracked(repo, HOOKS_FILE)) return { status: "tracked", file };
   const existed = existsSync(file);
-  const state: InstallState = readState(repo) ?? { command: guardCommand(script), createdFile: !existed, createdDir: !existsSync(dirname(file)), addedSteps: [], exclude: null, excludeBefore: null };
+  const state: InstallState = readState(repo) ?? { command: guardCommand(script), createdFile: !existed, createdDir: !existsSync(dirname(file)), addedSteps: [], exclude: null, excludeBefore: null, fileBefore: existed ? readFileSync(file, "utf8") : null };
   const cfg: HooksFile = existed ? (JSON.parse(readFileSync(file, "utf8")) as HooksFile) : { version: 1, hooks: {} };
   const hooks = (cfg.hooks ??= {});
   const command = guardCommand(script);
@@ -391,7 +399,7 @@ export function uninstallGuard(repo: string): { status: "removed" | "absent" | "
       rmSync(file);
       const dir = dirname(file);
       if ((state ? state.createdDir : false) && existsSync(dir) && readdirSync(dir).length === 0) rmdirSync(dir);
-    } else if (removed) writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n");
+    } else if (removed) writeFileSync(file, restoredBytes(cfg, state?.fileBefore) ?? JSON.stringify(cfg, null, 2) + "\n");
   }
   const exclude = state?.exclude ?? (removed && !existsSync(file) ? gitPath(repo, "info/exclude") : null);
   if (exclude && existsSync(exclude)) {
@@ -404,6 +412,43 @@ export function uninstallGuard(repo: string): { status: "removed" | "absent" | "
   const stateFile = gitPath(repo, GUARD_STATE);
   if (stateFile) rmSync(stateFile, { force: true });
   return { status: removed || state ? "removed" : "absent", file };
+}
+
+// The file as it was before install, when what is left after taking the guard out is the same
+// content: install's own `version` and two-space layout go with it.
+function restoredBytes(cfg: HooksFile, before: string | null | undefined): string | null {
+  if (typeof before !== "string") return null;
+  try {
+    const orig = JSON.parse(before) as HooksFile;
+    const now: HooksFile = { ...cfg };
+    if (!("version" in orig)) delete now.version;
+    return isDeepStrictEqual(orig, now) ? before : null;
+  } catch {
+    return null;
+  }
+}
+
+// Runs the installed hook once on a harmless command, as Cursor would, so `guard status` can say
+// whether it answers. A hook that can't start (no Node 22.14 on Cursor's PATH, a moved skill)
+// enforces nothing while the file still lists it.
+export function probeGuard(repo: string): { answers: boolean; detail: string } {
+  let command: string | undefined;
+  try {
+    const cfg = JSON.parse(readFileSync(join(repo, HOOKS_FILE), "utf8")) as HooksFile;
+    command = (cfg.hooks?.beforeShellExecution ?? []).find((h) => isGuard(h.command))?.command;
+  } catch {
+    return { answers: false, detail: `${HOOKS_FILE} can't be read` };
+  }
+  if (!command) return { answers: false, detail: `${HOOKS_FILE} lists no guard hook` };
+  const r = spawnSync("sh", ["-c", command], { cwd: repo, input: JSON.stringify({ command: "true", cwd: repo }), encoding: "utf8", timeout: 20000 });
+  try {
+    const out = JSON.parse(r.stdout) as GuardDecision;
+    if (out.permission === "allow" || out.permission === "deny") return { answers: true, detail: "the hook answers" };
+  } catch {
+    // Reported below with what the hook printed.
+  }
+  const said = (r.stderr || r.stdout || r.error?.message || "").trim().split("\n").slice(-1)[0];
+  return { answers: false, detail: `the hook didn't answer${r.status !== null ? ` (exit ${r.status})` : ""}${said ? `: ${said.slice(0, 160)}` : ""}` };
 }
 
 export function guardInstalled(repo: string): boolean {
