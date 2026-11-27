@@ -28,7 +28,7 @@ import { makeRecipe } from "./static.ts";
 import { SUPPORTED_DOC, notSupportedReason } from "./support.ts";
 import { loadSealedAudit } from "./history.ts";
 import { paths, plantSeed, refreshTree } from "./workspace.ts";
-import { GIT_IDENTITY_CONFIG, canCutNetwork, canaryFailure, detectDisposableVm, normalizedEnv, offlineCommand, provesIn, runCanary } from "./proofenv.ts";
+import { GIT_IDENTITY_CONFIG, canCutNetwork, canaryFailure, detectDisposableVm, normalizedEnv, offlineCommand, provesIn, runCanary, vmNotDetectedNote } from "./proofenv.ts";
 import type { Canary, ProofEnv, VmDetection } from "./proofenv.ts";
 import { loadRubric } from "./rubric.ts";
 import { lease } from "./session.ts";
@@ -116,7 +116,7 @@ export function noRuntimeReason(preference: string): string {
 }
 export const HOST_MODE_NOTE = "host mode was allowed: the repo's commands ran on this machine as this user, outside a container, with a throwaway home and no account credentials, but they could read this user's local files; it isn't a sandbox, and Level 1 can't be proved there";
 export function vmModeNote(vm: VmDetection): string {
-  return `host mode was allowed on ${vm.label}, detected by ${vm.signals.join(" and ")}: the repo's commands ran on that machine as its user, outside a container, with a throwaway home and no account credentials; they could read its local files, which a disposable VM holds only for this run`;
+  return `host mode was allowed on ${vm.label}, detected by ${vm.signals.join(" and ")}: the repo's commands ran on that machine as its user, outside a container, with a throwaway home and no account credentials; they could read its local files, which a disposable VM holds only for this run, and the secrets injected into it. A pass there proves the VM as provisioned, including its preinstalled tools and running services, which a clean container may not have`;
 }
 
 // Linux, macOS and cloud agents. The audit drives its container through bash on the host and its
@@ -1291,6 +1291,8 @@ function pickExecutors(audit: Audit, copyDir: string, runtimePref: string, log: 
   delete audit.environment.imageDigest;
   delete audit.environment.images;
   const image = wanted[0]?.image ?? plan[0].image;
+  const unseen = !runtime && !vm ? vmNotDetectedNote() : null;
+  if (unseen) log(unseen);
   if (hostAllowed(allowHost)) {
     audit.environment.containerRuntime = null;
     audit.environment.image = null;

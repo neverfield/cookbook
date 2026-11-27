@@ -10,7 +10,10 @@ import { diagnose, privatePackage } from "../skill/agent-readiness/scripts/lib/d
 import { HOOKS_FILE, guardDecision, installGuard, probeGuard, uninstallGuard } from "../skill/agent-readiness/scripts/lib/guard.ts";
 import { reproOf } from "../skill/agent-readiness/scripts/lib/model.ts";
 import type { Executor, Executors } from "../skill/agent-readiness/scripts/lib/replay.ts";
-import { checkExecutors, mountHint, mountUnseen, openWithMountRetry } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { checkExecutors, mountHint, mountUnseen, openWithMountRetry, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import type { VmDetection } from "../skill/agent-readiness/scripts/lib/proofenv.ts";
+import { vmNotDetectedNote } from "../skill/agent-readiness/scripts/lib/proofenv.ts";
+import { loadDraft, saveDraft } from "../skill/agent-readiness/scripts/lib/workspace.ts";
 import { renderHtml } from "../skill/agent-readiness/scripts/lib/render-html.ts";
 import { renderMarkdown } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
@@ -309,6 +312,34 @@ describe("S9: a maintainer corrects a wrong discovered command in a committed co
     assert.equal(r.code, 0, r.out);
     assert.match(r.out, /config\.json isn't in the audited commit, so it was ignored/);
     assert.deepEqual(sealedAudit(repo).audit.contract.filter((c) => c.kind === "test").map((c) => c.command), ["npm run test"]);
+  });
+});
+
+describe("S10: proof on a cloud VM says what it proves, and a missing signal shows", () => {
+  const CLOUD_VM: VmDetection = { kind: "cursor_cloud_agent", label: "a Cursor Cloud Agent VM", signals: ["/exec-daemon", "CLOUD_AGENT_INJECTED_SECRET_NAMES"] };
+
+  test("the report and the host-mode finding say the VM was proved as provisioned, and that its secrets were readable", { timeout: 5 * 60 * 1000 }, async () => {
+    const repo = materialize("healthy-node");
+    for (const step of [["init", "--tier", "local-exec"], ["scan"]]) assert.equal(readiness(repo, step).code, 0, step.join(" "));
+    const { audit, local, paths: p } = loadDraft(repo);
+    await replay(audit, repo, local.tree, loadRubric(audit.rubric), { runtime: "none", allowHost: true, vm: CLOUD_VM, mutants: false, instructions: false, budgetComponentMinutes: 15, budgetTotalMinutes: 60, log: () => {} });
+    saveDraft(p, audit);
+    assert.equal(readiness(repo, ["seal"]).code, 0);
+    const { audit: sealed, md } = sealedAudit(repo);
+    assert.match(md, /fresh copy on a disposable VM as provisioned, including its preinstalled tools and running services/);
+    assert.match(sealed.safety.find((s) => s.kind === "host_mode")!.detail, /and the secrets injected into it\. A pass there proves the VM as provisioned, including its preinstalled tools and running services/);
+  });
+
+  test("a Linux machine with neither signal logs one line; a VM sign, another OS or detection off logs none", () => {
+    assert.match(vmNotDetectedNote({}, "linux", () => false) ?? "", /neither sign of a Cursor Cloud Agent VM \(\/exec-daemon and CLOUD_AGENT_\* variables\)/);
+    assert.equal(vmNotDetectedNote({}, "linux", (f) => f === "/exec-daemon"), null);
+    assert.equal(vmNotDetectedNote({ CLOUD_AGENT_SOMETHING_NEW: "1" }, "linux", () => false), null, "a renamed variable still counts as a sign, so the line doesn't cry wolf");
+    assert.equal(vmNotDetectedNote({}, "darwin", () => false), null);
+    assert.equal(vmNotDetectedNote({ SA_READINESS_VM_DETECT: "off" }, "linux", () => false), null);
+  });
+
+  test("SKILL.md rule 2 names the injected secrets in the consent question", () => {
+    assert.match(readFileSync(join(SKILL_ROOT, "SKILL.md"), "utf8"), /A disposable cloud VM the audit detects is still this machine: ask the same way, and say the commands can also read the secrets injected into the VM\./);
   });
 });
 

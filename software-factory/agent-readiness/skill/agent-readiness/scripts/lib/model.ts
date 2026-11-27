@@ -209,7 +209,7 @@ function vmEnvironmentNote(audit: Audit): string {
   const pe = audit.environment.proofEnv;
   const by = pe?.detectedBy?.length ? `, detected by ${pe.detectedBy.join(" and ")}` : "";
   const net = pe?.network === "cut" ? "network cut for the tests" : pe?.network === "on" ? "network on for the tests, because the VM couldn't cut it" : "network not switched";
-  return `fresh copy on a disposable VM (no container runtime${by}), ${net}${pe?.proves ? "" : "; this audit's rubric doesn't count a disposable VM as proof"}`;
+  return `fresh copy on a disposable VM as provisioned, including its preinstalled tools and running services (no container runtime${by}), ${net}${pe?.proves ? "" : "; this audit's rubric doesn't count a disposable VM as proof"}`;
 }
 
 function canaryNote(c: NonNullable<Audit["environment"]["proofEnv"]>["canary"]): string {

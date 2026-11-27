@@ -51,6 +51,14 @@ export const VM_DETECT_ENV = "SA_READINESS_VM_DETECT";
 // would let any laptop prove Level 1. A Cursor Cloud Agent runs on a Linux VM made for the run,
 // with the agent's daemon at /exec-daemon and the run's secrets listed in CLOUD_AGENT_* variables;
 // a desktop agent has neither. The report names the signals it saw.
+// The line a Linux run with no container runtime logs when neither sign of a cloud VM is there, so a
+// renamed signal shows up as a visible line rather than a silent "unproven".
+export function vmNotDetectedNote(env: NodeJS.ProcessEnv = process.env, platform: string = process.platform, exists: (p: string) => boolean = existsSync): string | null {
+  if (env[VM_DETECT_ENV] === "off" || platform !== "linux") return null;
+  if (exists("/exec-daemon") || Object.keys(env).some((k) => k.startsWith("CLOUD_AGENT_"))) return null;
+  return "This Linux machine shows neither sign of a Cursor Cloud Agent VM (/exec-daemon and CLOUD_AGENT_* variables), so it isn't treated as a disposable VM.";
+}
+
 export function detectDisposableVm(env: NodeJS.ProcessEnv = process.env, platform: string = process.platform, exists: (p: string) => boolean = existsSync): VmDetection | null {
   if (env[VM_DETECT_ENV] === "off" || platform !== "linux") return null;
   const vars = ["CLOUD_AGENT_INJECTED_SECRET_NAMES", "CLOUD_AGENT_ALL_SECRET_NAMES"].filter((k) => env[k] !== undefined);

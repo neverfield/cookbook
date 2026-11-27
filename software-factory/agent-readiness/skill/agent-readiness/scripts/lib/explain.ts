@@ -88,7 +88,7 @@ function environmentLine(input: ModelInput): string {
   if (audit.environment.containerRuntime && images) return `in clean ${audit.environment.containerRuntime} containers, one per toolchain: ${images}`;
   if (audit.environment.containerRuntime) return `in a clean ${audit.environment.containerRuntime} container (${audit.environment.image ?? "the audit's image"})`;
   const pe = audit.environment.proofEnv;
-  if (pe?.kind === "disposable_vm" && audit.evidence.some((e) => e.where === "disposable_vm")) return `in a fresh copy on a disposable VM, detected by ${(pe.detectedBy ?? []).join(" and ")}, with the network ${pe.network === "cut" ? "cut for the tests" : "on for the tests, because the VM couldn't cut it"}`;
+  if (pe?.kind === "disposable_vm" && audit.evidence.some((e) => e.where === "disposable_vm")) return `in a fresh copy on a disposable VM as provisioned, including its preinstalled tools and running services, detected by ${(pe.detectedBy ?? []).join(" and ")}, with the network ${pe.network === "cut" ? "cut for the tests" : "on for the tests, because the VM couldn't cut it"}`;
   if (audit.evidence.some((e) => e.where === "fresh_copy")) return "in a fresh copy on the host, because this machine has no container runtime";
   return "nowhere: no repo command ran";
 }
