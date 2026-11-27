@@ -101,6 +101,8 @@ The audit reads the committed tree only: it checks out the recorded commit into 
 
 **Leftovers.** `init --force` and the seal remove the abandoned draft and its temporary tree. An audit that is stopped (Ctrl-C, a shell timeout, a cancelled CI job) removes its containers, its temporary copies and its host-mode home on the way out, and each container ends on its own once the budget and its setup time have passed. Anything a killed audit still left is removed by the next `init`, `replay` or `recheck` on the machine, whatever its age. `readiness cleanup` removes what a crashed audit left: this repo's drafts no session holds, and the temporary folders and containers audits name as theirs once they are older than a session; `--images` also removes the images built from a repo's declared environment.
 
+**The scan picked the wrong command?** A maintainer names the right install, build, lint, type-check or test command for a component in `.agent-readiness/config.json`, committed to the repo, with a reason and a reviewer; it replaces the scan's commands of that kind there, and "About this report" lists it. The format is in [references/report.md](skill/agent-readiness/references/report.md#command-config).
+
 **A finding is a false positive?** A maintainer lists it in `.agent-readiness/waivers.json`, committed to the repo, with a reason and a reviewer. Only instruction and safety findings can be waived, never a Level 1 check; waived findings are listed in part 5. The format is in [references/report.md](skill/agent-readiness/references/report.md#waivers).
 
 ## Reading the report

@@ -450,6 +450,9 @@ export interface Audit {
   signals?: Signal[];
   // Read by the scan from the audited commit's waiver file; sealed with the rest of the audit.
   waivers?: WaiverRecord;
+  // The commands a maintainer named in the audited commit's .agent-readiness/config.json, which
+  // replaced the scan's of the same component and kind.
+  commandConfig?: { digest: string | null; entries: { component: string; kind: CommandKind; cmd: string; cwd: string; reason: string; by: string }[]; rejected: { at: string; reason: string }[]; ignored: string | null };
   // Secret-shaped values in the repo's own text that the seal masked as [redacted:<type>].
   masked?: MaskedValue[];
   sealed?: { at: string; digest: string; reportJsonDigest: string; reportMdDigest: string; reportHtmlDigest?: string; roadmapItemsDigest?: string; historyLineDigest?: string; keyed?: boolean };

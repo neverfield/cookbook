@@ -19,6 +19,7 @@ import { NOT_SUPPORTED, STACKS, SUPPORTED_DOC } from "./support.ts";
 import type { Asset, Audit, CapReason, CommandKind, CondId, Component, ComponentLevel, Evidence, HistoryLine, Level, LevelStatus, MaskedValue, Narration, OutcomeStats, OutcomesSnapshot, ProofEnvKind, ReportAction, ReportChanges, ReportJson, RevertsSnapshot, Roadmap, RoadmapItem, ScenarioId, SettleBy } from "./types.ts";
 import { fmtShortDate, pct, shellQuote, wordCount } from "./util.ts";
 import { WAIVER_FILE } from "./waivers.ts";
+import { CONFIG_FILE } from "./config.ts";
 
 // The report model, built once from the audit: every state, count, level and sentence the report
 // shows. report.json is this model; render.ts and render-html.ts only lay it out.
@@ -1144,6 +1145,7 @@ export function buildReport(raw: ModelInput): ReportJson {
         ...(audit.environment.proofEnv?.canary.checks.length ? [{ label: "Environment self-check", value: canaryNote(audit.environment.proofEnv.canary) }] : []),
         ...(audit.environment.registryEnv.length ? [{ label: "Registry variables", value: `${audit.environment.registryEnv.join(", ")}, passed to the setup steps by name; their values are never recorded` }] : []),
         ...(audit.masked?.length ? [{ label: "Masked values", value: maskedNote(audit.masked) }] : []),
+        ...(audit.commandConfig ? [{ label: "Command config", value: commandConfigNote(audit.commandConfig) }] : []),
         ...(audit.environment.hostConsent !== undefined ? [{ label: "Host mode", value: hostConsentNote(audit.environment.hostConsent) }] : []),
         { label: "Stored in", value: input.storedAt },
       ],
@@ -1208,6 +1210,15 @@ export function changesOf(prev: ReportJson, now: ReportJson, rubric: Rubric): Re
   const okBefore = new Map(prev.details.checks.map((c) => [c.id, c.ok]));
   const checks = now.details.checks.filter((c) => okBefore.has(c.id) && okBefore.get(c.id) !== c.ok && (okBefore.get(c.id) === false || c.ok === false)).map((c) => ({ id: c.id, name: c.name, from: okBefore.get(c.id) ?? null, to: c.ok }));
   return { since: { audit: prev.audit.id, date: prev.audit.date }, repo: { from: repoLevel(prev), to: repoLevel(now) }, components, nowMet, nowFailing, checks };
+}
+
+// The commands a maintainer named instead of the scan's, each with who reviewed it and why.
+export function commandConfigNote(c: NonNullable<Audit["commandConfig"]>): string {
+  const named = c.entries.map((e) => `\`${e.cmd}\` as the ${e.kind} command for ${e.component === "*" ? "the repo" : e.component}, reviewed by ${e.by}: ${e.reason}`);
+  const parts = [named.length ? `${CONFIG_FILE} in the audited commit named ${named.join("; ")}; each replaced the scan's ${named.length === 1 ? "command" : "commands"} of that kind` : `${CONFIG_FILE} named no command the audit used`];
+  if (c.rejected.length) parts.push(`${c.rejected.length} ${c.rejected.length === 1 ? "entry was" : "entries were"} refused (${c.rejected.map((r) => `${r.at}: ${r.reason}`).join("; ")})`);
+  if (c.ignored) parts.push(c.ignored);
+  return parts.join("; ") + ".";
 }
 
 // Whether anyone said yes before the repo's commands ran outside a container, in the user's words.

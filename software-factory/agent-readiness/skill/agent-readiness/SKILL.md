@@ -61,7 +61,7 @@ For a private registry, ask for the variable names (never values) and pass `--re
    readiness contract add --kind test --component api --cmd "npm run test:unit" --source AGENTS.md:12 --reason "the documented unit test command"
    ```
 
-   Add commands the repo documents or CI runs. Never add a command to make a check pass, and never remove one the scan found.
+   Add commands the repo documents or CI runs. Never add a command to make a check pass, and never remove one the scan found. When the user says the scan picked a wrong command, a maintainer names the right one in a committed `.agent-readiness/config.json` ([references/report.md](references/report.md#command-config)); you never write that file.
    `--component` must be `*` or a component the scan assessed; `contract add` refuses any other, because replay would never run it. `--source` is `agent` or a `file:line`.
 3. Add only commands the repo defines: a script in the manifest, a Make target, or a step CI runs. A documented command with nothing behind it, such as `npm run typecheck` with no `typecheck` script, is a wrong instruction, not a missing command. `readiness status` lists these under "Wrong instructions", and the audit already counts them against the instructions. Leave them out of the contract and mention them in your summary.
 4. `readiness contract list` to confirm.

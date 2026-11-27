@@ -29,6 +29,7 @@ import { WORKS_LEAD, slotErrors } from "./lib/model.ts";
 import type { Audit, CommandKind, CondId, Level, Narration, Result, Roadmap, ScanBound, ScenarioId, ScenarioSpec, Strength, Tier } from "./lib/types.ts";
 import { addDays, exists, fail, git, nowIso, randomHex, readJson, readText, sha256, today, writeJson } from "./lib/util.ts";
 import { WAIVER_FILE, applyWaivers, loadWaivers } from "./lib/waivers.ts";
+import { CONFIG_FILE, applyCommandConfig, isConfigCommand, loadCommandConfig } from "./lib/config.ts";
 import { commitReader, currentDraftId, initAudit, loadDraft, paths, refreshTree, releaseManifest, resolveRepo, saveDraft, scratchTree, writeRecordsIgnore } from "./lib/workspace.ts";
 
 const BOOLEAN = new Set(["images", "force", "remediate", "inherit-env", "allow-host", "no-mutants", "no-instructions", "no-outcomes", "json", "push", "allow-eval", "allow-unkeyed", "dockerfile", "instructions", "strict", "help"]);
@@ -165,9 +166,17 @@ function cmdScan(a: Args): void {
     log(`Warning: the scan stops at ${bound.scope.fileCap.toLocaleString("en-US")} files, and this commit tracks more. ${unreached.length ? `It didn't list everything in ${unreached.slice(0, 8).join(", ")}${unreached.length > 8 ? ` and ${unreached.length - 8} more` : ""}, so components there may be missing from this audit; each is listed as not assessed.` : "Components in the files past the cap are missing from this audit."}`);
   }
   const assessedIds = new Set(profile.components.filter((c) => c.assessed).map((c) => c.id));
-  const agentCmds = audit.contract.filter((c) => c.source !== "readiness" && !c.source.includes("scripts.") && !c.source.startsWith(".cursor/environment.json"));
+  const agentCmds = audit.contract.filter((c) => c.source !== "readiness" && !c.source.includes("scripts.") && !c.source.startsWith(".cursor/environment.json") && !isConfigCommand(c));
   for (const c of agentCmds.filter((x) => x.component !== "*" && !assessedIds.has(x.component))) log(`Dropped ${c.id} (${c.command}): ${c.component} isn't an assessed component after this scan.`);
   audit.contract = [...discoverContract(profile, local.tree, rubric, audit.safety), ...agentCmds.filter((x) => x.component === "*" || assessedIds.has(x.component))];
+  const workingConfig = join(repo, CONFIG_FILE);
+  const config = loadCommandConfig(local.tree, profile, existsSync(workingConfig) ? readFileSync(workingConfig, "utf8") : null);
+  if (config) {
+    for (const line of applyCommandConfig(audit.contract, config, profile)) log(`${line}.`);
+    if (config.ignored) log(`Command config: ${config.ignored}.`);
+    for (const r of config.rejected) log(`Command config ${r.at} refused: ${r.reason}`);
+    audit.commandConfig = { digest: config.digest, entries: config.entries.map(({ line: _line, ...e }) => e), rejected: config.rejected, ignored: config.ignored };
+  } else delete audit.commandConfig;
   audit.signals = staticSignals(local.tree, profile, audit.contract);
   saveDraft(p, audit);
   log(`Scanned ${audit.repo.name}: ${profile.repoType}, package manager ${profile.packageManager ?? "none"}.`);

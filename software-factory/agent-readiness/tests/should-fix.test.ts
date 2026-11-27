@@ -270,6 +270,48 @@ describe("S8: a private package the registry won't show reads as a missing crede
   });
 });
 
+describe("S9: a maintainer corrects a wrong discovered command in a committed config", () => {
+  // The scan's test command runs a suite that needs a service, as an e2e suite would; the unit suite is the right one.
+  function wrongTest(): string {
+    const repo = materialize("healthy-node");
+    const pkg = JSON.parse(readFileSync(join(repo, "package.json"), "utf8"));
+    pkg.scripts.test = 'node -e "console.error(\'connect ECONNREFUSED 127.0.0.1:5432\'); process.exit(1)"';
+    pkg.scripts["test:unit"] = "node --test";
+    writeFileSync(join(repo, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
+    commitAll(repo, "test runs e2e");
+    return repo;
+  }
+  const config = (commands: object[]) => JSON.stringify({ schema: "agent-readiness/config@1", commands }, null, 2) + "\n";
+  const unit = { component: "healthy-node", kind: "test", cmd: "npm run test:unit", reason: "test runs the e2e suite, which needs a database", by: "Contributor A" };
+  const hostAudit = ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants", "--allow-host"];
+
+  test("the named command replaces the scan's, runs, and About this report lists it", () => {
+    const repo = wrongTest();
+    mkdirSync(join(repo, ".agent-readiness"), { recursive: true });
+    writeFileSync(join(repo, ".agent-readiness", "config.json"), config([unit, { component: "nope", kind: "test", cmd: "x", reason: "a component that isn't there", by: "B" }]));
+    commitAll(repo, "Name the unit test command");
+    const r = readiness(repo, hostAudit);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /config\.json replaces cmd-healthy-node-test \(`npm run test`\)/);
+    const { audit, md } = sealedAudit(repo);
+    const tests = audit.contract.filter((c) => c.kind === "test");
+    assert.deepEqual(tests.map((c) => c.command), ["npm run test:unit"]);
+    assert.match(tests[0].source, /^\.agent-readiness\/config\.json:\d+$/);
+    assert.equal(audit.evidence.find((e) => e.kind === "test" && !e.supersededBy)?.result, "pass");
+    assert.match(md, /Command config\W+\.agent-readiness\/config\.json in the audited commit named `npm run test:unit` as the test command for healthy-node, reviewed by Contributor A: test runs the e2e suite.*1 entry was refused \(commands\[1\]: "component" must be/);
+  });
+
+  test("an uncommitted config changes nothing, and says so", () => {
+    const repo = wrongTest();
+    mkdirSync(join(repo, ".agent-readiness"), { recursive: true });
+    writeFileSync(join(repo, ".agent-readiness", "config.json"), config([unit]));
+    const r = readiness(repo, hostAudit);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /config\.json isn't in the audited commit, so it was ignored/);
+    assert.deepEqual(sealedAudit(repo).audit.contract.filter((c) => c.kind === "test").map((c) => c.command), ["npm run test"]);
+  });
+});
+
 describe("S6: a copy of the tree checks the free disk first", () => {
   test("git gives the tree's size without a checkout", () => {
     const repo = materialize("healthy-node");
