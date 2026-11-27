@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { detectRuntime } from "../skill/agent-readiness/scripts/lib/container.ts";
+import { ContainerSession, detectRuntime, pullTimeoutMs } from "../skill/agent-readiness/scripts/lib/container.ts";
 import { diagnose, privatePackage } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { HOOKS_FILE, guardDecision, installGuard, probeGuard, uninstallGuard } from "../skill/agent-readiness/scripts/lib/guard.ts";
 import { reproOf } from "../skill/agent-readiness/scripts/lib/model.ts";
@@ -340,6 +340,35 @@ describe("S10: proof on a cloud VM says what it proves, and a missing signal sho
 
   test("SKILL.md rule 2 names the injected secrets in the consent question", () => {
     assert.match(readFileSync(join(SKILL_ROOT, "SKILL.md"), "utf8"), /A disposable cloud VM the audit detects is still this machine: ask the same way, and say the commands can also read the secrets injected into the VM\./);
+  });
+});
+
+describe("S11: an image pull gets its own limit and says when it ran out", () => {
+  // A runtime that has no image and whose pull never finishes; anything else it is asked fails loudly.
+  function slowRuntime(): string {
+    const dir = mkdtempSync(join(tmpdir(), "slow-runtime-"));
+    const bin = join(dir, "docker");
+    writeFileSync(bin, `#!/bin/sh\necho "$@" >> ${JSON.stringify(join(dir, "calls"))}\ncase "$1" in\n  image) exit 1 ;;\n  pull) echo "Pulling fs layer"; exec sleep 30 ;;\n  *) echo "unexpected: $*" >&2; exit 2 ;;\nesac\n`);
+    chmodSync(bin, 0o755);
+    return bin;
+  }
+
+  test("a pull past its limit is reported as the pull, never as a container with no output", () => {
+    const bin = slowRuntime();
+    const session = new ContainerSession({ bin }, "readiness-test-pull", "node:22-bookworm", tmpdir(), [], null);
+    session.pullTimeoutMs = 1000;
+    const logs: string[] = [];
+    const r = session.start((s) => logs.push(s));
+    assert.equal(r.ok, false);
+    assert.match(r.output, /^the image pull didn't finish in 1 seconds; pull node:22-bookworm@sha256:[0-9a-f]{64} by hand, or set SA_READINESS_PULL_MINUTES higher/);
+    assert.match(logs[0], /^Pulling node:22-bookworm, which this machine doesn't have yet/);
+    assert.doesNotMatch(readFileSync(join(dirname(bin), "calls"), "utf8"), /^run /m, "the container isn't started after a failed pull");
+    session.remove();
+  });
+
+  test("the pull limit defaults to 30 minutes and SA_READINESS_PULL_MINUTES sets it", () => {
+    assert.equal(pullTimeoutMs({}), 30 * 60000);
+    assert.equal(pullTimeoutMs({ SA_READINESS_PULL_MINUTES: "90" }), 90 * 60000);
   });
 });
 

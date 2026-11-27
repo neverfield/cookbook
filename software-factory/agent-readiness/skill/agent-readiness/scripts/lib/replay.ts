@@ -1091,7 +1091,7 @@ export function containerLifetimeSec(budgetTotalMinutes: number): number {
 // Starts one clean container and adds what the audit's own image lacks for these components.
 function startContainer(audit: Audit, runtime: NonNullable<ReturnType<typeof detectRuntime>>, image: string, imageSource: Executor["imageSource"], copyDir: string, limits: ReturnType<typeof probeLimits>, comps: Component[], forWhom: string, log: (s: string) => void, lifetimeSec: number): Executor | { error: string } {
   const session = new ContainerSession(runtime, `readiness-${audit.id}-${randomHex(3)}`, image, copyDir, audit.environment.registryEnv, hostUser(), limits, lifetimeSec);
-  const started = session.start();
+  const started = session.start(log);
   if (!started.ok) {
     session.remove();
     log(`Could not start a container${forWhom}: ${startError(started.output)}`);
