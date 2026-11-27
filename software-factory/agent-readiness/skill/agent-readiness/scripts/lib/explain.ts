@@ -35,7 +35,7 @@ function placeOf(audit: Audit, e: Evidence): string {
   if (e.where === "container") return `in a clean ${rt ? `${rt} ` : ""}container${e.image ? ` (${e.image})` : ""}`;
   if (e.where === "fresh_copy") return "in a fresh copy on the host, with no container";
   if (e.where === "disposable_vm") return "in a fresh copy on a disposable VM, with no container";
-  if (e.where === "host") return "on the host, in the repo itself";
+  if (e.where === "host") return "on the host, in a scratch copy of the repo";
   return STATIC_PLACE;
 }
 

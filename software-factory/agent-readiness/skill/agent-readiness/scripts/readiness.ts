@@ -746,7 +746,7 @@ async function cmdAudit(a: Args): Promise<void> {
 const HELP = `readiness <command> [options]
 
 Audit
-  init --tier <read-only|local-exec|external-systems> [--scenario first_pr,bug_fixes,features,repo_wide] [--registry-env A,B] [--force]
+  init --tier <read-only|local-exec|external-systems> [--scenario first_pr,bug_fixes,features,repo_wide] [--registry-env A,B] [--inherit-env] [--force]
   scan [--strict] [--budget-scan M]   profile, agent assets, static checks and the verification contract; --strict exits 1 on wrong instructions or blocking safety findings; past M minutes (default ${SCAN_BOUND_MINUTES}) the secret scan and asset history are sampled
   contract [list|add --kind K --component C --cmd "..." --reason "..." [--cwd D] [--source file:line]]
   scenario [list|add <id> [--components a,b]|remove <id>]   optional breakdowns reported under the components they name
@@ -757,10 +757,12 @@ Audit
   narrate [--file narration.json] [--lead C] [--cause condition=ev-id] [--works ev-id,ev-id] [--ask item-id|settle]   picks the ids part 1's templates use; status lists them
   status [--json]
   seal
-  audit --tier T [--scenario S] [--outcomes-input f] [--narration f] [--budget-scan M] [--budget-total M] [--memory MB] [--force]   init, scan, replay, outcomes and seal in one go; --force abandons an open draft
+  audit --tier T [--scenario S] [--registry-env A,B] [--inherit-env] [--runtime auto|docker|none] [--image ref] [--no-mutants] [--outcomes-input f] [--narration f] [--budget-scan M] [--budget-total M] [--memory MB] [--force]   init, scan, replay, outcomes and seal in one go; --force abandons an open draft
 
 --allow-host (replay, recheck, run, audit) lets repo commands run on the host when no container can,
 in a scrubbed copy that can still read local files. It is not a sandbox: use it only with the user's approval.
+--inherit-env (init, audit) passes this shell's variables to those host commands, except account credentials
+such as cloud, GitHub and SSH ones; a container never inherits them.
 
 After an audit
   verify-seal [audit-id|latest] [--release-repo owner/repo --release-ref tag --tier external-systems] [--allow-eval] [--allow-unkeyed]   with SA_READINESS_SEAL_KEY set, only keyed seals pass unless --allow-unkeyed
