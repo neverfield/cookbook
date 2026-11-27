@@ -123,6 +123,14 @@ describe("proof environments", () => {
     assert.equal(lines[1], "UTC");
   });
 
+  test("an identity a test sets in its own repo's config wins over the audit's, as on CI", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "proofenv-git-own-"));
+    const ex = hostExecutor(dir, [], false, "fresh_copy", true);
+    const out = await ex.exec("git init -q . && git config user.name 'Test User' && git config user.email test@example.com && git commit -q --allow-empty -m 'from a test' && git log -1 --format='%an <%ae>|%cn <%ce>'", ".", 60);
+    assert.equal(out.exitCode, 0, out.output);
+    assert.equal(out.output.trim(), "Test User <test@example.com>|Test User <test@example.com>");
+  });
+
   test("a VM cuts the network for the tests where it can, as the same user with loopback up, and says so where it can't", async () => {
     const dir = mkdtempSync(join(tmpdir(), "proofenv-net-"));
     writeFileSync(join(dir, "f"), "x");

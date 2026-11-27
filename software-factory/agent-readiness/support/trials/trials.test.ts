@@ -50,6 +50,9 @@ interface Trial {
   notes: string;
   // Hosts the result depends on. When any is unreachable the run is compared with recorded.restricted.
   egress?: string[];
+  // --budget-component for the audit, the rerun the report advises when a component's budget runs
+  // out, for a trial whose result is otherwise decided by the machine's speed rather than the repo.
+  budgetComponentMinutes?: number;
   // Instruction items, as file:line, that are genuinely wrong. Every other failing item is a false finding.
   realInstructionFindings: string[];
   falseInstructionFindings: number;
@@ -195,7 +198,8 @@ async function auditTrial(t: Trial): Promise<TrialRun> {
   // own package.json (such as "type": "commonjs") applies to the scripts.
   const skill = join(repo, ".cursor", "skills", "agent-readiness");
   cpSync(SKILL, skill, { recursive: true });
-  const r = readiness(repo, ["audit", "--tier", "local-exec"], env, join(skill, "scripts", "readiness.ts"));
+  const budget = t.budgetComponentMinutes ? ["--budget-component", String(t.budgetComponentMinutes)] : [];
+  const r = readiness(repo, ["audit", "--tier", "local-exec", ...budget], env, join(skill, "scripts", "readiness.ts"));
   const after = afterAudit(repo, { tmp, containers: `-${t.commit.slice(0, 7)}-`, ignore: [".cursor/skills/agent-readiness/"] });
   const score = scoreRepo(truthOf(t), observeTruth(repo, { exit: r.code, after }));
   return { key, blocked, code: r.code, out: r.out, repo, o: observe(repo, r.code), score };

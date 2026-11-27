@@ -4,7 +4,7 @@ import { hostname } from "node:os";
 import { basename, dirname, isAbsolute } from "node:path";
 import { IDLE_MARK, IDLE_OFFLINE, OOM_MARK } from "./diagnose.ts";
 import { pinnedRef } from "./images.ts";
-import { normalizedEnv } from "./proofenv.ts";
+import { GIT_IDENTITY_CONFIG, normalizedEnv } from "./proofenv.ts";
 import { runCommand } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
 import { onTeardown, ownerGone } from "./teardown.ts";
@@ -143,7 +143,7 @@ export function startArgs(name: string, image: string, hostDir: string, limits: 
   // An init as PID 1 reaps orphaned processes. Without it a killed child stays a zombie, and a test
   // that checks its process tree was stopped (kill -0) sees it as still running.
   args.push("--init");
-  for (const [k, v] of Object.entries(normalizedEnv())) args.push("-e", `${k}=${v}`);
+  for (const [k, v] of Object.entries(normalizedEnv(GIT_CONFIG))) args.push("-e", `${k}=${v}`);
   if (limits) {
     if (limits.cpus) args.push("--cpus", String(limits.cpus));
     args.push("--memory", `${limits.memoryMb}m`, "--memory-swap", `${limits.memoryMb}m`, "--pids-limit", String(limits.pids));
@@ -203,6 +203,8 @@ export function hostUser(): string | null {
 // pip, npm and the rest leave their caches there instead of root-owned files in the shared one.
 export const HOME_DIR = "/tmp/home";
 export const SETUP_HOME = "/tmp/readiness-setup-home";
+// The audit's git identity, outside the work tree; GIT_CONFIG_SYSTEM points every command at it.
+export const GIT_CONFIG = "/tmp/readiness-gitconfig";
 
 export function imageUserArgs(name: string, command: string, env: string[] = []): string[] {
   return ["exec", "-e", `HOME=${SETUP_HOME}`, ...env.flatMap((k) => ["-e", k]), name, ...loginShell(`mkdir -p ${SETUP_HOME} && ${command}`, false)];
@@ -293,6 +295,7 @@ export class ContainerSession {
         const entry = this.asImageUser(userEntryCommand(this.user), 30000);
         this.userEntry = parseUserEntry(entry.ok, entry.output);
       }
+      this.asImageUser(`printf %s ${shellQuote(GIT_IDENTITY_CONFIG)} > ${GIT_CONFIG} && chmod 644 ${GIT_CONFIG}`, 30000);
       this.reclaimHome();
     }
     return { ok: r.status === 0, output: (r.stdout ?? "") + (r.stderr ?? "") };

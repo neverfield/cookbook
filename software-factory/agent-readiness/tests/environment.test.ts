@@ -131,4 +131,18 @@ describe("in a container, setup as root leaves the shared home writable", { skip
       session.stop();
     }
   });
+
+  test("a test that commits gets the audit's git identity, and one that sets its own keeps it", { timeout: 120000 }, async () => {
+    const work = mkdtempSync(join(tmpdir(), "readiness-env-git-"));
+    const session = new ContainerSession(runtime!, `readiness-env-git-${process.pid}`, "node:22-bookworm", work, [], user);
+    assert.ok(session.start().ok, "container starts");
+    try {
+      const fallback = await session.exec("cd \"$(mktemp -d)\" && git init -q && git commit -q --allow-empty -m x && git log -1 --format='%an <%ae>'", ".", 60);
+      assert.equal(fallback.output.trim(), "Agent Readiness <readiness@audit.invalid>", fallback.output);
+      const own = await session.exec("cd \"$(mktemp -d)\" && git init -q && git config user.name 'Test User' && git config user.email test@example.com && git commit -q --allow-empty -m x && git log -1 --format='%an <%ae>'", ".", 60);
+      assert.equal(own.output.trim(), "Test User <test@example.com>", own.output);
+    } finally {
+      session.stop();
+    }
+  });
 });

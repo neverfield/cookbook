@@ -26,7 +26,7 @@ import { makeRecipe } from "./static.ts";
 import { SUPPORTED_DOC, notSupportedReason } from "./support.ts";
 import { loadSealedAudit } from "./history.ts";
 import { paths, plantSeed, refreshTree } from "./workspace.ts";
-import { canCutNetwork, canaryFailure, detectDisposableVm, normalizedEnv, offlineCommand, provesIn, runCanary } from "./proofenv.ts";
+import { GIT_IDENTITY_CONFIG, canCutNetwork, canaryFailure, detectDisposableVm, normalizedEnv, offlineCommand, provesIn, runCanary } from "./proofenv.ts";
 import type { Canary, ProofEnv, VmDetection } from "./proofenv.ts";
 import { loadRubric } from "./rubric.ts";
 
@@ -125,7 +125,10 @@ export function hostExecutor(root: string, registryEnv: string[], inheritEnv: bo
   assertPlatformSupported();
   if (!hostAllowed(allowHost)) fail(`This runs the repo's commands on this machine, outside a container, which needs the user's yes first: ${HOST_NOT_ALLOWED}. Ask the user, then rerun with --allow-host.`);
   // --inherit-env is host mode's alone: a container never inherits this shell's variables.
-  const setupEnv = scrubbedEnv({ registryEnv, inheritEnv, extra: normalizedEnv() });
+  const setupEnv = scrubbedEnv({ registryEnv, inheritEnv });
+  const gitConfig = join(setupEnv.HOME, "readiness-gitconfig");
+  writeFileSync(gitConfig, GIT_IDENTITY_CONFIG);
+  Object.assign(setupEnv, normalizedEnv(gitConfig));
   const env = { ...setupEnv };
   for (const k of registryEnv) delete env[k];
   return {

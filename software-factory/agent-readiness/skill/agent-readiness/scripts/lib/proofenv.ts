@@ -67,15 +67,12 @@ export function provesIn(rubric: Rubric, kind: ProofKind): boolean {
 // What the audit sets itself rather than inheriting: a git identity, so tests that commit work,
 // and the time zone. The locale stays as it was (the image's default in a container, this
 // machine's on the host): the diagnosis reads tool output in the plain quotes the C locale prints.
+// The identity is a git config file at system scope, git's lowest, so an identity a test sets in its
+// own repo or home config wins, as on CI. GIT_AUTHOR_* variables would override it there.
 export const GIT_IDENTITY = { name: "Agent Readiness", email: "readiness@audit.invalid" };
-export function normalizedEnv(): Record<string, string> {
-  return {
-    GIT_AUTHOR_NAME: GIT_IDENTITY.name,
-    GIT_AUTHOR_EMAIL: GIT_IDENTITY.email,
-    GIT_COMMITTER_NAME: GIT_IDENTITY.name,
-    GIT_COMMITTER_EMAIL: GIT_IDENTITY.email,
-    TZ: "UTC",
-  };
+export const GIT_IDENTITY_CONFIG = `[user]\n\tname = ${GIT_IDENTITY.name}\n\temail = ${GIT_IDENTITY.email}\n`;
+export function normalizedEnv(gitConfig: string): Record<string, string> {
+  return { GIT_CONFIG_SYSTEM: gitConfig, TZ: "UTC" };
 }
 
 const MARK = "readiness-canary";
