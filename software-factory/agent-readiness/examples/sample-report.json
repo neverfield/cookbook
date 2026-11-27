@@ -9,9 +9,9 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "8f8a031bfe122cb94bece22b2a89ab756726766a8c642030e64cd68fe140b06c",
+    "scriptsDigest": "66f5529188ba1aa6fe5da9bd70985249019cd1a32da3f4a3ab35c1a19be858c7",
     "seedPinned": true,
-    "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
+    "sealStatus": "Seal not verified: the scripts differ from release agent-readiness-v0.2.0; the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
     "previous": "aud-2026-10-30-7e84b7e-c404",
     "storedAt": ".agent-readiness/history/audits/aud-2026-11-30-9a2c092-ae7a",
@@ -1105,8 +1105,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "doctor passed",
-        "durationMs": 130,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'node --version && npm --version'",
+        "durationMs": 133,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && node --version && npm --version'\\'''",
         "supersededBy": null
       },
       {
@@ -1117,8 +1117,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "install passed",
-        "durationMs": 8941,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh'",
+        "durationMs": 9276,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh'\\'''",
         "supersededBy": null
       },
       {
@@ -1129,8 +1129,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 182,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/api && npm run lint)'",
+        "durationMs": 196,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && (cd packages/api && npm run lint)'\\'''",
         "supersededBy": null
       },
       {
@@ -1141,8 +1141,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 172,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/shared && npm run lint)'",
+        "durationMs": 180,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && (cd packages/shared && npm run lint)'\\'''",
         "supersededBy": null
       },
       {
@@ -1153,8 +1153,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 170,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/worker && npm run lint)'",
+        "durationMs": 178,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && (cd packages/worker && npm run lint)'\\'''",
         "supersededBy": null
       },
       {
@@ -1165,8 +1165,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "start passed",
-        "durationMs": 2279,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && bash scripts/agent-start.sh'",
+        "durationMs": 2292,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && bash scripts/agent-start.sh'\\'''",
         "supersededBy": null
       },
       {
@@ -1177,8 +1177,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "test passed (1 of 1 tests)",
-        "durationMs": 230,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/api && npm run test)'",
+        "durationMs": 254,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && (cd packages/api && npm run test)'\\'''",
         "supersededBy": null
       },
       {
@@ -1189,8 +1189,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "test passed (3 of 3 tests)",
-        "durationMs": 224,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/shared && npm run test)'",
+        "durationMs": 237,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && (cd packages/shared && npm run test)'\\'''",
         "supersededBy": null
       },
       {
@@ -1201,8 +1201,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "test passed (2 of 2 tests)",
-        "durationMs": 222,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && (cd packages/worker && npm run test)'",
+        "durationMs": 239,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && (cd packages/worker && npm run test)'\\'''",
         "supersededBy": null
       },
       {
@@ -1261,8 +1261,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": ".cursor/rules/style.mdc:6 `npm run lint -w api` replays",
-        "durationMs": 170,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run lint -w api'",
+        "durationMs": 185,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && npm run lint -w api'\\'''",
         "supersededBy": null
       },
       {
@@ -1273,8 +1273,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "AGENTS.md:6 `npm run test -w shared` replays",
-        "durationMs": 213,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run test -w shared'",
+        "durationMs": 240,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && npm run test -w shared'\\'''",
         "supersededBy": null
       },
       {
@@ -1285,8 +1285,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "AGENTS.md:7 `npm test` replays",
-        "durationMs": 451,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm test'",
+        "durationMs": 478,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && npm test'\\'''",
         "supersededBy": null
       },
       {
@@ -1297,8 +1297,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": ".cursor/skills/verify/SKILL.md:15 `node --version && npm --version` replays",
-        "durationMs": 115,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && node --version && npm --version'",
+        "durationMs": 125,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && node --version && npm --version'\\'''",
         "supersededBy": null
       },
       {
@@ -1309,8 +1309,8 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": ".cursor/skills/verify/SKILL.md:56 `npm run test` replays",
-        "durationMs": 446,
-        "repro": "docker run --rm -v \"$PWD\":/work -w /work node:22-bookworm bash -lc 'bash scripts/agent-install.sh && npm run test'",
+        "durationMs": 482,
+        "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && npm run test'\\'''",
         "supersededBy": null
       }
     ],
@@ -1333,7 +1333,7 @@
       },
       {
         "label": "Seal",
-        "value": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it"
+        "value": "Seal not verified: the scripts differ from release agent-readiness-v0.2.0; the seal is an unkeyed digest, which shows edits but not who sealed it"
       },
       {
         "label": "Integrity",
@@ -1341,7 +1341,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "8f8a031bfe12"
+        "value": "66f5529188ba"
       },
       {
         "label": "Planted faults",
@@ -1361,7 +1361,11 @@
       }
     ]
   },
-  "notices": [],
+  "notices": [
+    {
+      "text": "This audit ran with scripts that differ from the released skill (agent-readiness-v0.2.0), so it isn't a released result. Reinstall the released skill and rerun the audit."
+    }
+  ],
   "waivers": null,
   "explanations": [
     {
