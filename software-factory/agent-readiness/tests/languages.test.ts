@@ -180,7 +180,7 @@ describe("one image per component", () => {
     const profile = buildProfile(dir, dir, rubric);
     assert.deepEqual(imagePlan(profile, dir), [
       { image: "node:22-bookworm", components: ["web"] },
-      { image: "ghcr.io/astral-sh/uv:python3.13-bookworm-slim", components: ["pricing"] },
+      { image: "ghcr.io/astral-sh/uv:python3.13-trixie-slim", components: ["pricing"] },
     ]);
     const doctors = discoverContract(profile, dir, rubric, []).filter((c) => c.kind === "doctor").map((c) => [c.id, c.command]);
     assert.deepEqual(doctors, [["cmd-repo-doctor", "node --version && npm --version"], ["cmd-pricing-doctor", "python3 --version && uv --version"]]);
@@ -197,7 +197,7 @@ describe("one image per component", () => {
   test("a Node project with its own lockfile next to a Python root runs in Node's image", () => {
     const dir = repo({ "pyproject.toml": '[project]\nname = "api"\n', "uv.lock": "version = 1\n", "api/x.py": "", "frontend/package.json": '{"name":"frontend","scripts":{"test":"vitest"}}', "frontend/package-lock.json": "{}", "frontend/src/a.ts": "export const a = 1;\n" });
     const plan = imagePlan(buildProfile(dir, dir, rubric), dir);
-    assert.deepEqual(plan.map((g) => g.image), ["ghcr.io/astral-sh/uv:python3.12-bookworm-slim", "node:22-bookworm"]);
+    assert.deepEqual(plan.map((g) => g.image), ["ghcr.io/astral-sh/uv:python3.12-trixie-slim", "node:22-bookworm"]);
   });
 });
 

@@ -110,7 +110,7 @@ describe("scrubbed environment", () => {
     const node = materialize("healthy-node");
     assert.equal(containerImage(buildProfile(node, node, rubric), node), "node:22-bookworm");
     const py = gitRepo({ "pyproject.toml": "[project]\nname = \"lib\"\n\n[dependency-groups]\ndev = [\"pytest\"]\n", "uv.lock": "version = 1\n", ".python-version": "3.13\n", "tests/test_a.py": "def test_a():\n    assert True\n" });
-    assert.equal(containerImage(buildProfile(py, py, rubric), py), "ghcr.io/astral-sh/uv:python3.13-bookworm-slim", "uv projects get an image that has uv");
+    assert.equal(containerImage(buildProfile(py, py, rubric), py), "ghcr.io/astral-sh/uv:python3.13-trixie-slim", "uv projects get an image that has uv");
     assert.match(discoverContract(buildProfile(py, py, rubric), py, rubric, []).find((c) => c.kind === "test")!.command, /^\.venv\/bin\/python -m pytest -q$/, "uv sync installs into .venv");
   });
 });

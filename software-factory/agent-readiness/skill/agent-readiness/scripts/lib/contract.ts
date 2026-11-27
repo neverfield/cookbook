@@ -563,7 +563,7 @@ function pythonImage(tree: string, dir: string, pm: Profile["packageManager"]): 
   const file = [dir, "."].map((d) => join(tree, d, ".python-version")).find(exists);
   const pv = file ? readText(file).trim().match(/^(\d+\.\d+)/)?.[1] : null;
   const version = pv ?? pythonFor([join(tree, dir)]);
-  return pm === "uv" ? `ghcr.io/astral-sh/uv:python${version}-bookworm-slim` : `python:${version}-slim`;
+  return pm === "uv" ? `ghcr.io/astral-sh/uv:python${version}-trixie-slim` : `python:${version}-slim`;
 }
 
 function nodeImage(tree: string, dirs: string[]): string {

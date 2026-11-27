@@ -91,13 +91,13 @@ describe("a Python or Playwright the image doesn't have is blocked, not a repo f
   test("the audit picks a Python image new enough for requires-python", () => {
     const uv = tree({ "pyproject.toml": "[project]\nname = \"app\"\nrequires-python = \">=3.14,<4.0\"\n", "uv.lock": "", "app/main.py": "" });
     assert.equal(requiredPython(uv), "3.14");
-    assert.equal(containerImage(buildProfile(uv, uv, rubric), uv), "ghcr.io/astral-sh/uv:python3.14-bookworm-slim");
+    assert.equal(containerImage(buildProfile(uv, uv, rubric), uv), "ghcr.io/astral-sh/uv:python3.14-trixie-slim");
     const poetry = tree({ "pyproject.toml": "[tool.poetry]\nname = \"app\"\n\n[tool.poetry.dependencies]\npython = \"^3.13\"\n", "poetry.lock": "", "app/main.py": "" });
     assert.equal(containerImage(buildProfile(poetry, poetry, rubric), poetry), "python:3.13-slim");
     const old = tree({ "pyproject.toml": "[project]\nname = \"app\"\nrequires-python = \">=3.9\"\n", "requirements.txt": "", "app/main.py": "" });
     assert.equal(containerImage(buildProfile(old, old, rubric), old), "python:3.12-slim", "an older floor keeps the default");
     const pinned = tree({ "pyproject.toml": "[project]\nname = \"app\"\nrequires-python = \">=3.14\"\n", ".python-version": "3.13\n", "uv.lock": "", "app/main.py": "" });
-    assert.equal(containerImage(buildProfile(pinned, pinned, rubric), pinned), "ghcr.io/astral-sh/uv:python3.13-bookworm-slim", ".python-version wins");
+    assert.equal(containerImage(buildProfile(pinned, pinned, rubric), pinned), "ghcr.io/astral-sh/uv:python3.13-trixie-slim", ".python-version wins");
   });
 
   test("Playwright's missing browsers are a missing tool, blocked in the audit's image", () => {

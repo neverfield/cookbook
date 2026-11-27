@@ -1,11 +1,4 @@
 {
   "about": "Guards written before their fix, each failing at ad5a0f9. While a guard fails, its test passes and says why; when it passes, its test fails until its entry is removed. The fixing PR removes its entries. A release needs this list empty. SA_KNOWN_FAILURES=strict runs every guard as an ordinary test.",
-  "failures": [
-    {
-      "file": "support/trials/trials.test.ts",
-      "test": "mcp-servers truth R3",
-      "finding": "R3: no proven level on a green, tested component in a container. src/git is undetermined: the audit's uv bookworm-slim image has no git, the audit adds Debian bookworm's git 2.39, and 10 git show format tests fail with it that CI's newer git passes (truth review and Mac re-baseline at H)",
-      "fixedBy": "H"
-    }
-  ]
+  "failures": []
 }
