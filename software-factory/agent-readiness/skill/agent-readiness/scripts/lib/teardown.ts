@@ -66,8 +66,8 @@ export interface TempDir {
 }
 
 // A temp folder that is removed when it is disposed of or when the process stops, whichever comes first.
-export function tempDir(prefix: string): TempDir {
-  const path = mkdtempSync(join(tmpdir(), prefix));
+export function tempDir(prefix: string, base: string = tmpdir()): TempDir {
+  const path = mkdtempSync(join(base, prefix));
   const owner: Owner = { pid: process.pid, host: hostname() };
   writeFileSync(join(path, OWNER_FILE), JSON.stringify(owner) + "\n");
   const drop = onTeardown(() => rmSync(path, { recursive: true, force: true }));

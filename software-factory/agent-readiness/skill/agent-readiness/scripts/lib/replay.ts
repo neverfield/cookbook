@@ -1,4 +1,5 @@
-import { cpSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { ContainerSession, HOME_DIR, buildImage, detectRuntime, hostUser, probeLimits, removeOrphanedContainers } from "./container.ts";
 import { hooked, imagePlan, toolchainCopies, toolSetup } from "./contract.ts";
@@ -19,6 +20,7 @@ import { SUDO_SHIM_MARK, disposeHome, runCommand, scrubbedEnv } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
 import type { Attribution, Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Language, Mutant, Profile, Strength, Where } from "./types.ts";
 import { removeOrphanedTempDirs, tempDir } from "./teardown.ts";
+import type { TempDir } from "./teardown.ts";
 import { containedPath, exists, fail, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
 import { commandsFor } from "./score.ts";
 import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
@@ -1163,12 +1165,14 @@ function recordProofEnv(audit: Audit, ex: Executor, vm: VmDetection | null): voi
 
 // Runs the canary in every executor before any repo command. One that fails is replaced by an
 // executor that runs nothing, so every result it would have given is blocked with the reason.
-export async function checkExecutors(audit: Audit, exs: Executors, profile: Profile, log: (s: string) => void): Promise<Executors> {
+// mountHint: what to say instead of "the work tree is empty" once a second folder was tried too.
+export async function checkExecutors(audit: Audit, exs: Executors, profile: Profile, log: (s: string) => void, mountHint?: string): Promise<Executors> {
   const checks: Canary["checks"] = [];
   let failed: string | null = null;
   const groups: ExecutorGroup[] = [];
   for (const g of exs.groups) {
     const c = await runCanary(g.ex, g.ex.runUser ?? null);
+    if (mountHint) for (const k of c.checks) if (k.id === "mount_visible" && !k.ok) k.detail = mountHint;
     checks.push(...c.checks.filter((k) => !checks.some((x) => x.id === k.id && x.ok === k.ok)));
     if (c.ok) {
       groups.push(g);
@@ -1333,27 +1337,71 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
   for (const gone of reapOrphans(opts.runtime)) opts.log(`Removed ${gone}, left by an audit that was stopped before it could clean up.`);
   refreshTree(repo, audit.repo.commit, tree);
   // Everything from the copy on is undone in the finally, and on a signal or crash by teardown.ts.
-  const scratch = tempDir("readiness-replay-");
-  let exs: Executors | null = null;
+  if (opts.image) audit.environment.imageOverride = opts.image;
+  const before = new Map<string, string>();
+  for (const f of lockfilesToCompare(profile, tree, audit.contract)) before.set(f, sha256(readText(join(tree, f))));
+  const { exs, scratch, copyDir } = await openWithMountRetry(audit, tree, opts.log, (dir, hint) =>
+    checkExecutors(audit, makeExecutors(audit, dir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost, audit.contract.some((c) => c.component === "*"), opts.vm, opts.budgetTotalMinutes), profile, opts.log, hint),
+  );
   try {
-    const copyDir = join(scratch.path, "work");
-    copyWorkTree(tree, copyDir);
-    const before = new Map<string, string>();
-    for (const f of lockfilesToCompare(profile, tree, audit.contract)) before.set(f, sha256(readText(join(copyDir, f))));
-    if (opts.image) audit.environment.imageOverride = opts.image;
-    exs = await checkExecutors(audit, makeExecutors(audit, copyDir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost, audit.contract.some((c) => c.component === "*"), opts.vm, opts.budgetTotalMinutes), profile, opts.log);
     recordHostConsent(audit, repo);
     await replayIn(audit, repo, tree, rubric, opts, exs, copyDir, before, components);
   } finally {
-    exs?.close();
+    exs.close();
     scratch.dispose();
+  }
+}
+
+// Where the work tree goes when the runtime can't see the temp folder: Colima's default mounts, snap
+// Docker and a remote DOCKER_HOST share the home folder, or nothing, but not /tmp.
+export function cacheBase(): string {
+  return join(homedir(), ".cache", "agent-readiness");
+}
+
+export function mountUnseen(audit: Audit): boolean {
+  const pe = audit.environment.proofEnv;
+  return pe?.kind === "container" && pe.canary.checks.some((c) => c.id === "mount_visible" && !c.ok);
+}
+
+export function mountHint(folders: string[]): string {
+  return `the container runtime couldn't see the work tree under ${folders.join(" or ")}, as it mounts only folders it shares with this machine; set TMPDIR to a folder it shares and run the audit again`;
+}
+
+// Opens the executors on a copy of the tree, and when the container's self-check finds the copy
+// empty, once more on a copy under cacheBase(). The scratch folder in use is returned for disposal.
+export async function openWithMountRetry(
+  audit: Audit,
+  tree: string,
+  log: (s: string) => void,
+  open: (copyDir: string, hint?: string) => Promise<Executors>,
+  bases: string[] = [tmpdir(), cacheBase()],
+): Promise<{ exs: Executors; scratch: TempDir; copyDir: string }> {
+  let scratch = tempDir("readiness-replay-", bases[0]);
+  try {
+    let copyDir = join(scratch.path, "work");
+    copyWorkTree(tree, copyDir);
+    let exs = await open(copyDir);
+    if (!mountUnseen(audit) || bases.length < 2) return { exs, scratch, copyDir };
+    log(`The container couldn't see the audit's copy of the repo under ${bases[0]}; trying again under ${bases[1]}.`);
+    exs.close();
+    scratch.dispose();
+    mkdirSync(bases[1], { recursive: true });
+    scratch = tempDir("readiness-replay-", bases[1]);
+    copyDir = join(scratch.path, "work");
+    copyWorkTree(tree, copyDir);
+    delete audit.environment.notRun;
+    exs = await open(copyDir, mountHint(bases));
+    return { exs, scratch, copyDir };
+  } catch (e) {
+    scratch.dispose();
+    throw e;
   }
 }
 
 // Containers and temp folders of audits on this machine whose process is gone, whatever their age.
 // With container runtimes turned off, the runtime isn't asked.
 export function reapOrphans(runtimePref = "auto"): string[] {
-  return [...(runtimePref === "none" ? [] : removeOrphanedContainers()), ...removeOrphanedTempDirs()];
+  return [...(runtimePref === "none" ? [] : removeOrphanedContainers()), ...removeOrphanedTempDirs(), ...removeOrphanedTempDirs(cacheBase())];
 }
 
 async function replayIn(audit: Audit, repo: string, tree: string, rubric: Rubric, opts: ReplayOptions, exs: Executors, copyDir: string, before: Map<string, string>, components: Set<string>): Promise<void> {

@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { detectRuntime } from "../skill/agent-readiness/scripts/lib/container.ts";
 import { HOOKS_FILE, guardDecision, installGuard, probeGuard, uninstallGuard } from "../skill/agent-readiness/scripts/lib/guard.ts";
 import { reproOf } from "../skill/agent-readiness/scripts/lib/model.ts";
+import type { Executor, Executors } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { checkExecutors, mountHint, mountUnseen, openWithMountRetry } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { renderHtml } from "../skill/agent-readiness/scripts/lib/render-html.ts";
 import { renderMarkdown } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
@@ -151,5 +153,61 @@ describe("S4: host mode keeps a record of the user's yes", () => {
     const { audit, md } = sealedAudit(repo);
     assert.equal(audit.environment.hostConsent, null);
     assert.match(md, /with no recorded yes: --allow-host was passed/);
+  });
+});
+
+describe("S5: a container that can't see the temp folder gets a second folder, and a reason", () => {
+  // An executor whose work tree the "runtime" sees, or doesn't.
+  const fakeEx = (sees: boolean, root: string): Executor => ({
+    where: "container",
+    strength: "clean_replay",
+    image: "node:22-bookworm",
+    imageSource: "audit",
+    root,
+    exec: async () => ({ exitCode: 0, timedOut: false, durationMs: 1, output: sees ? canaryLines(true) : canaryLines(false) }),
+    offline: () => true,
+    networkOff: null,
+    close: () => {},
+    runUser: null,
+  });
+  const canaryLines = (visible: boolean) => [visible ? "readiness-canary mount_visible ok" : "readiness-canary mount_visible fail the work tree is empty", "readiness-canary mount_writable ok", "readiness-canary run_user 1000", "readiness-canary git_identity ok"].join("\n");
+  const set = (ex: Executor): Executors => ({ groups: [{ ex, components: ["app"], repoWide: true }], forComponent: () => ex, repo: ex, close: () => {} });
+  const withProof = (audit: Audit) => {
+    audit.environment.proofEnv = { kind: "container", id: "docker:node:22-bookworm", imageSource: "audit", network: null, canary: { ok: true, checks: [] }, proves: true };
+  };
+
+  test("an empty mount under the temp folder is retried under the second folder, and the first copy is gone", async () => {
+    const audit = makeAudit({ components: [{ id: "app", share: 1 }] });
+    const tree = mkdtempSync(join(tmpdir(), "tree-"));
+    writeFileSync(join(tree, "package.json"), "{}");
+    const [first, second] = [mkdtempSync(join(tmpdir(), "base1-")), mkdtempSync(join(tmpdir(), "base2-"))];
+    const hints: (string | undefined)[] = [];
+    const dirs: string[] = [];
+    const logs: string[] = [];
+    const { scratch, copyDir } = await openWithMountRetry(audit, tree, (s) => logs.push(s), async (dir, hint) => {
+      hints.push(hint);
+      dirs.push(dir);
+      withProof(audit);
+      return checkExecutors(audit, set(fakeEx(dir.startsWith(second), dir)), audit.profile!, () => {}, hint);
+    }, [first, second]);
+    assert.deepEqual(hints, [undefined, mountHint([first, second])]);
+    assert.ok(copyDir.startsWith(second) && existsSync(join(copyDir, "package.json")));
+    assert.equal(existsSync(dirs[0]), false, "the copy the runtime couldn't see is removed");
+    assert.equal(mountUnseen(audit), false);
+    assert.equal(audit.environment.notRun, undefined);
+    assert.match(logs.join("\n"), /couldn't see the audit's copy of the repo under .*trying again under/);
+    scratch.dispose();
+  });
+
+  test("when neither folder is seen, the self-check names both and says TMPDIR moves it", async () => {
+    const audit = makeAudit({ components: [{ id: "app", share: 1 }] });
+    const tree = mkdtempSync(join(tmpdir(), "tree-"));
+    const bases = [mkdtempSync(join(tmpdir(), "base1-")), mkdtempSync(join(tmpdir(), "base2-"))];
+    const { scratch } = await openWithMountRetry(audit, tree, () => {}, async (dir, hint) => {
+      withProof(audit);
+      return checkExecutors(audit, set(fakeEx(false, dir)), audit.profile!, () => {}, hint);
+    }, bases);
+    assert.match(audit.environment.notRun ?? "", new RegExp(`mount visible: the container runtime couldn't see the work tree under ${bases[0]} or ${bases[1]}.*set TMPDIR to a folder it shares`));
+    scratch.dispose();
   });
 });
