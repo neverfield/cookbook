@@ -29,6 +29,7 @@ import { paths, plantSeed, refreshTree } from "./workspace.ts";
 import { GIT_IDENTITY_CONFIG, canCutNetwork, canaryFailure, detectDisposableVm, normalizedEnv, offlineCommand, provesIn, runCanary } from "./proofenv.ts";
 import type { Canary, ProofEnv, VmDetection } from "./proofenv.ts";
 import { loadRubric } from "./rubric.ts";
+import { lease } from "./session.ts";
 
 export interface Executor {
   where: Where;
@@ -90,6 +91,16 @@ export { ALLOW_HOST_ENV };
 
 export function hostAllowed(explicit?: boolean): boolean {
   return explicit ?? process.env[ALLOW_HOST_ENV] === "1";
+}
+
+// The user's yes to host mode, as the session holds it, copied into the audit: the seal deletes the
+// session, and the report has to show whether anyone was asked. Null when host mode ran on the flag
+// alone. Untouched when nothing ran on the host.
+export function recordHostConsent(audit: Audit, repo: string): void {
+  if (!audit.environment.hostMode && !audit.evidence.some((e) => e.where === "host")) return;
+  const l = lease(repo);
+  const grant = l.valid ? l.session?.grant : null;
+  audit.environment.hostConsent = grant ? { note: redact(grant.note).slice(0, 300), at: grant.at } : null;
 }
 
 export const HOST_NOT_ALLOWED = `host mode wasn't allowed (--allow-host), so no repo command ran outside a container`;
@@ -1331,6 +1342,7 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
     for (const f of lockfilesToCompare(profile, tree, audit.contract)) before.set(f, sha256(readText(join(copyDir, f))));
     if (opts.image) audit.environment.imageOverride = opts.image;
     exs = await checkExecutors(audit, makeExecutors(audit, copyDir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost, audit.contract.some((c) => c.component === "*"), opts.vm, opts.budgetTotalMinutes), profile, opts.log);
+    recordHostConsent(audit, repo);
     await replayIn(audit, repo, tree, rubric, opts, exs, copyDir, before, components);
   } finally {
     exs?.close();

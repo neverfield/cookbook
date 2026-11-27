@@ -13,7 +13,7 @@ import { PREVIEW } from "./lib/preview.ts";
 import { buildProfile } from "./lib/profile.ts";
 import { redact } from "./lib/redact.ts";
 import { MEMORY_ENV, memoryOverride } from "./lib/container.ts";
-import { ALLOW_HOST_ENV, HOST_NOT_ALLOWED, assertPlatformSupported, evidenceFromPhase, hostAllowed, hostExecutor, newBudget, reapOrphans, registryValuesOf, replay, runContract } from "./lib/replay.ts";
+import { ALLOW_HOST_ENV, HOST_NOT_ALLOWED, assertPlatformSupported, evidenceFromPhase, hostAllowed, hostExecutor, newBudget, reapOrphans, recordHostConsent, registryValuesOf, replay, runContract } from "./lib/replay.ts";
 import { latestRubricVersion, loadRubric } from "./lib/rubric.ts";
 import { SCAN_BOUND_MINUTES, capCutFolders, sampledScope } from "./lib/scope.ts";
 import { validateAgainst } from "./lib/schema.ts";
@@ -256,6 +256,7 @@ async function cmdRun(a: Args): Promise<void> {
     ex = hostExecutor(scratch.dir, audit.environment.registryEnv, audit.environment.inheritEnv, "host");
     const results = await runContract(ex, selected, { components: comps, budget: newBudget(rubric.budgets.componentMinutes, rubric.budgets.totalMinutes), registryValues, onResult: (r) => log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.status}${r.diagnosis ? ` (${r.diagnosis.detail})` : ""}`) });
     for (const r of results) evidenceFromPhase(audit, ex, r, registryValues);
+    recordHostConsent(audit, repo);
     if (a.flags.instructions) {
       for (const item of audit.instructions.filter((i) => i.category === "replay" && i.staticResult === "pass")) {
         const out = await ex.exec(item.text, ".", 300);

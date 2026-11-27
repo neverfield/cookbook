@@ -1144,6 +1144,7 @@ export function buildReport(raw: ModelInput): ReportJson {
         ...(audit.environment.proofEnv?.canary.checks.length ? [{ label: "Environment self-check", value: canaryNote(audit.environment.proofEnv.canary) }] : []),
         ...(audit.environment.registryEnv.length ? [{ label: "Registry variables", value: `${audit.environment.registryEnv.join(", ")}, passed to the setup steps by name; their values are never recorded` }] : []),
         ...(audit.masked?.length ? [{ label: "Masked values", value: maskedNote(audit.masked) }] : []),
+        ...(audit.environment.hostConsent !== undefined ? [{ label: "Host mode", value: hostConsentNote(audit.environment.hostConsent) }] : []),
         { label: "Stored in", value: input.storedAt },
       ],
     },
@@ -1207,6 +1208,11 @@ export function changesOf(prev: ReportJson, now: ReportJson, rubric: Rubric): Re
   const okBefore = new Map(prev.details.checks.map((c) => [c.id, c.ok]));
   const checks = now.details.checks.filter((c) => okBefore.has(c.id) && okBefore.get(c.id) !== c.ok && (okBefore.get(c.id) === false || c.ok === false)).map((c) => ({ id: c.id, name: c.name, from: okBefore.get(c.id) ?? null, to: c.ok }));
   return { since: { audit: prev.audit.id, date: prev.audit.date }, repo: { from: repoLevel(prev), to: repoLevel(now) }, components, nowMet, nowFailing, checks };
+}
+
+// Whether anyone said yes before the repo's commands ran outside a container, in the user's words.
+export function hostConsentNote(consent: { note: string; at: string } | null): string {
+  return consent ? `the repo's commands ran on this machine on the user's yes, recorded at ${consent.at}: "${consent.note}"` : "the repo's commands ran on this machine with no recorded yes: --allow-host was passed, and no `readiness allow-host --note` was recorded in the session";
 }
 
 // The secret-shaped values the seal masked in the repo's own text, by type and place.

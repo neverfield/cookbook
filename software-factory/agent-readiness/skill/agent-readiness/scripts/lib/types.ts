@@ -425,6 +425,8 @@ export interface Audit {
     limits?: { cpus: number | null; memoryMb: number; pids: number };
     // The user allowed repo commands to run on this machine, outside a container.
     hostMode?: boolean;
+    // The user's yes to that, as `readiness allow-host --note` recorded it; null when none was.
+    hostConsent?: { note: string; at: string } | null;
     // Where the replay's results were proved, and the canary that checked that environment first.
     proofEnv?: ProofEnv;
     // Why no repo command ran: no container runtime, or a container that didn't start, and host mode not allowed.

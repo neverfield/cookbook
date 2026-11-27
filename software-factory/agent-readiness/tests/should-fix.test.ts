@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
@@ -123,4 +123,33 @@ describe("S3: the skill excludes itself in any agent's skills folder", () => {
       assert.equal(after.profile!.totalChanges, before.profile!.totalChanges, "installing it isn't work in the repo");
     });
   }
+});
+
+function sealedAudit(repo: string): { audit: Audit; md: string } {
+  const audits = join(repo, ".agent-readiness", "history", "audits");
+  const dir = join(audits, readdirSync(audits).sort().pop()!);
+  return { audit: JSON.parse(readFileSync(join(dir, "audit.json"), "utf8")) as Audit, md: readFileSync(join(dir, "report.md"), "utf8") };
+}
+
+describe("S4: host mode keeps a record of the user's yes", () => {
+  const hostAudit = ["audit", "--tier", "local-exec", "--runtime", "none", "--no-mutants", "--allow-host"];
+
+  test("a yes recorded with allow-host is quoted in the sealed audit and the report", () => {
+    const repo = materialize("healthy-node");
+    assert.equal(readiness(repo, ["allow-host", "--note", "yes, run npm test on this laptop"]).code, 0);
+    const r = readiness(repo, hostAudit);
+    assert.equal(r.code, 0, r.out);
+    const { audit, md } = sealedAudit(repo);
+    assert.equal(audit.environment.hostConsent?.note, "yes, run npm test on this laptop");
+    assert.match(md, /Host mode\W+the repo's commands ran on this machine on the user's yes, recorded at [^:]+:\S*: "yes, run npm test on this laptop"/);
+  });
+
+  test("host mode on the flag alone says no yes was recorded", () => {
+    const repo = materialize("healthy-node");
+    const r = readiness(repo, hostAudit);
+    assert.equal(r.code, 0, r.out);
+    const { audit, md } = sealedAudit(repo);
+    assert.equal(audit.environment.hostConsent, null);
+    assert.match(md, /with no recorded yes: --allow-host was passed/);
+  });
 });
