@@ -16,10 +16,10 @@ import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule
 import { Progress, budgetSummary } from "./progress.ts";
 import { redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
-import { SUDO_SHIM_MARK, disposeHome, runCommand, scrubbedEnv } from "./run.ts";
+import { SUDO_SHIM_MARK, disposeHome, endGroups, runCommand, scrubbedEnv } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
 import type { Attribution, Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Language, Mutant, Profile, Strength, Where } from "./types.ts";
-import { removeOrphanedTempDirs, tempDir } from "./teardown.ts";
+import { onTeardown, removeOrphanedTempDirs, tempDir } from "./teardown.ts";
 import type { TempDir } from "./teardown.ts";
 import { assertFreeSpace, containedPath, exists, fail, treeBytes, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
 import { commandsFor } from "./score.ts";
@@ -144,16 +144,24 @@ export function hostExecutor(root: string, registryEnv: string[], inheritEnv: bo
   Object.assign(setupEnv, normalizedEnv(gitConfig));
   const env = { ...setupEnv };
   for (const k of registryEnv) delete env[k];
+  // Each command's process group, so a service a start step left in the background on this machine
+  // ends with the replay, or when it is stopped, instead of outliving the audit.
+  const groups = new Set<number>();
+  const dropGroups = onTeardown(() => endGroups(groups));
   return {
     where,
     strength: "executed",
     image: null,
     imageSource: null,
     root,
-    exec: (command, cwd, timeoutSec, opts) => (SUDO.test(command) ? Promise.resolve({ exitCode: null, timedOut: false, durationMs: 0, output: `readiness: ${SUDO_REFUSED}` }) : runCommand(command, join(root, cwd), { ...(opts?.registry ? setupEnv : env), ...opts?.env }, timeoutSec)),
+    exec: (command, cwd, timeoutSec, opts) => (SUDO.test(command) ? Promise.resolve({ exitCode: null, timedOut: false, durationMs: 0, output: `readiness: ${SUDO_REFUSED}` }) : runCommand(command, join(root, cwd), { ...(opts?.registry ? setupEnv : env), ...opts?.env }, timeoutSec, groups)),
     offline: () => false,
     networkOff: null,
-    close: () => disposeHome(setupEnv),
+    close: () => {
+      dropGroups();
+      endGroups(groups);
+      disposeHome(setupEnv);
+    },
     runUser: process.getuid ? String(process.getuid()) : null,
   };
 }

@@ -102,11 +102,26 @@ function homeEnv(home: string): Record<string, string> {
 
 const MAX_OUTPUT = 1024 * 1024;
 
-export function runCommand(command: string, cwd: string, env: Record<string, string>, timeoutSec: number): Promise<RunOutcome> {
+// Ends process groups that may still hold something a command left running, such as a server its
+// start step put in the background. A group already gone is skipped.
+export function endGroups(groups: Set<number>): void {
+  for (const pgid of groups) {
+    try {
+      process.kill(-pgid, "SIGKILL");
+    } catch {
+      // Already gone.
+    }
+  }
+  groups.clear();
+}
+
+// groups: where to note the command's process group, so its owner can end what it left running.
+export function runCommand(command: string, cwd: string, env: Record<string, string>, timeoutSec: number, groups?: Set<number>): Promise<RunOutcome> {
   return new Promise((resolve) => {
     const started = Date.now();
     // pipefail, as CI shells run, so `tests | tee` fails when the tests do.
     const child = spawn("bash", ["-o", "pipefail", "-c", command], { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
+    if (child.pid && groups) groups.add(child.pid);
     // Its own process group outlives this process, so a stopped audit ends the group too.
     const drop = onTeardown(() => {
       if (child.pid && child.exitCode === null && child.signalCode === null) process.kill(-child.pid, "SIGKILL");

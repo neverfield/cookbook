@@ -10,10 +10,12 @@ import { diagnose, privatePackage } from "../skill/agent-readiness/scripts/lib/d
 import { HOOKS_FILE, guardDecision, installGuard, probeGuard, uninstallGuard } from "../skill/agent-readiness/scripts/lib/guard.ts";
 import { reproOf } from "../skill/agent-readiness/scripts/lib/model.ts";
 import type { Executor, Executors } from "../skill/agent-readiness/scripts/lib/replay.ts";
-import { checkExecutors, declaredBuildFailure, mountHint, mountUnseen, openWithMountRetry, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { checkExecutors, declaredBuildFailure, hostExecutor, mountHint, mountUnseen, openWithMountRetry, replay } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import type { VmDetection } from "../skill/agent-readiness/scripts/lib/proofenv.ts";
 import { vmNotDetectedNote } from "../skill/agent-readiness/scripts/lib/proofenv.ts";
 import { loadDraft, saveDraft } from "../skill/agent-readiness/scripts/lib/workspace.ts";
+import { DOTNET_INSTALL_SCRIPT, dotnet } from "../skill/agent-readiness/scripts/lib/languages/dotnet.ts";
+import { redact } from "../skill/agent-readiness/scripts/lib/redact.ts";
 import { renderHtml } from "../skill/agent-readiness/scripts/lib/render-html.ts";
 import { renderMarkdown } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
@@ -416,6 +418,54 @@ describe("S13: a declared image that doesn't build is a finding, and the audit s
     assert.equal(f.result, "not_run");
     assert.match(f.blocked ?? "", /^the base image of the declared environment \.cursor\/Dockerfile couldn't be pulled on this machine \(ERROR: failed to solve/);
     assert.equal(declaredBuildFailure("#5 [2/2] RUN ./setup.sh\n#5 0.2 /bin/sh: ./setup.sh: not found\nERROR: failed to solve: process \"/bin/sh -c ./setup.sh\" did not complete successfully: exit code: 127", "Dockerfile").result, "fail");
+  });
+});
+
+describe("S14: smaller security and hygiene points", () => {
+  const alive = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  test("a service a host-mode command leaves in the background ends when the replay closes", async () => {
+    const ex = hostExecutor(mkdtempSync(join(tmpdir(), "host-")), [], false, "fresh_copy", true);
+    const out = await ex.exec("sleep 300 > /dev/null 2>&1 & echo $!", ".", 10);
+    const pid = Number(out.output.trim());
+    assert.ok(pid > 0 && alive(pid), "the service outlives its command");
+    ex.close();
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(alive(pid), false);
+  });
+
+  test("a private key printed in output is redacted through its END line, or to the end of its body when cut off", () => {
+    const body = ["MIIEowIBAAKCAQEA1x8vYq3k2mJ9Zr7Pq0Lw4Nn6Hh2Tt5Uu8Vv1Ww3Xx7Yy9Zz0Aa", "c2VjcmV0LWtleS1ib2R5LWxpbmUtdHdvLXdpdGgtZW5vdWdoLWNoYXJzLXRvLW1hdGNo"];
+    const key = ["-----BEGIN RSA PRIVATE KEY-----", ...body, "-----END RSA PRIVATE KEY-----"].join("\n");
+    const full = redact(`config loaded\n${key}\nnext step ok`);
+    assert.equal(full, "config loaded\n[redacted:Private key]\nnext step ok");
+    const cut = redact(`dump:\n-----BEGIN PRIVATE KEY-----\n${body[0]}\n${body[1]}`);
+    for (const line of body) assert.doesNotMatch(cut, new RegExp(line.slice(0, 20)));
+    const escaped = redact(`{"key":"-----BEGIN PRIVATE KEY-----\\n${body[0]}\\n-----END PRIVATE KEY-----\\n","ok":true}`);
+    assert.equal(escaped, '{"key":"[redacted:Private key]\\n","ok":true}');
+  });
+
+  test("Microsoft's install script is pinned to a commit and checked against its digest before it runs", () => {
+    const strict = mkdtempSync(join(tmpdir(), "dotnet-"));
+    writeFileSync(join(strict, "global.json"), '{"sdk":{"version":"10.0.100"}}');
+    writeFileSync(join(strict, "A.csproj"), '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>');
+    const [t] = dotnet.replay!.setup!(strict, ".");
+    assert.match(DOTNET_INSTALL_SCRIPT.url, /^https:\/\/raw\.githubusercontent\.com\/dotnet\/install-scripts\/[0-9a-f]{40}\/src\/dotnet-install\.sh$/);
+    assert.ok(t.install.startsWith(`curl -fsSL ${DOTNET_INSTALL_SCRIPT.url} -o /tmp/dotnet-install.sh && echo "${DOTNET_INSTALL_SCRIPT.sha256}  /tmp/dotnet-install.sh" | sha256sum -c --quiet - && bash /tmp/dotnet-install.sh`), t.install);
+    assert.doesNotMatch(t.install, /dot\.net\/v1/);
+  });
+
+  test("README says the install can reach the metadata address and what host mode stops", () => {
+    const readme = readFileSync(join(SKILL_ROOT, "..", "..", "README.md"), "utf8");
+    assert.match(readme, /instance metadata address \(169\.254\.169\.254\)/);
+    assert.match(readme, /a service the repo's start step leaves running in the background is stopped when the replay ends/);
   });
 });
 
