@@ -3,36 +3,6 @@
   "seed": "trial-seed",
   "trials": [
     {
-      "id": "ms",
-      "repo": "vercel/ms",
-      "commit": "4ff48cec099f0514c3e9bbca18706c9c21122bfb",
-      "runtime": "docker",
-      "review": "customer-trial-opus.md",
-      "notes": "Tiny pnpm TypeScript library. Builds, type-checks and passes all 167 tests. The README's npm install, yarn add, npm link and npm test lines are for the package's users, not wrong agent instructions. One real untested boundary: the tests use one year plus 1 ms.",
-      "realInstructionFindings": [],
-      "falseInstructionFindings": 0,
-      "recorded": {
-        "any": {
-          "exit": 0,
-          "sealed": true,
-          "runtime": "docker",
-          "level": 2,
-          "outcome": "proven",
-          "unproven": false,
-          "couldBe": null,
-          "components": {
-            "ms": {
-              "level": 2,
-              "unproven": false
-            }
-          },
-          "notAssessed": [],
-          "instructionFailures": [],
-          "blockingSafety": []
-        }
-      }
-    },
-    {
       "id": "zustand",
       "repo": "pmndrs/zustand",
       "commit": "9fed2eb2f3af672da9f7bf694b996df3831fc207",
@@ -126,36 +96,6 @@
           "instructionFailures": [],
           "blockingSafety": [],
           "headline": "Agents can build and test dotenv, but its tests can't yet catch wrong changes."
-        }
-      }
-    },
-    {
-      "id": "commander",
-      "repo": "tj/commander.js",
-      "commit": "a5a7dc084d4d2b7932e85ca049c5204e50a2c721",
-      "runtime": "docker",
-      "review": "customer-trial-carbon.md",
-      "notes": "Single npm JavaScript package. npm ci and all 1,430 node --test and tsd tests pass, and 5 of 5 planted faults were caught. All 7 README instruction findings were false: consumer CLI examples and commands quoted in prose such as node --eval. In a container 2 of 1,430 tests fail because tests/fixtures/pmlink, a committed symlink, is missing from the audit's clean copy: an audit defect, not the repo's. Host runs passed.",
-      "realInstructionFindings": [],
-      "falseInstructionFindings": 0,
-      "recorded": {
-        "any": {
-          "exit": 0,
-          "sealed": true,
-          "runtime": "docker",
-          "level": 2,
-          "outcome": "proven",
-          "unproven": false,
-          "couldBe": null,
-          "components": {
-            "commander": {
-              "level": 2,
-              "unproven": false
-            }
-          },
-          "notAssessed": [],
-          "instructionFailures": [],
-          "blockingSafety": []
         }
       }
     },
@@ -485,36 +425,6 @@
       ]
     },
     {
-      "id": "uuid",
-      "repo": "google/uuid",
-      "commit": "2d3c2a9cc518326daf99a383f07c4d3c44317e4d",
-      "runtime": "docker",
-      "review": "agent-readiness-hardening-plan.md",
-      "notes": "Go module with no dependencies and no go line, so it runs in the newest pinned Go (golang:1.27) and the toolchain condition reports the missing go line. Its CI runs go test only, so there is no lint. It builds and passes its 45 top-level tests offline, and its tests catch at least 3 of 5 planted faults, so Level 2 is correct.",
-      "realInstructionFindings": [],
-      "falseInstructionFindings": 0,
-      "recorded": {
-        "any": {
-          "exit": 0,
-          "sealed": true,
-          "runtime": "docker",
-          "level": 2,
-          "outcome": "proven",
-          "unproven": false,
-          "couldBe": null,
-          "components": {
-            "uuid": {
-              "level": 2,
-              "unproven": false
-            }
-          },
-          "notAssessed": [],
-          "instructionFailures": [],
-          "blockingSafety": []
-        }
-      }
-    },
-    {
       "id": "ripgrep",
       "repo": "BurntSushi/ripgrep",
       "commit": "91f5d22ef48bde459d90a8c7dbeab416e97d0f2b",
@@ -651,74 +561,6 @@
             "benchmarks"
           ],
           "instructionFailures": [],
-          "blockingSafety": []
-        }
-      }
-    },
-    {
-      "id": "csharp-algorithms",
-      "repo": "TheAlgorithms/C-Sharp",
-      "commit": "6d3b02a6b026abe253e942fe0d84d1244b8fbeb1",
-      "runtime": "docker",
-      "review": "lang-jvm-dotnet",
-      "notes": "C# algorithms collection on net8.0 with NUnit, no global.json and no packages.lock.json. With NuGet and mcr.microsoft.com reachable it restores, builds and passes its tests offline in the .NET 8 SDK image: Level 1. Level 2 is held back by four README links that are genuinely broken at this commit (AutokeyEncoder.cs is missing, Floor.cs and CollaborativeFiltering moved, LinqShuffler.cs is LINQShuffler.cs); the lockfile and toolchain conditions also fail. Where mcr.microsoft.com is blocked the image can't be pulled, so it is unproven on that machine.",
-      "egress": [
-        "mcr.microsoft.com",
-        "api.nuget.org"
-      ],
-      "realInstructionFindings": [
-        "README.md:44",
-        "README.md:82",
-        "README.md:109",
-        "README.md:156"
-      ],
-      "falseInstructionFindings": 0,
-      "recorded": {
-        "open": {
-          "exit": 0,
-          "sealed": true,
-          "runtime": "docker",
-          "level": 2,
-          "outcome": "proven",
-          "unproven": false,
-          "couldBe": null,
-          "components": {
-            "C-Sharp": {
-              "level": 2,
-              "unproven": false
-            }
-          },
-          "notAssessed": [],
-          "instructionFailures": [
-            "README.md:44",
-            "README.md:82",
-            "README.md:109",
-            "README.md:156"
-          ],
-          "blockingSafety": [],
-          "headline": "Nothing blocks agents in C-Sharp: from a clean checkout it installs, builds and passes its tests, and its tests caught the planted bugs. Start giving agents work there."
-        },
-        "restricted": {
-          "exit": 0,
-          "sealed": true,
-          "runtime": "docker",
-          "level": 0,
-          "outcome": "blocked",
-          "unproven": true,
-          "couldBe": 1,
-          "components": {
-            "C-Sharp": {
-              "level": 0,
-              "unproven": true
-            }
-          },
-          "notAssessed": [],
-          "instructionFailures": [
-            "README.md:44",
-            "README.md:82",
-            "README.md:109",
-            "README.md:156"
-          ],
           "blockingSafety": []
         }
       }
