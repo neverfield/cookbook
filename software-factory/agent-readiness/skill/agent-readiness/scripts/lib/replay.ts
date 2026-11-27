@@ -21,7 +21,7 @@ import type { RunOutcome } from "./run.ts";
 import type { Attribution, Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Language, Mutant, Profile, Strength, Where } from "./types.ts";
 import { removeOrphanedTempDirs, tempDir } from "./teardown.ts";
 import type { TempDir } from "./teardown.ts";
-import { containedPath, exists, fail, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
+import { assertFreeSpace, containedPath, exists, fail, treeBytes, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
 import { commandsFor } from "./score.ts";
 import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
 import { makeRecipe } from "./static.ts";
@@ -1340,6 +1340,8 @@ export async function replay(audit: Audit, repo: string, tree: string, rubric: R
   if (opts.image) audit.environment.imageOverride = opts.image;
   const before = new Map<string, string>();
   for (const f of lockfilesToCompare(profile, tree, audit.contract)) before.set(f, sha256(readText(join(tree, f))));
+  const bytes = treeBytes(repo, audit.repo.commit);
+  assertFreeSpace(tmpdir(), bytes === null ? null : 2 * bytes, "the replay's copy of the tree and the dependencies it installs there");
   const { exs, scratch, copyDir } = await openWithMountRetry(audit, tree, opts.log, (dir, hint) =>
     checkExecutors(audit, makeExecutors(audit, dir, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, opts.allowHost, audit.contract.some((c) => c.component === "*"), opts.vm, opts.budgetTotalMinutes), profile, opts.log, hint),
   );

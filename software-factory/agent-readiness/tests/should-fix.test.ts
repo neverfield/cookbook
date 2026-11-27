@@ -14,7 +14,7 @@ import { renderMarkdown } from "../skill/agent-readiness/scripts/lib/render.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { startSession } from "../skill/agent-readiness/scripts/lib/session.ts";
 import type { Audit } from "../skill/agent-readiness/scripts/lib/types.ts";
-import { SKILL_ROOT } from "../skill/agent-readiness/scripts/lib/util.ts";
+import { SKILL_ROOT, assertFreeSpace, freeSpaceProblem, treeBytes } from "../skill/agent-readiness/scripts/lib/util.ts";
 import { commitAll, materialize, readiness } from "../support/tools/fixture.ts";
 import { makeAudit, reportFor } from "./helpers.ts";
 
@@ -209,5 +209,39 @@ describe("S5: a container that can't see the temp folder gets a second folder, a
     }, bases);
     assert.match(audit.environment.notRun ?? "", new RegExp(`mount visible: the container runtime couldn't see the work tree under ${bases[0]} or ${bases[1]}.*set TMPDIR to a folder it shares`));
     scratch.dispose();
+  });
+});
+
+describe("S6: a copy of the tree checks the free disk first", () => {
+  test("git gives the tree's size without a checkout", () => {
+    const repo = materialize("healthy-node");
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
+    const files = execFileSync("git", ["ls-files"], { cwd: repo, encoding: "utf8" }).trim().split("\n");
+    assert.equal(treeBytes(repo, head), files.reduce((n, f) => n + statSync(join(repo, f)).size, 0));
+  });
+
+  test("too little free space stops with what it needs and how to move it; enough says nothing", () => {
+    const gb = 1024 ** 3;
+    assert.match(freeSpaceProblem("/tmp", 0.2 * gb, 2 * gb, "a clean checkout") ?? "", /^Not enough free disk for a clean checkout: \/tmp has 205 MB free and this needs about 2\.5 GB\. Free space there, or set TMPDIR/);
+    assert.equal(freeSpaceProblem("/tmp", 10 * gb, 2 * gb, "a clean checkout"), null);
+  });
+
+  test("init on a disk without room stops before it writes, with no folder left behind", () => {
+    const repo = materialize("healthy-node");
+    // A tmpfs this small can't hold the headroom, so the check stops the export.
+    const small = mkdtempSync(join(tmpdir(), "small-"));
+    const mounted = spawnSync("sudo", ["-n", "mount", "-t", "tmpfs", "-o", `size=64m,uid=${process.getuid!()}`, "tmpfs", small], { encoding: "utf8" });
+    if (mounted.status !== 0) {
+      assert.throws(() => assertFreeSpace(tmpdir(), Number.MAX_SAFE_INTEGER, "a clean checkout"), /Not enough free disk for a clean checkout/);
+      return;
+    }
+    try {
+      const r = readiness(repo, ["init", "--tier", "local-exec"], { TMPDIR: small });
+      assert.equal(r.code, 1, r.out);
+      assert.match(r.out, new RegExp(`Not enough free disk for a clean checkout of [0-9a-f]{7}.*${small}/\\S+ has \\d+ MB free`));
+      assert.deepEqual(readdirSync(small), []);
+    } finally {
+      spawnSync("sudo", ["-n", "umount", small]);
+    }
   });
 });

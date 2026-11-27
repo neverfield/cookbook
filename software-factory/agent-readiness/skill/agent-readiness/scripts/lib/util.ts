@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, statfsSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,6 +19,44 @@ export function ownSkillPath(file: string): boolean {
     installedAt = r.status === 0 && r.stdout.trim() ? r.stdout.trim() : null;
   }
   return installedAt !== null && file.startsWith(installedAt);
+}
+
+// The bytes a commit's files take, from git's own object sizes. Null when git can't say without
+// fetching: on a blobless partial clone that would download every blob of the commit.
+export function treeBytes(repo: string, commit: string): number | null {
+  const r = spawnSync("git", ["ls-tree", "-r", "-l", "--full-tree", commit], { cwd: repo, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, env: { ...process.env, GIT_NO_LAZY_FETCH: "1" } });
+  if (r.status !== 0) return null;
+  let total = 0;
+  for (const line of r.stdout.split("\n")) {
+    const size = Number(line.split(/\s+/)[3]);
+    if (Number.isFinite(size)) total += size;
+  }
+  return total;
+}
+
+const MIB = 1024 * 1024;
+// Kept free past what a step writes, for the tools' own temp files.
+export const DISK_HEADROOM = 512 * MIB;
+
+const mb = (n: number) => (n >= 1024 * MIB ? `${(n / (1024 * MIB)).toFixed(1)} GB` : `${Math.ceil(n / MIB)} MB`);
+
+// Why a step that writes `need` bytes into `dir` can't, or null when it can.
+export function freeSpaceProblem(dir: string, free: number, need: number, what: string): string | null {
+  if (free >= need + DISK_HEADROOM) return null;
+  return `Not enough free disk for ${what}: ${dir} has ${mb(free)} free and this needs about ${mb(need + DISK_HEADROOM)}. Free space there, or set TMPDIR to a folder on a larger disk, and run it again.`;
+}
+
+export function assertFreeSpace(dir: string, need: number | null, what: string): void {
+  if (need === null) return;
+  let free: number;
+  try {
+    const s = statfsSync(dir);
+    free = s.bavail * s.bsize;
+  } catch {
+    return;
+  }
+  const problem = freeSpaceProblem(dir, free, need, what);
+  if (problem) fail(problem);
 }
 
 // A repo-controlled path, refused when it or a symlink along it leaves the tree. The repo's own
