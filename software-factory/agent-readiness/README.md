@@ -134,7 +134,7 @@ Tests added to catch planted faults are proved against a fresh set of faults the
 
 ## Enterprise repos
 
-- **Private registries:** `--registry-env NPM_TOKEN,PIP_INDEX_URL` passes named variables to the install. Names are recorded and values never are. Without them, a 401 reads "registry credentials not provided", not a repo blocker.
+- **Private registries:** `--registry-env NPM_TOKEN,PIP_INDEX_URL` passes named variables to the install. Names are recorded and values never are. Without them, a 401 reads "registry credentials not provided", and a "not found" for a scoped npm package or from an internal Maven, NuGet, Python or Go registry says the package looks private and to pass its credential. Only environment variables reach the install: credentials kept in `~/.npmrc`, `~/.m2/settings.xml`, `~/.netrc`, `pip.conf` or `NuGet.Config` on this machine aren't in the audit's empty home, so put the token in a variable those files read and pass its name.
 - **Network:** tests run with networking off after the install.
 - **Base images:** `--image <ref>` replays on an approved internal image. A repo-declared `.cursor/Dockerfile` in `environment.json` is built and used.
 - **No container runtime:** nothing runs and the result is unproven on this machine, unless `--allow-host` lets the replay use a fresh copy on the host, and then part 1 says Level 1 can't be proved on that machine, except on a disposable cloud VM the audit detects, where it can. A tool the host lacks, and every step behind it, is reported as blocked on this machine, never as a repo defect, and commands that use `sudo` are listed by the safety check and never run on the host. When nothing produced a real result, the report gives no level and says why.

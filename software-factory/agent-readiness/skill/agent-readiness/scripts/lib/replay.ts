@@ -582,7 +582,7 @@ export function evidenceFromPhase(audit: Audit, ex: Executor, r: PhaseResult, re
   if (r.status === "pass") summary = `${r.cmd.kind} passed${counts ? ` (${counts.passed} of ${counts.total} tests)` : ""}`;
   else if (r.status === "not_run") summary = r.note.startsWith("not run") ? `${r.cmd.kind} ${r.note}` : `${r.cmd.kind} not run: ${r.note}`;
   else summary = `${r.cmd.kind} failed: ${r.diagnosis?.detail ?? "non-zero exit"}${counts && counts.failed ? ` (${counts.failed} of ${counts.total} tests failed)` : ""}`;
-  if (r.status === "fail" && r.diagnosis?.cause === "registry" && audit.environment.registryEnv.length === 0) summary = `${r.cmd.kind} failed: registry credentials not provided (pass them with --registry-env)`;
+  if (r.status === "fail" && r.diagnosis?.detail === "registry credentials not provided" && audit.environment.registryEnv.length === 0) summary = `${r.cmd.kind} failed: registry credentials not provided (pass them with --registry-env)`;
   if (r.cmd.declared && r.status !== "not_run") summary += `; ran check-only, without the write flags in \`${r.cmd.declared}\``;
   if (r.networkOn) summary = r.status === "pass" ? `${summary}, with the network on, after failing with it cut` : `${summary}; it failed again with the network on`;
   else if (/once the audit added /.test(r.note)) summary += `, ${r.note.replace(/^(passed|ran) /, "")}`;

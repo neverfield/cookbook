@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { detectRuntime } from "../skill/agent-readiness/scripts/lib/container.ts";
+import { diagnose, privatePackage } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { HOOKS_FILE, guardDecision, installGuard, probeGuard, uninstallGuard } from "../skill/agent-readiness/scripts/lib/guard.ts";
 import { reproOf } from "../skill/agent-readiness/scripts/lib/model.ts";
 import type { Executor, Executors } from "../skill/agent-readiness/scripts/lib/replay.ts";
@@ -19,6 +21,7 @@ import { commitAll, materialize, readiness } from "../support/tools/fixture.ts";
 import { makeAudit, reportFor } from "./helpers.ts";
 
 // Fixes for the should-fix items S1 to S17 of the offline production-readiness review of 0.2.
+const TESTS = dirname(fileURLToPath(import.meta.url));
 const runtime = detectRuntime("auto");
 const docker = { skip: runtime ? false : "no container runtime: this needs docker", timeout: 5 * 60 * 1000 };
 
@@ -232,6 +235,38 @@ describe("S7: history push runs none of the repo's hooks and no commit signing",
     assert.match(pushed.out, /committed history to agent-readiness\/history and pushed to origin/);
     assert.equal(existsSync(ran), false, "no hook ran");
     assert.match(execFileSync("git", ["ls-tree", "--name-only", "agent-readiness/history"], { cwd: remote, encoding: "utf8" }), /history\.jsonl/);
+  });
+});
+
+describe("S8: a private package the registry won't show reads as a missing credential", () => {
+  const cases: [string, string, string][] = [
+    ["npm, scoped on npmjs.org", "npm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/@acme%2fwidgets - Not found\nnpm error 404  '@acme/widgets@^1.2.0' is not in this registry.", "@acme/widgets"],
+    ["pnpm, an internal registry", "ERR_PNPM_FETCH_404  GET https://npm.acme.internal/billing-core: Not Found - 404", "billing-core"],
+    ["yarn, scoped", 'error An unexpected error occurred: "https://registry.yarnpkg.com/@acme%2fui: Not found".', "@acme/ui"],
+    ["Maven, a Nexus repository", "[ERROR] Failed to execute goal on project app: Could not resolve dependencies for project com.acme:app:jar:1.0: Could not find artifact com.acme:billing-core:jar:2.3.1 in nexus (https://nexus.acme.corp/repository/maven-releases/) -> [Help 1]", "com.acme:billing-core:jar:2.3.1"],
+    ["NuGet, a private feed listed", "/src/App.csproj : error NU1101: Unable to find package Acme.Billing. No packages exist with this id in source(s): AcmeFeed, nuget.org", "Acme.Billing"],
+    ["pip, an extra index", "Looking in indexes: https://pypi.org/simple, https://pypi.acme.corp/simple\nERROR: Could not find a version that satisfies the requirement acme-billing==2.0 (from versions: none)\nERROR: No matching distribution found for acme-billing==2.0", "acme-billing"],
+    ["Go, a private host", "go: git.acme.corp/platform/billing@v1.4.0: reading https://proxy.golang.org/git.acme.corp/platform/billing/@v/v1.4.0.mod: 404 Not Found", "git.acme.corp/platform/billing"],
+    ["Go, a private GitHub repo", "go: github.com/acme/billing@v1.4.0: invalid version: git ls-remote -q origin in /go/pkg/mod/cache/vcs/abc: exit status 128:\n\tfatal: could not read Username for 'https://github.com': terminal prompts disabled", "github.com/acme/billing"],
+  ];
+  for (const [name, output, pkg] of cases) {
+    test(name, () => {
+      const d = diagnose(output, false, "install", 1);
+      assert.equal(d.cause, "registry");
+      assert.equal(d.detail, `${pkg} looks like a private package the registry answered "not found" for, as one does without its credential; pass the credential with --registry-env`);
+    });
+  }
+
+  test("a typo or a missing version on a public registry stays the repo's own failure", () => {
+    for (const out of [
+      "npm error 404 Not Found - GET https://registry.npmjs.org/lefpad - Not found",
+      readFileSync(join(TESTS, "tool-outputs", "maven-wrong-version.txt"), "utf8"),
+      "error NU1101: Unable to find package Newtonsoft.Jsn. No packages exist with this id in source(s): nuget.org",
+      "Looking in indexes: https://pypi.org/simple\nERROR: Could not find a version that satisfies the requirement reqests (from versions: none)",
+      "go: github.com/google/uuid@v1.99.0: reading https://proxy.golang.org/github.com/google/uuid/@v/v1.99.0.mod: 404 Not Found",
+    ]) assert.notEqual(diagnose(out, false, "install", 1).cause, "registry", out.slice(0, 80));
+    assert.equal(privatePackage("npm error 404 Not Found - GET https://registry.npmjs.org/@acme%2fwidgets"), "@acme/widgets");
+    assert.notEqual(diagnose("npm error 404 Not Found - GET https://registry.npmjs.org/@acme%2fwidgets", false, "test", 1).cause, "registry", "only a setup step's registry answer");
   });
 });
 
