@@ -1,7 +1,9 @@
+import { HOME_DIR, loginShell } from "./container.ts";
 import { serviceLabel } from "./diagnose.ts";
 import { currentEvidence } from "./evidence.ts";
 import { explanationsOf, imagesUsed, waiversOf } from "./explain.ts";
 import { list } from "./format.ts";
+import { pinnedRef } from "./images.ts";
 import { LANGUAGE_LABELS } from "./languages/index.ts";
 import type { LevelResult } from "./levels.ts";
 import { describeRate, rate, windowLabel } from "./outcomes.ts";
@@ -1235,9 +1237,11 @@ function integrityOf(sealStatus: string): "keyed" | "unsigned" {
 const SETUP_BEFORE: Record<CommandKind, CommandKind[]> = { doctor: [], install: [], lint: ["install"], build: ["install"], typecheck: ["install", "build"], test: ["install", "build"], start: ["install", "build"] };
 
 // A pasteable command that reruns one step as the audit did, from a clean checkout of the audited
-// commit: the setup steps that passed before it in the same place, then the step. The audit cuts the
-// network for tests and planted faults; the command leaves it on. Null when no command ran, and for a
-// type-check canary, which ran on a copy with a planted error.
+// commit: the setup steps that passed before it in the same place, then the step. In a container it
+// runs on the pinned image, as the host's own user with the audit's home and CI=1, and keeps the
+// image's PATH past the login profile, as the audit's own shell does. The audit cuts the network for
+// tests and planted faults; the command leaves it on, and the report says so above the list. Null
+// when no command ran, and for a type-check canary, which ran on a copy with a planted error.
 export function reproOf(audit: Pick<Audit, "evidence" | "environment">, e: Evidence): string | null {
   if (!e.command || e.result === "not_run" || e.where === "static" || e.canary) return null;
   const at = audit.evidence.indexOf(e);
@@ -1250,8 +1254,11 @@ export function reproOf(audit: Pick<Audit, "evidence" | "environment">, e: Evide
   const dir = (d: string) => (/^[\w./@+-]+$/.test(d) ? d : shellQuote(d));
   const step = (x: Evidence) => (x.cwd && x.cwd !== "." ? `(cd ${dir(x.cwd)} && ${x.command})` : x.command!);
   const script = [...setup.values(), e].map(step).join(" && ");
+  if (e.where !== "container") return `bash -lc ${shellQuote(script)}`;
   const rt = audit.environment.containerRuntime ?? "docker";
-  return e.where === "container" ? `${rt} run --rm -v "$PWD":/work -w /work ${e.image ?? audit.environment.image ?? "<image>"} bash -lc ${shellQuote(script)}` : `bash -lc ${shellQuote(script)}`;
+  const image = pinnedRef(e.image ?? audit.environment.image ?? "<image>");
+  const shell = loginShell(`mkdir -p "$HOME" && ${script}`, false).map((w, i) => (i < 2 ? w : shellQuote(w))).join(" ");
+  return `${rt} run --rm --user "$(id -u):$(id -g)" -e HOME=${HOME_DIR} -e CI=1 -v "$PWD":/work -w /work ${image} ${shell}`;
 }
 
 // What the audit took as given, on the first screen: the component map, each command with where it
