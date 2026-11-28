@@ -552,8 +552,10 @@ export interface HistoryLine {
   scriptsDigest: string;
   result: "sealed" | "passed" | "failed" | "blocked";
   note?: string;
-  // Each assessed component's standard level, and the repo rollup over the active ones.
+  // Each assessed component's standard level, and the repo rollup over the active ones. A component
+  // whose level is undetermined has no entry in levels and is listed in undeterminedComponents.
   levels: Record<string, Level>;
+  undeterminedComponents?: string[];
   repoLevel: Level;
   // Only the scenarios a user added, under the components they apply to.
   scenarioLevels: Record<string, Partial<Record<ScenarioId, Level>>>;

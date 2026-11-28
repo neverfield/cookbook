@@ -132,6 +132,8 @@ export function buildSealedReport(audit: Audit, rubric: Rubric, history: History
     previousOutcomes = { window: `${fmtShortDate(from)} to ${fmtShortDate(to)}, ${to.slice(0, 4)}`, agent: prevWithOutcomes.outcomes.agent };
   }
   const o = audit.outcomes;
+  // The report gives an undetermined component no level, so the history records none for it either.
+  const undetermined = [...c.levels.entries()].filter(([, l]) => l.undetermined).map(([id]) => id);
   const line: HistoryLine = {
     id: audit.id,
     kind: "audit",
@@ -141,7 +143,8 @@ export function buildSealedReport(audit: Audit, rubric: Rubric, history: History
     scriptsDigest: audit.skill.scriptsDigest,
     result: "sealed",
     note: noResults ? `no level: ${noResults}` : undefined,
-    levels: Object.fromEntries([...c.levels.entries()].map(([id, l]) => [id, l.level])),
+    levels: Object.fromEntries([...c.levels.entries()].filter(([, l]) => !l.undetermined).map(([id, l]) => [id, l.level])),
+    ...(undetermined.length ? { undeterminedComponents: undetermined } : {}),
     repoLevel: c.repo.level,
     scenarioLevels: Object.fromEntries([...c.scenarioLevels.entries()].filter(([, m]) => m.size).map(([id, m]) => [id, Object.fromEntries([...m.entries()].map(([k, v]) => [k, v.level]))])),
     ...(noResults ? { noLevel: true } : {}),
@@ -492,6 +495,7 @@ export async function recheck(p: Paths, opts: RecheckOptions): Promise<{ line: H
   const unproven = onHost || (failed.length === 0 && Boolean(blockedBy));
   const lastLine = [...history].reverse().find((h) => h.id === audit.id);
   const levels: HistoryLine["levels"] = {};
+  const undetermined: string[] = [];
   const scenarioLevels: HistoryLine["scenarioLevels"] = {};
   const base = compute(audit, rubric, history.filter((h) => h.id !== audit.id));
   // A recheck can lower a level or restore it, never raise it past the last audit's.
@@ -499,7 +503,9 @@ export async function recheck(p: Paths, opts: RecheckOptions): Promise<{ line: H
     const kinds = new Set(failed.filter((r) => r.cmd.component === comp || r.cmd.component === "*").map((r) => r.cmd.kind as string));
     const s = recheckStates(statesOf(base.states.get(comp)!) as Partial<Record<CondId, CondState>>, kinds);
     const last = (lastLine?.levels[comp] ?? base.levels.get(comp)?.level ?? 0) as Level;
-    levels[comp] = kinds.size ? capAt(componentLevel(rubric, s).level, last) : last;
+    const wasUndetermined = lastLine ? Boolean(lastLine.undeterminedComponents?.includes(comp)) : Boolean(base.levels.get(comp)?.undetermined);
+    if (!kinds.size && wasUndetermined) undetermined.push(comp);
+    else levels[comp] = kinds.size ? capAt(componentLevel(rubric, s).level, last) : last;
     for (const sid of scenariosFor(rubric, audit.scenarios ?? [], comp)) {
       const lastScenario = (lastLine?.scenarioLevels?.[comp]?.[sid] ?? componentLevel(rubric, s, sid).level) as Level;
       (scenarioLevels[comp] ??= {})[sid] = capAt(componentLevel(rubric, s, sid).level, lastScenario);
@@ -520,6 +526,7 @@ export async function recheck(p: Paths, opts: RecheckOptions): Promise<{ line: H
     result: failed.length ? "failed" : unproven ? "blocked" : "passed",
     note: firstFail ? `${firstFail.cmd.command} failed${firstFail.diagnosis ? `: ${firstFail.diagnosis.detail}` : ""}` : unproven ? `no level: the last audit's levels couldn't be proved here (${blockedBy})` : undefined,
     levels,
+    ...(undetermined.length ? { undeterminedComponents: undetermined } : {}),
     repoLevel: repoLevelNow,
     ...(unproven ? { noLevel: true } : {}),
     scenarioLevels,

@@ -15,6 +15,7 @@ import { addToolCommand, evidenceFromPhase, newBudget, runContract } from "../sk
 import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
+import { buildSealedReport, compute } from "../skill/agent-readiness/scripts/lib/seal.ts";
 import type { Component, Profile } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { factConflicts } from "../support/holdout/observe.ts";
 import { makeAudit, reportFor } from "./helpers.ts";
@@ -171,6 +172,19 @@ describe("Level 0 needs a repo failure (2026-12-beta)", () => {
     assert.match(r.executive.headline, /^Level 1 is undetermined for web: /);
     const statesOfWeb = statesOf(componentStates(audit, next, "web"));
     assert.equal(statesOfWeb["clean.test"], "unknown");
+  });
+
+  // fixtures/standalone-nested-mixed: commerce-core undetermined, identity-dev at Level 0 by a repo failure.
+  test("the history line gives an undetermined component no level, as the report does, next to a component at Level 0", () => {
+    const audit = makeAudit({ components: [{ id: "web", share: 0.6, test: "missing", testFiles: 3 }, { id: "api", share: 0.4, test: "fail", reason: "test failed: total is 9, not 10" }] });
+    const { report, line } = buildSealedReport(audit, next, [], null, tree({ "README.md": "x\n" }), ".agent-readiness/history/audits/x");
+    const reported = Object.fromEntries(report.components.included.map((c) => [c.id, c.level]));
+    assert.deepEqual(reported, { web: null, api: 0 });
+    assert.equal(line.noLevel, undefined, "api's Level 0 sets the repo level, so the line has one");
+    assert.deepEqual([line.levels, line.undeterminedComponents, line.repoLevel], [{ api: 0 }, ["web"], 0]);
+    for (const [id, l] of compute(audit, next, []).levels) if (line.levels[id] !== undefined) assert.equal(line.levels[id], l.level, id);
+    const again = reportFor(makeAudit({ id: "aud-2026-10-28-abc1234-0002", components: [{ id: "web", share: 0.6, test: "missing", testFiles: 3 }, { id: "api", share: 0.4, test: "pass" }] }), [line]);
+    assert.deepEqual(again.progress?.history[0].levels, { api: 0, web: null });
   });
 });
 
