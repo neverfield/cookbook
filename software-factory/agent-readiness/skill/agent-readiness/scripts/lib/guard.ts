@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSyn
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import { BUILD_SUBS, BUILD_TOOLS, DENO_RUNS, NPM_RUNS, PM_HARMLESS, RUNNERS, SHELLS, WRAPPERS } from "./runners.ts";
 import { grantRecorded, lease } from "./session.ts";
 
 // An opt-in shell hook (Cursor's beforeShellExecution) that, while an audit's session is open,
@@ -14,7 +15,7 @@ import { grantRecorded, lease } from "./session.ts";
 // only refuses: the scripts never depend on it, and an input it can't read is let through.
 
 // Host mode's opt-in variable (`--allow-host` sets it). Defined here so the hook loads no more
-// than this file and session.ts.
+// than this file, session.ts and runners.ts.
 export const ALLOW_HOST_ENV = "SA_READINESS_ALLOW_HOST";
 export const HOOKS_FILE = ".cursor/hooks.json";
 export const GUARD_SCRIPT = join(dirname(dirname(fileURLToPath(import.meta.url))), "guard.ts");
@@ -47,13 +48,6 @@ export function recordsRead(target: string, kind: "shell" | "read" = "shell"): s
   return null;
 }
 
-const WRAPPERS = new Set(["time", "nohup", "command", "exec", "builtin", "nice", "sudo", "doas", "xargs", "stdbuf", "caffeinate"]);
-const NPM_RUNS = new Set(["test", "t", "tst", "run", "run-script", "rum", "urn", "start", "stop", "restart", "ci", "clean-install", "install", "i", "in", "ins", "inst", "insta", "instal", "isnt", "isntal", "isntall", "add", "it", "cit", "install-test", "install-ci-test", "clean-install-test", "exec", "x", "rebuild", "rb", "explore", "pack", "publish"]);
-const PM_HARMLESS = new Set(["--version", "-v", "-V", "--help", "-h", "help", "info", "view", "why", "list", "ls", "config", "outdated", "audit", "store", "bin", "root", "licenses", "env"]);
-const RUNNERS = new Set(["npx", "pnpx", "bunx", "pytest", "py.test", "tox", "nox", "make", "gmake", "tsc", "vitest", "jest", "mocha", "ava", "tap", "playwright", "cypress", "eslint", "biome", "prettier", "ruff", "mypy", "pyright", "flake8", "black", "rspec", "phpunit", "rake", "gradle", "gradlew", "mvn", "mvnw", "turbo", "nx", "lerna", "tsx", "ts-node", "jasmine", "karma", "nodemon"]);
-const BUILD_TOOLS = new Set(["cargo", "go", "dotnet", "swift", "uv", "poetry", "pipenv", "pdm", "hatch", "rye", "composer", "bundle", "mix"]);
-const BUILD_SUBS = new Set(["test", "run", "build", "bench", "generate", "vet", "check", "exec", "task", "install", "sync", "compile"]);
-const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
 const PYTHON = /^python(\d+(\.\d+)*)?$/;
 
 // Splits a command line into simple commands, each as its words, with the contents of $(...) and
@@ -172,7 +166,7 @@ export function runsRepoCode(words: string[], cwd: string, repo: string): boolea
     return Boolean(sub && NPM_RUNS.has(sub));
   }
   if (p === "pnpm" || p === "yarn" || p === "bun") return w[1] === undefined ? p === "yarn" : !PM_HARMLESS.has(w[1]);
-  if (p === "deno") return ["test", "run", "task", "bench", "compile", "install"].includes(w[1] ?? "");
+  if (p === "deno") return DENO_RUNS.has(w[1] ?? "");
   if (RUNNERS.has(p)) return true;
   if (BUILD_TOOLS.has(p)) {
     const sub = firstArg(w);

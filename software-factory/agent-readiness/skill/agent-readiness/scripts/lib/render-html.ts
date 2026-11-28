@@ -398,7 +398,7 @@ function details(r: ReportJson): string {
   out.push(`<h3>Everything we checked, and why</h3><table><thead><tr><th style="width:24%">Check</th><th style="width:38%">Why we check it</th><th style="width:24%">Result</th><th>Evidence</th></tr></thead><tbody>`);
   for (const c of r.details.checks) {
     // A pass over zero items is nothing to check, not a green result.
-    const empty = c.counts.passed + c.counts.failed + c.counts.notRun + (c.counts.skipped ?? 0) === 0 && /\b0 of 0\b/.test(c.result);
+    const empty = c.counts.passed + c.counts.failed + (c.counts.blocked ?? 0) + (c.counts.undetermined ?? 0) + c.counts.notRun + (c.counts.skipped ?? 0) === 0 && /\b0 of 0\b/.test(c.result);
     const cls = empty ? "none" : c.ok === true ? "ok" : c.ok === false ? "bad" : "warn";
     const word = empty ? "nothing to check" : c.ok === true ? "passed" : c.ok === false ? "failed" : "not proven";
     const src = c.sources.map((s) => ` ${esc(s.claim)} ${esc(s.caveat)} (<a href="${esc(s.url)}">source</a>)`).join("");

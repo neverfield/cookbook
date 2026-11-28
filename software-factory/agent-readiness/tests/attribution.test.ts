@@ -15,6 +15,7 @@ import { addToolCommand, evidenceFromPhase, newBudget, runContract } from "../sk
 import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
+import { buildSealedReport, compute } from "../skill/agent-readiness/scripts/lib/seal.ts";
 import type { Component, Profile } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { factConflicts } from "../support/holdout/observe.ts";
 import { makeAudit, reportFor } from "./helpers.ts";
@@ -172,6 +173,19 @@ describe("Level 0 needs a repo failure (2026-12-beta)", () => {
     const statesOfWeb = statesOf(componentStates(audit, next, "web"));
     assert.equal(statesOfWeb["clean.test"], "unknown");
   });
+
+  // fixtures/standalone-nested-mixed: commerce-core undetermined, identity-dev at Level 0 by a repo failure.
+  test("the history line gives an undetermined component no level, as the report does, next to a component at Level 0", () => {
+    const audit = makeAudit({ components: [{ id: "web", share: 0.6, test: "missing", testFiles: 3 }, { id: "api", share: 0.4, test: "fail", reason: "test failed: total is 9, not 10" }] });
+    const { report, line } = buildSealedReport(audit, next, [], null, tree({ "README.md": "x\n" }), ".agent-readiness/history/audits/x");
+    const reported = Object.fromEntries(report.components.included.map((c) => [c.id, c.level]));
+    assert.deepEqual(reported, { web: null, api: 0 });
+    assert.equal(line.noLevel, undefined, "api's Level 0 sets the repo level, so the line has one");
+    assert.deepEqual([line.levels, line.undeterminedComponents, line.repoLevel], [{ api: 0 }, ["web"], 0]);
+    for (const [id, l] of compute(audit, next, []).levels) if (line.levels[id] !== undefined) assert.equal(line.levels[id], l.level, id);
+    const again = reportFor(makeAudit({ id: "aud-2026-10-28-abc1234-0002", components: [{ id: "web", share: 0.6, test: "missing", testFiles: 3 }, { id: "api", share: 0.4, test: "pass" }] }), [line]);
+    assert.deepEqual(again.progress?.history[0].levels, { api: 0, web: null });
+  });
 });
 
 describe("run plan: the test script CI runs", () => {
@@ -246,11 +260,13 @@ describe("tool pins the audit honors", () => {
   test("an exact engines pin for pnpm, with no packageManager, sets corepack to it", () => {
     const dir = tree({ "package.json": JSON.stringify({ name: "x", engines: { pnpm: "12.3.4" } }), "pnpm-lock.yaml": "" });
     const profile = { packageManager: "pnpm", components: [{ id: "x", path: ".", language: "ts", manifest: "package.json", scripts: {}, changes: 1, changeShare: 1, assessed: true, packageManager: "pnpm" }] } as unknown as Profile;
-    const setup = toolSetup(profile, dir);
+    // Corepack itself, added where the image lacks it, is checked in tests/trial-misses.test.ts.
+    const pins = (p: Profile) => toolSetup(p, dir).filter((t) => t.tool !== "corepack");
+    const setup = pins(profile);
     assert.deepEqual(setup.map((t) => [t.spec, t.install]), [["pnpm@12.3.4", "COREPACK_HOME=/tmp/home/.cache/node/corepack corepack prepare 'pnpm@12.3.4' --activate"]]);
     assert.match(setup[0].present!, /corepack pnpm --version/);
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", packageManager: "pnpm@12.3.4", engines: { pnpm: "12.3.4" } }));
-    assert.deepEqual(toolSetup(profile, dir), []);
+    assert.deepEqual(pins(profile), []);
   });
 });
 

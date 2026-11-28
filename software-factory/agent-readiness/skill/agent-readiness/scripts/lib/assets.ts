@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { ghJson } from "./gh.ts";
-import { ELEVATED } from "./static.ts";
+import { SUDO } from "./patterns.ts";
 import type { Asset, InstructionItem, ScanBound } from "./types.ts";
 import { addDays, git, inTreePath, lastChanged, listFiles, ownSkillPath, readText, today } from "./util.ts";
 
@@ -70,7 +70,7 @@ function elevatedSetup(path: string): string | undefined {
   }
   const image = typeof env.build?.dockerfile === "string" ? `inside its declared image (.cursor/${env.build.dockerfile})` : "on a machine that grants it";
   for (const field of ["install", "start"] as const) {
-    if (typeof env[field] === "string" && ELEVATED.test(env[field] as string)) return `its ${field} command uses sudo, so it works only ${image}`;
+    if (typeof env[field] === "string" && SUDO.test(env[field] as string)) return `its ${field} command uses sudo, so it works only ${image}`;
   }
   return undefined;
 }

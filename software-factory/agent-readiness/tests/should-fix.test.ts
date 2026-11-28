@@ -528,7 +528,7 @@ describe("#65 follow-up: recheck blocks a command the seal masked, and runs the 
     const record = JSON.parse(readFileSync(join(rechecks, readdirSync(rechecks)[0]), "utf8"));
     const masked = record.results.find((x: { kind: string; status: string; note: string }) => x.kind === "build" && x.note === MASKED_COMMAND);
     assert.ok(masked, JSON.stringify(record.results));
-    assert.equal(masked.status, "not_run");
+    assert.equal(masked.status, "blocked", "the record stores the verdict, so a blocked step never reads as not run or failed");
     assert.ok(record.results.some((x: { kind: string; status: string }) => x.kind === "test" && x.status === "pass"), "the other commands still ran");
     assert.ok(!readFileSync(join(rechecks, readdirSync(rechecks)[0]), "utf8").includes(token));
     const history = readFileSync(join(repo, ".agent-readiness", "history", "history.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));

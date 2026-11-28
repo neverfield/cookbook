@@ -237,6 +237,7 @@ export const go: LanguageDef = {
     manifests: [{ match: /^go\.mod$/, stack: "go", rank: 20 }],
     sources: [{ ext: /\.go$/, stack: "go", rank: 20 }],
     rootApp: { names: ["go.mod"], stack: "go", toolchain: "Go", suffix: "go", rank: 30 },
+    runners: /\bgo\s+test\b|\bgotestsum\b/,
     lockfiles: ["go.sum"],
     projectName: (_tree, manifest, text) => (manifest === "go.mod" ? text.match(/^module\s+(\S+)/m)?.[1]?.split("/").pop() : undefined),
     // `go test ./...` stops at a nested go.mod: that folder is another module, built and tested apart.
@@ -244,6 +245,23 @@ export const go: LanguageDef = {
     ownUnit: (tree, _parent, dir) => hasGoSource(join(tree, dir)),
   },
   ecosystems: [goModules],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: /^(go|gofmt|golangci-lint)$/,
+    countedTests: isGoTest,
+    ciTest: null,
+  },
+  mutation: {
+    isTest: isGoTest,
+    isSource: isGoSource,
+    covered: (tree, comp, tests, files) => sameFolder(tests, ownedFiles(tree, files, "go.mod", (d) => d === comp.path), isGoSource),
+    sites: (line) => braceSites(line, GO_SYNTAX),
+    quoted: goQuoted,
+    compileProbe: (comp) => ({ command: "go build ./...", cwd: comp.path }),
+    compileError: (output) => /\[build failed\]|^(\.\/)?[\w./-]+\.go:\d+:\d+: /m.test(output),
+  },
   replay: {
     classify: () => ({ language: "go", packageManager: "go" }),
     image: goImage,
@@ -262,14 +280,5 @@ export const go: LanguageDef = {
       ];
     },
     testCounts: goTestCounts,
-    mutation: {
-      isTest: isGoTest,
-      isSource: isGoSource,
-      covered: (tree, comp, tests, files) => sameFolder(tests, ownedFiles(tree, files, "go.mod", (d) => d === comp.path), isGoSource),
-      sites: (line) => braceSites(line, GO_SYNTAX),
-      quoted: goQuoted,
-      compileProbe: (comp) => ({ command: "go build ./...", cwd: comp.path }),
-      compileError: (output) => /\[build failed\]|^(\.\/)?[\w./-]+\.go:\d+:\d+: /m.test(output),
-    },
   },
 };
