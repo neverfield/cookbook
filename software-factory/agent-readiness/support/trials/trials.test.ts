@@ -10,6 +10,7 @@ import { CRITICAL, scoreRepo } from "../holdout/score.ts";
 import type { RepoScore, Truth } from "../holdout/score.ts";
 import { guards } from "../tools/known-failures.ts";
 import { detectRuntime } from "../../skill/agent-readiness/scripts/lib/container.ts";
+import { BUDGET_OUT } from "../../skill/agent-readiness/scripts/lib/scope.ts";
 import { headlineCauseErrors } from "../evals/lib/part1.ts";
 import type { ReportJson } from "../../skill/agent-readiness/scripts/lib/types.ts";
 import { readiness, SKILL, SUPPORT } from "../tools/fixture.ts";
@@ -61,11 +62,19 @@ interface Trial {
   // "read-only" scans without running repo code: a repo too large to audit within the run, checked
   // for discovery, placement, test commands and safety findings. Unset, the audit runs at local-exec.
   tier?: "read-only";
+  // Scanned read-only in the per-PR run, for a trial whose full audit runs to its time budget; the
+  // full audit runs with SA_TRIALS_FULL=1, nightly and in the final-head serial pass. Each is
+  // recorded on its own, the scan under "read-only/<network>".
+  perPr?: "read-only";
+  // Wall minutes of the per-PR scan, which balance the per-PR shards.
+  perPrMinutes?: number;
   // Wall minutes of the trial's audits on the machines the shards run on (CI's runners), which split
   // the run into shards.
   minutes: number;
-  // A time budget decides the result, so it depends on the machine's speed: where several shards
-  // share a machine, its audit runs with no other audit beside it.
+  // A time budget decides the result, so it depends on the machine's speed. Where several shards
+  // share a machine, its audit runs with no other audit beside it, and each outcome is recorded on
+  // its own: under "<network>/budget-cut" when audit.json shows the budget cut a command or the
+  // planted faults, under "<network>" when it didn't.
   budgetEdge?: boolean;
   // Truth guards that report a miss without failing the run, each with why. Only for a miss that
   // comes from a feature the tool doesn't support yet; such a guard is never in known-failures.json.
@@ -77,7 +86,7 @@ interface Trial {
   // Instruction items, as file:line, that are genuinely wrong. Every other failing item is a false finding.
   realInstructionFindings: string[];
   falseInstructionFindings: number;
-  recorded: Partial<Record<"any" | "open" | "restricted", Observed>>;
+  recorded: Partial<Record<string, Observed>>;
   // Each alsoRun result, by variant and, for "host", the environment the audit reports: "none",
   // "host/host", "host/disposable_vm".
   recordedAlso?: Record<string, Observed>;
@@ -104,6 +113,26 @@ const SHARD = parseShard(process.env.SA_TRIALS_SHARD);
 // shards started side by side on one machine never slow each other's audits; raise it on a machine
 // with spare cores. A budgetEdge trial always runs alone.
 const HOST_SLOTS = Number(process.env.SA_TRIALS_HOST_SLOTS || 1);
+const FULL = process.env.SA_TRIALS_FULL === "1";
+
+// The tier this run audits a trial at: its per-PR scan unless SA_TRIALS_FULL=1.
+function tierOf(t: Trial): "read-only" | "local-exec" {
+  return (FULL ? t.tier : (t.perPr ?? t.tier)) ?? "local-exec";
+}
+
+function scanned(t: Trial): boolean {
+  return !FULL && t.perPr !== undefined;
+}
+
+// What a budget cut leaves in audit.json, read the way the report's coverage line reads it.
+const FAULTS_CUT = /; the time budget cut off \d+ of \d+/;
+function budgetCut(repo: string): boolean {
+  const report = existsSync(join(repo, ".agent-readiness/latest/report.json")) ? JSON.parse(readFileSync(join(repo, ".agent-readiness/latest/report.json"), "utf8")) : null;
+  const file = report ? join(repo, report.audit.storedAt, "audit.json") : "";
+  if (!file || !existsSync(file)) return false;
+  const audit = JSON.parse(readFileSync(file, "utf8")) as { evidence: { condition?: string; blocked?: string; summary: string }[] };
+  return audit.evidence.some((e) => e.blocked === BUDGET_OUT || (e.condition === "faults" && FAULTS_CUT.test(e.summary)));
+}
 
 function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -202,7 +231,8 @@ function falseFindings(t: Trial, o: Observed): string[] {
   return o.instructionFailures.filter((f) => !t.realInstructionFindings.includes(f));
 }
 
-const selected = SHARD ? shards(spec.trials, SHARD.count)[SHARD.index - 1] : spec.trials;
+const sized = spec.trials.map((t) => (scanned(t) && t.perPrMinutes !== undefined ? { ...t, minutes: t.perPrMinutes } : t));
+const selected = SHARD ? shards(sized, SHARD.count)[SHARD.index - 1] : sized;
 const trials = selected.filter((t) => ONLY.length === 0 || ONLY.includes(t.id));
 const runtime = detectRuntime("docker");
 if (SHARD) process.stdout.write(`shard ${SHARD.index}/${SHARD.count}: ${selected.map((t) => t.id).join(", ")} (${minutesOf(selected)} recorded minutes)\n`);
@@ -246,7 +276,8 @@ async function auditTrial(t: Trial, variant?: Variant): Promise<TrialRun> {
   const skill = join(repo, ".cursor", "skills", "agent-readiness");
   cpSync(SKILL, skill, { recursive: true });
   const budget = t.budgetComponentMinutes ? ["--budget-component", String(t.budgetComponentMinutes)] : [];
-  const args = ["audit", "--tier", t.tier ?? "local-exec", ...(t.tier === "read-only" ? [] : budget), ...(variant === "host" ? ["--allow-host"] : [])];
+  const tier = tierOf(t);
+  const args = ["audit", "--tier", tier, ...(tier === "read-only" ? [] : budget), ...(variant === "host" ? ["--allow-host"] : [])];
   const release = await acquireHost(join(CACHE, "host-lock"), { slots: HOST_SLOTS, exclusive: Boolean(t.budgetEdge), label: `${t.id}${variant ? ` (${variant})` : ""}` });
   const started = Date.now();
   let r: { code: number; out: string };
@@ -258,7 +289,8 @@ async function auditTrial(t: Trial, variant?: Variant): Promise<TrialRun> {
   const minutes = Math.round((Date.now() - started) / 6000) / 10;
   const after = afterAudit(repo, { tmp, containers: `-${t.commit.slice(0, 7)}-`, ignore: [".cursor/skills/agent-readiness/"] });
   const score = scoreRepo(truthOf(t), observeTruth(repo, { exit: r.code, after }));
-  const key = variant === "host" ? `host/${environmentOf(repo)}` : variant ?? network;
+  const base = variant === "host" ? `host/${environmentOf(repo)}` : variant ?? (scanned(t) ? `read-only/${network}` : network);
+  const key = t.budgetEdge && budgetCut(repo) ? `${base}/budget-cut` : base;
   return { key, blocked, code: r.code, out: r.out, repo, o: observe(repo, r.code), score, minutes };
 }
 
@@ -298,6 +330,13 @@ function assertMatches(t: Trial, run: TrialRun, want: Observed | undefined, what
   assert.deepEqual(got, exp, `${t.id} changed from its recorded result; if that is intended, re-record it and say why in the PR`);
 }
 
+// One line per audit as soon as it is checked, so a red shard shows its cause before the job ends;
+// node --test prints a test file's results only when the file finishes.
+function finished(t: Trial, run: TrialRun, verdict: string, variant?: Variant): void {
+  const misses = Object.entries(run.score.classes).map(([c, n]) => `${c}:${n}`).join(" ") || "none";
+  process.stdout.write(`trial ${t.id}${variant ? ` with ${variant}` : ""} (${run.key}, ${run.minutes} min): ${verdict}; truth classes ${misses}\n`);
+}
+
 function truthCheck(run: TrialRun, code: TruthCode): void {
   if ((TRUTH_CRITICAL as readonly string[]).includes(code)) {
     const k = code as (typeof TRUTH_CRITICAL)[number];
@@ -316,7 +355,7 @@ describe("pinned trial repos", () => {
   });
   for (const t of trials) {
     const skip = t.runtime === "docker" && !runtime ? "no docker: this trial runs in a container" : false;
-    const how = t.tier === "read-only" ? "read-only scan" : t.runtime === "docker" ? "docker" : "no container runtime";
+    const how = tierOf(t) === "read-only" ? "read-only scan" : t.runtime === "docker" ? "docker" : "no container runtime";
     describe(`${t.id} (${t.repo}@${t.commit.slice(0, 7)}, ${how})`, { skip }, () => {
       let run: TrialRun;
       before(async () => {
@@ -326,13 +365,21 @@ describe("pinned trial repos", () => {
         describeRun(ctx, t, run);
         if (RECORD) {
           await updateTrials(t.id, (entry) => {
-            entry.recorded[run.key as keyof Trial["recorded"]] = run.o;
-            entry.falseInstructionFindings = falseFindings(t, run.o).length;
+            entry.recorded[run.key] = run.o;
+            // A trial recorded both scanned and in full keeps one ceiling, the higher of the two.
+            entry.falseInstructionFindings = Math.max(t.perPr ? entry.falseInstructionFindings : 0, falseFindings(t, run.o).length);
           });
+          finished(t, run, "recorded");
           return;
         }
-        if (RECORD_MINUTES) await updateTrials(t.id, (entry) => (entry.minutes = run.minutes));
-        assertMatches(t, run, t.recorded[run.key as keyof Trial["recorded"]], `the "${run.key}" network`);
+        if (RECORD_MINUTES) await updateTrials(t.id, (entry) => (scanned(t) ? (entry.perPrMinutes = run.minutes) : (entry.minutes = run.minutes)));
+        try {
+          assertMatches(t, run, t.recorded[run.key], `"${run.key}"`);
+        } catch (e) {
+          finished(t, run, `DIFFERS: ${(e instanceof Error ? e.message : String(e)).split("\n")[0]}`);
+          throw e;
+        }
+        finished(t, run, "matches its recording");
       });
       for (const code of [...TRUTH_CRITICAL, ...TRUTH_RATES]) {
         const why = t.tracking?.[code];
@@ -361,6 +408,7 @@ describe("pinned trial repos", () => {
               await updateTrials(t.id, (entry) => {
                 entry.recordedAlso = { ...entry.recordedAlso, [v.key]: v.o };
               });
+              finished(t, v, "recorded", variant);
               return;
             }
             if (RECORD_MINUTES) await updateTrials(t.id, (entry) => (entry.minutes = Math.round((entry.minutes + v.minutes) * 10) / 10));
@@ -373,7 +421,13 @@ describe("pinned trial repos", () => {
               ctx.diagnostic(`no host-mode result recorded for "${v.key}"; SA_TRIALS_RECORD=1 on this kind of machine records one`);
               return;
             }
-            assertMatches(t, v, want, `"${v.key}"`);
+            try {
+              assertMatches(t, v, want, `"${v.key}"`);
+            } catch (e) {
+              finished(t, v, `DIFFERS: ${(e instanceof Error ? e.message : String(e)).split("\n")[0]}`, variant);
+              throw e;
+            }
+            finished(t, v, "matches its recording", variant);
           });
         });
       }

@@ -633,7 +633,7 @@
       ],
       "review": "first-run-sims.md",
       "now": "2026-11-24T12:00:00Z",
-      "notes": "pnpm workspace whose root package.json is the Next.js app (most of the changes), with packages under packages/. The Nov 24 Node sim found the root app neither scored nor listed, shares that ignore it, and a lockfile shown as none.",
+      "notes": "pnpm workspace whose root package.json is the Next.js app (most of the changes), with packages under packages/. The Nov 24 Node sim found the root app neither scored nor listed, shares that ignore it, and a lockfile shown as none. On CI's 3-CPU runners the 15-minute component budget cuts its planted faults (\"planted faults couldn't run on this machine\"); that outcome is recorded under any/budget-cut, taken from the CI run at 68d4653.",
       "realInstructionFindings": [],
       "falseInstructionFindings": 3,
       "recorded": {
@@ -667,6 +667,37 @@
           ],
           "blockingSafety": [],
           "headline": "Agents can build and test umami, but its lint command fails and its tests can't yet catch wrong changes."
+        },
+        "any/budget-cut": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 1,
+          "outcome": "blocked",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "umami": {
+              "level": 1,
+              "unproven": false
+            },
+            "api-client": {
+              "level": 2,
+              "unproven": false
+            },
+            "mcp": {
+              "level": 1,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [
+            "CONTRIBUTING.md:26",
+            "CONTRIBUTING.md:27",
+            "README.md:59"
+          ],
+          "blockingSafety": [],
+          "headline": "Agents can build and test umami, but its lint command fails; planted faults couldn't run on this machine."
         }
       },
       "recordedAlso": {
@@ -724,7 +755,8 @@
           "blockingSafety": [],
           "headline": "Level 1 couldn't be proved for umami because this machine has no container runtime and a corepack that can run pnpm 12.23.0 is not installed on this machine. A rerun where Docker is available, such as CI, can prove it."
         }
-      }
+      },
+      "budgetEdge": true
     },
     {
       "id": "zap",
@@ -783,7 +815,7 @@
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
       "recorded": {
-        "open": {
+        "open/budget-cut": {
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
@@ -874,9 +906,11 @@
       "commit": "0ac5dd117b622998783a1fa1b1694e409d3233ca",
       "runtime": "docker",
       "minutes": 61.7,
+      "perPr": "read-only",
+      "perPrMinutes": 1,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-26T12:00:00Z",
-      "notes": "Yarn and Nx monorepo (11.18.0) of about 267 package.json files with nested AGENTS.md, 67 skill files and .cursor/environment.json. CI tests every packages/* SDK through the root Nx task graph, so they are members of the root; each dev-packages/* suite (e2e, node, browser and bundler integration tests) runs from its own folder and needs services or the network. Task-graph builds aren't supported yet. Its ceiling of 12 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it. CONTRIBUTING.md:105 is a false finding in some runs and not in others.",
+      "notes": "Yarn and Nx monorepo (11.18.0) of about 267 package.json files with nested AGENTS.md, 67 skill files and .cursor/environment.json. CI tests every packages/* SDK through the root Nx task graph, so they are members of the root; each dev-packages/* suite (e2e, node, browser and bundler integration tests) runs from its own folder and needs services or the network. Task-graph builds aren't supported yet. Its ceiling of 12 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it. CONTRIBUTING.md:105 is a false finding in some runs and not in others. Its full audit runs to the 60-minute total budget, so the per-PR run scans it read-only and the full audit runs nightly and in the final-head serial pass (SA_TRIALS_FULL=1); per PR this gives up its replay, planted faults and instruction replay at full budget, whose R2 and R3 guards are tracking already.",
       "tracking": {
         "R2": "unsupported feature: CI tests the SDKs through the root Nx task graph (test:ci:node, test:ci:browser; supported.md, task-graph), so the root gets test:scripts, and the e2e, bun, deno and browser-min-version suites get no command",
         "R3": "unsupported feature: the bun-integration-tests suite, which needs nothing beyond its install, isn't assessed inside the Nx task-graph monorepo"
@@ -1009,6 +1043,129 @@
           ],
           "blockingSafety": [],
           "headline": "Level 1 is undetermined for e2e-tests: no check failed for a reason in the repo, but the audit couldn't tell how its tests run: it has 792 test files, and the audit found nothing that runs them."
+        },
+        "read-only/open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "not_assessed",
+          "unproven": false,
+          "couldBe": 1,
+          "components": {
+            "sentry-javascript": {
+              "level": null,
+              "unproven": false
+            },
+            "browser-integration-tests": {
+              "level": null,
+              "unproven": false
+            },
+            "bundler-plugin-integration-tests": {
+              "level": null,
+              "unproven": false
+            },
+            "cloudflare-integration-tests": {
+              "level": null,
+              "unproven": false
+            },
+            "e2e-tests": {
+              "level": null,
+              "unproven": false
+            },
+            "node-integration-tests": {
+              "level": null,
+              "unproven": false
+            },
+            "cloudflare": {
+              "level": null,
+              "unproven": false
+            },
+            "core": {
+              "level": null,
+              "unproven": false
+            },
+            "nextjs": {
+              "level": null,
+              "unproven": false
+            },
+            "server-utils": {
+              "level": null,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "angular",
+            "astro",
+            "aws-serverless",
+            "browser",
+            "browser-min-version-tests",
+            "browser-utils",
+            "bun",
+            "bun-integration-tests",
+            "bundler-plugins",
+            "bundler-tests",
+            "clear-cache-gh-action",
+            "deno",
+            "deno-integration-tests",
+            "effect",
+            "elysia",
+            "ember",
+            "esbuild-plugin",
+            "eslint-config-sdk",
+            "eslint-plugin-sdk",
+            "external-contributor-gh-action",
+            "feedback",
+            "gatsby",
+            "google-cloud-serverless",
+            "hono",
+            "integration-shims",
+            "nestjs",
+            "nitro",
+            "node",
+            "node-native",
+            "nuxt",
+            "opentelemetry",
+            "optional-e2e-gh-action",
+            "profiling-node",
+            "react",
+            "react-router",
+            "remix",
+            "replay-canvas",
+            "replay-internal",
+            "replay-worker",
+            "rollup-plugin",
+            "rollup-utils",
+            "server-runtime-injection",
+            "size-limit-gh-action",
+            "solid",
+            "solidstart",
+            "svelte",
+            "sveltekit",
+            "tanstackstart-react",
+            "test-utils",
+            "typescript",
+            "vercel-edge",
+            "vite-plugin",
+            "vue",
+            "wasm",
+            "webpack-plugin"
+          ],
+          "instructionFailures": [
+            "CONTRIBUTING.md:28",
+            "CONTRIBUTING.md:121",
+            ".agents/skills/dotagents/SKILL.md:79",
+            ".agents/skills/e2e/SKILL.md:119",
+            ".agents/skills/track-framework-updates/SKILL.md:83",
+            ".agents/skills/track-framework-updates/SKILL.md:116",
+            ".agents/skills/track-framework-updates/SKILL.md:117",
+            ".agents/skills/track-framework-updates/SKILL.md:118",
+            ".agents/skills/vendor-otel/SKILL.md:98",
+            ".agents/skills/write-tests/SKILL.md:243",
+            ".agents/skills/write-tests/SKILL.md:244"
+          ],
+          "blockingSafety": [],
+          "headline": "This read-only audit ran no repo code, so it gives no level yet. A local-exec audit can give one."
         }
       }
     },
@@ -1886,7 +2043,7 @@
       "minutes": 0.4,
       "review": "trial-representativeness-review.md",
       "now": "2026-10-16T12:00:00Z",
-      "notes": "Small Poetry library, the commit supported.md cites as Poetry's proof; its tests need nothing beyond the install, so this re-verifies that claim. Its headline isn't recorded: since 062443f the same planted faults (mut-cleo-6 to 9) survive on an 8-CPU cloud VM and are caught on CI's runners, which changes the headline but not the level; a defect, fix pending.",
+      "notes": "Small Poetry library, the commit supported.md cites as Poetry's proof; its tests need nothing beyond the install, so this re-verifies that claim. Recorded from a run with no other audit beside it, as on CI's runners. With another audit running beside it on the same host (SA_TRIALS_HOST_SLOTS=2) four planted faults (mut-cleo-6 to 9) survived and it read Level 1: a contention-dependent outcome, a defect, fix pending; keep SA_TRIALS_HOST_SLOTS at 1 for cleo's shard.",
       "egress": [
         "pypi.org",
         "files.pythonhosted.org"
@@ -1898,19 +2055,20 @@
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
-          "level": 1,
+          "level": 2,
           "outcome": "proven",
           "unproven": false,
           "couldBe": null,
           "components": {
             "cleo": {
-              "level": 1,
+              "level": 2,
               "unproven": false
             }
           },
           "notAssessed": [],
           "instructionFailures": [],
-          "blockingSafety": []
+          "blockingSafety": [],
+          "headline": "Nothing blocks agents in cleo: from a clean checkout it installs and passes its tests, and its tests caught the planted bugs. Start giving agents work there."
         }
       }
     },

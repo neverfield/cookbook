@@ -19,6 +19,9 @@ interface TrialEntry {
   tracking?: Record<string, string>;
   alsoRun?: string[];
   recordedAlso?: Record<string, unknown>;
+  recorded: Record<string, unknown>;
+  perPr?: string;
+  perPrMinutes?: number;
 }
 
 const trials = (JSON.parse(readFileSync(join(SUPPORT, "trials", "trials.json"), "utf8")) as { trials: TrialEntry[] }).trials;
@@ -49,7 +52,8 @@ describe("trial shards", () => {
     assert.ok(shardList && count, "the trials job has a shard matrix and sets SA_TRIALS_SHARD");
     assert.deepEqual(shardList, Array.from({ length: count }, (_, i) => i + 1));
     const timeout = Number(/trials:[\s\S]*?timeout-minutes: (\d+)/.exec(ci)?.[1]);
-    for (const s of shards(trials, count)) assert.ok(minutesOf(s) * 1.5 <= timeout, `a shard of ${minutesOf(s)} recorded minutes leaves too little room in ${timeout}`);
+    const perPr = trials.map((t) => (t.perPr && t.perPrMinutes !== undefined ? { ...t, minutes: t.perPrMinutes } : t));
+    for (const run of [perPr, trials]) for (const s of shards(run, count)) assert.ok(minutesOf(s) * 1.5 <= timeout, `a shard of ${minutesOf(s)} recorded minutes leaves too little room in ${timeout}`);
   });
 });
 
@@ -62,6 +66,16 @@ describe("trials.json", () => {
       assert.ok(t.budgetEdge === undefined || t.budgetEdge === true, `${t.id}: budgetEdge`);
       for (const v of t.alsoRun ?? []) assert.ok(v === "none" || v === "host", `${t.id}: alsoRun ${v}`);
       for (const k of Object.keys(t.recordedAlso ?? {})) assert.match(k, /^(none|host\/(host|disposable_vm|container|none))$/, `${t.id}: recordedAlso ${k}`);
+      for (const k of Object.keys(t.recorded)) {
+        assert.match(k, /^(read-only\/)?(any|open|restricted)(\/budget-cut)?$/, `${t.id}: recorded ${k}`);
+        if (k.endsWith("/budget-cut")) assert.ok(t.budgetEdge, `${t.id} records a budget-cut outcome but isn't budgetEdge`);
+        if (k.startsWith("read-only/")) assert.ok(t.perPr === "read-only", `${t.id} records a per-PR scan but has no perPr`);
+      }
+      if (t.perPr) {
+        assert.equal(t.perPr, "read-only", `${t.id}: perPr ${t.perPr}`);
+        assert.ok(t.tier === undefined && typeof t.perPrMinutes === "number" && t.perPrMinutes > 0, `${t.id}: a per-PR scan needs a full audit to stand for and its own minutes`);
+        assert.ok(Object.keys(t.recorded).some((k) => k.startsWith("read-only/")) && Object.keys(t.recorded).some((k) => !k.startsWith("read-only/")), `${t.id} records both its scan and its full audit`);
+      }
     }
   });
 
