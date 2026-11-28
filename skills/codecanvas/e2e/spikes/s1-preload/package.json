@@ -1,0 +1,10 @@
+{
+  "name": "@codecanvas/spike-s1-preload",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Sprint 0 Spike S1: zero-footprint preload instrumentation via own dev scripts",
+  "scripts": {
+    "test": "node run.mjs"
+  }
+}
