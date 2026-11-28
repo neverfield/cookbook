@@ -1318,7 +1318,7 @@
       "minutes": 3.7,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-26T12:00:00Z",
-      "notes": "About 40 .NET projects in one solution, pinned at a commit whose upstream run-tests job is red on Linux, Windows and macOS: the first truth with a failing clean run. Reproduced in mcr.microsoft.com/dotnet/sdk:10.0: two test projects don't compile (MigrateRatingLevelsTests.cs CS1061, ConfigurationControllerTests.cs CS7036), so a level above 0 for the root is over-claiming (K2). Its ceiling of 3 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
+      "notes": "About 40 .NET projects in one solution, pinned at a commit whose upstream run-tests job is red on Linux, Windows and macOS: the first truth with a failing clean run. Reproduced in mcr.microsoft.com/dotnet/sdk:10.0: two test projects don't compile (MigrateRatingLevelsTests.cs CS1061, ConfigurationControllerTests.cs CS7036), so a level above 0 for the root is over-claiming (K2). Its ceiling of 3 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it. Its headline isn't recorded: it names whichever of the two compile errors (CS1061 in MigrateRatingLevelsTests.cs, CS7036 in ConfigurationControllerTests.cs) the parallel build prints first, which changes between runs; a defect, fix pending (the headline should pick its error deterministically).",
       "egress": [
         "mcr.microsoft.com",
         "api.nuget.org"
@@ -1346,8 +1346,7 @@
             "README.md:116",
             "README.md:120"
           ],
-          "blockingSafety": [],
-          "headline": "Jellyfin doesn't build from a clean checkout because /work/tests/Jellyfin.Server.Integration.Tests/Controllers/ConfigurationControllerTests.cs(67,26): error CS7036: There is no argument given that corresponds to the required parameter 'serverConfigurati."
+          "blockingSafety": []
         }
       }
     },
