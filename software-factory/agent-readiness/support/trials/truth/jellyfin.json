@@ -1,0 +1,227 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "jellyfin/jellyfin",
+  "commit": "6b786b36eed49bf83860d9b652b96f475aeb2668",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "failure",
+    "source": "gh api repos/jellyfin/jellyfin/commits/6b786b36eed49bf83860d9b652b96f475aeb2668/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/jellyfin/jellyfin/commits/6b786b36eed49bf83860d9b652b96f475aeb2668/status ('run-tests (ubuntu-latest)', 'run-tests (windows-latest)' and 'run-tests (macos-latest)' failed with CS1061/CS7036 compile errors in tests/Jellyfin.Server.Tests and tests/Jellyfin.Server.Integration.Tests (gh run view 45579880544 --log-failed); 'Analyze (csharp)' and 'OpenAPI - Publish Artifact / Main' also failed; 'format-check' succeeded; combined status pending with no statuses)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "dotnet",
+      "placement": "component",
+      "changeShare": 0.152,
+      "hasTests": true,
+      "install": [
+        "dotnet restore Jellyfin.slnx",
+        "dotnet restore",
+        "dotnet build Jellyfin.slnx"
+      ],
+      "test": [
+        "dotnet test Jellyfin.slnx --configuration Release --collect:\"XPlat Code Coverage\" --settings tests/coverletArgs.runsettings --verbosity minimal",
+        "dotnet test Jellyfin.slnx",
+        "dotnet test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "no",
+      "notes": "One solution (Jellyfin.slnx, ~40 projects) tested as a whole by ci-tests.yml. Reproduced in mcr.microsoft.com/dotnet/sdk:10.0: two test projects fail to compile (MigrateRatingLevelsTests.cs CS1061 'Perform'; ConfigurationControllerTests.cs CS7036 AddJellyfinApi serverConfiguration), so Server.Tests, Server.Integration.Tests and Server.Implementations.Tests (which references Integration.Tests) do not run; dotnet test exits 1. Jellyfin.Drawing.Skia.Tests also needs the libfontconfig1 OS package, present on GitHub runners but not in the SDK image."
+    },
+    {
+      "path": "Emby.Server.Implementations",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.238,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "no"
+    },
+    {
+      "path": "Jellyfin.Server",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.103,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "no"
+    },
+    {
+      "path": "MediaBrowser.Controller",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.079,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "no"
+    },
+    {
+      "path": "MediaBrowser.Providers",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.078,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "no"
+    },
+    {
+      "path": "Jellyfin.Server.Implementations",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.06,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "no"
+    },
+    {
+      "path": "Jellyfin.Api",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.036,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "no"
+    },
+    {
+      "path": "src/Jellyfin.Database",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.03,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "no",
+      "notes": "Folder holding Jellyfin.Database.Implementations and Jellyfin.Database.Providers.Sqlite."
+    },
+    {
+      "path": "src/Jellyfin.LiveTv",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.028,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "no"
+    },
+    {
+      "path": "tests/Jellyfin.Server.Implementations.Tests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.111,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "no",
+      "notes": "Not run: it references Jellyfin.Server.Integration.Tests, which does not compile."
+    },
+    {
+      "path": "tests/Jellyfin.Controller.Tests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.03,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "no",
+      "notes": "Its own 261 tests pass; the solution's test command fails."
+    },
+    {
+      "path": "tests/Jellyfin.Providers.Tests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.029,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "no",
+      "notes": "Its own 541 tests pass; the solution's test command fails."
+    },
+    {
+      "path": "tests/Jellyfin.Server.Tests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.014,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "no",
+      "notes": "Compile error CS1061 in Migrations/MigrateRatingLevelsTests.cs(229)."
+    },
+    {
+      "path": "tests/Jellyfin.Server.Integration.Tests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.01,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "no",
+      "notes": "Compile error CS7036 in Controllers/ConfigurationControllerTests.cs(67)."
+    },
+    {
+      "path": "fuzz",
+      "ecosystem": "dotnet",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "SharpFuzz harnesses, not in the solution and not run by CI."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "tests/Jellyfin.Server.Implementations.Tests/Cryptography/CryptographyProviderTests.cs",
+      "line": 26,
+      "real": false,
+      "why": "test input password"
+    },
+    {
+      "file": "src/Jellyfin.LiveTv/Listings/SchedulesDirect.cs",
+      "line": 845,
+      "real": false,
+      "why": "string concatenation of a runtime token variable, no literal"
+    }
+  ],
+  "nextAction": {
+    "kind": "fix_failing_tests",
+    "text": "Update MigrateRatingLevelsTests and ConfigurationControllerTests to the current MigrateRatingLevels and AddJellyfinApi signatures so the test projects compile and dotnet test Jellyfin.slnx passes."
+  },
+  "dropped": 0
+}

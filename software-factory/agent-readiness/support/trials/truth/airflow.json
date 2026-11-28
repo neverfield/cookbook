@@ -1,0 +1,328 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "apache/airflow",
+  "commit": "619a787ac81e8b7c8a9102fc78e3f0b00625d04e",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/apache/airflow/commits/619a787ac81e8b7c8a9102fc78e3f0b00625d04e/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/apache/airflow/commits/619a787ac81e8b7c8a9102fc78e3f0b00625d04e/status (338 check runs: 224 success, 113 skipped, 1 neutral CodeQL, 0 failures; core DB/non-DB tests on Postgres/MySQL/Sqlite, Task SDK, Airflow CTL, React UI, Go/Java/TypeScript SDK, Breeze, scripts, shared distributions and K8s tests passed; provider and Helm test jobs were skipped on this v3-4-test release commit; combined status success)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.322,
+      "hasTests": true,
+      "install": [
+        "uv sync",
+        "scripts/tools/setup_breeze",
+        "./scripts/ci/install_breeze.sh",
+        "breeze ci-image build"
+      ],
+      "test": [
+        "breeze testing providers-tests --run-in-parallel",
+        "breeze testing providers-tests --run-in-parallel --run-db-tests-only",
+        "breeze testing providers-tests --use-xdist --skip-db-tests --no-db-cleanup --backend none",
+        "./scripts/ci/testing/run_unit_tests.sh providers All"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "undetermined",
+      "notes": "uv workspace root (apache-airflow meta-distribution) from which CI drives Breeze. The ~125 provider distributions under 0.02 each, shared/*, airflow-ctl, chart, devel-common, the e2e/k8s/docker test projects, .github and contributing-docs fold here. Provider tests run in the Breeze CI Docker image with a DB backend container and were skipped at this commit."
+    },
+    {
+      "path": "airflow-core",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.141,
+      "hasTests": true,
+      "install": [
+        "uv sync",
+        "breeze ci-image build"
+      ],
+      "test": [
+        "breeze testing core-tests --run-in-parallel",
+        "breeze testing core-tests --run-in-parallel --run-db-tests-only",
+        "breeze testing core-tests --use-xdist --skip-db-tests --no-db-cleanup --backend none",
+        "uv run --project airflow-core pytest airflow-core/tests",
+        "uv run pytest tests"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "apache-airflow-core distribution. CI runs its suite with breeze testing core-tests from the repo root inside the CI image, against Postgres 14-18, MySQL and Sqlite backends; DB tests need the backend container that Breeze starts. Non-DB tests run with --backend none."
+    },
+    {
+      "path": "airflow-core/docs",
+      "ecosystem": "python",
+      "placement": "satellite",
+      "of": "airflow-core",
+      "changeShare": 0.023,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Sphinx docs for airflow-core, built with breeze build-docs."
+    },
+    {
+      "path": "airflow-core/src/airflow/ui",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.188,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile",
+        "pnpm install",
+        "pnpm i"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test",
+        "vitest run"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "React/Vite UI with its own pnpm-lock.yaml; the Basic tests 'React UI tests' job runs pnpm install --frozen-lockfile and pnpm test here. Includes the many locale JSON files under public/i18n."
+    },
+    {
+      "path": "task-sdk",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.033,
+      "hasTests": true,
+      "install": [
+        "uv sync",
+        "breeze ci-image build"
+      ],
+      "test": [
+        "breeze testing task-sdk-tests",
+        "uv run --project task-sdk pytest task-sdk/tests",
+        "uv run pytest tests"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "apache-airflow-task-sdk distribution; its conftest fails any db_test-marked test, so it needs no database. CI runs it via breeze testing task-sdk-tests on each Python version."
+    },
+    {
+      "path": "providers/common/ai",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.07,
+      "hasTests": true,
+      "install": [
+        "uv sync",
+        "breeze ci-image build"
+      ],
+      "test": [
+        "breeze testing providers-tests --test-type \"Providers[common.ai]\"",
+        "uv run --project providers/common/ai pytest providers/common/ai/tests",
+        "uv run pytest tests"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "undetermined",
+      "notes": "Separately published provider distribution and uv workspace member with its own tests and a www plugin UI. Provider test jobs were skipped at this commit."
+    },
+    {
+      "path": "providers/google",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.028,
+      "hasTests": true,
+      "install": [
+        "uv sync",
+        "breeze ci-image build"
+      ],
+      "test": [
+        "breeze testing providers-tests --test-type \"Providers[google]\"",
+        "uv run --project providers/google pytest providers/google/tests"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "undetermined",
+      "notes": "Provider distribution; tests run in Breeze with a DB backend. Skipped at this commit."
+    },
+    {
+      "path": "providers/amazon",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.023,
+      "hasTests": true,
+      "install": [
+        "uv sync",
+        "breeze ci-image build"
+      ],
+      "test": [
+        "breeze testing providers-tests --test-type \"Providers[amazon]\"",
+        "uv run --project providers/amazon pytest providers/amazon/tests"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "undetermined",
+      "notes": "Provider distribution; tests run in Breeze with a DB backend. Skipped at this commit."
+    },
+    {
+      "path": "dev/breeze",
+      "ecosystem": "python",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.061,
+      "hasTests": true,
+      "install": [
+        "uv sync --locked",
+        "./scripts/ci/install_breeze.sh"
+      ],
+      "test": [
+        "uv run --locked pytest -n auto --color=yes",
+        "uv run pytest"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Breeze dev/CI environment tool with its own uv.lock; 'Breeze unit tests' passed (integration tests marked integration_tests need svn, Java and hatch and are a separate job)."
+    },
+    {
+      "path": "scripts",
+      "ecosystem": "python",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.033,
+      "hasTests": true,
+      "install": [
+        "uv sync"
+      ],
+      "test": [
+        "uv run --project . pytest --color=yes -n auto",
+        "uv run --project scripts pytest scripts/tests/"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "CI and prek hook scripts (uv workspace member); 'Scripts tests' passed. scripts/ci accounts for most of the change share."
+    },
+    {
+      "path": "go-sdk",
+      "ecosystem": "go",
+      "placement": "component",
+      "changeShare": 0.028,
+      "hasTests": true,
+      "install": [
+        "go mod download"
+      ],
+      "test": [
+        "gotestsum --format github-actions ./...",
+        "gotestsum --format github-actions -- -race ./...",
+        "go test ./...",
+        "go test -race ./..."
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Go Task SDK module; 'Go SDK tests' passed (also a GOARCH=386 run and govulncheck)."
+    },
+    {
+      "path": "ts-sdk",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.028,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile",
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test",
+        "vitest run"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "TypeScript Task SDK with its own pnpm lockfile; 'TypeScript SDK tests' passed. docs/ and example/ package.json are its satellites, folded in."
+    },
+    {
+      "path": "java-sdk",
+      "ecosystem": "jvm",
+      "placement": "component",
+      "changeShare": 0.021,
+      "hasTests": true,
+      "install": [
+        "./gradlew build"
+      ],
+      "test": [
+        "./gradlew test",
+        "./gradlew --no-daemon test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Gradle multi-project Java SDK (sdk, processor, plugin, bom, logging bridges); 'Java SDK tests' passed. Dependencies come from Maven Central and the Gradle plugin portal."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "providers/ssh/docs/connections/ssh.rst",
+      "line": 108,
+      "real": false,
+      "why": "truncated example private key (MII.....) in connection docs"
+    },
+    {
+      "file": "providers/ssh/tests/unit/ssh/hooks/test_ssh.py",
+      "line": 1020,
+      "real": false,
+      "why": "fake one-line key 'asdfg' in a test"
+    },
+    {
+      "file": "airflow-core/docs/howto/docker-compose/docker-compose.yaml",
+      "line": 97,
+      "real": false,
+      "why": "quick-start compose postgres password airflow"
+    },
+    {
+      "file": "airflow-core/docs/howto/docker-compose/docker-compose.yaml",
+      "line": 295,
+      "real": false,
+      "why": "default quick-start admin password airflow"
+    },
+    {
+      "file": "scripts/ci/docker-compose/backend-postgres.yml",
+      "line": 36,
+      "real": false,
+      "why": "Breeze CI postgres backend password"
+    },
+    {
+      "file": "scripts/ci/docker-compose/integration-keycloak.yml",
+      "line": 56,
+      "real": false,
+      "why": "CI integration keycloak DB password"
+    },
+    {
+      "file": "airflow-e2e-tests/docker/openlineage-compat-db.yml",
+      "line": 27,
+      "real": false,
+      "why": "e2e test DSN airflow:airflow"
+    },
+    {
+      "file": "airflow-core/docs/howto/connection.rst",
+      "line": 87,
+      "real": false,
+      "why": "documented example password"
+    },
+    {
+      "file": "airflow-core/src/airflow/utils/db.py",
+      "line": 483,
+      "real": false,
+      "why": "default example connections created by airflow db init"
+    },
+    {
+      "file": "providers/akeyless/provider.yaml",
+      "line": 54,
+      "real": false,
+      "why": "UI field label, not a value"
+    },
+    {
+      "file": "chart/values.yaml",
+      "line": 522,
+      "real": false,
+      "why": "commented placeholder for a base64 fernet key"
+    }
+  ],
+  "nextAction": {
+    "kind": "none",
+    "text": "AGENTS.md already gives per-project uv run and breeze testing commands and the Breeze environment; nothing more is needed beyond following it."
+  },
+  "dropped": 0
+}

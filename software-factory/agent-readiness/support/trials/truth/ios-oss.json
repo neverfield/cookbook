@@ -1,0 +1,224 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "kickstarter/ios-oss",
+  "commit": "209075796e43944ba4e925658f56aa6d495ad8e1",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/kickstarter/ios-oss/commits/209075796e43944ba4e925658f56aa6d495ad8e1/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv' (no check runs; there are no GitHub Actions workflows); gh api repos/kickstarter/ios-oss/commits/209075796e43944ba4e925658f56aa6d495ad8e1/status (CircleCI statuses build-and-cache, kickstarter-tests, kickstarter-framework-tests, library-tests, ksapi-tests and kds-tests all success; combined state success)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "xcode",
+      "placement": "component",
+      "changeShare": 0.139,
+      "hasTests": true,
+      "install": [
+        "bundle install",
+        "xcodebuild -resolvePackageDependencies -clonedSourcePackagesDirPath SourcePackages",
+        "make bootstrap"
+      ],
+      "test": [
+        "make test SCHEME=\"Kickstarter iOS\"",
+        "make test-app",
+        "xcodebuild test -scheme \"Kickstarter iOS\" -destination 'platform=iOS Simulator,name=iPad mini (A17 Pro),OS=18.6'",
+        "make test-all"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "Kickstarter.xcodeproj; CircleCI 'kickstarter-tests' runs make test with SCHEME='Kickstarter iOS', whose Kickstarter.xctestplan runs LibraryTests, Library-Keychain-iOSTests and the KDS, KsApi, ServerDrivenUI, Experimentation and Kickstarter-Framework test targets. Needs macOS, Xcode 26.6 and an iOS 18.6 iPad mini (A17 Pro) simulator; make bootstrap copies Configs/Secrets.swift.example when the private native-secrets repo is unreachable. Owns Kickstarter-iOS, LibraryTests, Library-Keychain-iOSTests, RichPushNotifications, graphql/ and Configs."
+    },
+    {
+      "path": "Kickstarter-Framework",
+      "ecosystem": "xcode",
+      "placement": "component",
+      "changeShare": 0.529,
+      "hasTests": true,
+      "install": [],
+      "test": [
+        "xcodebuild test -scheme Kickstarter-Framework -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPad mini (A17 Pro),OS=18.6'",
+        "xcodebuild test -scheme Kickstarter-Framework -sdk iphonesimulator"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "SPM package holding the app's UI and view models (98 test files). Own CircleCI job runs make test-spm (PACKAGE=Kickstarter-Framework SCHEME=Kickstarter-Framework), i.e. 'make test-kickstarter-framework' from the root, on macOS with Xcode 26.6 and an iOS 18.6 simulator; its tests are also in the root test plan."
+    },
+    {
+      "path": "Library",
+      "ecosystem": "xcode",
+      "placement": "component",
+      "changeShare": 0.134,
+      "hasTests": true,
+      "install": [],
+      "test": [
+        "xcodebuild test -scheme Library-Package -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPad mini (A17 Pro),OS=18.6'",
+        "xcodebuild test -scheme Library-Package -sdk iphonesimulator"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "SPM package; its own test target is a single LibraryTests.swift, most Library tests live in the root LibraryTests/ target. Own CircleCI job runs make test-spm (PACKAGE=Library SCHEME=Library-Package), i.e. 'make test-library' from the root, on macOS with Xcode 26.6 and an iOS 18.6 simulator; its tests are also in the root test plan."
+    },
+    {
+      "path": "KsApi",
+      "ecosystem": "xcode",
+      "placement": "component",
+      "changeShare": 0.093,
+      "hasTests": true,
+      "install": [],
+      "test": [
+        "xcodebuild test -scheme KsApi-Package -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPad mini (A17 Pro),OS=18.6'",
+        "xcodebuild test -scheme KsApi-Package -sdk iphonesimulator"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "SPM API client package. Own CircleCI job runs make test-spm (PACKAGE=KsApi SCHEME=KsApi-Package), i.e. 'make test-ksapi' from the root, on macOS with Xcode 26.6 and an iOS 18.6 simulator; its tests are also in the root test plan."
+    },
+    {
+      "path": "KDS",
+      "ecosystem": "xcode",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [
+        "xcodebuild test -scheme KDS -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPad mini (A17 Pro),OS=18.6'",
+        "xcodebuild test -scheme KDS -sdk iphonesimulator"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "Kickstarter design system SPM package. Own CircleCI job runs make test-spm (PACKAGE=KDS SCHEME=KDS), i.e. 'make test-kds' from the root, on macOS with Xcode 26.6 and an iOS 18.6 simulator; its tests are also in the root test plan."
+    },
+    {
+      "path": "ServerDrivenUI",
+      "ecosystem": "xcode",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.043,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "SPM package; tested only through the root Kickstarter.xctestplan."
+    },
+    {
+      "path": "Experimentation",
+      "ecosystem": "xcode",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "SPM package; tested only through the root Kickstarter.xctestplan."
+    },
+    {
+      "path": "GraphAPI",
+      "ecosystem": "xcode",
+      "placement": "excluded",
+      "changeShare": 0.062,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Apollo codegen output (apollo-codegen-config.json writes ./GraphAPI; files marked @generated), regenerated by the 'Generate GraphQL Library' scheme."
+    },
+    {
+      "path": "bin/StringsScript",
+      "ecosystem": "swift",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Swift CLI used by make strings to regenerate localized strings; not built or tested by CI."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "Configs/Secrets.swift.example",
+      "line": 7,
+      "real": false,
+      "why": "deadbeef placeholder in the example secrets file copied when the private native-secrets repo is unavailable"
+    },
+    {
+      "file": "Configs/Secrets.swift.example",
+      "line": 20,
+      "real": false,
+      "why": "pswd placeholder basic-auth password in example secrets"
+    },
+    {
+      "file": "KsApi/Sources/KsApiTests/ServiceTests.swift",
+      "line": 25,
+      "real": false,
+      "why": "deadbeef test OAuth token"
+    },
+    {
+      "file": "KsApi/Sources/KsApiTests/ServiceTypeTests.swift",
+      "line": 16,
+      "real": false,
+      "why": "literal 'password' in test"
+    },
+    {
+      "file": "KsApi/Sources/KsApiTests/ServiceTypeTests.swift",
+      "line": 21,
+      "real": false,
+      "why": "cafebeef test token"
+    },
+    {
+      "file": "Kickstarter-Framework/Sources/Kickstarter-Framework-iOSTests/Kickstarter-iOS/AppDelegateViewModelTests.swift",
+      "line": 206,
+      "real": false,
+      "why": "deadbeef test OAuth token"
+    },
+    {
+      "file": "Library-Keychain-iOSTests/AppEnvironmentTests+OAuthInKeychain.swift",
+      "line": 37,
+      "real": false,
+      "why": "deadbeef test OAuth token"
+    },
+    {
+      "file": "Library-Keychain-iOSTests/AppEnvironmentTests+OAuthInKeychain.swift",
+      "line": 278,
+      "real": false,
+      "why": "'this is a token' test string"
+    },
+    {
+      "file": "LibraryTests/Library/OAuthTests.swift",
+      "line": 93,
+      "real": false,
+      "why": "test_token placeholder"
+    },
+    {
+      "file": "LibraryTests/Library/ViewModels/PledgeViewModelTests.swift",
+      "line": 982,
+      "real": false,
+      "why": "stripe_token placeholder in test"
+    },
+    {
+      "file": "LibraryTests/Library/ViewModels/LoginToutViewModelTests.swift",
+      "line": 518,
+      "real": false,
+      "why": "apple_auth_token placeholder in test"
+    },
+    {
+      "file": "LibraryTests/Library/ViewModels/TwoFactorViewModelTests.swift",
+      "line": 42,
+      "real": false,
+      "why": "literal 'password' in test"
+    }
+  ],
+  "nextAction": {
+    "kind": "declare_environment",
+    "text": "State in an AGENTS.md that every test needs macOS with Xcode 26.6 and a booted iOS 18.6 'iPad mini (A17 Pro)' simulator, and give the bootstrap (bundle install, make bootstrap) and per-package make test-* targets CI runs."
+  },
+  "dropped": 0
+}
