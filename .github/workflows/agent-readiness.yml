@@ -21,6 +21,40 @@ defaults:
     working-directory: software-factory/agent-readiness
 
 jobs:
+  # Docs-only pull requests skip the trials and the negative evals. support/tools/ci-scope.ts decides
+  # from the diff, run from the base's copy so a PR can't widen its own list; any other path, any
+  # error, a push or a manual run means the full run.
+  scope:
+    name: Docs-only or full run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.scope.outputs.scope }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'pull_request'
+        with:
+          node-version-file: software-factory/agent-readiness/.nvmrc
+      - id: scope
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "full: a ${{ github.event_name }} run is always a full run"
+            echo "scope=full" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tool="$RUNNER_TEMP/ci-scope.ts"
+          if ! git show "origin/${{ github.base_ref }}:software-factory/agent-readiness/support/tools/ci-scope.ts" > "$tool"; then
+            echo "full: the base has no support/tools/ci-scope.ts"
+            echo "scope=full" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node --experimental-strip-types --no-warnings "$tool" --base "origin/${{ github.base_ref }}" --head HEAD
+        working-directory: .
+
   check:
     name: npm run check (Docker, no skips)
     runs-on: ubuntu-24.04
@@ -45,6 +79,8 @@ jobs:
 
   trials:
     name: Pinned trial repos (Docker)
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.outputs.scope != 'docs-only' }}
     runs-on: ubuntu-24.04
     # 18 repos, two at a time; Flexget's suite alone takes a quarter of an hour.
     timeout-minutes: 150
@@ -68,6 +104,8 @@ jobs:
 
   negative-evals:
     name: Scripted negative evals (Docker, no API key)
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.outputs.scope != 'docs-only' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:

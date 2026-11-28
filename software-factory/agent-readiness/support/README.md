@@ -9,7 +9,7 @@ This folder is for people who change the agent-readiness skill and need to valid
 | `evals/` | Skill evals against `@cursor/sdk`, negative cases, baseline, METHOD.md, the hill-climb log HILLCLIMB.md, goldens and labels |
 | `fixtures/` | Tiny repos with planted defects and `expected.json` (diagnostic ground truth), or `truth.json` in the holdout's schema for guard fixtures whose fix hasn't landed |
 | `holdout/` | The blind holdout's frozen protocol, schemas, scorer and thresholds, the adapter from a report to an observation, and the collision log; no holdout repository is named here |
-| `tools/` | Sample-report generator, fixture helpers, release-manifest writer, env-prefix scanner, CI skip check, known-failures harness, instrument-freeze check |
+| `tools/` | Sample-report generator, fixture helpers, release-manifest writer, env-prefix scanner, CI skip check, known-failures harness, instrument-freeze check and assertion ledger, CI docs-only scope |
 | `trials/` | Real public repos pinned at fixed commits, with each one's recorded result, truth (`truth/<id>.json`) and false instruction finding ceiling |
 | `examples/github-workflows/` | Example CI for static checks, scheduled recheck and skill evals |
 | `AGENTS.md`, `PRODUCT.md`, `RELEASE.md` | Rules for changing the accelerator, product notes and release-gate policy |
