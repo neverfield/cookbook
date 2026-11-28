@@ -1,0 +1,561 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "spree/spree",
+  "commit": "cdd9a02b3c91f9572a009d3f3ec0f19bde8a335b",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/spree/spree/commits/cdd9a02b3c91f9572a009d3f3ec0f19bde8a335b/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/spree/spree/commits/cdd9a02b3c91f9572a009d3f3ec0f19bde8a335b/status (Packages workflow: 'Typecheck, Test & Build', 'SDK Integration Tests', 'Dashboard - E2E' 4 shards + roll-up, 'Scaffolded app' all succeeded; CodeQL succeeded; Mintlify skipped; combined status 'pending' only because there are no commit statuses. The Ruby 'Tests' workflow is path-filtered to spree/** and did not run here; gh api 'repos/spree/spree/actions/workflows/tests.yml/runs?branch=main' shows its run at b0e63e07, the last commit touching spree/, succeeded)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.026,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile",
+        "pnpm install",
+        "pnpm i"
+      ],
+      "test": [
+        "pnpm turbo lint typecheck test build",
+        "pnpm turbo test",
+        "pnpm test",
+        "pnpm run test",
+        "turbo test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "pnpm workspace root (packages/*) driven by Turborepo; CI 'Typecheck, Test & Build' runs every package's lint, typecheck, vitest and build from here. Also owns repo tooling (.changeset, .claude, scripts/, CLAUDE.md, .github)."
+    },
+    {
+      "path": "spree",
+      "ecosystem": "ruby",
+      "placement": "component",
+      "changeShare": 0.003,
+      "hasTests": false,
+      "install": [
+        "bundle install"
+      ],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "The 'spree' meta-gem (spree.gemspec) and the shared Gemfile CI installs first; no specs of its own and CI tests nothing here."
+    },
+    {
+      "path": "spree/core",
+      "ecosystem": "ruby",
+      "placement": "component",
+      "changeShare": 0.256,
+      "hasTests": true,
+      "install": [
+        "bundle install",
+        "bundle exec --gemfile=../Gemfile rake test_app",
+        "bundle exec rake test_app"
+      ],
+      "test": [
+        "bundle exec rake parallel_shard",
+        "bundle exec rspec",
+        "bundle exec rake"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "spree_core; CI matrix lane 'core' (3 shards x 4 procs) on Postgres 16 and MySQL 8; uses the parent spree/Gemfile for test_app. rake test_app generates a dummy Rails app; the database defaults to SQLite (CI sets DB=postgres/mysql with service containers). Tests workflow did not run at this commit (path filter); its last main run, at b0e63e07 with an identical spree/ tree, was green."
+    },
+    {
+      "path": "spree/api",
+      "ecosystem": "ruby",
+      "placement": "component",
+      "changeShare": 0.18,
+      "hasTests": true,
+      "install": [
+        "bundle install",
+        "bundle exec --gemfile=../Gemfile rake test_app",
+        "bundle exec rake test_app"
+      ],
+      "test": [
+        "bundle exec rake parallel_shard",
+        "bundle exec rspec",
+        "bundle exec rake"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "spree_api; CI matrix lane 'api' on Postgres and MySQL; rswag specs also generate docs/api-reference. rake test_app generates a dummy Rails app; the database defaults to SQLite (CI sets DB=postgres/mysql with service containers). Tests workflow did not run at this commit (path filter); its last main run, at b0e63e07 with an identical spree/ tree, was green."
+    },
+    {
+      "path": "spree/emails",
+      "ecosystem": "ruby",
+      "placement": "component",
+      "changeShare": 0.013,
+      "hasTests": true,
+      "install": [
+        "bundle install",
+        "bundle exec rake test_app"
+      ],
+      "test": [
+        "bundle exec rake parallel_shard",
+        "bundle exec rspec",
+        "bundle exec rake"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "spree_emails; own CI matrix lane. rake test_app generates a dummy Rails app; the database defaults to SQLite (CI sets DB=postgres/mysql with service containers). Tests workflow did not run at this commit (path filter); its last main run, at b0e63e07 with an identical spree/ tree, was green."
+    },
+    {
+      "path": "spree/dashboard",
+      "ecosystem": "ruby",
+      "placement": "component",
+      "changeShare": 0.001,
+      "hasTests": true,
+      "install": [
+        "bundle install",
+        "bundle exec rake test_app"
+      ],
+      "test": [
+        "bundle exec rake parallel_shard",
+        "bundle exec rspec",
+        "bundle exec rake"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "spree_dashboard Rails gem hosting the built SPA; own CI matrix lane. rake test_app generates a dummy Rails app; the database defaults to SQLite (CI sets DB=postgres/mysql with service containers). Tests workflow did not run at this commit (path filter); its last main run, at b0e63e07 with an identical spree/ tree, was green."
+    },
+    {
+      "path": "spree/mcp",
+      "ecosystem": "ruby",
+      "placement": "component",
+      "changeShare": 0.003,
+      "hasTests": true,
+      "install": [
+        "bundle install",
+        "bundle exec rake test_app"
+      ],
+      "test": [
+        "bundle exec rake parallel_shard",
+        "bundle exec rspec",
+        "bundle exec rake"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "spree_mcp; own CI matrix lane. rake test_app generates a dummy Rails app; the database defaults to SQLite (CI sets DB=postgres/mysql with service containers). Tests workflow did not run at this commit (path filter); its last main run, at b0e63e07 with an identical spree/ tree, was green."
+    },
+    {
+      "path": "spree/opentelemetry",
+      "ecosystem": "ruby",
+      "placement": "component",
+      "changeShare": 0.001,
+      "hasTests": true,
+      "install": [
+        "bundle install",
+        "bundle exec rake test_app"
+      ],
+      "test": [
+        "bundle exec rake parallel_shard",
+        "bundle exec rspec",
+        "bundle exec rake"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "spree_opentelemetry; own CI matrix lane. rake test_app generates a dummy Rails app; the database defaults to SQLite (CI sets DB=postgres/mysql with service containers). Tests workflow did not run at this commit (path filter); its last main run, at b0e63e07 with an identical spree/ tree, was green."
+    },
+    {
+      "path": "spree/providers/easypost",
+      "ecosystem": "ruby",
+      "placement": "component",
+      "changeShare": 0.005,
+      "hasTests": true,
+      "install": [
+        "bundle install",
+        "bundle exec rake test_app"
+      ],
+      "test": [
+        "bundle exec rake parallel_shard",
+        "bundle exec rspec",
+        "bundle exec rake"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "spree_easypost; tested in the shared 'providers' lane from its own directory; HTTP replayed from VCR cassettes. rake test_app generates a dummy Rails app; the database defaults to SQLite (CI sets DB=postgres/mysql with service containers). Tests workflow did not run at this commit (path filter); its last main run, at b0e63e07 with an identical spree/ tree, was green."
+    },
+    {
+      "path": "spree/providers/meilisearch",
+      "ecosystem": "ruby",
+      "placement": "component",
+      "changeShare": 0.001,
+      "hasTests": true,
+      "install": [
+        "bundle install",
+        "bundle exec rake test_app"
+      ],
+      "test": [
+        "bundle exec rake parallel_shard",
+        "bundle exec rspec",
+        "bundle exec rake"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "spree_meilisearch; tested in the 'providers' lane; its integration spec needs a Meilisearch service and skips itself without one. rake test_app generates a dummy Rails app; the database defaults to SQLite (CI sets DB=postgres/mysql with service containers). Tests workflow did not run at this commit (path filter); its last main run, at b0e63e07 with an identical spree/ tree, was green."
+    },
+    {
+      "path": "spree/providers/paypal",
+      "ecosystem": "ruby",
+      "placement": "component",
+      "changeShare": 0.003,
+      "hasTests": true,
+      "install": [
+        "bundle install",
+        "bundle exec rake test_app"
+      ],
+      "test": [
+        "bundle exec rake parallel_shard",
+        "bundle exec rspec",
+        "bundle exec rake"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "spree_paypal; tested in the 'providers' lane; HTTP replayed from VCR cassettes. rake test_app generates a dummy Rails app; the database defaults to SQLite (CI sets DB=postgres/mysql with service containers). Tests workflow did not run at this commit (path filter); its last main run, at b0e63e07 with an identical spree/ tree, was green."
+    },
+    {
+      "path": "spree/providers/stripe",
+      "ecosystem": "ruby",
+      "placement": "component",
+      "changeShare": 0.01,
+      "hasTests": true,
+      "install": [
+        "bundle install",
+        "bundle exec rake test_app"
+      ],
+      "test": [
+        "bundle exec rake parallel_shard",
+        "bundle exec rspec",
+        "bundle exec rake"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "spree_stripe; tested in the 'providers' lane; HTTP replayed from VCR cassettes. rake test_app generates a dummy Rails app; the database defaults to SQLite (CI sets DB=postgres/mysql with service containers). Tests workflow did not run at this commit (path filter); its last main run, at b0e63e07 with an identical spree/ tree, was green."
+    },
+    {
+      "path": "packages/admin-sdk",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.084,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "@spree/admin-sdk; built and tested only through the root turbo command."
+    },
+    {
+      "path": "packages/cli",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.013,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "@spree/cli; built and tested only through the root turbo command."
+    },
+    {
+      "path": "packages/core",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.002,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "@spree/core (TypeScript); built and tested only through the root turbo command."
+    },
+    {
+      "path": "packages/create-spree-app",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.004,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "create-spree-app; also exercised by the 'Scaffolded app' CI job; built and tested only through the root turbo command."
+    },
+    {
+      "path": "packages/dashboard-core",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.037,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "@spree/dashboard-core; built and tested only through the root turbo command."
+    },
+    {
+      "path": "packages/dashboard-ui",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.016,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "@spree/dashboard-ui design system; lint and typecheck only, no tests; built and tested only through the root turbo command."
+    },
+    {
+      "path": "packages/seller-dashboard",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.019,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "@spree/seller-dashboard; lint, typecheck and build only; built and tested only through the root turbo command."
+    },
+    {
+      "path": "packages/seller-sdk",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.025,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "@spree/seller-sdk; built and tested only through the root turbo command."
+    },
+    {
+      "path": "packages/sdk-core",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.003,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "private shared HTTP layer for the SDKs; no tests; built and tested only through the root turbo command."
+    },
+    {
+      "path": "packages/dashboard-starter",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.003,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "private starter host app; vitest --passWithNoTests, no test files; built and tested only through the root turbo command."
+    },
+    {
+      "path": "packages/seller-dashboard-starter",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.002,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "private starter host app; vitest --passWithNoTests, no test files; served during dashboard E2E; built and tested only through the root turbo command."
+    },
+    {
+      "path": "packages/docs",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "@spree/docs offline docs package; also built by the Docs Package workflow (pnpm --filter @spree/docs build); built and tested only through the root turbo command."
+    },
+    {
+      "path": "packages/dashboard",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.16,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile",
+        "pnpm exec playwright install --with-deps chromium"
+      ],
+      "test": [
+        "pnpm test:e2e",
+        "pnpm run test:e2e",
+        "pnpm test:e2e:first-run",
+        "pnpm test",
+        "vitest run"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "@spree/dashboard admin SPA. Vitest unit tests run via root turbo (need nothing); CI also runs Playwright E2E from this directory (4 shards) against a built SPA and a Rails dummy app from spree/api (bundle exec rake test_app, SQLite) with Chromium."
+    },
+    {
+      "path": "packages/sdk",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.026,
+      "hasTests": true,
+      "install": [
+        "pnpm install --frozen-lockfile",
+        "pnpm turbo build --filter=@spree/sdk-core"
+      ],
+      "test": [
+        "pnpm test:integration",
+        "pnpm run test:integration",
+        "pnpm test",
+        "vitest run"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "@spree/sdk Store API client. Unit vitest runs via root turbo (needs nothing); CI's 'SDK Integration Tests' runs pnpm test:integration here against a Rails test app built in spree/api (Ruby + SQLite)."
+    },
+    {
+      "path": "packages/dashboard-plugin-example",
+      "ecosystem": "node",
+      "placement": "satellite",
+      "of": "packages/dashboard",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Reference dashboard plugin for the docs; lint and typecheck only."
+    },
+    {
+      "path": "docs",
+      "ecosystem": "other",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.105,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Mintlify docs site (docs.json), deployed by Mintlify; includes plans/ and the rswag-generated docs/api-reference OpenAPI files. CI tests nothing here."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "docs/api-reference/oauth.yml",
+      "line": 43,
+      "real": false,
+      "why": "example access_token in generated OpenAPI response sample"
+    },
+    {
+      "file": "docs/api-reference/store.yaml",
+      "line": 3888,
+      "real": false,
+      "why": "example token in generated OpenAPI response sample"
+    },
+    {
+      "file": "docs/api-reference/storefront.yaml",
+      "line": 6268,
+      "real": false,
+      "why": "Stripe ek_test_ example value in API docs sample"
+    },
+    {
+      "file": "docs/api-reference/storefront.yaml",
+      "line": 6269,
+      "real": false,
+      "why": "example Stripe setup-intent client secret in API docs sample"
+    },
+    {
+      "file": "docs/api-reference/storefront.yaml",
+      "line": 6319,
+      "real": false,
+      "why": "example Stripe payment-intent client secret in API docs sample"
+    },
+    {
+      "file": "docs/api-reference/storefront.yaml",
+      "line": 6320,
+      "real": false,
+      "why": "Stripe ek_test_ example value in API docs sample"
+    },
+    {
+      "file": "docs/api-reference/admin.yaml",
+      "line": 46867,
+      "real": false,
+      "why": "masked placeholder api_key"
+    },
+    {
+      "file": "docs/api-reference/admin.yaml",
+      "line": 46933,
+      "real": false,
+      "why": "masked placeholder api_key"
+    },
+    {
+      "file": "docs/api-reference/admin.yaml",
+      "line": 47065,
+      "real": false,
+      "why": "masked placeholder api_key"
+    },
+    {
+      "file": "spree/core/config/i18n-tasks.yml",
+      "line": 118,
+      "real": false,
+      "why": "commented-out placeholder Google Translate key"
+    },
+    {
+      "file": "spree/core/config/i18n-tasks.yml",
+      "line": 131,
+      "real": false,
+      "why": "commented-out sk-XXXX placeholder OpenAI key"
+    },
+    {
+      "file": "spree/providers/stripe/lib/spree_stripe/testing_support/factories/gateway_factory.rb",
+      "line": 9,
+      "real": false,
+      "why": "sk_test_1234567890 test-factory fallback"
+    },
+    {
+      "file": "spree/api/spec/lib/spree/api/preference_conformance_spec.rb",
+      "line": 47,
+      "real": false,
+      "why": "fake sk_test_ value in spec"
+    },
+    {
+      "file": "spree/core/spec/models/spree/preferences/masking_spec.rb",
+      "line": 15,
+      "real": false,
+      "why": "fake sk_test_ value in spec"
+    },
+    {
+      "file": "spree/core/app/models/spree/gateway/bogus.rb",
+      "line": 147,
+      "real": false,
+      "why": "bogus test gateway string built from SecureRandom"
+    }
+  ],
+  "nextAction": {
+    "kind": "pin_toolchain",
+    "text": "Commit a .ruby-version (CI uses Ruby 4.0) beside .node-version so a fresh checkout bundles the gems with the Ruby CI tests on; there is no Gemfile.lock either, so gem resolution floats."
+  },
+  "dropped": 0
+}
