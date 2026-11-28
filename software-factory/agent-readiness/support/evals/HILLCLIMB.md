@@ -862,3 +862,17 @@ The 17 should-fix items of the offline production-readiness review land before t
 - **Expected:** no change on the hard gates; the rerun sentence and the new rows sit below part 1, so the headline and page judges shouldn't move. The risk to watch is an agent writing `.agent-readiness/config.json` itself.
 - **Remeasure:** with round 21, at the Mac release session.
 - **Verdict:** pending.
+
+## Round 23 (pending measurement): Plan A trial defects in the report's wording (November 27, 2026)
+
+The Plan A trial recording ([#68](https://github.com/neverfield/cookbook/pull/68)) found five critical events. Their fixes are script changes; three of them change what the reader sees, logged as one round under the Nov 24 decision. Scoring rules, level rules, each fixture's `expected.json`, the trial truth, the judge prompts and the calibration are unchanged.
+
+- **Failure mode:** a report named one fact two ways or blamed the repo for the machine: sentry-javascript's blocked `corepack pnpm run test` read as "fail" because a failing component ran the same command line (K6); zustand and umami in host mode read as "doesn't pass its tests" and "doesn't install" on Node 22.14 (K1).
+- **Change:**
+  - A command run outside the repo root reads "`<command>` in `<folder>` (<result>)" in the component and condition explanations.
+  - A blocked host-mode step names the cause: "Node `<range>`, which the locked `<package>` needs, is not installed; Node `<version>` is on this machine", or "a corepack that can run `<manager> <version>` is not installed on this machine".
+  - A .NET SDK pin nothing here satisfies reads ".NET SDK `<version>` is not installed", blocked in the audit's image or on this machine.
+- **Tests:** `tests/report-consistency.test.ts` (same command in two folders, checked with the holdout's K6 checker), `tests/environment.test.ts` (Node and corepack too old in host mode), `tests/lang-dotnet.test.ts` (the solution decides the build; the SDK pin is blocked), `tests/secrets.test.ts` (placeholders and test keys).
+- **Expected:** no change on the hard gates. Explanations get longer where commands run in folders; the headline judge reads the heading, which doesn't change.
+- **Remeasure:** with rounds 21 and 22, at the Mac release session.
+- **Verdict:** pending.

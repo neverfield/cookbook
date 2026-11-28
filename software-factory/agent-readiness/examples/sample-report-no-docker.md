@@ -2,8 +2,6 @@
 
 > Preview: agent-readiness 0.2 is pre-1.0; results and scoring may change.
 
-> **Action needed:** This audit ran with scripts that differ from the released skill (agent-readiness-v0.2.0), so it isn't a released result. Reinstall the released skill and rerun the audit.
-
 ## 1. Where am I now
 
 **Unproven on this machine: no Level 1 check failed, and 3 were blocked here.**
@@ -202,15 +200,15 @@ Evidence strength, weakest to strongest: stated in docs, read from files, ran on
 
 ## About this report
 
-Audited Oct 27, 2026 at dc50d7a. Eval run with a pinned seed; not a production result. Seal not verified: the scripts differ from release agent-readiness-v0.2.0; the seal is an unkeyed digest, which shows edits but not who sealed it.
+Audited Oct 27, 2026 at dc50d7a. Eval run with a pinned seed; not a production result. Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it.
 
 - **Audit:** aud-2026-10-27-dc50d7a-58b8
 - **Commit:** dc50d7a (clean tree)
 - **Rubric:** 2026-12-beta
 - **Permission tier:** local-exec
-- **Seal:** Seal not verified: the scripts differ from release agent-readiness-v0.2.0; the seal is an unkeyed digest, which shows edits but not who sealed it
+- **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
 - **Integrity:** unsigned: the seal is a digest that shows edits, but anyone with the scripts could reseal an edited audit
-- **Skill digest:** 66f5529188ba
+- **Skill digest:** db08ff6647cf
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** none: no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container
 - **Stored in:** .agent-readiness/history/audits/aud-2026-10-27-dc50d7a-58b8

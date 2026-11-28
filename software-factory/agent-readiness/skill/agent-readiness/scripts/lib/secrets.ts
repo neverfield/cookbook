@@ -1,5 +1,5 @@
 import type { SecretClass } from "./types.ts";
-import { ASSIGNMENT, ENV_ASSIGNMENT, EXAMPLE_KEYS, LOCAL_HOST, PATTERNS, PLACEHOLDER, URL_CREDENTIAL, URL_PLACEHOLDER, envSecret, placeholderValue } from "./redact.ts";
+import { ASSIGNMENT, ENV_ASSIGNMENT, EXAMPLE_KEYS, LOCAL_HOST, PATTERNS, PLACEHOLDER, URL_CREDENTIAL, URL_PLACEHOLDER, describesItself, envSecret, placeholderValue } from "./redact.ts";
 
 // Findings become advice, so they are precision-biased: redact.ts hides anything that might be a
 // secret, and this file decides which of those are worth a reader's action.
@@ -28,14 +28,15 @@ export interface SecretHit {
 export const SECRET_PATTERN_COUNT = PATTERNS.length + 3;
 
 // A template slot standing in for a URL's user, password or host: `{user}`, `{0}`, `{{ password }}`,
-// `%(password)s`, `${PASS}`, `$PASS`, `<password>`.
+// `%(password)s`, `${PASS}`, `$PASS`, `<password>`. A password that names itself, as in a commented
+// example's `proxy_user:proxy_password@`, is a placeholder too.
 const TEMPLATE_SLOT = /\{[^{}]*\}|%\([\w.]+\)[sdr]|\$\{[^}]*\}|^\$\w+$|<[^>]*>/;
 
 function urlCredential(head: string, password: string, rest: string): boolean {
   const user = head.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/:$/, "");
   const host = rest.slice(1).replace(/:\d+$/, "");
   if ([user, password, host].some((s) => TEMPLATE_SLOT.test(s))) return false;
-  return password.length >= 8 && password !== user && !URL_PLACEHOLDER.test(password) && !PLACEHOLDER.test(password) && !LOCAL_HOST.test(host);
+  return password.length >= 8 && password !== user && !URL_PLACEHOLDER.test(password) && !PLACEHOLDER.test(password) && !describesItself(password) && !LOCAL_HOST.test(host);
 }
 
 export function scanText(text: string): SecretHit[] {

@@ -52,10 +52,14 @@ const REDACTED = /\[redacted:[^\]]*\]/;
 // (`astronomy_password`, `something-with-a-#-hash`, Symfony's `not-a-secret--read-the-doc!`, ruby-jwt's
 // `secretkeyforsigning`), or the last words of its own name.
 function namesItself(name: string, value: string): boolean {
+  return describesItself(value) || name.toLowerCase().replace(/-/g, "_").endsWith(value.toLowerCase().replace(/[!?.]+$/, "").replace(/-/g, "_"));
+}
+
+// `proxy_password`, `db-pass`, `secretkeyforsigning`: words that say what the value stands for.
+export function describesItself(value: string): boolean {
   const v = value.toLowerCase().replace(/[!?.]+$/, "");
-  if (/^[a-z]+(?:[-_.#]+[a-z]+)+$/.test(v) && v === value.replace(/[!?.]+$/, "") && /(^|[-_.#])(password|passwd|pass|secret|token|key|hash)([-_.#]|$)/.test(v)) return true;
-  if (/^[a-z]+$/.test(value) && /password|passwd|secret|token/.test(value)) return true;
-  return name.toLowerCase().replace(/-/g, "_").endsWith(v.replace(/-/g, "_"));
+  if (/^[a-z]+(?:[-_.#]+[a-z]+)+$/.test(v) && v === value.replace(/[!?.]+$/, "") && /(^|[-_.#])(password|passwd|pass|pwd|secret|token|key|hash)([-_.#]|$)/.test(v)) return true;
+  return /^[a-z]+$/.test(value) && /password|passwd|secret|token/.test(value);
 }
 
 export function placeholderValue(name: string, value: string): boolean {

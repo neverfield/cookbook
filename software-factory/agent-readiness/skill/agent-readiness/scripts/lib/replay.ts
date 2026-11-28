@@ -12,6 +12,7 @@ import { fmtDuration } from "./format.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
 import { ecosystemOf } from "./languages/index.ts";
+import { lockedEngineGap } from "./languages/node.ts";
 import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary } from "./mutate.ts";
 import { Progress, budgetSummary } from "./progress.ts";
 import { redact, tail } from "./redact.ts";
@@ -443,6 +444,18 @@ export async function runContract(
     if (failedInstalls.has(cmd.component) && !rescued.has(cmd.component)) return true;
     return failedInstalls.has("*") && !rescued.has(cmd.component) && !rescued.has("*");
   };
+  // Outside a container the repo's commands run on this machine's Node. One older than a locked
+  // dependency's engines.node allows, as undici 8 needs 22.19 where the machine has 22.14, is a
+  // limit of the machine: the same lockfile passes in an image with a Node it supports.
+  let hostNode: string | null | undefined;
+  const hostEngineGap = async (cwd: string): Promise<Diagnosis | null> => {
+    if (hostNode === undefined) {
+      const v = await ex.exec("node --version", ".", 30);
+      hostNode = v.exitCode === 0 ? (v.output.trim().split("\n").pop() ?? null) : null;
+    }
+    const gap = hostNode ? lockedEngineGap(ex.root, cwd, hostNode) : null;
+    return gap ? { cause: "missing_tool", detail: `Node ${gap.range}, which the locked ${gap.pkg} needs, is not installed; Node ${hostNode} is` } : null;
+  };
   const attempt = async (cmd: ContractCommand): Promise<PhaseResult | null> => {
     if (cmd.fallbackFor && (ex.unavailable || !blockedIds.has(cmd.fallbackFor))) return null;
     if (ex.unavailable) {
@@ -487,7 +500,8 @@ export async function runContract(
     const ok = out.exitCode === 0 && !out.timedOut && reportedFailures === 0 && changed.length === 0;
     const rewroteDetail = `it changed ${changed.length} ${changed.length === 1 ? "file" : "files"} (${changed.slice(0, 3).join(", ")}${changed.length > 3 ? ", …" : ""}), ${REWROTE}`;
     // Read from the redacted output, so a cause quoted from it never carries a secret.
-    const diagnosis = ok ? null : changed.length ? { cause: "unknown" as const, detail: rewroteDetail } : reportedFailures > 0 ? { cause: "unknown" as const, detail: `the runner reported ${reportedFailures} failing tests but exited 0` } : diagnose(redact(out.output, opts.registryValues), out.timedOut, cmd.kind, out.exitCode);
+    let diagnosis: Diagnosis | null = ok ? null : changed.length ? { cause: "unknown" as const, detail: rewroteDetail } : reportedFailures > 0 ? { cause: "unknown" as const, detail: `the runner reported ${reportedFailures} failing tests but exited 0` } : diagnose(redact(out.output, opts.registryValues), out.timedOut, cmd.kind, out.exitCode);
+    if (diagnosis && ex.where !== "container" && cmd.kind !== "doctor" && !environmentLimit(ex, cmd, diagnosis, opts.workspacePackages ?? [])) diagnosis = (await hostEngineGap(cmd.cwd)) ?? diagnosis;
     const sudoRefused = !ok && ex.where !== "container" && out.output.includes(SUDO_SHIM_MARK);
     const blocked = sudoRefused ? `the ${cmd.kind} command uses sudo, which the audit never runs on the host` : ok ? undefined : environmentLimit(ex, cmd, diagnosis, opts.workspacePackages ?? []);
     if (!ok && cmd.kind === "install") {
@@ -1486,7 +1500,7 @@ async function replayIn(audit: Audit, repo: string, tree: string, rubric: Rubric
     }
     if (r.blocked && r.diagnosis?.cause === "missing_tool" && rex.where === "container") {
       const tool = r.diagnosis.detail.replace(/ is not installed$/, "");
-      const failed = audit.environment.tools?.find((t) => !t.added && t.spec.split(/[@=]/)[0] === tool);
+      const failed = audit.environment.tools?.find((t) => !t.added && (t.spec.split(/[@=]/)[0] === tool || t.spec === tool.replace(/^\.NET SDK /, "dotnet-sdk@")));
       if (failed) r.blocked += `: the audit couldn't add ${failed.spec} to it on this machine`;
     }
     const ev = evidenceFromPhase(audit, rex, r, registryValues);

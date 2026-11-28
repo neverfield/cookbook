@@ -847,8 +847,17 @@ const NOT_SHIPPED: { re: RegExp; where: string }[] = [
   { re: /(^|\/)(docs?|examples?|samples?)\/|\.(md|mdx|rst|adoc)$|(^|\/)\.env\.(example|sample|template)$|\.example$/, where: "docs or example" },
 ];
 
-export function notShipped(file: string): string | null {
-  return NOT_SHIPPED.find((n) => n.re.test(file))?.where ?? null;
+// A source file that imports a test framework is a test, whatever the repo's naming scheme for
+// them (`*.servertest.ts`, `*.e2e.ts`, `check_*.py`).
+const TEST_IMPORT = [
+  { file: /\.[cm]?[jt]sx?$/, re: /^\s*(?:import\b[^;]*?\bfrom\s*|import\s*|(?:const|let|var)\b[^=]*=\s*require\()\s*["'](?:vitest|@jest\/globals|node:test|mocha|chai|ava|uvu|tap|bun:test|@playwright\/test|@testing-library\/[\w-]+)["']/m },
+  { file: /\.py$/, re: /^(?:import\s+(?:pytest|unittest)\b|from\s+(?:pytest|unittest)\b[\w.]*\s+import\b)/m },
+];
+
+export function notShipped(file: string, text?: string): string | null {
+  const where = NOT_SHIPPED.find((n) => n.re.test(file))?.where ?? null;
+  if (where || text === undefined) return where;
+  return TEST_IMPORT.some((t) => t.file.test(file) && t.re.test(text)) ? "test" : null;
 }
 
 export const SAFETY_RULES: Record<string, string> = {
@@ -902,7 +911,7 @@ export function safetyScan(tree: string, profile: Profile, bound?: ScanBound, bl
     const full = join(tree, file);
     if (!isText(full)) continue;
     const text = readText(full);
-    const where = notShipped(file);
+    const where = notShipped(file, text);
     const lines = text.split("\n");
     for (const f of secretFindings(file, text, where, blockingSecrets)) add({ kind: "secret", file, line: f.line, detail: f.detail, blocking: f.blocking, rule: f.rule, secretClass: f.class });
     if (where === "test") {

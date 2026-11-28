@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFil
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
+import { detectRuntime } from "../skill/agent-readiness/scripts/lib/container.ts";
 import { discoverContract, imagePlan } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { diagnose } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { IMAGE_SDK, SDKS, dotnet, dotnetTestCounts, sdkFor, sdkSatisfies, windowsOnly } from "../skill/agent-readiness/scripts/lib/languages/dotnet.ts";
@@ -12,7 +13,7 @@ import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { environmentLimit } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric, latestRubricVersion } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import type { ContractCommand } from "../skill/agent-readiness/scripts/lib/types.ts";
-import { FIXTURES } from "../support/tools/fixture.ts";
+import { FIXTURES, materialize, readiness } from "../support/tools/fixture.ts";
 
 const rubric = loadRubric(latestRubricVersion());
 const hooks = dotnet.replay!;
@@ -213,6 +214,61 @@ describe(".NET: projects that need Windows", () => {
     assert.deepEqual(cmds.map((c) => c.command), ["dotnet build src/Tool/Tool.csproj --no-restore && dotnet build tests/Core.Tests/Core.Tests.csproj --no-restore", "dotnet test tests/Core.Tests/Core.Tests.csproj --no-restore"]);
     assert.match(cmds[0].reason, /Desk\.csproj needs Windows and is listed apart/);
     assert.deepEqual(hooks.mutation.covered(mixed, { path: "." } as never, ["tests/Core.Tests/FormTests.cs"], ["src/Core/Form.cs", "src/Desk/Form.cs"]), ["src/Core/Form.cs"], "no fault goes into code the build leaves out");
+  });
+});
+
+// System.CommandLine's slnx leaves out a stale benchmark, and Arcade's vendored eng/common holds a
+// net472 project; building every project the tree holds read that benchmark's CS0234 as a repo
+// that doesn't build.
+describe(".NET: the solution decides what the repo builds", () => {
+  const STALE = '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><ProjectReference Include="../../src/Lib/Lib.csproj" /></ItemGroup></Project>';
+
+  test("a project outside the solution, and a Windows-only one outside it, leave the solution to build whole", () => {
+    const dir = materialize("dotnet-solution-scope");
+    const cmds = hooks.commands(dir, { path: "." } as never);
+    assert.deepEqual(cmds.map((c) => c.command), ["dotnet build --no-restore", "dotnet test --no-restore"]);
+    assert.doesNotMatch(cmds[0].reason, /Windows/);
+    assert.equal(ecosystemOf("nuget")!.install(dir, ".", { ignoreScripts: false }).command, "dotnet restore --locked-mode");
+  });
+
+  test("an .slnx and an .sln both list the projects; a Windows-only project in the solution still splits the build into the solution's own projects", () => {
+    const slnx = repo({ "Lib.slnx": '<Solution>\n  <Folder Name="/src/">\n    <Project Path="src/Lib/Lib.csproj" />\n    <Project Path="test/Lib.Tests/Lib.Tests.csproj" />\n  </Folder>\n</Solution>\n', "src/Lib/Lib.csproj": proj("net10.0"), "test/Lib.Tests/Lib.Tests.csproj": proj("net10.0", XUNIT), "src/Lib.Benchmarks/Lib.Benchmarks.csproj": STALE, "eng/common/internal/Tools.csproj": proj("net472") });
+    assert.deepEqual(hooks.commands(slnx, { path: "." } as never).map((c) => c.command), ["dotnet build --no-restore", "dotnet test --no-restore"]);
+    const sln = repo({ "Lib.sln": 'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lib", "src\\Lib\\Lib.csproj", "{6F1D2A3B-1C4E-4B8A-9D2F-0A1B2C3D4E01}"\r\nEndProject\r\nProject("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Desk", "src\\Desk\\Desk.csproj", "{6F1D2A3B-1C4E-4B8A-9D2F-0A1B2C3D4E02}"\r\nEndProject\r\n', "src/Lib/Lib.csproj": proj("net10.0"), "src/Desk/Desk.csproj": proj("net48"), "src/Lib.Benchmarks/Lib.Benchmarks.csproj": STALE });
+    assert.deepEqual(hooks.commands(sln, { path: "." } as never).map((c) => c.command), ["dotnet build src/Lib/Lib.csproj --no-restore"]);
+  });
+
+  test("a solution that lists none of the folder's projects leaves every project in", () => {
+    const empty = repo({ "Lib.sln": "", "src/Lib/Lib.csproj": proj("net10.0"), "src/Desk/Desk.csproj": proj("net48") });
+    assert.deepEqual(hooks.commands(empty, { path: "." } as never).map((c) => c.command), ["dotnet build src/Lib/Lib.csproj --no-restore"]);
+  });
+
+  test("in the .NET SDK image the solution builds and its tests pass, with the benchmark that no longer compiles left out", { skip: detectRuntime("auto") ? false : "no container runtime: this needs docker or podman", timeout: 15 * 60 * 1000 }, () => {
+    const dir = materialize("dotnet-solution-scope");
+    const r = readiness(dir, ["audit", "--tier", "local-exec"], { SA_READINESS_EVAL_SEED: "fixture-seed" });
+    assert.equal(r.code, 0, r.out.slice(-3000));
+    const report = JSON.parse(readFileSync(join(dir, ".agent-readiness", "latest", "report.json"), "utf8"));
+    const audit = JSON.parse(readFileSync(join(dir, report.audit.storedAt, "audit.json"), "utf8"));
+    const result = (kind: string) => (audit.evidence as { kind?: string; result: string; supersededBy?: string }[]).filter((e) => e.kind === kind && !e.supersededBy).map((e) => e.result);
+    assert.deepEqual(result("build"), ["pass"]);
+    assert.deepEqual(result("test"), ["pass"]);
+    assert.ok(report.components.included.find((c: { id: string }) => c.id === "Billing").level >= 1, report.executive.heading);
+  });
+});
+
+// A global.json pin the image's SDK can't satisfy, where the pinned SDK couldn't be added: the
+// machine's limit, never a repo that doesn't build.
+describe(".NET: an SDK pin nothing here satisfies", () => {
+  const OUTPUT = "The command could not be loaded, possibly because:\n  * You intended to execute a .NET application:\n      The application 'restore' does not exist.\n  * You intended to execute a .NET SDK command:\n      A compatible .NET SDK was not found.\n\nRequested SDK version: 12.0.100-alpha.1.26555.106\nglobal.json file: /work/global.json\n\nInstalled SDKs:\n10.0.404 [/usr/share/dotnet/sdk]\n";
+
+  test("dotnet's own words name the pinned SDK as a missing tool, and that blocks in the audit's image and on the host", () => {
+    const d = diagnose(OUTPUT, false, "install");
+    assert.deepEqual(d, { cause: "missing_tool", detail: ".NET SDK 12.0.100-alpha.1.26555.106 is not installed" });
+    assert.equal(diagnose("A compatible installed .NET SDK for global.json version [9.0.100] from [/work/global.json] was not found.", false, "build").detail, ".NET SDK 9.0.100 is not installed");
+    assert.equal(diagnose("/usr/share/dotnet/sdk/10.0.404/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.TargetFrameworkInference.targets(166,5): error NETSDK1045: The current .NET SDK does not support targeting .NET 12.0.  Either target .NET 10.0 or lower, or use a version of the .NET SDK that supports .NET 12.0.", false, "build").detail, "a .NET SDK that targets .NET 12.0 is not installed");
+    const cmd = { kind: "install", command: "dotnet restore" } as ContractCommand;
+    assert.equal(environmentLimit({ where: "container", image: "mcr.microsoft.com/dotnet/sdk:10.0", imageSource: "audit" }, cmd, d, []), ".NET SDK 12.0.100-alpha.1.26555.106 is not installed in the audit's image (mcr.microsoft.com/dotnet/sdk:10.0)");
+    assert.equal(environmentLimit({ where: "disposable_vm", image: null, imageSource: null }, cmd, d, []), ".NET SDK 12.0.100-alpha.1.26555.106 is not installed on this machine");
   });
 });
 

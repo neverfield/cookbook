@@ -9,9 +9,9 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "66f5529188ba1aa6fe5da9bd70985249019cd1a32da3f4a3ab35c1a19be858c7",
+    "scriptsDigest": "db08ff6647cfaf3b50c55b6786d3dbbcc4181589aba53f022e2b5ae8596473af",
     "seedPinned": true,
-    "sealStatus": "Seal not verified: the scripts differ from release agent-readiness-v0.2.0; the seal is an unkeyed digest, which shows edits but not who sealed it",
+    "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
     "previous": null,
     "storedAt": ".agent-readiness/history/audits/aud-2026-10-27-7070f44-e101",
@@ -1015,7 +1015,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "doctor passed",
-        "durationMs": 136,
+        "durationMs": 148,
         "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && node --version && npm --version'\\'''",
         "supersededBy": null
       },
@@ -1027,7 +1027,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "install passed",
-        "durationMs": 440,
+        "durationMs": 462,
         "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci'\\'''",
         "supersededBy": null
       },
@@ -1039,7 +1039,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 191,
+        "durationMs": 187,
         "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/api && npm run lint)'\\'''",
         "supersededBy": null
       },
@@ -1051,7 +1051,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 180,
+        "durationMs": 181,
         "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/shared && npm run lint)'\\'''",
         "supersededBy": null
       },
@@ -1063,7 +1063,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 182,
+        "durationMs": 189,
         "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/worker && npm run lint)'\\'''",
         "supersededBy": null
       },
@@ -1075,7 +1075,7 @@
         "where": "ran in a clean container",
         "result": "fail",
         "summary": "test failed: connection refused on port 5432 (1 of 1 tests failed)",
-        "durationMs": 239,
+        "durationMs": 243,
         "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/api && npm run test)'\\'''",
         "supersededBy": "ev-014"
       },
@@ -1087,7 +1087,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "test passed (3 of 3 tests)",
-        "durationMs": 239,
+        "durationMs": 238,
         "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/shared && npm run test)'\\'''",
         "supersededBy": null
       },
@@ -1099,7 +1099,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "test passed (2 of 2 tests)",
-        "durationMs": 234,
+        "durationMs": 240,
         "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/worker && npm run test)'\\'''",
         "supersededBy": null
       },
@@ -1111,7 +1111,7 @@
         "where": "ran in a clean container",
         "result": "fail",
         "summary": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on",
-        "durationMs": 247,
+        "durationMs": 240,
         "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/api && npm run test)'\\'''",
         "supersededBy": null
       },
@@ -1171,7 +1171,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": ".cursor/rules/style.mdc:6 `npm run lint -w api` replays",
-        "durationMs": 182,
+        "durationMs": 183,
         "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && npm run lint -w api'\\'''",
         "supersededBy": null
       },
@@ -1183,7 +1183,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "AGENTS.md:6 `npm run test -w shared` replays",
-        "durationMs": 230,
+        "durationMs": 239,
         "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && npm run test -w shared'\\'''",
         "supersededBy": null
       }
@@ -1207,7 +1207,7 @@
       },
       {
         "label": "Seal",
-        "value": "Seal not verified: the scripts differ from release agent-readiness-v0.2.0; the seal is an unkeyed digest, which shows edits but not who sealed it"
+        "value": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it"
       },
       {
         "label": "Integrity",
@@ -1215,7 +1215,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "66f5529188ba"
+        "value": "db08ff6647cf"
       },
       {
         "label": "Planted faults",
@@ -1235,11 +1235,7 @@
       }
     ]
   },
-  "notices": [
-    {
-      "text": "This audit ran with scripts that differ from the released skill (agent-readiness-v0.2.0), so it isn't a released result. Reinstall the released skill and rerun the audit."
-    }
-  ],
+  "notices": [],
   "waivers": null,
   "explanations": [
     {
@@ -1255,7 +1251,7 @@
       "kind": "level",
       "subject": "api",
       "result": "Level 0",
-      "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (fail)",
+      "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` in `packages/api` (pass) and `npm run test` in `packages/api` (fail)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "Held at Level 0 by passes every test in a clean environment: not met (test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on)",
       "rule": "Level 1 needs: installs from the lockfile in a clean environment, builds in a clean environment and passes every test in a clean environment. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
@@ -1264,7 +1260,7 @@
       "kind": "level",
       "subject": "shared",
       "result": "Level 1",
-      "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (pass)",
+      "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` in `packages/shared` (pass) and `npm run test` in `packages/shared` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "Held at Level 1 by agent instructions are accurate: not met (2 agent instruction commands are wrong)",
       "rule": "Level 1 needs: installs from the lockfile in a clean environment, builds in a clean environment and passes every test in a clean environment. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
@@ -1273,7 +1269,7 @@
       "kind": "level",
       "subject": "worker",
       "result": "Level 1",
-      "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` (pass) and `npm run test` (pass)",
+      "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` in `packages/worker` (pass) and `npm run test` in `packages/worker` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "Held at Level 1 by tests catch planted faults: not met (caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10) and agent instructions are accurate: not met (2 agent instruction commands are wrong)",
       "rule": "Level 1 needs: installs from the lockfile in a clean environment, builds in a clean environment and passes every test in a clean environment. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
@@ -1309,7 +1305,7 @@
       "kind": "condition",
       "subject": "api: passes every test in a clean environment",
       "result": "not met",
-      "ran": "`npm run test` (fail)",
+      "ran": "`npm run test` in `packages/api` (fail)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on",
       "rule": "Level 1 needs it: passes every test in a clean environment (Setup works from a clean checkout). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails."
@@ -1318,7 +1314,7 @@
       "kind": "condition",
       "subject": "api: build, lint, type-check and test commands pass",
       "result": "not met",
-      "ran": "`npm run lint` (pass) and `npm run test` (fail)",
+      "ran": "`npm run lint` in `packages/api` (pass) and `npm run test` in `packages/api` (fail)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on",
       "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Not met means it ran and failed, or the repo lacks what it needs. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone."
@@ -1390,7 +1386,7 @@
       "kind": "condition",
       "subject": "shared: passes every test in a clean environment",
       "result": "met",
-      "ran": "`npm run test` (pass)",
+      "ran": "`npm run test` in `packages/shared` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "test passed (3 of 3 tests)",
       "rule": "Level 1 needs it: passes every test in a clean environment (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
@@ -1399,7 +1395,7 @@
       "kind": "condition",
       "subject": "shared: build, lint, type-check and test commands pass",
       "result": "met",
-      "ran": "`npm run lint` (pass) and `npm run test` (pass)",
+      "ran": "`npm run lint` in `packages/shared` (pass) and `npm run test` in `packages/shared` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "2 commands pass",
       "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone."
@@ -1435,7 +1431,7 @@
       "kind": "condition",
       "subject": "worker: passes every test in a clean environment",
       "result": "met",
-      "ran": "`npm run test` (pass)",
+      "ran": "`npm run test` in `packages/worker` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "test passed (2 of 2 tests)",
       "rule": "Level 1 needs it: passes every test in a clean environment (Setup works from a clean checkout). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
@@ -1444,7 +1440,7 @@
       "kind": "condition",
       "subject": "worker: build, lint, type-check and test commands pass",
       "result": "met",
-      "ran": "`npm run lint` (pass) and `npm run test` (pass)",
+      "ran": "`npm run lint` in `packages/worker` (pass) and `npm run test` in `packages/worker` (pass)",
       "where": "in a clean docker container (node:22-bookworm)",
       "happened": "2 commands pass",
       "rule": "Level 2 needs it: build, lint, type-check and test commands pass (Build, lint, type-check and test commands pass). Met means it ran at the strength the check requires and passed. A type-check that passes counts only once it fails on a known type error the audit adds, in a throwaway copy, to the most recently changed TypeScript or Python file the tests import, and passes again once the line is removed; a component whose tests import neither counts on the exit code alone."

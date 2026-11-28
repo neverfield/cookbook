@@ -1,0 +1,9 @@
+{
+  "name": "fetch-compat",
+  "version": "8.0.0",
+  "main": "index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=99.0.0"
+  }
+}

@@ -140,6 +140,53 @@
         ["token = '", "q7Rk2vLx9TzW4mPa", "'"]
       ],
       "expect": [{ "line": 2, "class": "generic_assignment", "blocking": false }]
+    },
+    {
+      "file": "chart/values.yaml",
+      "lines": [
+        "# extraSecrets:",
+        "#   'proxy-config':",
+        "#     stringData: |",
+        "#        HTTP_PROXY: http://proxy_user:proxy_password@192.168.0.10:2080",
+        "#        HTTPS_PROXY: http://proxy_user:proxy_password@192.168.0.10:2080",
+        "#        DB_URL: postgres://db_user:db-pass@db.acme-corp.io:5432/app",
+        "#        BACKUP_URL: postgres://backup:Qm7vT2xK9pLw@db.acme-corp.io:5432/app",
+        "extraSecrets: {}"
+      ],
+      "expect": [{ "line": 7, "class": "url_credential", "blocking": true }]
+    },
+    {
+      "file": "web/src/auth/verifier.servertest.ts",
+      "lines": [
+        "import { describe, expect, it } from \"vitest\";",
+        "",
+        ["const privateKey = `-----BEGIN ", "PRIVATE KEY-----"],
+        ["MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg", "Fq7Zr2Kd9Wm4Tx1Ny6Hb3Lc8Vp5Qs0Je"],
+        ["Wn2Xk7Pq4Rt9Ys1Mv6Bc3Hd8Lf5Gj0Uz", "Ka2Eb7Nc4Od9Ie1Tf6Ug3Vh8Wi5Xj0Yk"],
+        ["-----END ", "PRIVATE KEY-----`;"]
+      ],
+      "expect": [{ "line": 3, "class": "private_key", "blocking": false }]
+    },
+    {
+      "file": "web/src/auth/signer.ts",
+      "lines": [
+        "import { sign } from \"./jwt\";",
+        "",
+        ["const privateKey = `-----BEGIN ", "PRIVATE KEY-----"],
+        ["MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg", "Fq7Zr2Kd9Wm4Tx1Ny6Hb3Lc8Vp5Qs0Je"],
+        ["Wn2Xk7Pq4Rt9Ys1Mv6Bc3Hd8Lf5Gj0Uz", "Ka2Eb7Nc4Od9Ie1Tf6Ug3Vh8Wi5Xj0Yk"],
+        ["-----END ", "PRIVATE KEY-----`;"]
+      ],
+      "expect": [{ "line": 3, "class": "private_key", "blocking": true }]
+    },
+    {
+      "file": "src/service/smoke_checks.py",
+      "lines": [
+        "import pytest",
+        "",
+        ["STRIPE_KEY = \"", "sk_", "live_", "Lw4pQ9xT2vM7kR3nB8cF6hJ1", "\""]
+      ],
+      "expect": [{ "line": 3, "class": "provider_token", "blocking": false }]
     }
   ]
 }

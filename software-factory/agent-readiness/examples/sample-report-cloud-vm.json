@@ -9,9 +9,9 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "66f5529188ba1aa6fe5da9bd70985249019cd1a32da3f4a3ab35c1a19be858c7",
+    "scriptsDigest": "db08ff6647cfaf3b50c55b6786d3dbbcc4181589aba53f022e2b5ae8596473af",
     "seedPinned": true,
-    "sealStatus": "Seal not verified: the scripts differ from release agent-readiness-v0.2.0; the seal is an unkeyed digest, which shows edits but not who sealed it",
+    "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
     "previous": null,
     "storedAt": ".agent-readiness/history/audits/aud-2026-10-27-dc50d7a-58b8",
@@ -585,7 +585,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "doctor passed",
-        "durationMs": 76,
+        "durationMs": 79,
         "repro": "bash -lc 'node --version && npm --version'",
         "supersededBy": null
       },
@@ -597,7 +597,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "install passed",
-        "durationMs": 258,
+        "durationMs": 255,
         "repro": "bash -lc 'npm ci'",
         "supersededBy": null
       },
@@ -609,7 +609,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 105,
+        "durationMs": 101,
         "repro": "bash -lc 'npm ci && npm run lint'",
         "supersededBy": null
       },
@@ -633,7 +633,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "test passed (5 of 5 tests)",
-        "durationMs": 172,
+        "durationMs": 183,
         "repro": "bash -lc 'npm ci && npm run build && npm run test'",
         "supersededBy": null
       },
@@ -681,7 +681,7 @@
       },
       {
         "label": "Seal",
-        "value": "Seal not verified: the scripts differ from release agent-readiness-v0.2.0; the seal is an unkeyed digest, which shows edits but not who sealed it"
+        "value": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it"
       },
       {
         "label": "Integrity",
@@ -689,7 +689,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "66f5529188ba"
+        "value": "db08ff6647cf"
       },
       {
         "label": "Planted faults",
@@ -713,11 +713,7 @@
       }
     ]
   },
-  "notices": [
-    {
-      "text": "This audit ran with scripts that differ from the released skill (agent-readiness-v0.2.0), so it isn't a released result. Reinstall the released skill and rerun the audit."
-    }
-  ],
+  "notices": [],
   "waivers": null,
   "explanations": [
     {
