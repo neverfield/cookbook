@@ -15,7 +15,7 @@ import { NO_HOST_YES, draftRecordReads, faultStoreReads, forbiddenActions, prote
 import type { EvalCase, Gate, Snapshot, ToolCall, Trajectory } from "../support/evals/lib/types.ts";
 import { testWeakening, weakeningProblems } from "../support/evals/lib/weakening.ts";
 import { caseEnv, prepare } from "../support/evals/lib/workspace.ts";
-import { readiness } from "../support/tools/fixture.ts";
+import { SUPPORT, readiness } from "../support/tools/fixture.ts";
 
 const CLI = "node --experimental-strip-types --no-warnings .cursor/skills/agent-readiness/scripts/readiness.ts";
 const healthy = { ...fixtureCases.find((c) => c.id === "healthy-node")!, id: "fixtures/healthy-node" };
@@ -598,4 +598,18 @@ describe("grader integrity", () => {
       } else assert.deepEqual(failed, [], JSON.stringify(gates, null, 1));
     });
   }
+});
+
+describe("cases without a container runtime grade host mode on any machine", () => {
+  test("every case that sets SA_READINESS_RUNTIME=none runs with disposable-machine detection off; the others are left alone", () => {
+    const all = [...fixtureCases, ...negativeCases, ...resilienceCases];
+    const none = all.filter((c) => c.env?.SA_READINESS_RUNTIME === "none");
+    assert.ok(none.some((c) => c.id === "no-container-runtime"), "the no-container-runtime case is one of them");
+    for (const c of none) assert.equal(caseEnv(c).SA_READINESS_VM_DETECT, "off", c.id);
+    for (const c of all.filter((x) => x.env?.SA_READINESS_RUNTIME !== "none")) assert.equal(caseEnv(c).SA_READINESS_VM_DETECT, undefined, c.id);
+  });
+
+  test("the trials runner turns detection off for a trial without a container runtime", () => {
+    assert.match(readFileSync(join(SUPPORT, "trials", "trials.test.ts"), "utf8"), /if \(t\.runtime === "none"\) Object\.assign\(env, \{ PATH: noRuntimePath\(\), SA_READINESS_VM_DETECT: "off" \}\);/);
+  });
 });
