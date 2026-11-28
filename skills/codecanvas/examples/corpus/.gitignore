@@ -1,0 +1,16 @@
+# Dependencies and build outputs (never commit generated artifacts)
+node_modules/
+.next/
+dist/
+out/
+.turbo/
+*.tsbuildinfo
+
+# Local lockfiles and framework-generated type shims
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+next-env.d.ts
+
+# Local codecanvas cache
+.codecanvas/cache/
