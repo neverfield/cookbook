@@ -1,4 +1,5 @@
 import { expected, fixtureNames } from "../../tools/fixture.ts";
+import { NO_HOST_ANSWER } from "../lib/trajectory.ts";
 import type { EvalCase } from "../lib/types.ts";
 
 const SMOKE = new Set(["healthy-node", "hidden-service", "tautological-tests", "agents-md-drift"]);
@@ -14,6 +15,7 @@ export const cases: EvalCase[] = fixtureNames().flatMap((fixture) => {
     if (run.scenarios) prompt += ` Add the ${run.scenarios.join(" and ")} ${run.scenarios.length > 1 ? "scenarios" : "scenario"} for every component.`;
     if (exp.outcomes) prompt += " For outcomes, use the recorded PR list at {root}/prs.json.";
     if (run.registryEnv) prompt += ` Our private registry token is in the ${Object.keys(run.registryEnv).join(", ")} environment variable.`;
+    if (run.runtime === "none") prompt += ` ${NO_HOST_ANSWER}`;
     return {
       id: run.name === "default" ? fixture : `${fixture}/${run.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`,
       fixture,
