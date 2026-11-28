@@ -6,8 +6,11 @@ import type { Baseline } from "./baseline.ts";
 import { bindingProblems } from "./binding.ts";
 import type { Binding } from "./binding.ts";
 import { PANEL_SIZE, family } from "./judge.ts";
+import { DETERMINISTIC_REPEATS } from "./plan.ts";
 
 // The release-gate policy (November 15, 2026, for 0.2.0):
+// - Repeats (November 27): 5 per case in the agent arm. The scripted arm runs no agent, so a case
+//   whose first 2 runs match byte for byte (fingerprint.ts) stops there; any other case runs 5.
 // - Hard gates, k of n per case at 5 repeats or more: a case one run short of passing every gate
 //   in every repeat is a flag; two or more runs short is a regression, and fails the release. At most
 //   a tenth of the in-sample cases may be flagged, and the pooled all-gates pass rate's 95% lower
@@ -26,6 +29,8 @@ import { PANEL_SIZE, family } from "./judge.ts";
 // - Known failures: tests/known-failures.json is empty.
 export const RELEASE_POLICY = {
   repeats: 5,
+  // The scripted arm may stop at this many runs of a case when they match byte for byte (plan.ts).
+  deterministicRepeats: DETERMINISTIC_REPEATS,
   judgeMean: 0.8,
   judgeLower: 0.75,
   pageAbove: 0.667,
@@ -158,6 +163,13 @@ export function releaseVerdict(b: Baseline, ctx: ReleaseContext = {}): ReleaseVe
     const g = control.lift.gates;
     const h = control.lift.judge;
     lift = { gates: { mean: g?.mean ?? null, low: g?.low ?? null }, judge: { mean: h.mean, low: h.low } };
+    if (control.repeats) {
+      const rows = Object.entries(control.repeats);
+      const short = rows.filter(([, r]) => r.runs < RELEASE_POLICY.repeats && !(r.matched && r.runs >= RELEASE_POLICY.deterministicRepeats));
+      for (const [id, r] of short) fail(`${RELEASE_POLICY.liftOver} arm, ${id}: ${r.runs} run${r.runs === 1 ? "" : "s"}${r.matched ? "" : " that don't match"}; the policy needs ${RELEASE_POLICY.repeats}, or ${RELEASE_POLICY.deterministicRepeats} that match byte for byte`);
+      const early = rows.filter(([, r]) => r.runs < RELEASE_POLICY.repeats && r.matched).length;
+      if (!short.length) ok(`${RELEASE_POLICY.liftOver} arm repeats: ${early} of ${rows.length} cases matched byte for byte in ${RELEASE_POLICY.deterministicRepeats} runs, ${rows.length - early} ran ${RELEASE_POLICY.repeats} or more`);
+    }
     if (!g) fail(`the ${RELEASE_POLICY.liftOver} lift has no per-case interval for the hard gates; re-summarize the run with this harness`);
     else {
       const gl = `all-gates lift over the ${RELEASE_POLICY.liftOver} run ${ci(g)} per case, over ${g.n} cases (lower bound needs to be above 0)`;

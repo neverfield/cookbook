@@ -12,7 +12,8 @@ import { scriptedAudit } from "./lib/controls.ts";
 import { NO_DOCKER_GATES } from "./lib/gates.ts";
 import { loadCalibration, releaseRecord, releaseVerdict } from "./lib/release.ts";
 import { isolateHome } from "./lib/isolation.ts";
-import { loadCases, planJobs, select } from "./lib/plan.ts";
+import { runFingerprint } from "./lib/fingerprint.ts";
+import { DETERMINISTIC_REPEATS, deterministic, loadCases, planJobs, probeOutcome, restOf, select } from "./lib/plan.ts";
 import type { Job } from "./lib/plan.ts";
 import { gradeCase, latestReport } from "./lib/grade.ts";
 import { renderMarkdown } from "../../skill/agent-readiness/scripts/lib/render.ts";
@@ -130,7 +131,8 @@ async function worker(flags: Record<string, string | true>): Promise<void> {
         return [none, none];
       });
   const byModel = { ...(Object.keys(h.byModel).length ? { judgeByModel: h.byModel, pageByModel: p.byModel } : {}), ...(judgeError ? { judgeError } : {}) };
-  const run: CaseRun = { id: c.id, repeat: Number(flags.repeat), model, driver: t.driver, arm, judgeModel: c.attack || !judgeModels.length ? null : judgeModels.join(","), rubric: report?.audit.rubric ?? null, isolation: iso.id, workspace: ws.dir, grade: { gates, soft: { judge: h.score, judgeReasons: h.reasons, page: p.score, pageReasons: p.reasons, ...byModel, wallMs: t.durationMs, toolCalls: t.toolCalls.length, tokens: t.tokens } }, error: t.error };
+  const fingerprint = deterministic({ c, arm }) ? { fingerprint: runFingerprint(ws, gates, t.error) } : {};
+  const run: CaseRun = { id: c.id, repeat: Number(flags.repeat), model, driver: t.driver, arm, judgeModel: c.attack || !judgeModels.length ? null : judgeModels.join(","), rubric: report?.audit.rubric ?? null, isolation: iso.id, workspace: ws.dir, grade: { gates, soft: { judge: h.score, judgeReasons: h.reasons, page: p.score, pageReasons: p.reasons, ...byModel, wallMs: t.durationMs, toolCalls: t.toolCalls.length, tokens: t.tokens } }, error: t.error, ...fingerprint };
   writeResult(String(flags.out), { run, trajectory: t });
 }
 
@@ -379,21 +381,48 @@ async function main(): Promise<void> {
   // Recorded before any run starts, so a change made while the runs go can't be passed off as measured.
   const binding = currentBinding();
   const maxRuns = Number(flags["max-runs"] ?? 120);
-  const jobs = planJobs([...driven, ...scripted], drivenArms, models, repeats);
-  if (jobs.length > maxRuns) throw new Error(`${jobs.length} runs exceed --max-runs ${maxRuns}.`);
+  // --max-runs bounds the worst case, in which every deterministic case falls back to every repeat.
+  const worst = planJobs([...driven, ...scripted], drivenArms, models, repeats).length;
+  if (worst > maxRuns) throw new Error(`${worst} runs exceed --max-runs ${maxRuns}.`);
+  const probe = Number(flags["deterministic-repeats"] ?? DETERMINISTIC_REPEATS);
+  if (!Number.isInteger(probe) || probe < 2) throw new Error(`--deterministic-repeats ${flags["deterministic-repeats"]} must be a whole number of 2 or more: one run can't show that runs match.`);
+  const jobs = planJobs([...driven, ...scripted], drivenArms, models, repeats, probe);
   const outDir = join(HERE, "runs", new Date().toISOString().replace(/[:.]/g, "-"));
   mkdirSync(outDir, { recursive: true });
+  const outOf = (j: Job) => join(outDir, `${j.c.id.replace(/\//g, "__")}.${j.arm}.${j.m}.${j.r}.run.json`);
   const concurrency = Number(flags.concurrency ?? 2);
   const retries = Number(flags["infra-retries"] ?? 2);
+  const probed = new Map<string, Job[]>();
+  const matched: string[] = [];
+  const fellBack: string[] = [];
+  const afterRun = (j: Job) => {
+    if (probe >= repeats || !deterministic(j) || j.r > probe) return;
+    const key = `${j.c.id} [${j.c.attack ? "negative" : j.arm}]`;
+    const list = [...(probed.get(key) ?? []), j];
+    probed.set(key, list);
+    if (list.length < probe) return;
+    const o = probeOutcome(list.map((x) => (JSON.parse(readFileSync(outOf(x), "utf8")) as { run: CaseRun }).run), probe);
+    if (o.matched) return void matched.push(key);
+    fellBack.push(`${key}: ${o.why}`);
+    jobs.push(...restOf(j, probe, repeats));
+  };
   let next = 0;
-  await Promise.all(
-    Array.from({ length: concurrency }, async () => {
-      while (next < jobs.length) {
-        const j = jobs[next++];
-        await spawnWorker(j, join(outDir, `${j.c.id.replace(/\//g, "__")}.${j.arm}.${j.m}.${j.r}.run.json`), String(flags["timeout-min"] ?? 30), j.c.attack ? null : judges, retries);
-      }
-    }),
-  );
+  // A case that falls back adds jobs after some workers may have finished, so drain until none are left.
+  while (next < jobs.length) {
+    await Promise.all(
+      Array.from({ length: concurrency }, async () => {
+        while (next < jobs.length) {
+          const j = jobs[next++];
+          await spawnWorker(j, outOf(j), String(flags["timeout-min"] ?? 30), j.c.attack ? null : judges, retries);
+          afterRun(j);
+        }
+      }),
+    );
+  }
+  if (probed.size) {
+    process.stdout.write(`Runs with no agent (the scripted arm and the negative cases): ${matched.length} of ${probed.size} cases matched byte for byte in ${probe} runs and stood for all ${repeats} repeats; ${fellBack.length} fell back to ${repeats}.\n`);
+    for (const f of fellBack) process.stdout.write(`FELL BACK ${f}\n`);
+  }
   const done = collect(outDir);
   // A run the API refused after every retry, or a judge call it refused, would leave a draw out of
   // the summary. The run fails, and no baseline is written from it.
