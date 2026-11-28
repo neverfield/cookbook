@@ -193,7 +193,9 @@ async function auditTrial(t: Trial): Promise<TrialRun> {
   rmSync(tmp, { recursive: true, force: true });
   mkdirSync(tmp, { recursive: true });
   const env: Record<string, string> = { SA_READINESS_EVAL_SEED: spec.seed, SA_READINESS_NOW: t.now ?? spec.now, SA_READINESS_RUNTIME: t.runtime, TMPDIR: tmp };
-  if (t.runtime === "none") env.PATH = noRuntimePath();
+  // A trial without a container runtime records host mode, wherever the trials run: the machine
+  // (a GitHub runner, a cloud VM) never proves Level 1 as a disposable one.
+  if (t.runtime === "none") Object.assign(env, { PATH: noRuntimePath(), SA_READINESS_VM_DETECT: "off" });
   // Copied into the repo and run from there, as the quickstart has a customer do, so the repo's
   // own package.json (such as "type": "commonjs") applies to the scripts.
   const skill = join(repo, ".cursor", "skills", "agent-readiness");
