@@ -55,6 +55,25 @@
           "instructionFailures": [],
           "blockingSafety": [],
           "headline": "Level 1 couldn't be proved for zustand because container runtimes were turned off for this audit. A rerun where Docker is available, such as CI, can prove it."
+        },
+        "host/disposable_vm": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": true,
+          "couldBe": 1,
+          "components": {
+            "zustand": {
+              "level": 0,
+              "unproven": true
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": [],
+          "headline": "Level 1 couldn't be proved for zustand on this machine. A rerun where Docker is available, such as CI, can prove it."
         }
       }
     },
@@ -677,6 +696,33 @@
           "instructionFailures": [],
           "blockingSafety": [],
           "headline": "Level 1 couldn't be proved for umami because container runtimes were turned off for this audit. A rerun where Docker is available, such as CI, can prove it."
+        },
+        "host/disposable_vm": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": true,
+          "couldBe": 1,
+          "components": {
+            "umami": {
+              "level": 0,
+              "unproven": true
+            },
+            "api-client": {
+              "level": 0,
+              "unproven": true
+            },
+            "mcp": {
+              "level": 0,
+              "unproven": true
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": [],
+          "headline": "Level 1 couldn't be proved for umami because this machine has no container runtime and a corepack that can run pnpm 12.23.0 is not installed on this machine. A rerun where Docker is available, such as CI, can prove it."
         }
       }
     },
@@ -830,7 +876,7 @@
       "minutes": 61.7,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-26T12:00:00Z",
-      "notes": "Yarn and Nx monorepo (11.18.0) of about 267 package.json files with nested AGENTS.md, 67 skill files and .cursor/environment.json. CI tests every packages/* SDK through the root Nx task graph, so they are members of the root; each dev-packages/* suite (e2e, node, browser and bundler integration tests) runs from its own folder and needs services or the network. Task-graph builds aren't supported yet. Its ceiling of 13 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
+      "notes": "Yarn and Nx monorepo (11.18.0) of about 267 package.json files with nested AGENTS.md, 67 skill files and .cursor/environment.json. CI tests every packages/* SDK through the root Nx task graph, so they are members of the root; each dev-packages/* suite (e2e, node, browser and bundler integration tests) runs from its own folder and needs services or the network. Task-graph builds aren't supported yet. Its ceiling of 11 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
       "tracking": {
         "R2": "unsupported feature: CI tests the SDKs through the root Nx task graph (test:ci:node, test:ci:browser; supported.md, task-graph), so the root gets test:scripts, and the e2e, bun, deno and browser-min-version suites get no command",
         "R3": "unsupported feature: the bun-integration-tests suite, which needs nothing beyond its install, isn't assessed inside the Nx task-graph monorepo"
@@ -839,7 +885,7 @@
         "registry.npmjs.org"
       ],
       "realInstructionFindings": [],
-      "falseInstructionFindings": 13,
+      "falseInstructionFindings": 11,
       "recorded": {
         "open": {
           "exit": 0,
@@ -871,7 +917,7 @@
               "unproven": false
             },
             "node-integration-tests": {
-              "level": null,
+              "level": 0,
               "unproven": false
             },
             "cloudflare": {
@@ -950,10 +996,8 @@
           ],
           "instructionFailures": [
             "CONTRIBUTING.md:28",
-            "CONTRIBUTING.md:105",
             "CONTRIBUTING.md:121",
             ".agents/skills/dotagents/SKILL.md:79",
-            ".agents/skills/e2e/SKILL.md:119",
             ".agents/skills/e2e/SKILL.md:119",
             ".agents/skills/track-framework-updates/SKILL.md:83",
             ".agents/skills/track-framework-updates/SKILL.md:116",
@@ -1146,7 +1190,7 @@
             "README.md:120"
           ],
           "blockingSafety": [],
-          "headline": "Jellyfin doesn't build from a clean checkout because /work/tests/Jellyfin.Server.Tests/Migrations/MigrateRatingLevelsTests.cs(229,201): error CS1061: 'MigrateRatingLevels' does not contain a definition for 'Perform' and no accessible extension method 'P."
+          "headline": "Jellyfin doesn't build from a clean checkout because /work/tests/Jellyfin.Server.Integration.Tests/Controllers/ConfigurationControllerTests.cs(67,26): error CS7036: There is no argument given that corresponds to the required parameter 'serverConfigurati."
         }
       }
     },
@@ -1159,6 +1203,10 @@
       "review": "trial-representativeness-review.md",
       "now": "2026-11-11T12:00:00Z",
       "notes": "System.CommandLine: Azure Pipelines CI, a NuGet.config that clears nuget.org for the public dnceng Azure Artifacts feeds, and a prerelease SDK pin (12.0.100-alpha) that only ./build.sh installs from ci.dot.net, so a stock SDK image can't satisfy global.json. eng/common is Arcade's vendored build scripts and is excluded.",
+      "tracking": {
+        "R2": "defect found by a new trial, fix pending: the Arcade test projects CI runs through ./build.sh --test (eng/common/cibuild.sh) aren't found, so the solution gets no test command (\"the audit couldn't tell how its tests run\")",
+        "R3": "defect found by a new trial, fix pending: with no test command for the Arcade test projects, the root stays undetermined instead of proven"
+      },
       "egress": [
         "pkgs.dev.azure.com",
         "ci.dot.net"
@@ -1173,10 +1221,10 @@
           "level": 0,
           "outcome": "proven",
           "unproven": false,
-          "couldBe": null,
+          "couldBe": 1,
           "components": {
             "System.CommandLine": {
-              "level": 0,
+              "level": null,
               "unproven": false
             }
           },
@@ -1185,7 +1233,7 @@
           ],
           "instructionFailures": [],
           "blockingSafety": [],
-          "headline": "System.CommandLine doesn't build from a clean checkout because /work/src/System.CommandLine.Benchmarks/Helpers/NullStreamWriter.cs(4,26): error CS0234: The type or namespace name 'IO' does not exist in the namespace 'System.CommandLine' (are you missing an assemb."
+          "headline": "Level 1 is undetermined for System.CommandLine: no check failed for a reason in the repo, but the audit couldn't tell how its tests run: it has 82 test files, and the audit found nothing that runs them."
         }
       }
     },
@@ -1320,9 +1368,7 @@
             ".agents/skills/seed-test-data/SKILL.md:53",
             ".agents/skills/turborepo/SKILL.md:951"
           ],
-          "blockingSafety": [
-            "secret web/src/features/ai-gateway/server/auth/ingestionTokenVerifier.servertest.ts:13"
-          ],
+          "blockingSafety": [],
           "headline": "Level 1 is undetermined for shared and web: no check failed for a reason in the repo, but the clean install hasn't run."
         }
       }
@@ -1550,10 +1596,7 @@
             ".agents/skills/airflow-java-sdk/SKILL.md:94",
             ".agents/skills/airflow-java-sdk/SKILL.md:100"
           ],
-          "blockingSafety": [
-            "secret chart/values.yaml:404",
-            "secret chart/values.yaml:405"
-          ],
+          "blockingSafety": [],
           "headline": "This read-only audit ran no repo code, so it gives no level yet. A local-exec audit can give one."
         }
       }
@@ -1922,7 +1965,7 @@
       "minutes": 19.1,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-03T12:00:00Z",
-      "notes": "Ruby gems (core, api, emails, dashboard, providers) each tested from its own folder, beside a pnpm and Turborepo workspace of JS packages tested through the root task graph. No Gemfile.lock or .ruby-version. The commit supported.md cites for task-graph builds, which aren't supported yet. Its ceiling of 38 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
+      "notes": "Ruby gems (core, api, emails, dashboard, providers) each tested from its own folder, beside a pnpm and Turborepo workspace of JS packages tested through the root task graph. No Gemfile.lock or .ruby-version. The commit supported.md cites for task-graph builds, which aren't supported yet. Its ceiling of 48 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
       "tracking": {
         "R1": "unsupported feature: the root is a pnpm and Turborepo task graph (supported.md, task-graph), and the Ruby gems under spree/, each with a gemspec and no Gemfile.lock, aren't discovered",
         "R2": "unsupported feature: the gems under spree/ aren't discovered, so none gets the rake or rspec command its CI job runs in its folder",
@@ -1934,7 +1977,7 @@
         "registry.npmjs.org"
       ],
       "realInstructionFindings": [],
-      "falseInstructionFindings": 38,
+      "falseInstructionFindings": 48,
       "recorded": {
         "open": {
           "exit": 0,
@@ -2024,12 +2067,22 @@
             "AGENTS.md:45",
             "AGENTS.md:48",
             "AGENTS.md:49",
+            "AGENTS.md:86",
+            "AGENTS.md:87",
+            "AGENTS.md:88",
+            "AGENTS.md:89",
+            "packages/AGENTS.md:3",
+            "packages/AGENTS.md:5",
             "packages/AGENTS.md:18",
             "packages/AGENTS.md:40",
             "packages/dashboard-starter/AGENTS.md:81",
+            "packages/dashboard-starter/AGENTS.md:82",
+            "packages/dashboard-starter/AGENTS.md:83",
             "packages/dashboard-starter/AGENTS.md:84",
             "packages/dashboard-starter/AGENTS.md:87",
             "packages/seller-dashboard-starter/AGENTS.md:89",
+            "packages/seller-dashboard-starter/AGENTS.md:90",
+            "packages/seller-dashboard-starter/AGENTS.md:91",
             "packages/seller-dashboard-starter/AGENTS.md:92",
             "packages/seller-dashboard-starter/AGENTS.md:95",
             "spree/AGENTS.md:81"
