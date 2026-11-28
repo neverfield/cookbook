@@ -1,5 +1,8 @@
+import { LANGUAGES } from "./languages/index.ts";
+import { mavenRoot } from "./languages/jvm.ts";
 import { CREDENTIAL_NAME } from "./patterns.ts";
 import type { Diagnosis } from "./types.ts";
+import { clip } from "./util.ts";
 
 const PORTS: Record<string, string> = {
   "5432": "Postgres",
@@ -32,39 +35,13 @@ export function serviceLabel(d: Diagnosis, unnamed: (port: string) => string): s
   return d.serviceNamed && d.service ? `${d.service} on port ${port}` : unnamed(port);
 }
 
-// The test totals a runner prints, so the report can say "82 of 82 tests" instead of "passed".
-// Covers node --test (tap and spec), bun test, vitest, jest, mocha, pytest and unittest; null when none match.
+// The test totals a runner prints, so the report can say "82 of 82 tests" instead of "passed", by the
+// language files' readers in registry order; null when none match.
 export function testCounts(output: string): { passed: number; failed: number; total: number } | null {
   const text = output.replace(/\x1b\[[0-9;]*m/g, "");
-  const num = (re: RegExp) => {
-    const all = [...text.matchAll(new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g"))];
-    return all.length ? Number(all[all.length - 1][1]) : null;
-  };
-  const nodePass = num(/^\s*[#\u2139] pass (\d+)\s*$/m);
-  if (nodePass !== null) {
-    const failed = num(/^\s*[#\u2139] fail (\d+)\s*$/m) ?? 0;
-    return { passed: nodePass, failed, total: num(/^\s*[#\u2139] tests (\d+)\s*$/m) ?? nodePass + failed };
-  }
-  const bunRan = num(/^Ran (\d+) tests? across \d+ files?\./m);
-  if (bunRan !== null) {
-    const failed = num(/^\s*(\d+) fail\s*$/m) ?? 0;
-    return { passed: num(/^\s*(\d+) pass\s*$/m) ?? bunRan - failed, failed, total: bunRan };
-  }
-  const vitest = [...text.matchAll(/Tests\s+(?:(\d+) failed \|\s*)?(\d+) passed[^(\n]*\((\d+)\)/g)].pop();
-  if (vitest) return { passed: Number(vitest[2]), failed: Number(vitest[1] ?? 0), total: Number(vitest[3]) };
-  const jest = [...text.matchAll(/Tests:\s+(?:(\d+) failed, )?(?:\d+ skipped, )?(?:\d+ todo, )?(\d+) passed, (\d+) total/g)].pop();
-  if (jest) return { passed: Number(jest[2]), failed: Number(jest[1] ?? 0), total: Number(jest[3]) };
-  const mochaPass = num(/^\s*(\d+) passing\b/m);
-  if (mochaPass !== null) {
-    const failed = num(/^\s*(\d+) failing\b/m) ?? 0;
-    return { passed: mochaPass, failed, total: mochaPass + failed };
-  }
-  const pytest = [...text.matchAll(/(?:(\d+) failed, )?(\d+) passed(?:, \d+ \w+)* in [\d.]+s/g)].pop();
-  if (pytest) return { passed: Number(pytest[2]), failed: Number(pytest[1] ?? 0), total: Number(pytest[2]) + Number(pytest[1] ?? 0) };
-  const ran = num(/^Ran (\d+) tests? in /m);
-  if (ran !== null) {
-    const failed = (num(/FAILED \((?:failures=(\d+))/m) ?? 0) + (num(/FAILED \([^)]*errors=(\d+)/m) ?? 0);
-    return { passed: ran - failed, failed, total: ran };
+  for (const l of LANGUAGES) {
+    const counts = l.output?.testCounts?.(text);
+    if (counts) return counts;
   }
   return null;
 }
@@ -366,92 +343,15 @@ function withoutMavenWarnings(text: string): string {
   return text.replace(/^\[WARNING\][^\n]*(?:\n\t[^\n]*)*\n?/gm, "");
 }
 
-// Cut at a word boundary, so a message never ends mid-URL.
-function clip(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const cut = text.slice(0, max);
-  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), max / 2)).replace(/[\s,;:]+$/, "")} …`;
-}
-
-// Lines PHPStan decorates with an emoji (its identifier and tip lines); the report never shows one.
-const PICTOGRAPH = /\p{Extended_Pictographic}/u;
-
 // The error a build tool reports as the cause, rather than its closing lines ("mvn <args> -rf
 // :module", "BUILD FAILED in 4m 17s", "[ERROR] Found 1 error"): Maven's "Failed to execute goal"
 // block, Gradle's "What went wrong", Composer's problem list and PHPStan's error table. Null when the
 // output has none of them.
 export function rootError(output: string): string | null {
   const text = output.replace(/\x1b\[[0-9;]*m/g, "");
-  return mavenRoot(text) ?? gradleRoot(text) ?? composerRoot(text) ?? phpstanRoot(text);
-}
-
-const MAVEN_GENERIC = /^(Compilation failure|There are test failures\.?|There was an error in the forked process|)$/;
-const MAVEN_BOILERPLATE = /^(-> \[Help \d+\]|To see the full stack trace|Re-run Maven using|For more information about the errors|\[Help \d+\]|After correcting the problems|mvn <args>|Please refer to )/;
-
-function mavenRoot(text: string): string | null {
-  const lines = text.split("\n");
-  const at = lines.findIndex((l) => /^\[ERROR\] Failed to execute goal /.test(l));
-  if (at < 0) return null;
-  const m = lines[at].match(/^\[ERROR\] Failed to execute goal (?:[\w.-]+:([\w.-]+):[\w.-]+:([\w-]+) \([^)]*\) )?on project ([\w.-]+):\s*(.*?)\s*(?:-> \[Help \d+\])?\s*$/);
-  if (!m) return null;
-  const [, artifact, goal, project, message] = m;
-  const step = artifact && goal ? `${artifact.replace(/^maven-/, "").replace(/(-maven)?-plugin$/, "")}:${goal}` : "the build";
-  const rest: string[] = [];
-  for (const l of lines.slice(at + 1)) {
-    if (!l.startsWith("[ERROR]")) break;
-    const body = l.replace(/^\[ERROR\]\s?/, "").trim();
-    if (/^(-> \[Help \d+\]|To see the full stack trace)/.test(body)) break;
-    if (body && !MAVEN_BOILERPLATE.test(body)) rest.push(body);
-  }
-  const compile = rest.find((l) => /\S+\.(java|kt|groovy|scala):\[\d+,\d+\]/.test(l));
-  const thrown = rest.find((l) => /^(?:[a-z][\w$]*\.)+[A-Z][\w$]*(?:Error|Exception)\b/.test(l));
-  const said = message.endsWith(":") ? `${message} ${rest[0] ?? ""}`.trim() : MAVEN_GENERIC.test(message) ? (compile ?? thrown ?? rest[0] ?? message) : message;
-  return clip(`${step} failed in module ${project}: ${said || "no message"}`, 240);
-}
-
-function gradleRoot(text: string): string | null {
-  const block = text.match(/^\* What went wrong:\n([\s\S]*?)(?=\n\* (?:Try|Where|Exception is):|\n\n|(?![\s\S]))/m)?.[1];
-  if (!block) return null;
-  const lines = block.split("\n").map((l) => l.trim()).filter((l) => l && !/^Required by:|^(project|root project) [:']/.test(l));
-  const head = lines[0]?.replace(/^>\s*/, "");
-  if (!head) return null;
-  const deepest = [...lines].reverse().find((l) => l.startsWith(">"))?.replace(/^>\s*/, "");
-  const first = (s: string) => s.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? s;
-  const said = deepest && first(deepest) !== first(head) ? `${first(head).replace(/\.$/, "")}: ${first(deepest)}` : first(head);
-  return clip(said, 240);
-}
-
-function composerRoot(text: string): string | null {
-  const problems = [...text.matchAll(/^\s*Problem \d+\s*\n((?:\s+- [^\n]*\n?)+)/gm)];
-  if (!problems.length) return null;
-  const bullets = problems[0][1].split("\n").map((l) => l.trim().replace(/^- /, "")).filter(Boolean);
-  const last = bullets[bullets.length - 1].replace(/ from composer repo \([^)]*\)/g, "").replace(/\s*See https?:\/\/\S+ for [^.]*\.?$/, "").trim();
-  const more = problems.length > 1 ? ` (and ${problems.length - 1} more ${problems.length === 2 ? "problem" : "problems"})` : "";
-  return `${clip(last, 260)}${more}`;
-}
-
-function phpstanRoot(text: string): string | null {
-  const found = text.match(/\[ERROR\] Found (\d+) errors?/);
-  if (!found) return null;
-  const lines = text.split("\n");
-  const sep = /^\s*-{2,}(\s+-{2,})+\s*$/;
-  for (let i = 0; i < lines.length; i++) {
-    const head = lines[i].match(/^\s*(Line|Error)\s+(\S.*?)?\s*$/);
-    if (!head || !sep.test(lines[i + 1] ?? "")) continue;
-    const file = head[1] === "Line" ? head[2] : undefined;
-    const parts: string[] = [];
-    let line: string | undefined;
-    for (let j = i + 2; j < lines.length && !sep.test(lines[j]); j++) {
-      const row = lines[j].match(/^\s*(:?\d+)?\s{2,}(\S.*?)\s*$/) ?? lines[j].match(/^\s*()(\S.*?)\s*$/);
-      if (!row || PICTOGRAPH.test(lines[j])) continue;
-      if (row[1] && parts.length) break;
-      if (row[1]) line = row[1].replace(/^:/, "");
-      parts.push(row[2]);
-    }
-    if (!parts.length) continue;
-    const n = Number(found[1]);
-    const where = file ? ` in ${file}${line ? `:${line}` : ""}` : "";
-    return clip(`${n === 1 ? `PHPStan found 1 error${where}` : `PHPStan found ${n} errors; the first${where}`}: ${parts.join(" ")}`, 260);
+  for (const l of LANGUAGES) for (const read of l.output?.rootErrors ?? []) {
+    const root = read(text);
+    if (root) return root;
   }
   return null;
 }

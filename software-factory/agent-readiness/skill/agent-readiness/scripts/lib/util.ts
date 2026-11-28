@@ -412,3 +412,16 @@ export function inTreePath(tree: string, file: string): string | null {
     return null;
   }
 }
+
+// Cut at a word boundary, so a message never ends mid-URL.
+export function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), max / 2)).replace(/[\s,;:]+$/, "")} …`;
+}
+
+// The number the last match of `re` captures, or null.
+export function lastNumber(text: string, re: RegExp): number | null {
+  const all = [...text.matchAll(new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g"))];
+  return all.length ? Number(all[all.length - 1][1]) : null;
+}

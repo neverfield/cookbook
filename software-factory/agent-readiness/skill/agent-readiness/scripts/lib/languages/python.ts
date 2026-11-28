@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Component, ContractCommand, Profile } from "../types.ts";
-import { exists, readText, shellQuote, workspaceDirs } from "../util.ts";
+import { exists, lastNumber, readText, shellQuote, workspaceDirs } from "../util.ts";
 import { quotedLines, sitesForLine } from "./fault-sites.ts";
 import { importedFiles, plantable, reachingTests } from "./imports.ts";
 import type { ContractContext, Ecosystem, LanguageDef } from "./language.ts";
@@ -190,6 +190,19 @@ function pythonCommands(tree: string, c: Component, ctx: ContractContext): Contr
   return test ? [{ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: c.path, command: test, source: c.manifest ?? "readiness", reason: "discovered test runner", timeoutSec: ctx.timeoutSec, tier: "convention", confidence: "derived" }] : [];
 }
 
+// pytest and unittest.
+function pythonTestCounts(text: string): { passed: number; failed: number; total: number } | null {
+  const num = (re: RegExp) => lastNumber(text, re);
+  const pytest = [...text.matchAll(/(?:(\d+) failed, )?(\d+) passed(?:, \d+ \w+)* in [\d.]+s/g)].pop();
+  if (pytest) return { passed: Number(pytest[2]), failed: Number(pytest[1] ?? 0), total: Number(pytest[2]) + Number(pytest[1] ?? 0) };
+  const ran = num(/^Ran (\d+) tests? in /m);
+  if (ran !== null) {
+    const failed = (num(/FAILED \((?:failures=(\d+))/m) ?? 0) + (num(/FAILED \([^)]*errors=(\d+)/m) ?? 0);
+    return { passed: ran - failed, failed, total: ran };
+  }
+  return null;
+}
+
 const isPyTest = (f: string) => f.endsWith(".py") && isTestFile(f);
 
 export const python: LanguageDef = {
@@ -256,4 +269,5 @@ export const python: LanguageDef = {
     // Python components in the Node image, as with --image, need the venv module it lacks.
     foreignImage: (image) => (image.startsWith("node:") ? { command: "python3 -m venv /tmp/venv-probe >/dev/null 2>&1 || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv >/dev/null)", added: "Added python3-venv to the Node image for the Python components.", failed: "Couldn't add python3-venv for the Python components" } : null),
   },
+  output: { testCounts: pythonTestCounts },
 };

@@ -9,7 +9,7 @@ import type { Site } from "../mutate.ts";
 import type { CiCommand } from "../plan/ci.ts";
 import type { Rubric } from "../rubric.ts";
 import type { Stack } from "../support.ts";
-import type { CommandKind, Component, ContractCommand, Language, PackageManager, Profile } from "../types.ts";
+import type { CommandKind, Component, ContractCommand, Diagnosis, Language, PackageManager, Profile } from "../types.ts";
 
 // A frozen install, or the closest the folder allows, and why.
 export interface InstallPlan {
@@ -160,6 +160,9 @@ export interface ReplayHooks {
   // report says how many passed. Omitted: the runners diagnose.ts knows.
   testCounts?(output: string): { passed: number; failed: number; total: number } | null;
   setup?(tree: string, dir: string): ToolSetup[];
+  // The `spec` of the setup tool a diagnosis names as missing, such as `dotnet-sdk@10.0.100` for
+  // ".NET SDK 10.0.100", so a blocked result says the audit couldn't add it. Omitted: the tool's name.
+  specFor?(tool: string): string | null;
   // Toolchains the build needs beside the image's own, copied in from other pinned images.
   toolchains?(tree: string, dir: string): ToolchainCopy[];
   budget?: ToolchainBudget;
@@ -275,4 +278,20 @@ export interface LanguageDef {
   mutation: MutationHooks | null;
   replay?: ReplayHooks;
   sharedRoot?: SharedRootHooks;
+  // Outside a container: a toolchain on this machine older than the committed files need, which is
+  // the machine's limit. `probe` prints the version, and `gap` reads it against the folder a failed
+  // command ran in. Omitted: not checked.
+  hostGap?: { probe: string; gap(root: string, cwd: string, version: string): Diagnosis | null };
+  // What this language's tools print, read from a failed or finished command's output whatever
+  // component ran it: diagnose.ts asks every language in registry order. Omitted: none.
+  output?: OutputReaders;
+}
+
+export interface OutputReaders {
+  // The totals a test runner prints, from output with its colour codes removed. A hooked language
+  // reads its own components' runs with `replay.testCounts`; these read every other run.
+  testCounts?(text: string): { passed: number; failed: number; total: number } | null;
+  // The error a build tool reports as the cause rather than its closing lines, such as Maven's
+  // "Failed to execute goal" block, each tried in turn.
+  rootErrors?: ((text: string) => string | null)[];
 }

@@ -1,6 +1,6 @@
 import { basename, join } from "node:path";
 import type { Site } from "../mutate.ts";
-import { exists, listFiles, readText } from "../util.ts";
+import { clip, exists, listFiles, readText } from "../util.ts";
 import { inComponent, namedAfter } from "./coverage.ts";
 import type { DraftCommand, Ecosystem, LanguageDef } from "./language.ts";
 
@@ -563,6 +563,43 @@ const IMAGES: Record<string, string> = {
   "gradle:9-jdk25": "sha256:39d599d8df1777d73b00b5bf928254ecd121802d518577fe08d41a3cf86aa45f",
 };
 
+// Maven's "Failed to execute goal" block and Gradle's "What went wrong", as the build's cause.
+const MAVEN_GENERIC = /^(Compilation failure|There are test failures\.?|There was an error in the forked process|)$/;
+const MAVEN_BOILERPLATE = /^(-> \[Help \d+\]|To see the full stack trace|Re-run Maven using|For more information about the errors|\[Help \d+\]|After correcting the problems|mvn <args>|Please refer to )/;
+
+export function mavenRoot(text: string): string | null {
+  const lines = text.split("\n");
+  const at = lines.findIndex((l) => /^\[ERROR\] Failed to execute goal /.test(l));
+  if (at < 0) return null;
+  const m = lines[at].match(/^\[ERROR\] Failed to execute goal (?:[\w.-]+:([\w.-]+):[\w.-]+:([\w-]+) \([^)]*\) )?on project ([\w.-]+):\s*(.*?)\s*(?:-> \[Help \d+\])?\s*$/);
+  if (!m) return null;
+  const [, artifact, goal, project, message] = m;
+  const step = artifact && goal ? `${artifact.replace(/^maven-/, "").replace(/(-maven)?-plugin$/, "")}:${goal}` : "the build";
+  const rest: string[] = [];
+  for (const l of lines.slice(at + 1)) {
+    if (!l.startsWith("[ERROR]")) break;
+    const body = l.replace(/^\[ERROR\]\s?/, "").trim();
+    if (/^(-> \[Help \d+\]|To see the full stack trace)/.test(body)) break;
+    if (body && !MAVEN_BOILERPLATE.test(body)) rest.push(body);
+  }
+  const compile = rest.find((l) => /\S+\.(java|kt|groovy|scala):\[\d+,\d+\]/.test(l));
+  const thrown = rest.find((l) => /^(?:[a-z][\w$]*\.)+[A-Z][\w$]*(?:Error|Exception)\b/.test(l));
+  const said = message.endsWith(":") ? `${message} ${rest[0] ?? ""}`.trim() : MAVEN_GENERIC.test(message) ? (compile ?? thrown ?? rest[0] ?? message) : message;
+  return clip(`${step} failed in module ${project}: ${said || "no message"}`, 240);
+}
+
+function gradleRoot(text: string): string | null {
+  const block = text.match(/^\* What went wrong:\n([\s\S]*?)(?=\n\* (?:Try|Where|Exception is):|\n\n|(?![\s\S]))/m)?.[1];
+  if (!block) return null;
+  const lines = block.split("\n").map((l) => l.trim()).filter((l) => l && !/^Required by:|^(project|root project) [:']/.test(l));
+  const head = lines[0]?.replace(/^>\s*/, "");
+  if (!head) return null;
+  const deepest = [...lines].reverse().find((l) => l.startsWith(">"))?.replace(/^>\s*/, "");
+  const first = (s: string) => s.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? s;
+  const said = deepest && first(deepest) !== first(head) ? `${first(head).replace(/\.$/, "")}: ${first(deepest)}` : first(head);
+  return clip(said, 240);
+}
+
 export const jvm: LanguageDef = {
   id: "jvm",
   label: "JVM",
@@ -644,4 +681,5 @@ export const jvm: LanguageDef = {
     testCounts: jvmTestCounts,
     budget: { commandTimeoutSec: 1200, componentMinutes: 45, mutationRunTimeoutSec: 900 },
   },
+  output: { rootErrors: [mavenRoot, gradleRoot] },
 };

@@ -14,6 +14,7 @@ import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
 import { LANGUAGES, codesOfTool, ecosystemOf, languageOf } from "./languages/index.ts";
 import { lockedEngineGap } from "./languages/node.ts";
+import { typecheckProbe } from "./languages/probes.ts";
 import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary } from "./mutate.ts";
 import { typecheckProbe } from "./languages/probes.ts";
 import { Progress, budgetSummary } from "./progress.ts";
@@ -447,17 +448,22 @@ export async function runContract(
     if (failedInstalls.has(cmd.component) && !rescued.has(cmd.component)) return true;
     return failedInstalls.has("*") && !rescued.has(cmd.component) && !rescued.has("*");
   };
-  // Outside a container the repo's commands run on this machine's Node. One older than a locked
-  // dependency's engines.node allows, as undici 8 needs 22.19 where the machine has 22.14, is a
-  // limit of the machine: the same lockfile passes in an image with a Node it supports.
-  let hostNode: string | null | undefined;
+  // Outside a container the repo's commands run on this machine's toolchains. One older than the
+  // locked dependencies allow is a limit of the machine, by the language files that check it; each
+  // asks this machine for its version once.
+  const hostVersions = new Map<string, string | null>();
   const hostEngineGap = async (cwd: string): Promise<Diagnosis | null> => {
-    if (hostNode === undefined) {
-      const v = await ex.exec("node --version", ".", 30);
-      hostNode = v.exitCode === 0 ? (v.output.trim().split("\n").pop() ?? null) : null;
+    for (const l of LANGUAGES) {
+      if (!l.hostGap) continue;
+      if (!hostVersions.has(l.id)) {
+        const v = await ex.exec(l.hostGap.probe, ".", 30);
+        hostVersions.set(l.id, v.exitCode === 0 ? (v.output.trim().split("\n").pop() ?? null) : null);
+      }
+      const version = hostVersions.get(l.id);
+      const gap = version ? l.hostGap.gap(ex.root, cwd, version) : null;
+      if (gap) return gap;
     }
-    const gap = hostNode ? lockedEngineGap(ex.root, cwd, hostNode) : null;
-    return gap ? { cause: "missing_tool", detail: `Node ${gap.range}, which the locked ${gap.pkg} needs, is not installed; Node ${hostNode} is` } : null;
+    return null;
   };
   const attempt = async (cmd: ContractCommand): Promise<PhaseResult | null> => {
     if (cmd.fallbackFor && (ex.unavailable || !blockedIds.has(cmd.fallbackFor))) return null;
@@ -1590,7 +1596,7 @@ async function replayIn(audit: Audit, repo: string, tree: string, rubric: Rubric
     }
     if (r.blocked && r.diagnosis?.cause === "missing_tool" && rex.where === "container") {
       const tool = r.diagnosis.detail.replace(/ is not installed$/, "");
-      const failed = audit.environment.tools?.find((t) => !t.added && (t.spec.split(/[@=]/)[0] === tool || t.spec === tool.replace(/^\.NET SDK /, "dotnet-sdk@")));
+      const failed = audit.environment.tools?.find((t) => !t.added && (t.spec.split(/[@=]/)[0] === tool || t.spec === tool || LANGUAGES.some((l) => l.replay?.specFor?.(tool) === t.spec)));
       if (failed) r.blocked += `: the audit couldn't add ${failed.spec} to it on this machine`;
     }
     const ev = evidenceFromPhase(audit, rex, r, registryValues);

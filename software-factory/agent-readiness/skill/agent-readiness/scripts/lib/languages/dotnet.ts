@@ -406,6 +406,7 @@ export const dotnet: LanguageDef = {
     // A global.json that pins a feature band the image doesn't ship, such as 10.0.100 under the
     // default `patch` policy next to the image's 10.0.404, gets that exact SDK added from Microsoft's
     // install script, as a CI's setup-dotnet would. Where that can't be fetched the install is blocked.
+    specFor: (tool) => (tool.startsWith(".NET SDK ") ? tool.replace(/^\.NET SDK /, "dotnet-sdk@") : null),
     setup: (tree, dir) => {
       const out: ToolSetup[] = [];
       const pin = sdkPin(tree, dir);

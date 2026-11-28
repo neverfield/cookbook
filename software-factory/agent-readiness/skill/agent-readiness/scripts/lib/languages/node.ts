@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import type { Component, ContractCommand, PackageManager } from "../types.ts";
-import { exists, listFiles, readJson, readText, shellQuote } from "../util.ts";
+import { exists, lastNumber, listFiles, readJson, readText, shellQuote } from "../util.ts";
 import { quotedLines, sitesForLine } from "./fault-sites.ts";
 import { importedFiles, plantable, reachingTests } from "./imports.ts";
 import type { ContractContext, Ecosystem, LanguageDef, ToolSetup } from "./language.ts";
@@ -326,6 +326,31 @@ function nodeSetup(tree: string, pms: Map<PackageManager, string>, homeDir: stri
   return out;
 }
 
+// node --test (tap and spec), bun test, vitest, jest and mocha.
+function nodeTestCounts(text: string): { passed: number; failed: number; total: number } | null {
+  const num = (re: RegExp) => lastNumber(text, re);
+  const nodePass = num(/^\s*[#\u2139] pass (\d+)\s*$/m);
+  if (nodePass !== null) {
+    const failed = num(/^\s*[#\u2139] fail (\d+)\s*$/m) ?? 0;
+    return { passed: nodePass, failed, total: num(/^\s*[#\u2139] tests (\d+)\s*$/m) ?? nodePass + failed };
+  }
+  const bunRan = num(/^Ran (\d+) tests? across \d+ files?\./m);
+  if (bunRan !== null) {
+    const failed = num(/^\s*(\d+) fail\s*$/m) ?? 0;
+    return { passed: num(/^\s*(\d+) pass\s*$/m) ?? bunRan - failed, failed, total: bunRan };
+  }
+  const vitest = [...text.matchAll(/Tests\s+(?:(\d+) failed \|\s*)?(\d+) passed[^(\n]*\((\d+)\)/g)].pop();
+  if (vitest) return { passed: Number(vitest[2]), failed: Number(vitest[1] ?? 0), total: Number(vitest[3]) };
+  const jest = [...text.matchAll(/Tests:\s+(?:(\d+) failed, )?(?:\d+ skipped, )?(?:\d+ todo, )?(\d+) passed, (\d+) total/g)].pop();
+  if (jest) return { passed: Number(jest[2]), failed: Number(jest[1] ?? 0), total: Number(jest[3]) };
+  const mochaPass = num(/^\s*(\d+) passing\b/m);
+  if (mochaPass !== null) {
+    const failed = num(/^\s*(\d+) failing\b/m) ?? 0;
+    return { passed: mochaPass, failed, total: mochaPass + failed };
+  }
+  return null;
+}
+
 const nodeCode = (c: Component) => c.language === "ts" || c.language === "js";
 
 const JS_TEST = /\.(ts|tsx|js|mjs|cjs|mts|cts)$/;
@@ -408,5 +433,15 @@ export const node: LanguageDef = {
       return { id: `cmd-${comp.id}-test`, kind: "test", component: comp.id, cwd: ".", command: scopedRun(ctx.profile.packageManager, root.script, comp.path), source: `package.json scripts.${root.script}`, reason: `the root ${root.runner} run, scoped to ${comp.path}`, timeoutSec: ctx.timeoutSec, tier: "manifest", confidence: "derived" };
     },
     fallback: { doctor: "node --version" },
+  },
+  // One older than a locked dependency's engines.node allows, as undici 8 needs 22.19 where the
+  // machine has 22.14: the same lockfile passes in an image with a Node it supports.
+  output: { testCounts: nodeTestCounts },
+  hostGap: {
+    probe: "node --version",
+    gap: (root, cwd, version) => {
+      const gap = lockedEngineGap(root, cwd, version);
+      return gap ? { cause: "missing_tool", detail: `Node ${gap.range}, which the locked ${gap.pkg} needs, is not installed; Node ${version} is` } : null;
+    },
   },
 };
