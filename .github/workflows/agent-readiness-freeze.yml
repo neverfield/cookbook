@@ -1,12 +1,12 @@
 name: agent-readiness instrument freeze
 
-# A pull request may change the accelerator's scripts or the instrument that measures them, not both
-# (support/tools/instrument-freeze.ts). Its own workflow, so editing the description to add an
-# exception reruns this check alone.
+# A pull request may change the accelerator's scripts or the instrument that measures them, not both,
+# and may not assert less without saying why (support/tools/instrument-freeze.ts). Its own workflow,
+# so editing the description to add an exception reruns this check alone.
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    paths: ["software-factory/agent-readiness/**"]
+    paths: ["software-factory/agent-readiness/**", ".github/workflows/agent-readiness*.yml"]
 
 permissions:
   contents: read
@@ -31,7 +31,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: software-factory/agent-readiness/.nvmrc
-      - name: Instrument freeze
+      # The base's copy decides, so a PR can't loosen the rules it is judged by. A base from before
+      # the ledger has no copy that prints it, so this PR's copy runs once, until it lands.
+      - name: Instrument freeze and assertion ledger
         env:
           SA_PR_BODY: ${{ github.event.pull_request.body }}
-        run: node --experimental-strip-types --no-warnings support/tools/instrument-freeze.ts --base "origin/${{ github.base_ref }}" --head HEAD
+        run: |
+          tool="$RUNNER_TEMP/instrument-freeze.ts"
+          git show "origin/${{ github.base_ref }}:software-factory/agent-readiness/support/tools/instrument-freeze.ts" > "$tool"
+          if ! grep -q "ledgerOf" "$tool"; then
+            echo "The base's instrument-freeze.ts has no assertion ledger yet; running this pull request's copy."
+            tool=support/tools/instrument-freeze.ts
+          fi
+          node --experimental-strip-types --no-warnings "$tool" --base "origin/${{ github.base_ref }}" --head HEAD
