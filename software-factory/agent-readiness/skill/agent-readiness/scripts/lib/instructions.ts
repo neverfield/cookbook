@@ -76,7 +76,7 @@ export function instructionKey(text: string, tree: string, cwd: string): string 
 
 // `make test` whose recipe is one command is that command, so its result is the check's too.
 function throughMake(text: string, tree: string, cwd: string): string {
-  const target = text.trim().match(/^make\s+([\w.-]+)\s*$/)?.[1];
+  const target = text.trim().match(/^make\s+([\w./-]+)\s*$/)?.[1];
   if (!target) return text;
   const lines = makeRecipe(tree, cwd, target).split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
   return lines.length === 1 ? lines[0] : text;

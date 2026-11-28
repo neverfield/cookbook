@@ -582,6 +582,7 @@ export const jvm: LanguageDef = {
     manifests: [{ match: /^(pom\.xml|build\.gradle(\.kts)?)$/, stack: "jvm", rank: 40 }],
     sources: [{ ext: /\.(java|kt|scala)$/, stack: "jvm", rank: 40 }],
     rootApp: { names: ["pom.xml", "build.gradle", "build.gradle.kts"], stack: "jvm", toolchain: "JVM", suffix: "jvm", rank: 50 },
+    runners: /(^|[\s/])(gradlew?|mvnw?)\s+(\S+\s+)*(test|check|verify|package)\b/,
     lockfiles: ["gradle.lockfile"],
     projectName: (tree, manifest, text) => {
       // The project's own artifactId, not its parent's, such as spring-boot-starter-parent.

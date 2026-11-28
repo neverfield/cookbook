@@ -302,6 +302,9 @@ export const dotnet: LanguageDef = {
       { match: PROJECT, stack: "dotnet", rank: 11 },
     ],
     sources: [{ ext: /\.(cs|fs)$/, stack: "dotnet", rank: 50 }],
+    // A solution at the root next to a root package.json, such as a Playwright harness beside it.
+    rootApp: { names: [], match: SOLUTION, stack: "dotnet", toolchain: ".NET", suffix: "dotnet", rank: 60 },
+    runners: /\bdotnet\s+test\b/,
     lockfiles: ["packages.lock.json"],
     // Several solutions in one folder name the project only when one matches the repo, so ShareX
     // isn't named after ShareX.ImageEditor.sln.
@@ -329,6 +332,9 @@ export const dotnet: LanguageDef = {
       });
     },
     notes: (tree, dir, stackId) => (stackId === "dotnet-windows" ? windowsNotes(tree, dir) : []),
+    // A folder with a solution of its own, such as a MAUI client's, is built from that solution, apart
+    // from the enclosing one, even when the enclosing solution lists its projects too.
+    ownUnit: (tree, _parent, dir) => readdirSync(join(tree, dir)).some((n) => SOLUTION.test(n)),
   },
   ecosystems: [nuget],
   replay: {

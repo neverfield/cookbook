@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import { isAbsolute, join, normalize } from "node:path";
 import { DEFAULT_NODE, NODE_MAJORS } from "./images.ts";
 import { ecosystemOf, languageOf } from "./languages/index.ts";
@@ -50,10 +51,24 @@ function pythonTest(tree: string, path: string, pm: Profile["packageManager"], w
   // A workspace member runs the root's pytest when the root declares it.
   const dirs = workspaceMember ? [dir, tree] : [dir];
   const reqs = dirs.flatMap((d) => ["requirements.txt", "requirements-dev.txt", "pyproject.toml"].map((f) => (exists(join(d, f)) ? readText(join(d, f)) : ""))).join("\n");
-  if (/pytest/.test(reqs) || dirs.some((d) => exists(join(d, "pytest.ini")) || exists(join(d, "conftest.py")))) return `${python} -m pytest -q`;
+  if (PYTEST_DECLARED.test(reqs) || dirs.some((d) => exists(join(d, "pytest.ini")) || exists(join(d, "conftest.py")))) return `${python} -m pytest -q`;
+  const project = djangoProject(dir);
+  if (project === ".") return `${python} manage.py test`;
+  if (project) return `${python} ${project}/manage.py test ${project}/`;
   if (pm === "pip" && toxRuns(dir)) return `${python} -m tox`;
   if (exists(join(dir, "tests"))) return `${python} -m unittest discover -s tests -t .`;
   return null;
+}
+
+// pytest as a dependency or its config table, not a word such as `.pytest_cache` in an exclude list.
+const PYTEST_DECLARED = /(?<![\w.-])pytest(?:-[\w-]+)?(?!\w)|^\[tool\.pytest\b/m;
+
+// The folder of a Django project's manage.py: the component's own, or the one folder below it that
+// holds the project, as netbox/manage.py does. Django's own runner runs its tests.
+function djangoProject(dir: string): string | null {
+  if (exists(join(dir, "manage.py"))) return ".";
+  const below = readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && exists(join(dir, d.name, "manage.py")));
+  return below.length === 1 ? below[0].name : null;
 }
 
 // The toolchains a set of Node and Python components use; a hooked component's language file
@@ -348,11 +363,11 @@ function escapes(path: string): boolean {
 
 // Explicit targets and pattern rules such as `test-%`, but not `VAR := value`.
 export function makeTargets(text: string | null): string[] {
-  return text ? [...text.matchAll(/^([\w.%-]+)\s*:(?!=)/gm)].map((m) => m[1]) : [];
+  return text ? [...text.matchAll(/^([\w.%/-]+)\s*:(?!=)/gm)].map((m) => m[1]) : [];
 }
 
 const TEST_RUN = /\b(npm|pnpm|yarn|bun)\s+(run\s+)?test[\w:.-]*|\b(pytest|vitest|jest|mocha|tox|nox|phpunit|rspec)\b|\b(go|cargo|dotnet|mix)\s+test\b|\bnode\s+--test\b|\bpython3?\s+-m\s+(pytest|unittest)\b/;
-const MAKE_CALL = /(?:\$\(MAKE\)|\$\{MAKE\}|\bmake)\s+(?:-\S+\s+)*([\w.-]+)/g;
+const MAKE_CALL = /(?:\$\(MAKE\)|\$\{MAKE\}|\bmake)\s+(?:-\S+\s+)*([\w./-]+)/g;
 
 // The Make target that runs the tests, as `make test` does when its recipe, or a target it depends on
 // or calls with $(MAKE), runs a test runner. With the line of the target, for the contract's source.
@@ -362,7 +377,7 @@ export function makeTestTarget(text: string | null): { target: string; line: num
   const rules = new Map<string, { line: number; deps: string[]; recipe: string[] }>();
   let current: { line: number; deps: string[]; recipe: string[] } | null = null;
   lines.forEach((l, i) => {
-    const head = l.match(/^([\w.-]+(?:\s+[\w.-]+)*)\s*:(?!=)(.*)$/);
+    const head = l.match(/^([\w./-]+(?:\s+[\w./-]+)*)\s*:(?!=)(.*)$/);
     if (head) {
       current = { line: i + 1, deps: head[2].replace(/[|;].*$/, "").trim().split(/\s+/).filter(Boolean), recipe: head[2].includes(";") ? [head[2].split(";").slice(1).join(";")] : [] };
       for (const t of head[1].split(/\s+/)) if (!rules.has(t)) rules.set(t, current);
@@ -431,7 +446,7 @@ function checkSource(read: CommitReader, profile: Profile, input: { component: s
   if (CHAINED.test(command)) fail(`\`${command}\` chains commands; add each one the repo defines on its own, citing where with --source file:line.`);
   if (script && !BARE_SCRIPT.test(command)) fail(`\`${command}\` passes extra arguments to the ${script} script; add the script as the repo defines it.`);
   const comp = profile.components.find((c) => c.id === input.component);
-  const make = command.match(/^make\s+([\w.-]+)$/);
+  const make = command.match(/^make\s+([\w./-]+)$/);
   if (script && (comp?.scripts[script] || profile.components.some((c) => c.path === input.cwd && c.scripts[script]))) return;
   if (make && makeRuleFor(makeTargets(read(join(input.cwd, "Makefile"))), make[1])) return;
   fail(`\`${command}\` doesn't run a script or Make target the repo defines. Add only commands the repo defines, and cite where with --source file:line.`);
@@ -485,6 +500,9 @@ function assessedManagers(profile: Profile, only?: Set<string>): Map<string, str
   return out;
 }
 
+// The Corepack release on npm on Nov 27, 2026.
+const COREPACK = "corepack@0.36.0";
+
 // Tools a frozen install needs that the audit's base images don't ship: Bun in the Node image and
 // Poetry in the Python one, and whatever a language file's setup adds. Each goes in at the version
 // the repo pins, as the image's own user and with the network on, before the install runs. Without
@@ -499,6 +517,9 @@ export function toolSetup(profile: Profile, tree: string, only?: Set<string>): T
     const spec = `bun@${pin ?? "1"}`;
     out.push({ tool: "bun", spec, install: `npm install -g --silent --no-fund --no-audit ${shellQuote(spec)}` });
   }
+  // Node 25 and later ship without Corepack, which runs the pinned pnpm or Yarn, so it's added where
+  // the image lacks it.
+  if (pms.has("pnpm") || pms.has("yarn")) out.push({ tool: "corepack", spec: COREPACK, install: `npm install -g --silent --no-fund --no-audit ${COREPACK}` });
   // Corepack runs the version packageManager names, or its own default. With no packageManager, an
   // exact engines pin is the version the repo's engine check accepts, so corepack is set to it.
   for (const pm of ["pnpm", "yarn"] as const) {

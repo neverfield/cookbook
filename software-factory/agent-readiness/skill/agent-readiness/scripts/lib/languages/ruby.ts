@@ -27,6 +27,9 @@ const RUBY_IMAGES: Record<string, string> = {
   "ruby:3.3-bookworm": "sha256:ae098d019fd2995e6cb82e16a87529348ba26a7c83ad6189937decc2846b0730",
   "ruby:3.4-bookworm": "sha256:d7c312a48736dd291d7ce043c847f04dfde9bdf7334491ca6a545a4a184395be",
   "ruby:4.0-bookworm": "sha256:862aacfe5415f2dcb399677d9139963ef4cd989140096cf723a91256ae8a9de3",
+  // Exact patches, for a repo that pins one the minor's image above isn't: Bundler refuses a Gemfile
+  // whose `ruby` names another patch. Read the same way on Nov 27, 2026.
+  "ruby:4.0.10-bookworm": "sha256:a74fe73b00b18a1d329486025f4753d4f4b051fa763b8e08a3d0da9d81f26080",
 };
 const RUBY_MINORS = ["3.2", "3.3", "3.4", "4.0"];
 const DEFAULT_RUBY = "3.4";
@@ -47,10 +50,14 @@ function rubyPin(tree: string, dir: string): { file: string; version: string } |
   return null;
 }
 
-// The pinned version's image; else the one Gemfile.lock was resolved on; else the default. A minor
-// the table lacks gets the nearest newer one, or the newest.
+// The pinned version's image: its exact patch when the table has it, else its minor's; else the
+// one Gemfile.lock was resolved on; else the default. A minor the table lacks gets the nearest newer
+// one, or the newest.
 export function rubyImage(tree: string, dir: string): string {
-  const version = rubyPin(tree, dir)?.version ?? read(tree, dir, "Gemfile.lock").match(/^RUBY VERSION\s+ruby (\d+\.\d+)/m)?.[1] ?? DEFAULT_RUBY;
+  const pinned = rubyPin(tree, dir)?.version;
+  const exact = pinned?.match(/^\d+\.\d+\.\d+$/) ? `ruby:${pinned}-bookworm` : null;
+  if (exact && RUBY_IMAGES[exact]) return exact;
+  const version = pinned ?? read(tree, dir, "Gemfile.lock").match(/^RUBY VERSION\s+ruby (\d+\.\d+)/m)?.[1] ?? DEFAULT_RUBY;
   const [maj, min] = version.split(".").map(Number);
   const pick = RUBY_MINORS.find((m) => {
     const [a, b] = m.split(".").map(Number);
