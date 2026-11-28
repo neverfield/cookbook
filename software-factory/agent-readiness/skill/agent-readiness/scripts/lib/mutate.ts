@@ -1,4 +1,4 @@
-import { statSync, utimesSync, writeFileSync } from "node:fs";
+import { statSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { inComponent } from "./languages/coverage.ts";
 import { languageOf } from "./languages/index.ts";
@@ -673,18 +673,6 @@ export function typeCanarySite(repo: string, tree: string, comp: Component, comm
 export function withCanary(text: string, line: string): string {
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
   return `${text}${text === "" || text.endsWith("\n") ? "" : eol}${line}${eol}`;
-}
-
-// Writes a planted fault, or the original back, with a modification time in whole seconds later than
-// any this audit gave before and later than now. Caches that trust a file whose time and size are
-// unchanged, such as Python's .pyc files (which compare whole seconds), can't then run one version as
-// the other when a run takes under a second, and a build that compares times with its outputs sees
-// each write as newer than anything built from the one before.
-let lastStamp = 0;
-export function writeStamped(path: string, text: string): void {
-  writeFileSync(path, text);
-  lastStamp = Math.max(Math.floor(Date.now() / 1000) + 1, lastStamp + 1);
-  utimesSync(path, lastStamp, lastStamp);
 }
 
 export function applySite(text: string, site: Site): string {

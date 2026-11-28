@@ -4,7 +4,7 @@ import { mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { writeStamped } from "../skill/agent-readiness/scripts/lib/mutate.ts";
+import { writeStamped } from "../skill/agent-readiness/scripts/lib/replay.ts";
 
 // A planted fault and the original it is swapped back for often have the same size, and a narrowed
 // test run finishes in under a second. Python trusts a .pyc whose source has the same whole-second
