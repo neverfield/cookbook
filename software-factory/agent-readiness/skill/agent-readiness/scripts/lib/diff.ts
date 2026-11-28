@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { isTestFile } from "./mutate.ts";
+import { LANGUAGES } from "./languages/index.ts";
 import type { Audit, HistoryLine } from "./types.ts";
 import { git } from "./util.ts";
 
@@ -13,10 +13,14 @@ export interface Weakening {
   comparable: boolean;
 }
 
-const SKIP = /\b(it|test|describe)\.(skip|only|todo)\(|\bx(it|describe|test)\(|@pytest\.mark\.(skip|xfail)|\bpytest\.skip\(|@unittest\.skip/;
-const TEST_CASE = /\b(it|test)\(\s*['"`]|^\s*def test_|^\s*async def test_/;
 const CI_FILE = /^\.github\/workflows\/|^\.gitlab-ci\.yml$|^\.circleci\/|^\.buildkite\//;
-const LOCKFILES = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "uv.lock", "poetry.lock", "Pipfile.lock", "requirements.txt"]);
+
+// Each language file's rules for weakened tests; a language with none isn't checked.
+const isTestFile = (path: string) => LANGUAGES.some((l) => l.checks.weakening.isTest?.(path));
+const MARKERS = LANGUAGES.flatMap((l) => (l.checks.weakening.markers ? [l.checks.weakening.markers] : []));
+const skipMarker = (line: string) => MARKERS.some((m) => m.skip.test(line));
+const testCase = (line: string) => MARKERS.some((m) => m.testCase.test(line));
+const LOCKFILES = new Set(LANGUAGES.flatMap((l) => l.checks.lockfiles.diff ?? []));
 
 export function weakening(repo: string, fromCommit: string, toCommit: string): Weakening {
   const empty: Weakening = { changedTestFiles: [], deletedTestFiles: [], removedTestCases: 0, newSkipMarkers: [], ciChanged: [], lockfileChanged: [], comparable: true };
@@ -42,10 +46,10 @@ export function weakening(repo: string, fromCommit: string, toCommit: string): W
     for (const line of patch.split("\n")) {
       if (line.startsWith("+++ b/")) current = line.slice(6);
       else if (line.startsWith("+") && !line.startsWith("+++")) {
-        if (SKIP.test(line)) empty.newSkipMarkers.push({ path: current, text: line.slice(1).trim().slice(0, 120) });
-        if (TEST_CASE.test(line.slice(1))) added++;
+        if (skipMarker(line)) empty.newSkipMarkers.push({ path: current, text: line.slice(1).trim().slice(0, 120) });
+        if (testCase(line.slice(1))) added++;
       } else if (line.startsWith("-") && !line.startsWith("---")) {
-        if (TEST_CASE.test(line.slice(1))) removed++;
+        if (testCase(line.slice(1))) removed++;
       }
     }
     empty.removedTestCases = Math.max(0, removed - added);

@@ -1,0 +1,263 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "dotnet/eShop",
+  "commit": "3c6e531a6063676ece317644f72172fb42a935b3",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/dotnet/eShop/commits/3c6e531a6063676ece317644f72172fb42a935b3/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/dotnet/eShop/commits/3c6e531a6063676ece317644f72172fb42a935b3/status ('build-and-test' (dotnet build/test of eShop.Web.slnf, functional tests against Aspire-started Docker containers), 'playwright' and 'maui' all succeeded; the combined status has no statuses (pending); the Azure Pipelines ci.yml is an internal 1ES build that reports nothing here)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "dotnet",
+      "placement": "component",
+      "changeShare": 0.476,
+      "hasTests": true,
+      "install": [
+        "dotnet restore eShop.Web.slnf",
+        "dotnet build eShop.Web.slnf",
+        "dotnet build"
+      ],
+      "test": [
+        "dotnet test --solution eShop.Web.slnf --no-build --no-progress --output detailed",
+        "dotnet test --solution eShop.Web.slnf",
+        "dotnet test"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "CI builds and tests the eShop.Web.slnf filter of eShop.slnx (all projects except ClientApp, HybridApp and ClientApp.UnitTests). Unit tests need nothing; Basket/Catalog/Ordering/Webhooks functional tests start Redis, Postgres and RabbitMQ through Aspire.Hosting and need Docker. SDK 11.0.100 from global.json, Microsoft.Testing.Platform runner."
+    },
+    {
+      "path": "e2e",
+      "ecosystem": "node",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [
+        "cd .. && npm ci",
+        "cd .. && npx playwright install --with-deps chromium"
+      ],
+      "test": [
+        "cd .. && npm run test:e2e",
+        "cd .. && npx playwright test"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "The root package.json and playwright.config.ts are only the Playwright e2e harness for the web app, not a separate project; specs live in e2e/. webServer runs dotnet run on eShop.AppHost, so tests need a browser, the .NET SDK and Docker for the Aspire resources. Commands run from the repo root."
+    },
+    {
+      "path": "src/ClientApp",
+      "ecosystem": "dotnet",
+      "placement": "component",
+      "changeShare": 0.137,
+      "hasTests": false,
+      "install": [
+        "dotnet workload install maui",
+        "dotnet build src/ClientApp/ClientApp.csproj"
+      ],
+      "test": [
+        "dotnet test --project ../../tests/ClientApp.UnitTests/ClientApp.UnitTests.csproj --no-progress --output detailed"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "MAUI client built and tested by its own Windows-only workflow (pr-validation-maui.yml, green at the commit). Targets android/ios/maccatalyst(/windows) and the test project sets UseMaui, which needs MAUI workloads Linux does not offer, so a Linux run is undetermined."
+    },
+    {
+      "path": "tests/ClientApp.UnitTests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": "src/ClientApp",
+      "changeShare": 0.009,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "MSTest project for ClientApp; tested only by the MAUI workflow on Windows."
+    },
+    {
+      "path": "src/Identity.API",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.069,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/Ordering.API",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.052,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/Catalog.API",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.047,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/WebApp",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.039,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/eShop.AppHost",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.039,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/Ordering.Infrastructure",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.03,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "src/Ordering.Domain",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.026,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "tests/Ordering.UnitTests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.03,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "tests/Ordering.FunctionalTests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.026,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "service",
+      "cleanPasses": "yes"
+    },
+    {
+      "path": "tests/Catalog.FunctionalTests",
+      "ecosystem": "dotnet",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.021,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "service",
+      "cleanPasses": "yes"
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": ".github/workflows/playwright.yml",
+      "line": 38,
+      "real": false,
+      "why": "password of the seeded demo user bob, published in the login page hint"
+    },
+    {
+      "file": "src/Identity.API/UsersSeed.cs",
+      "line": 28,
+      "real": false,
+      "why": "seeded demo user password"
+    },
+    {
+      "file": "src/Identity.API/UsersSeed.cs",
+      "line": 68,
+      "real": false,
+      "why": "seeded demo user password"
+    },
+    {
+      "file": ".config/CredScanSuppressions.json",
+      "line": 5,
+      "real": false,
+      "why": "CredScan suppression naming the demo password"
+    },
+    {
+      "file": "src/Catalog.API/appsettings.Development.json",
+      "line": 3,
+      "real": false,
+      "why": "localhost development Postgres DSN with placeholder password"
+    },
+    {
+      "file": "src/Identity.API/appsettings.Development.json",
+      "line": 3,
+      "real": false,
+      "why": "localhost development Postgres DSN with placeholder password"
+    },
+    {
+      "file": "src/Ordering.API/appsettings.Development.json",
+      "line": 3,
+      "real": false,
+      "why": "localhost development Postgres DSN with placeholder password"
+    },
+    {
+      "file": "src/OrderProcessor/appsettings.Development.json",
+      "line": 10,
+      "real": false,
+      "why": "localhost development Postgres DSN with placeholder password"
+    },
+    {
+      "file": "src/ClientApp/Services/Settings/SettingsService.cs",
+      "line": 15,
+      "real": false,
+      "why": "demo OAuth client secret 'secret' matching the sample IdentityServer config"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md saying CI builds and tests eShop.Web.slnf (not the full .slnx, which includes the MAUI apps), that functional tests and Playwright need Docker running, and that the MAUI client is Windows-only."
+  },
+  "dropped": 0
+}

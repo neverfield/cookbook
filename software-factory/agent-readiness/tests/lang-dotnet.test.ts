@@ -124,7 +124,7 @@ describe(".NET: the contract", () => {
     const dir = repo({ "Shop.sln": "", "Shop.Tools.sln": "", "src/Shop.csproj": proj("net8.0"), "tests/Shop.Tests.csproj": proj("net8.0", XUNIT) });
     assert.equal(ecosystemOf("nuget")!.install(dir, ".", { ignoreScripts: false }).command, "dotnet restore Shop.sln");
     assert.deepEqual(hooks.commands(dir, { path: "." } as never).map((c) => c.command), ["dotnet build Shop.sln --no-restore", "dotnet test Shop.sln --no-restore"]);
-    assert.equal(hooks.mutation.compileProbe({ path: "services/shop", manifest: "services/shop/Shop.sln" } as never)!.command, "dotnet build Shop.sln --no-restore -v q -nologo");
+    assert.equal(dotnet.mutation!.compileProbe({ path: "services/shop", manifest: "services/shop/Shop.sln" } as never, { contract: [], root: "" })!.command, "dotnet build Shop.sln --no-restore -v q -nologo");
   });
 
   test("no test project, no test command: a folder without the test SDK or a framework has no tests to run", () => {
@@ -152,9 +152,9 @@ describe(".NET: where faults go", () => {
     const comp = buildProfile(dir, dir, rubric).components[0];
     assert.deepEqual(testFiles(dir, comp), ["tests/Billing.Tests/InvoiceTests.cs"]);
     assert.deepEqual(targetFiles(dir, comp), ["src/Billing/Invoice.cs"]);
-    for (const f of ["src/A/obj/Debug/A.AssemblyInfo.cs", "src/A/Form1.Designer.cs", "src/A/Migrations/0001_Init.cs", "tests/A.Tests/ATests.cs"]) assert.ok(!hooks.mutation.isSource(f), f);
-    assert.ok(hooks.mutation.compileError!("Invoice.cs(14,20): error CS0103: The name 'zero' does not exist in the current context"));
-    assert.ok(!hooks.mutation.compileError!("Failed!  - Failed:     1, Passed:     2"));
+    for (const f of ["src/A/obj/Debug/A.AssemblyInfo.cs", "src/A/Form1.Designer.cs", "src/A/Migrations/0001_Init.cs", "tests/A.Tests/ATests.cs"]) assert.ok(!dotnet.mutation!.isSource(f), f);
+    assert.ok(dotnet.mutation!.compileError!("Invoice.cs(14,20): error CS0103: The name 'zero' does not exist in the current context"));
+    assert.ok(!dotnet.mutation!.compileError!("Failed!  - Failed:     1, Passed:     2"));
   });
 });
 
@@ -213,7 +213,7 @@ describe(".NET: projects that need Windows", () => {
     const cmds = hooks.commands(mixed, { path: "." } as never);
     assert.deepEqual(cmds.map((c) => c.command), ["dotnet build src/Tool/Tool.csproj --no-restore && dotnet build tests/Core.Tests/Core.Tests.csproj --no-restore", "dotnet test tests/Core.Tests/Core.Tests.csproj --no-restore"]);
     assert.match(cmds[0].reason, /Desk\.csproj needs Windows and is listed apart/);
-    assert.deepEqual(hooks.mutation.covered(mixed, { path: "." } as never, ["tests/Core.Tests/FormTests.cs"], ["src/Core/Form.cs", "src/Desk/Form.cs"]), ["src/Core/Form.cs"], "no fault goes into code the build leaves out");
+    assert.deepEqual(dotnet.mutation!.covered(mixed, { path: "." } as never, ["tests/Core.Tests/FormTests.cs"], ["src/Core/Form.cs", "src/Desk/Form.cs"]), ["src/Core/Form.cs"], "no fault goes into code the build leaves out");
   });
 });
 

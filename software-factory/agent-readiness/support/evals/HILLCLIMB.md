@@ -863,6 +863,7 @@ The 17 should-fix items of the offline production-readiness review land before t
 - **Remeasure:** with round 21, at the Mac release session.
 - **Verdict:** pending.
 
+<<<<<<< HEAD
 ## Round 23 (pending measurement): Plan A trial defects in the report's wording (November 27, 2026)
 
 The Plan A trial recording ([#68](https://github.com/neverfield/cookbook/pull/68)) found five critical events. Their fixes are script changes; three of them change what the reader sees, logged as one round under the Nov 24 decision. Scoring rules, level rules, each fixture's `expected.json`, the trial truth, the judge prompts and the calibration are unchanged.
@@ -875,4 +876,50 @@ The Plan A trial recording ([#68](https://github.com/neverfield/cookbook/pull/68
 - **Tests:** `tests/report-consistency.test.ts` (same command in two folders, checked with the holdout's K6 checker), `tests/environment.test.ts` (Node and corepack too old in host mode), `tests/lang-dotnet.test.ts` (the solution decides the build; the SDK pin is blocked), `tests/secrets.test.ts` (placeholders and test keys).
 - **Expected:** no change on the hard gates. Explanations get longer where commands run in folders; the headline judge reads the heading, which doesn't change.
 - **Remeasure:** with rounds 21 and 22, at the Mac release session.
+=======
+## Round 24 (pending measurement): planted-fault wording after the architecture review (November 27, 2026)
+
+The independent architecture review at `062443f` found that a re-audit could call a suite strong when it missed every new fault, because faults carried over from the last report were pooled with new ones, and that tests checking the source's bytes caught every fault. The fixes are scripts (lever 3); these lines change what the agent reads or the reader sees, logged as one round under the Nov 24 decision. Level rules, each fixture's `expected.json`, the judge prompts and the calibration are unchanged.
+
+- **Failure mode:** `remediate.md` told the agent the report never names a missed fault's line, while the sealed report does, and that carried faults "don't carry a weak suite", while the estimate counted them.
+- **Change:**
+  - `remediate.md` "Tests that don't catch planted faults" step 1 says the sealed report names each missed fault's line for people, and that only faults no sealed report named decide the estimate.
+  - `references/checks.md` describes the carried batch, the new-faults-only estimate and the comment-only control run.
+  - The faults row reads "caught N of M new planted faults" on a re-audit and adds "N of the M faults the last audit missed are now caught, planted again and not counted"; a comment-only run that failed reads "no fault was planted: the test command failed when only a comment was added to …".
+- **Tests:** `tests/level2-gates.test.ts` (named faults caught and none new is weak; 15 named and 0 of 5 new is not strong, and a named fault past the carry cap is never planted as new; the control run), `tests/review-2.test.ts` (a draft whose temp folder is gone is refused at the seal).
+- **Expected:** no change on the hard gates. tautological-tests and diff-catches-weakening should hold or improve; a seeded re-audit case where the agent writes tests against the named lines would now stay below Level 2.
+- **Remeasure:** with rounds 21 and 22, at the Mac release session.
 - **Verdict:** pending.
+
+## Round 25 (pending measurement): one verdict word per result (November 27, 2026)
+
+The failing-verdict review's changes 1, 3, 4 and 7 (Andrew, Nov 27). They change which rows the reader sees as failed, so the wording is logged as one round. Each fixture's `expected.json`, the judge prompts and the calibration are unchanged.
+
+- **Failure mode:** a step blocked on this machine, or one the audit couldn't pin on the repo, read as failed in the headline, the counts, the roadmap titles and `(fail)` in the explanations; a host-mode failure read as Level 0 while a host-mode pass read as unproven; a recheck could fail where the audit, with its experiments, had passed.
+- **Change:** the headline's failing commands, the cause rows narration may choose, the roadmap's step titles and evidence, the explanations' result words, the check counts and the evidence log read each row's verdict from `lib/verdict.ts`; a host-mode failure of a Level 1 check reads "blocked on this machine" with why; an unproven instruction says why it isn't shown wrong.
+- **Tests:** `tests/one-verdict.test.ts`; each block fails on the base scripts.
+- **Expected:** no change on the hard gates. The headline names fewer failing commands only where a named one was blocked. The risk to watch is a host-mode audit that now reads as unproven where a reader expected Level 0.
+- **Remeasure:** with rounds 21 to 24, at the Mac release session.
+>>>>>>> f787ae2 (agent-readiness: one verdict word per result (lib/verdict.ts), host-mode symmetry, the recheck through the audit's gate, and instruction verdicts)
+- **Verdict:** pending.
+
+## Round 26 (pending measurement): the Plan A trials' rate misses and false instruction findings (November 27, 2026)
+
+The Plan A trials (#68) recorded rate misses in discovery and the run plan, and ceilings of false instruction findings on eight repos. This round fixes their general causes in discovery, the run plan, the language files and the instruction checker. Scoring rules, level rules, each fixture's `expected.json`, the judge prompts and the calibration are unchanged. The wording that changes is new skip reasons on instruction items (`per-package`, `pm-command`, a lockfile-conditional block, a folder a guide's step makes) and a paragraph in `references/supported.md`.
+
+- **Failure mode:** components the trials' truth lists were missed or got another toolchain's test command, and instruction items that aren't wrong were reported as wrong: scripts and files written without their folder, the package manager's own commands, Make targets with `/`, folder cues the checker didn't read, paths in another repository, on the contributor's machine, written by a tool or shown as a template.
+- **Change:** see CHANGELOG, "What the Plan A trials corrected".
+- **Tests:** `tests/trial-misses.test.ts`, one test per cause; 19 of its 20 fail on the base (the 20th guards that pytest still outranks `manage.py`).
+- **Before and after, on the trials at their pinned commits** (truth guards and false instruction findings, the base's recording against this branch's scripts run by #68's runner on one VM): false instruction findings langfuse 58 to 0, spree 38 to 26 (the rest are replay failures of its unsupported task-graph and gem layout), netbox 19 to 0, airflow 17 to 2, sentry-javascript 13 to 1, dd-trace-go 13 to 2 (one, `make test-integration`, names a target the Makefile doesn't have), jellyfin 3 to 0, saleor 3 to 2. R1: airflow 0 to 1 of 1. R2: airflow 7 to 9 of 10 (the root's CI runs breeze), langfuse 6 to 8 of 8, netbox and eShop from a miss to a hit; apollo-client unchanged at 1 of 2. command-line-api, undetermined for want of a test command, now passes every truth guard at Level 2: Arcade's `*.Tests` projects are test projects, and its net472 target is left to Windows. Mastodon's install gets Corepack on node:26 and the 4.0.10 Ruby image; its Ruby install now stops at `idn-ruby`, which needs a system library from its Aptfile.
+- **Expected:** no change on the hard gates; the skip reasons sit in the instructions table, below part 1.
+- **Remeasure:** with rounds 21 to 25, at the Mac release session.
+- **Verdict:** pending.
+
+## Round 27 (no measurement needed): per-language facts move into the language files (November 27, 2026)
+
+Findings 8, 16 and 19 of the skill architecture review (#72). Scripts only: SKILL.md, the references, the templates, the report wording, the rubric, each fixture's `expected.json`, the judge prompts and the calibration are unchanged, so there is nothing for the judges to measure.
+
+- **Failure mode:** none the agent or the reader sees. A new language could leave a check silently unimplemented, and Node and Python bypassed the language interface.
+- **Change:** every per-language fact moves into the language files; see the PR.
+- **Held fixed:** a probe over every fixture and every pinned trial repo records the profile, safety findings, instruction items, the contract (with and without install hooks, under 2026-12-beta and 2026-11-beta), the image plan, tool setup, toolchain copies, timeouts, test and target files, fault sites, the faults chosen, narrowing, the run plan's test counts and `readiness diff`. Its output is byte-identical to the base's. The goldens rerun with every level unchanged.
+- **Verdict:** kept; no measurement needed.

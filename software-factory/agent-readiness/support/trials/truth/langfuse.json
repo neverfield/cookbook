@@ -1,0 +1,261 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "langfuse/langfuse",
+  "commit": "c2557ba42437a947026bcfa29570df4f075350db",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/langfuse/langfuse/commits/c2557ba42437a947026bcfa29570df4f075350db/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv' and gh api repos/langfuse/langfuse/commits/c2557ba42437a947026bcfa29570df4f075350db/status; CI/CD pipeline green: tests-web (3 modes), tests-web-client, tests-worker (3 modes), tests-shared, tests-ai-gateway, tests-eslint-plugin, tests-in-app-agent-sandbox-runtime, tests-storybook, e2e-tests, e2e-server-tests, tests-fips, typecheck and native checks, all-ci-passed succeeded; test-worker-llm-connections skipped by path filter; the only non-success runs are 6 cancelled 'evaluate' runs from an unrelated agentic workflow; commit status success (license/cla, CLA gate)"
+  },
+  "components": [
+    {
+      "path": "web",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.712,
+      "hasTests": true,
+      "install": [
+        "pnpm install",
+        "pnpm i"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test",
+        "pnpm run test-client",
+        "npx dotenv -e ../.env.test -e ../.env -- vitest run --project server --project server-isolated --project server-shared-source --project server-unit --project server-shared-source-unit"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "Next.js app. CI copies .env.dev.example to .env, starts docker-compose.dev.yml (Postgres, ClickHouse, Redis, MinIO), runs pnpm turbo run build:test, migrations (golang-migrate for ClickHouse), starts Langfuse (pnpm run start) and then runs the server vitest projects; client (jsdom) tests run separately with pnpm run test-client and need no services; Playwright e2e (test:e2e) and Storybook tests run in other jobs."
+    },
+    {
+      "path": "packages/shared",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.131,
+      "hasTests": true,
+      "install": [
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test",
+        "pnpm --filter @langfuse/shared run test"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "@langfuse/shared (Prisma schema, ClickHouse queries, server code). CI runs db:generate then tests with a Redis service container; SQL-equivalence golden tests need the clickhouse binary (installed from packages.clickhouse.com) and skip without it."
+    },
+    {
+      "path": "worker",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.072,
+      "hasTests": true,
+      "install": [
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm run test:exclude-llm-connections",
+        "pnpm test",
+        "pnpm run test"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "Queue worker. CI starts docker-compose.dev stack, builds worker..., migrates and seeds Postgres and ClickHouse, then runs vitest excluding LLM-connection tests (those need provider API keys and run only on path changes)."
+    },
+    {
+      "path": "ai-gateway",
+      "ecosystem": "rust",
+      "placement": "component",
+      "changeShare": 0.026,
+      "hasTests": true,
+      "install": [
+        "cargo fetch --locked",
+        "cargo build --locked"
+      ],
+      "test": [
+        "cargo test --locked",
+        "cargo test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Rust service (toolchain pinned 1.98.0 in rust-toolchain.toml); CI runs fmt, clippy, cargo machete, cargo deny, cargo test --locked, then builds and smoke-tests its Docker image. A separate test-ai-gateway-e2e job exercises it through web."
+    },
+    {
+      "path": "packages/native",
+      "ecosystem": "rust",
+      "placement": "component",
+      "changeShare": 0.009,
+      "hasTests": true,
+      "install": [
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm run test",
+        "pnpm --filter @langfuse/native run test",
+        "cargo test --locked --features napi/dyn-symbols"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "napi-rs Node addon in Rust (toolchain 1.98.0); pnpm test runs cargo test. Tested in the 'typecheck and native checks' job."
+    },
+    {
+      "path": "packages/eslint-plugin",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.002,
+      "hasTests": true,
+      "install": [
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test",
+        "vitest run"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Private @repo/eslint-plugin with custom lint rules; own CI job."
+    },
+    {
+      "path": "packages/icons",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.001,
+      "hasTests": true,
+      "install": [
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Needs pnpm run build first; CI runs build and test inside the tests-shared job."
+    },
+    {
+      "path": "packages/in-app-agent-sandbox-runtime",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [
+        "pnpm install"
+      ],
+      "test": [
+        "pnpm test",
+        "pnpm run test",
+        "pnpm run test:e2e"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Unit tests (vitest run src) need nothing; test:e2e builds a Docker image and needs Docker."
+    },
+    {
+      "path": "ee",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "@langfuse/ee enterprise package; built and typechecked through turbo, no test script."
+    }
+  ],
+  "unownedShare": 0.047,
+  "secrets": [
+    {
+      "file": "web/src/features/ai-gateway/server/auth/ingestionTokenVerifier.servertest.ts",
+      "line": 13,
+      "real": false,
+      "why": "EC private key generated for a token-verification unit test"
+    },
+    {
+      "file": "web/src/__tests__/server/llm-api-key.servertest.ts",
+      "line": 869,
+      "real": false,
+      "why": "AKIAIOSFODNN7EXAMPLE, AWS's documented example key (repeated through the file)"
+    },
+    {
+      "file": "web/src/__tests__/server/llm-connections-api.servertest.ts",
+      "line": 37,
+      "real": false,
+      "why": "elided 'test' PEM placeholder"
+    },
+    {
+      "file": "web/src/__tests__/server/blob-storage-integration-trpc.servertest.ts",
+      "line": 277,
+      "real": false,
+      "why": "elided 'fake' PEM placeholder"
+    },
+    {
+      "file": "packages/shared/src/server/llm/ai-sdk/requestShape.test.ts",
+      "line": 170,
+      "real": false,
+      "why": "elided 'fake' PEM placeholder"
+    },
+    {
+      "file": "packages/shared/src/server/services/StorageService.test.ts",
+      "line": 468,
+      "real": false,
+      "why": "truncated PEM placeholder"
+    },
+    {
+      "file": "web/src/features/ai-gateway/components/GatewayGuardrailDialogController/constants/gatewayGuardrailTemplates.ts",
+      "line": 82,
+      "real": false,
+      "why": "sample text for a guardrail template using AWS's example key"
+    },
+    {
+      "file": "packages/shared/scripts/seeder/utils/postgres-seed-constants.ts",
+      "line": 3,
+      "real": false,
+      "why": "sk-lf-1234567890 local seed API key"
+    },
+    {
+      "file": ".env.dev.example",
+      "line": 72,
+      "real": false,
+      "why": "dev example NEXTAUTH_SECRET=\"secret\""
+    },
+    {
+      "file": ".env.dev.example",
+      "line": 52,
+      "real": false,
+      "why": "local ClickHouse password in example env"
+    },
+    {
+      "file": "docker-compose.yml",
+      "line": 138,
+      "real": false,
+      "why": "CHANGEME default NEXTAUTH_SECRET"
+    },
+    {
+      "file": "docker-compose.yml",
+      "line": 27,
+      "real": false,
+      "why": "all-zero CHANGEME ENCRYPTION_KEY default"
+    },
+    {
+      "file": "docker-compose.yml",
+      "line": 284,
+      "real": false,
+      "why": "CHANGEME default Postgres password"
+    },
+    {
+      "file": "web/src/__e2e__/utils/auth.ts",
+      "line": 6,
+      "real": false,
+      "why": "e2e test user password"
+    }
+  ],
+  "nextAction": {
+    "kind": "make_tests_hermetic",
+    "text": "Separate the web and worker tests that need the docker-compose.dev stack (Postgres, ClickHouse, Redis, MinIO) and a running Langfuse server from pure unit projects, and document the split, so an agent can run targeted tests without the full stack."
+  },
+  "dropped": 0
+}

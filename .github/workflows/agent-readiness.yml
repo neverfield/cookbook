@@ -7,6 +7,10 @@ on:
   pull_request:
     paths: ["software-factory/agent-readiness/**", ".github/workflows/agent-readiness.yml"]
   workflow_dispatch:
+  # Nightly, the trials run every audit in full (SA_TRIALS_FULL), including the ones the per-PR run
+  # only scans.
+  schedule:
+    - cron: "0 9 * * *"
 
 permissions:
   contents: read
@@ -44,10 +48,19 @@ jobs:
         run: support/tools/no-skips.sh "$RUNNER_TEMP/check.log"
 
   trials:
-    name: Pinned trial repos (Docker)
+    name: Pinned trial repos (Docker, shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04
-    # 18 repos, two at a time; Flexget's suite alone takes a quarter of an hour.
-    timeout-minutes: 150
+    # Each shard on its own runner, so no shard slows another's audits. support/trials/shards.ts
+    # splits the trials by their minutes on these runners (a per-PR scan's own minutes outside the
+    # nightly full run). tests/trials.test.ts keeps the count in step.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    timeout-minutes: 120
+    env:
+      SA_TRIALS_SHARD: ${{ matrix.shard }}/4
+      SA_TRIALS_FULL: ${{ github.event_name == 'schedule' && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

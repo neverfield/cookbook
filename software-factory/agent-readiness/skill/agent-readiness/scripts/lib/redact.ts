@@ -1,3 +1,5 @@
+import { SECRET_ASSIGNMENT_NAME } from "./patterns.ts";
+
 // Redaction is recall-biased: hiding something that wasn't a secret costs nothing. The findings that
 // become advice are precision-biased and live in secrets.ts, which reuses these patterns.
 export const PATTERNS: { type: string; re: RegExp; keyShaped?: (match: string) => boolean }[] = [
@@ -40,7 +42,6 @@ export const ENV_ASSIGNMENT = new RegExp(String.raw`^([^\S\n]*(?:#[^\S\n]*)?(?:-
 // Output is redacted wherever the assignment starts a word, as in `env API_KEY=... node app.js` or
 // `app_1  | API_KEY=...`, not only at the start of a line.
 const ENV_IN_OUTPUT = new RegExp(String.raw`((?:^|(?<=[\s#|>]))(?:export\s+)?([A-Z][A-Z0-9_]*)(?:=|:[^\S\n]+(?=["'])))` + ENV_VALUE, "gm");
-const SECRET_NAME = /(API_?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE_KEY|ACCESS_KEY)/;
 // Names that point at a secret rather than hold one: CURSOR_API_KEY_SECRET_NAME, DB_PASSWORD_FILE.
 const REFERENCE_NAME = /_(NAME|ARN|ID|PATH|FILE|URL|URI|REF|VERSION|REGION)$/;
 // Placeholder text in examples and docs: replace-with-your-key, YOURSECRETKEYGOESHERE.
@@ -67,7 +68,7 @@ export function placeholderValue(name: string, value: string): boolean {
 }
 
 export function envSecret(name: string, value: string): boolean {
-  return SECRET_NAME.test(name) && !REFERENCE_NAME.test(name) && !placeholderValue(name, value) && !ENV_PLACEHOLDER.test(value);
+  return SECRET_ASSIGNMENT_NAME.test(name) && !REFERENCE_NAME.test(name) && !placeholderValue(name, value) && !ENV_PLACEHOLDER.test(value);
 }
 // The password in a URL, as connection strings and proxy settings carry it: scheme://user:password@host,
 // and scheme://:password@host, as Redis URLs carry it with no user.

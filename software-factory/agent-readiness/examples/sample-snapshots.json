@@ -12,7 +12,7 @@
         "dirtyTree": false,
         "rubric": "2026-12-beta",
         "tier": "local-exec",
-        "scriptsDigest": "db08ff6647cfaf3b50c55b6786d3dbbcc4181589aba53f022e2b5ae8596473af",
+        "scriptsDigest": "ec54274f7483ae637e8e8f56924d32e16bf7f7e54ad7e1de98fade722000388e",
         "seedPinned": true,
         "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
         "staleCopy": null,
@@ -272,7 +272,7 @@
                 "condition": "faults",
                 "label": "tests catch planted faults",
                 "state": "not_met",
-                "reason": "caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10"
+                "reason": "caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; a comment added to packages/worker/src/retry.js left the tests passing; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10"
               },
               {
                 "component": "worker",
@@ -370,7 +370,7 @@
           "impact": 0.549,
           "effort": "small",
           "evidence": [
-            "ev-014"
+            "ev-015"
           ]
         },
         {
@@ -409,7 +409,7 @@
           "impact": 0,
           "effort": "medium",
           "evidence": [
-            "ev-018"
+            "ev-019"
           ]
         }
       ],
@@ -595,6 +595,8 @@
             "counts": {
               "passed": 0,
               "failed": 0,
+              "blocked": 0,
+              "undetermined": 0,
               "notRun": 0
             },
             "evidence": []
@@ -609,6 +611,8 @@
             "counts": {
               "passed": 0,
               "failed": 0,
+              "blocked": 0,
+              "undetermined": 0,
               "notRun": 0
             },
             "evidence": []
@@ -629,6 +633,8 @@
             "counts": {
               "passed": 6,
               "failed": 1,
+              "blocked": 0,
+              "undetermined": 0,
               "notRun": 0
             },
             "evidence": [
@@ -637,8 +643,8 @@
               "ev-007",
               "ev-012",
               "ev-013",
-              "ev-014",
-              "ev-015"
+              "ev-015",
+              "ev-016"
             ]
           },
           {
@@ -651,6 +657,8 @@
             "counts": {
               "passed": 5,
               "failed": 1,
+              "blocked": 0,
+              "undetermined": 0,
               "notRun": 0
             },
             "evidence": [
@@ -659,7 +667,7 @@
               "ev-010",
               "ev-012",
               "ev-013",
-              "ev-014"
+              "ev-015"
             ]
           },
           {
@@ -678,12 +686,14 @@
             "counts": {
               "passed": 1,
               "failed": 1,
+              "blocked": 0,
+              "undetermined": 0,
               "notRun": 1
             },
             "evidence": [
-              "ev-016",
               "ev-017",
-              "ev-018"
+              "ev-018",
+              "ev-019"
             ]
           },
           {
@@ -701,8 +711,8 @@
             },
             "evidence": [
               "ev-003",
-              "ev-019",
-              "ev-020"
+              "ev-020",
+              "ev-021"
             ]
           },
           {
@@ -956,7 +966,7 @@
             "component": null,
             "ran": "AGENTS.md:7 `pnpm test`: uses pnpm, but the repo uses npm",
             "where": "read from files",
-            "result": "fail",
+            "result": "undetermined",
             "summary": "AGENTS.md:7 `pnpm test`: uses pnpm, but the repo uses npm",
             "durationMs": null,
             "repro": null,
@@ -968,7 +978,7 @@
             "component": null,
             "ran": "AGENTS.md:8 `docs/architecture.md`: docs/architecture.md doesn't exist",
             "where": "read from files",
-            "result": "fail",
+            "result": "undetermined",
             "summary": "AGENTS.md:8 `docs/architecture.md`: docs/architecture.md doesn't exist",
             "durationMs": null,
             "repro": null,
@@ -980,7 +990,7 @@
             "component": null,
             "ran": ".cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no \"changelog\" script in package.json",
             "where": "read from files",
-            "result": "fail",
+            "result": "undetermined",
             "summary": ".cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no \"changelog\" script in package.json",
             "durationMs": null,
             "repro": null,
@@ -1018,7 +1028,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "doctor passed",
-            "durationMs": 148,
+            "durationMs": 154,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && node --version && npm --version'\\'''",
             "supersededBy": null
           },
@@ -1030,7 +1040,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "install passed",
-            "durationMs": 462,
+            "durationMs": 445,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci'\\'''",
             "supersededBy": null
           },
@@ -1042,7 +1052,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "lint passed",
-            "durationMs": 187,
+            "durationMs": 201,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/api && npm run lint)'\\'''",
             "supersededBy": null
           },
@@ -1054,7 +1064,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "lint passed",
-            "durationMs": 181,
+            "durationMs": 196,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/shared && npm run lint)'\\'''",
             "supersededBy": null
           },
@@ -1066,7 +1076,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "lint passed",
-            "durationMs": 189,
+            "durationMs": 203,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/worker && npm run lint)'\\'''",
             "supersededBy": null
           },
@@ -1078,7 +1088,7 @@
             "where": "ran in a clean container",
             "result": "fail",
             "summary": "test failed: connection refused on port 5432 (1 of 1 tests failed)",
-            "durationMs": 243,
+            "durationMs": 258,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/api && npm run test)'\\'''",
             "supersededBy": "ev-014"
           },
@@ -1090,7 +1100,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "test passed (3 of 3 tests)",
-            "durationMs": 238,
+            "durationMs": 252,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/shared && npm run test)'\\'''",
             "supersededBy": null
           },
@@ -1102,7 +1112,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "test passed (2 of 2 tests)",
-            "durationMs": 240,
+            "durationMs": 257,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/worker && npm run test)'\\'''",
             "supersededBy": null
           },
@@ -1114,12 +1124,24 @@
             "where": "ran in a clean container",
             "result": "fail",
             "summary": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on",
-            "durationMs": 240,
+            "durationMs": 247,
+            "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/api && npm run test)'\\'''",
+            "supersededBy": "ev-015"
+          },
+          {
+            "id": "ev-015",
+            "check": "bootstrap.cold_replay",
+            "component": "api",
+            "ran": "npm run test",
+            "where": "ran in a clean container",
+            "result": "fail",
+            "summary": "test failed: connection refused on port 5432 (1 of 1 tests failed); it failed again with the network on",
+            "durationMs": 255,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && (cd packages/api && npm run test)'\\'''",
             "supersededBy": null
           },
           {
-            "id": "ev-015",
+            "id": "ev-016",
             "check": "bootstrap.cold_replay",
             "component": null,
             "ran": "frozen install reproduced the lockfile",
@@ -1131,7 +1153,7 @@
             "supersededBy": null
           },
           {
-            "id": "ev-016",
+            "id": "ev-017",
             "check": "verify.behavioral_oracle",
             "component": "api",
             "ran": "tests must pass before faults can be planted",
@@ -1143,50 +1165,50 @@
             "supersededBy": null
           },
           {
-            "id": "ev-017",
-            "check": "verify.behavioral_oracle",
-            "component": "shared",
-            "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
-            "where": "ran in a clean container",
-            "result": "pass",
-            "summary": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
-            "durationMs": null,
-            "repro": null,
-            "supersededBy": null
-          },
-          {
             "id": "ev-018",
             "check": "verify.behavioral_oracle",
-            "component": "worker",
-            "ran": "caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10",
+            "component": "shared",
+            "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant); a comment added to packages/shared/src/money.js left the tests passing",
             "where": "ran in a clean container",
-            "result": "fail",
-            "summary": "caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10",
+            "result": "pass",
+            "summary": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant); a comment added to packages/shared/src/money.js left the tests passing",
             "durationMs": null,
             "repro": null,
             "supersededBy": null
           },
           {
             "id": "ev-019",
-            "check": "context.instructions_verified",
-            "component": null,
-            "ran": "npm run lint -w api",
+            "check": "verify.behavioral_oracle",
+            "component": "worker",
+            "ran": "caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; a comment added to packages/worker/src/retry.js left the tests passing; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10",
             "where": "ran in a clean container",
-            "result": "pass",
-            "summary": ".cursor/rules/style.mdc:6 `npm run lint -w api` replays",
-            "durationMs": 183,
-            "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && npm run lint -w api'\\'''",
+            "result": "fail",
+            "summary": "caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; a comment added to packages/worker/src/retry.js left the tests passing; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10",
+            "durationMs": null,
+            "repro": null,
             "supersededBy": null
           },
           {
             "id": "ev-020",
             "check": "context.instructions_verified",
             "component": null,
+            "ran": "npm run lint -w api",
+            "where": "ran in a clean container",
+            "result": "pass",
+            "summary": ".cursor/rules/style.mdc:6 `npm run lint -w api` replays",
+            "durationMs": 197,
+            "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && npm run lint -w api'\\'''",
+            "supersededBy": null
+          },
+          {
+            "id": "ev-021",
+            "check": "context.instructions_verified",
+            "component": null,
             "ran": "npm run test -w shared",
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "AGENTS.md:6 `npm run test -w shared` replays",
-            "durationMs": 239,
+            "durationMs": 248,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && npm ci && npm run test -w shared'\\'''",
             "supersededBy": null
           }
@@ -1218,7 +1240,7 @@
           },
           {
             "label": "Skill digest",
-            "value": "db08ff6647cf"
+            "value": "ec54274f7483"
           },
           {
             "label": "Planted faults",
@@ -1274,7 +1296,7 @@
           "result": "Level 1",
           "ran": "`node --version && npm --version` (pass), `npm ci` (pass), `npm run lint` in `packages/worker` (pass) and `npm run test` in `packages/worker` (pass)",
           "where": "in a clean docker container (node:22-bookworm)",
-          "happened": "Held at Level 1 by tests catch planted faults: not met (caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10) and agent instructions are accurate: not met (2 agent instruction commands are wrong)",
+          "happened": "Held at Level 1 by tests catch planted faults: not met (caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; a comment added to packages/worker/src/retry.js left the tests passing; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10) and agent instructions are accurate: not met (2 agent instruction commands are wrong)",
           "rule": "Level 1 needs: installs from the lockfile in a clean environment, builds in a clean environment and passes every test in a clean environment. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
         },
         {
@@ -1407,9 +1429,9 @@
           "kind": "condition",
           "subject": "shared: tests catch planted faults",
           "result": "met",
-          "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
+          "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant); a comment added to packages/shared/src/money.js left the tests passing",
           "where": "in a clean docker container (node:22-bookworm)",
-          "happened": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
+          "happened": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant); a comment added to packages/shared/src/money.js left the tests passing",
           "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
         },
         {
@@ -1452,9 +1474,9 @@
           "kind": "condition",
           "subject": "worker: tests catch planted faults",
           "result": "not met",
-          "ran": "caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10",
+          "ran": "caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; a comment added to packages/worker/src/retry.js left the tests passing; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10",
           "where": "in a clean docker container (node:22-bookworm)",
-          "happened": "caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10",
+          "happened": "caught 0 of 5 planted faults (0%): weak, at most 35% with 95% confidence; a comment added to packages/worker/src/retry.js left the tests passing; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10",
           "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails."
         },
         {
@@ -1533,7 +1555,7 @@
         "dirtyTree": false,
         "rubric": "2026-12-beta",
         "tier": "local-exec",
-        "scriptsDigest": "db08ff6647cfaf3b50c55b6786d3dbbcc4181589aba53f022e2b5ae8596473af",
+        "scriptsDigest": "ec54274f7483ae637e8e8f56924d32e16bf7f7e54ad7e1de98fade722000388e",
         "seedPinned": true,
         "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
         "staleCopy": null,
@@ -1699,8 +1721,8 @@
       "maturity": {
         "level": 1,
         "rule": "The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it.",
-        "couldBe": null,
-        "couldBeReason": null,
+        "couldBe": 2,
+        "couldBeReason": "a check that would decide it couldn't run here",
         "setBy": [
           "worker"
         ],
@@ -1708,9 +1730,9 @@
         "assessedComponents": 3,
         "outcome": "proven",
         "confidence": {
-          "level": "high",
+          "level": "medium",
           "reasons": [
-            "every check that decides the level ran"
+            "a check that decides the next level couldn't run"
           ]
         },
         "capReasons": [
@@ -1718,8 +1740,8 @@
             "component": "worker",
             "condition": "faults",
             "label": "tests catch planted faults",
-            "state": "not_met",
-            "reason": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2"
+            "state": "unknown",
+            "reason": "caught 0 of 1 new planted faults (0%): inconclusive, between 0% and 73%, too few to tell strong tests from weak ones; at least 3 must give a clear result; a comment added to packages/worker/src/retry.js left the tests passing; 0 of the 5 faults the last audit missed are now caught, planted again and not counted; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:2"
           }
         ],
         "unproven": false,
@@ -1814,7 +1836,7 @@
             "placement": "component",
             "active": true,
             "level": 1,
-            "couldBe": null,
+            "couldBe": 2,
             "unproven": false,
             "status": "proven",
             "provenIn": "container",
@@ -1824,8 +1846,8 @@
                 "component": "worker",
                 "condition": "faults",
                 "label": "tests catch planted faults",
-                "state": "not_met",
-                "reason": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2"
+                "state": "unknown",
+                "reason": "caught 0 of 1 new planted faults (0%): inconclusive, between 0% and 73%, too few to tell strong tests from weak ones; at least 3 must give a clear result; a comment added to packages/worker/src/retry.js left the tests passing; 0 of the 5 faults the last audit missed are now caught, planted again and not counted; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:2"
               }
             ],
             "scenarios": [
@@ -1833,7 +1855,7 @@
                 "id": "bug_fixes",
                 "label": "Bug fixes",
                 "level": 1,
-                "couldBe": null,
+                "couldBe": 2,
                 "unproven": false
               }
             ]
@@ -1860,7 +1882,7 @@
       },
       "executive": {
         "heading": "Level 1 of 4, bootable",
-        "headline": "Agents can build and test worker, but its tests can't yet catch wrong changes, and 23% of recent changes land there. api and shared are already at Level 2.",
+        "headline": "Agents can build and test worker, but its checks can't yet catch wrong changes, and 23% of recent changes land there. api and shared are already at Level 2.",
         "numbers": [
           {
             "label": "Components ready for agents",
@@ -1902,7 +1924,7 @@
           "itemId": "faults:worker",
           "title": "Make worker's tests catch wrong behavior",
           "startNow": false,
-          "why": "The audit planted 11 faults in worker in a throwaway copy, and the tests caught 0.",
+          "why": "The audit planted 10 faults in worker in a throwaway copy, and the tests caught 0.",
           "movesTheNeedle": "Takes worker to Level 2, covering 23% of recent changes. Changes in worker get a real pass-or-fail signal, so reviewers catch less by hand.",
           "watch": "Share of agent PRs touching worker where a reviewer requested changes. Baseline: 2 of 3 (too few for a rate), Sep 27 to Oct 27, 2026. Now: 50% (3 of 6), Oct 31 to Nov 30, 2026.",
           "research": "OpenAI estimated about 30% of SWE-Bench Pro's 731 public tasks were broken, including low-coverage tests that let incomplete fixes pass. An audit of one benchmark, not of customer repositories. https://openai.com/index/separating-signal-from-noise-coding-evaluations",
@@ -2137,7 +2159,14 @@
           "components": [],
           "nowMet": [],
           "nowFailing": [],
-          "checks": []
+          "checks": [
+            {
+              "id": "verify.behavioral_oracle",
+              "name": "Tests catch planted faults",
+              "from": false,
+              "to": null
+            }
+          ]
         }
       },
       "details": {
@@ -2176,6 +2205,8 @@
             "counts": {
               "passed": 0,
               "failed": 0,
+              "blocked": 0,
+              "undetermined": 0,
               "notRun": 0
             },
             "evidence": []
@@ -2190,6 +2221,8 @@
             "counts": {
               "passed": 0,
               "failed": 0,
+              "blocked": 0,
+              "undetermined": 0,
               "notRun": 0
             },
             "evidence": []
@@ -2210,6 +2243,8 @@
             "counts": {
               "passed": 8,
               "failed": 0,
+              "blocked": 0,
+              "undetermined": 0,
               "notRun": 0
             },
             "evidence": [
@@ -2233,6 +2268,8 @@
             "counts": {
               "passed": 6,
               "failed": 0,
+              "blocked": 0,
+              "undetermined": 0,
               "notRun": 0
             },
             "evidence": [
@@ -2255,12 +2292,14 @@
                 "url": "https://openai.com/index/separating-signal-from-noise-coding-evaluations"
               }
             ],
-            "result": "api: caught 5 of 5 planted faults; shared: caught 7 of 7 planted faults; worker: caught 0 of 11 planted faults",
-            "ok": false,
+            "result": "api: caught 5 of 5 planted faults; shared: caught 5 of 5 planted faults; worker: caught 0 of 1 new planted faults",
+            "ok": null,
             "counts": {
               "passed": 2,
-              "failed": 1,
-              "notRun": 0
+              "failed": 0,
+              "blocked": 0,
+              "undetermined": 0,
+              "notRun": 1
             },
             "evidence": [
               "ev-013",
@@ -2629,7 +2668,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "doctor passed",
-            "durationMs": 144,
+            "durationMs": 142,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && node --version && npm --version'\\'''",
             "supersededBy": null
           },
@@ -2641,7 +2680,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "install passed",
-            "durationMs": 9654,
+            "durationMs": 9773,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh'\\'''",
             "supersededBy": null
           },
@@ -2653,7 +2692,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "lint passed",
-            "durationMs": 197,
+            "durationMs": 253,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && (cd packages/api && npm run lint)'\\'''",
             "supersededBy": null
           },
@@ -2665,7 +2704,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "lint passed",
-            "durationMs": 178,
+            "durationMs": 193,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && (cd packages/shared && npm run lint)'\\'''",
             "supersededBy": null
           },
@@ -2677,7 +2716,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "lint passed",
-            "durationMs": 203,
+            "durationMs": 197,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && (cd packages/worker && npm run lint)'\\'''",
             "supersededBy": null
           },
@@ -2689,7 +2728,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "start passed",
-            "durationMs": 2294,
+            "durationMs": 2310,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && bash scripts/agent-start.sh'\\'''",
             "supersededBy": null
           },
@@ -2701,7 +2740,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "test passed (1 of 1 tests)",
-            "durationMs": 230,
+            "durationMs": 267,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && (cd packages/api && npm run test)'\\'''",
             "supersededBy": null
           },
@@ -2713,7 +2752,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "test passed (3 of 3 tests)",
-            "durationMs": 246,
+            "durationMs": 252,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && (cd packages/shared && npm run test)'\\'''",
             "supersededBy": null
           },
@@ -2725,7 +2764,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "test passed (2 of 2 tests)",
-            "durationMs": 237,
+            "durationMs": 252,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && (cd packages/worker && npm run test)'\\'''",
             "supersededBy": null
           },
@@ -2745,10 +2784,10 @@
             "id": "ev-013",
             "check": "verify.behavioral_oracle",
             "component": "api",
-            "ran": "caught 5 of 5 planted faults (100%), 5 of them planted again from the last audit: strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip)",
+            "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip); a comment added to packages/api/src/orders.js left the tests passing",
             "where": "ran in a clean container",
             "result": "pass",
-            "summary": "caught 5 of 5 planted faults (100%), 5 of them planted again from the last audit: strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip)",
+            "summary": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip); a comment added to packages/api/src/orders.js left the tests passing",
             "durationMs": null,
             "repro": null,
             "supersededBy": null
@@ -2757,10 +2796,10 @@
             "id": "ev-014",
             "check": "verify.behavioral_oracle",
             "component": "shared",
-            "ran": "caught 7 of 7 planted faults (100%), 7 of them planted again from the last audit: strong, at least 65% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
+            "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant); a comment added to packages/shared/src/money.js left the tests passing",
             "where": "ran in a clean container",
             "result": "pass",
-            "summary": "caught 7 of 7 planted faults (100%), 7 of them planted again from the last audit: strong, at least 65% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
+            "summary": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant); a comment added to packages/shared/src/money.js left the tests passing",
             "durationMs": null,
             "repro": null,
             "supersededBy": null
@@ -2769,10 +2808,10 @@
             "id": "ev-015",
             "check": "verify.behavioral_oracle",
             "component": "worker",
-            "ran": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2",
-            "where": "ran in a clean container",
-            "result": "fail",
-            "summary": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2",
+            "ran": "caught 0 of 1 new planted faults (0%): inconclusive, between 0% and 73%, too few to tell strong tests from weak ones; at least 3 must give a clear result; a comment added to packages/worker/src/retry.js left the tests passing; 0 of the 5 faults the last audit missed are now caught, planted again and not counted; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:2",
+            "where": "not run",
+            "result": "not_run",
+            "summary": "caught 0 of 1 new planted faults (0%): inconclusive, between 0% and 73%, too few to tell strong tests from weak ones; at least 3 must give a clear result; a comment added to packages/worker/src/retry.js left the tests passing; 0 of the 5 faults the last audit missed are now caught, planted again and not counted; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:2",
             "durationMs": null,
             "repro": null,
             "supersededBy": null
@@ -2785,7 +2824,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": ".cursor/rules/style.mdc:6 `npm run lint -w api` replays",
-            "durationMs": 228,
+            "durationMs": 246,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && npm run lint -w api'\\'''",
             "supersededBy": null
           },
@@ -2797,7 +2836,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "AGENTS.md:6 `npm run test -w shared` replays",
-            "durationMs": 336,
+            "durationMs": 276,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && npm run test -w shared'\\'''",
             "supersededBy": null
           },
@@ -2809,7 +2848,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": "AGENTS.md:7 `npm test` replays",
-            "durationMs": 734,
+            "durationMs": 524,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && npm test'\\'''",
             "supersededBy": null
           },
@@ -2821,7 +2860,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": ".cursor/skills/verify/SKILL.md:15 `node --version && npm --version` replays",
-            "durationMs": 128,
+            "durationMs": 127,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && node --version && npm --version'\\'''",
             "supersededBy": null
           },
@@ -2833,7 +2872,7 @@
             "where": "ran in a clean container",
             "result": "pass",
             "summary": ".cursor/skills/verify/SKILL.md:56 `npm run test` replays",
-            "durationMs": 506,
+            "durationMs": 531,
             "repro": "docker run --rm --user \"$(id -u):$(id -g)\" -e HOME=/tmp/home -e CI=1 -v \"$PWD\":/work -w /work node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb bash -c 'SA_READINESS_IMAGE_PATH=\"$PATH\" exec bash -lc '\\''export PATH=\"$SA_READINESS_IMAGE_PATH:$PATH\"; unset SA_READINESS_IMAGE_PATH; mkdir -p \"$HOME\" && bash scripts/agent-install.sh && npm run test'\\'''",
             "supersededBy": null
           }
@@ -2865,7 +2904,7 @@
           },
           {
             "label": "Skill digest",
-            "value": "db08ff6647cf"
+            "value": "ec54274f7483"
           },
           {
             "label": "Planted faults",
@@ -2891,10 +2930,10 @@
         {
           "kind": "level",
           "subject": "repo",
-          "result": "Level 1",
+          "result": "Level 1 (could be 2)",
           "ran": "the level rules over the active components, api, shared and worker",
           "where": "in a clean docker container (node:22-bookworm)",
-          "happened": "Set by worker, held by worker: tests catch planted faults, not met (caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2).",
+          "happened": "Set by worker, held by worker: tests catch planted faults, not proven (caught 0 of 1 new planted faults (0%): inconclusive, between 0% and 73%, too few to tell strong tests from weak ones; at least 3 must give a clear result; a comment added to packages/worker/src/retry.js left the tests passing; 0 of the 5 faults the last audit missed are now caught, planted again and not counted; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:2).",
           "rule": "The repo level is the lowest level among active components, the assessed components with at least 10% of changes over 90 days; a component joins or leaves that set only after two audits on the same side of the line, except that one the last audit didn't have joins at once; when no assessed component reaches 10%, the largest sets it; and components the audit can't assess never set it."
         },
         {
@@ -2918,10 +2957,10 @@
         {
           "kind": "level",
           "subject": "worker",
-          "result": "Level 1",
+          "result": "Level 1 (could be 2)",
           "ran": "`node --version && npm --version` (pass), `bash scripts/agent-install.sh` (pass), `npm ci` (not run), `bash scripts/agent-start.sh` (pass), `npm run lint` in `packages/worker` (pass) and `npm run test` in `packages/worker` (pass)",
           "where": "in a clean docker container (node:22-bookworm)",
-          "happened": "Held at Level 1 by tests catch planted faults: not met (caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2)",
+          "happened": "Held at Level 1 by tests catch planted faults: not proven (caught 0 of 1 new planted faults (0%): inconclusive, between 0% and 73%, too few to tell strong tests from weak ones; at least 3 must give a clear result; a comment added to packages/worker/src/retry.js left the tests passing; 0 of the 5 faults the last audit missed are now caught, planted again and not counted; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:2)",
           "rule": "Level 1 needs: installs from the lockfile in a clean environment, builds in a clean environment and passes every test in a clean environment. Level 2 needs: build, lint, type-check and test commands pass, tests catch planted faults, agent instructions are accurate and normal work needs no production access. A component's level is the highest whose conditions are all met; Level 3 and 4 also need agent PR outcomes against targets."
         },
         {
@@ -2973,9 +3012,9 @@
           "kind": "condition",
           "subject": "api: tests catch planted faults",
           "result": "met",
-          "ran": "caught 5 of 5 planted faults (100%), 5 of them planted again from the last audit: strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip)",
+          "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip); a comment added to packages/api/src/orders.js left the tests passing",
           "where": "in a clean docker container (node:22-bookworm)",
-          "happened": "caught 5 of 5 planted faults (100%), 5 of them planted again from the last audit: strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip)",
+          "happened": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, change_constant, drop_throw_or_return, boundary_flip); a comment added to packages/api/src/orders.js left the tests passing",
           "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
         },
         {
@@ -3054,9 +3093,9 @@
           "kind": "condition",
           "subject": "shared: tests catch planted faults",
           "result": "met",
-          "ran": "caught 7 of 7 planted faults (100%), 7 of them planted again from the last audit: strong, at least 65% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
+          "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant); a comment added to packages/shared/src/money.js left the tests passing",
           "where": "in a clean docker container (node:22-bookworm)",
-          "happened": "caught 7 of 7 planted faults (100%), 7 of them planted again from the last audit: strong, at least 65% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant)",
+          "happened": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: negate_condition, drop_throw_or_return, boundary_flip, change_constant); a comment added to packages/shared/src/money.js left the tests passing",
           "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed. Tests run with the container's network switched off, so a test that needs the internet fails."
         },
         {
@@ -3098,11 +3137,11 @@
         {
           "kind": "condition",
           "subject": "worker: tests catch planted faults",
-          "result": "not met",
-          "ran": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2",
-          "where": "in a clean docker container (node:22-bookworm)",
-          "happened": "caught 0 of 11 planted faults (0%), 10 of them planted again from the last audit: weak, at most 20% with 95% confidence; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:3, negate_condition at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:12, negate_condition at packages/worker/src/retry.js:9, change_constant at packages/worker/src/retry.js:2",
-          "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not met means it ran and failed, or the repo lacks what it needs. Tests run with the container's network switched off, so a test that needs the internet fails."
+          "result": "not proven",
+          "ran": "caught 0 of 1 new planted faults (0%): inconclusive, between 0% and 73%, too few to tell strong tests from weak ones; at least 3 must give a clear result; a comment added to packages/worker/src/retry.js left the tests passing; 0 of the 5 faults the last audit missed are now caught, planted again and not counted; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:2",
+          "where": "not run",
+          "happened": "caught 0 of 1 new planted faults (0%): inconclusive, between 0% and 73%, too few to tell strong tests from weak ones; at least 3 must give a clear result; a comment added to packages/worker/src/retry.js left the tests passing; 0 of the 5 faults the last audit missed are now caught, planted again and not counted; missed: boundary_flip at packages/worker/src/retry.js:9, boundary_flip at packages/worker/src/retry.js:2, change_constant at packages/worker/src/retry.js:5, boundary_flip at packages/worker/src/retry.js:12, swap_return at packages/worker/src/retry.js:10, change_constant at packages/worker/src/retry.js:2",
+          "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Not proven means it didn't run, or ran below the strength the check requires."
         },
         {
           "kind": "instruction",

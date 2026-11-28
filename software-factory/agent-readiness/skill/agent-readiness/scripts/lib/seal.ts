@@ -9,7 +9,7 @@ import type { NamedValue } from "./history.ts";
 import type { LevelResult } from "./levels.ts";
 import { activeComponents, capAt, componentLevel, level3Run, outcomeLevel, partialCoverage, previousAtLevel3, recheckStates, repoLevel, scenariosFor, statesOf } from "./levels.ts";
 import { emptyStats } from "./outcomes.ts";
-import { budgetFloors, checkExecutors, makeExecutors, newBudget, reapOrphans, registryValuesOf, revealMutants, runContracts } from "./replay.ts";
+import { budgetFloors, checkExecutors, makeExecutors, newBudget, phaseRow, reapOrphans, registryValuesOf, revealMutants, runContracts, workspacePackages } from "./replay.ts";
 import type { Executors, PhaseResult } from "./replay.ts";
 import type { ModelInput, NarrationChoices } from "./model.ts";
 import { buildReport, narrationChoices, slotErrors } from "./model.ts";
@@ -21,7 +21,9 @@ import { loadRubric } from "./rubric.ts";
 import { validateAgainst } from "./schema.ts";
 import type { CompStates } from "./score.ts";
 import { componentStates, noRealResults } from "./score.ts";
-import type { Audit, CondId, CondState, HistoryLine, Level, OutcomeStats, ReportJson, Roadmap, ScenarioId, Targets } from "./types.ts";
+import type { Judgement } from "./verdict.ts";
+import { RECORD_WORD, VERDICT_WORD, judge } from "./verdict.ts";
+import type { Audit, CondId, CondState, Evidence, HistoryLine, Level, OutcomeStats, ReportJson, Roadmap, ScenarioId, Targets } from "./types.ts";
 import { SUPPORTED_DOC } from "./support.ts";
 import { tempDir } from "./teardown.ts";
 import { WAIVER_FILE, applyWaivers, loadWaivers } from "./waivers.ts";
@@ -130,6 +132,8 @@ export function buildSealedReport(audit: Audit, rubric: Rubric, history: History
     previousOutcomes = { window: `${fmtShortDate(from)} to ${fmtShortDate(to)}, ${to.slice(0, 4)}`, agent: prevWithOutcomes.outcomes.agent };
   }
   const o = audit.outcomes;
+  // The report gives an undetermined component no level, so the history records none for it either.
+  const undetermined = [...c.levels.entries()].filter(([, l]) => l.undetermined).map(([id]) => id);
   const line: HistoryLine = {
     id: audit.id,
     kind: "audit",
@@ -139,7 +143,8 @@ export function buildSealedReport(audit: Audit, rubric: Rubric, history: History
     scriptsDigest: audit.skill.scriptsDigest,
     result: "sealed",
     note: noResults ? `no level: ${noResults}` : undefined,
-    levels: Object.fromEntries([...c.levels.entries()].map(([id, l]) => [id, l.level])),
+    levels: Object.fromEntries([...c.levels.entries()].filter(([, l]) => !l.undetermined).map(([id, l]) => [id, l.level])),
+    ...(undetermined.length ? { undeterminedComponents: undetermined } : {}),
     repoLevel: c.repo.level,
     scenarioLevels: Object.fromEntries([...c.scenarioLevels.entries()].filter(([, m]) => m.size).map(([id, m]) => [id, Object.fromEntries([...m.entries()].map(([k, v]) => [k, v.level]))])),
     ...(noResults ? { noLevel: true } : {}),
@@ -447,28 +452,50 @@ export async function recheck(p: Paths, opts: RecheckOptions): Promise<{ line: H
   const root = tempDir("readiness-recheck-");
   const work: Audit = JSON.parse(JSON.stringify(audit)) as Audit;
   let exs: Executors | null = null;
-  let results: PhaseResult[];
+  let judged: { r: PhaseResult; row: Evidence; j: Judgement }[];
   try {
     const copy = join(root.path, "work");
+    const tree = join(root.path, "tree");
     exportTree(p.repo, commit, copy);
+    exportTree(p.repo, commit, tree);
     exs = await checkExecutors(work, makeExecutors(work, copy, opts.runtime, opts.log, opts.image ?? audit.environment.imageOverride, undefined, audit.contract.some((c) => c.component === "*")), audit.profile!, opts.log);
-    results = await runContracts(exs, audit.contract.filter((c) => !masked.includes(c)), { components: comps, budget: newBudget(rubric.budgets.componentMinutes, rubric.budgets.totalMinutes, budgetFloors(audit.profile!)), registryValues: registryValuesOf(audit), profile: audit.profile, onResult: (r) => opts.log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.blocked ? "blocked" : r.status}`) });
+    const run = exs;
+    // The audit's own gate: its experiments, the tree its checks must leave alone, and the workspace
+    // packages it recognises, so a recheck at the same commit can't read worse than the audit did.
+    const results = await runContracts(run, audit.contract.filter((c) => !masked.includes(c)), {
+      components: comps,
+      reruns: rubric.attribution?.reruns ?? [],
+      tree,
+      workspacePackages: workspacePackages(copy, audit.profile!),
+      budget: newBudget(rubric.budgets.componentMinutes, rubric.budgets.totalMinutes, budgetFloors(audit.profile!)),
+      registryValues: registryValuesOf(audit),
+      profile: audit.profile,
+    });
     results.push(...masked.map((cmd): PhaseResult => ({ cmd, status: "not_run", outcome: null, diagnosis: null, note: MASKED_COMMAND, blocked: MASKED_COMMAND })));
+    // A rerun's result is the command's: the last result for each command stands.
+    const latest = [...new Map(results.map((r) => [r.cmd.id, r])).values()];
+    judged = latest.map((r) => {
+      const row = phaseRow(r.executor ?? run.repo, r);
+      return { r, row, j: judge(row, rubric) };
+    });
+    for (const { r, j } of judged) opts.log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${VERDICT_WORD[j.verdict]}`);
   } finally {
     exs?.close();
     root.dispose();
   }
-  // A limit of this machine is never a regression, and a rerun outside a clean container can't
-  // carry the last audit's levels onto a new commit.
-  // Only a command that ran and failed lowers a level; one cut off or skipped proves nothing. On the
-  // host nothing is recorded as a level at all, whatever passed.
-  const failed = results.filter((r) => r.status === "fail" && !r.blocked);
+  // Only the repo's fault lowers a level: a limit of this machine, a failure the audit can't pin on
+  // the repo, and a command cut off or skipped prove nothing, and a rerun outside a clean container
+  // can't carry the last audit's levels onto a new commit. On the host nothing is recorded as a
+  // level at all, whatever passed.
+  const failed = judged.filter((x) => x.j.verdict === "repo_fault").map((x) => x.r);
   const onHost = exs.groups.some((g) => g.ex.where !== "container" && !(g.ex.where === "disposable_vm" && g.ex.strength === "clean_replay"));
-  const cutOff = results.find((r) => r.status === "not_run" && !r.blocked);
-  const blockedBy = onHost ? "no container runtime on this machine" : (results.find((r) => r.blocked)?.blocked ?? (cutOff ? `${cutOff.cmd.command} ${cutOff.note || "didn't run"}` : undefined));
+  const cutOff = judged.find((x) => x.j.verdict === "not_run" && !x.r.blocked)?.r;
+  const held = judged.find((x) => x.j.verdict === "blocked" || x.j.verdict === "undetermined");
+  const blockedBy = onHost ? "no container runtime on this machine" : held ? (held.r.blocked ?? held.j.reason) : cutOff ? `${cutOff.cmd.command} ${cutOff.note || "didn't run"}` : undefined;
   const unproven = onHost || (failed.length === 0 && Boolean(blockedBy));
   const lastLine = [...history].reverse().find((h) => h.id === audit.id);
   const levels: HistoryLine["levels"] = {};
+  const undetermined: string[] = [];
   const scenarioLevels: HistoryLine["scenarioLevels"] = {};
   const base = compute(audit, rubric, history.filter((h) => h.id !== audit.id));
   // A recheck can lower a level or restore it, never raise it past the last audit's.
@@ -476,7 +503,9 @@ export async function recheck(p: Paths, opts: RecheckOptions): Promise<{ line: H
     const kinds = new Set(failed.filter((r) => r.cmd.component === comp || r.cmd.component === "*").map((r) => r.cmd.kind as string));
     const s = recheckStates(statesOf(base.states.get(comp)!) as Partial<Record<CondId, CondState>>, kinds);
     const last = (lastLine?.levels[comp] ?? base.levels.get(comp)?.level ?? 0) as Level;
-    levels[comp] = kinds.size ? capAt(componentLevel(rubric, s).level, last) : last;
+    const wasUndetermined = lastLine ? Boolean(lastLine.undeterminedComponents?.includes(comp)) : Boolean(base.levels.get(comp)?.undetermined);
+    if (!kinds.size && wasUndetermined) undetermined.push(comp);
+    else levels[comp] = kinds.size ? capAt(componentLevel(rubric, s).level, last) : last;
     for (const sid of scenariosFor(rubric, audit.scenarios ?? [], comp)) {
       const lastScenario = (lastLine?.scenarioLevels?.[comp]?.[sid] ?? componentLevel(rubric, s, sid).level) as Level;
       (scenarioLevels[comp] ??= {})[sid] = capAt(componentLevel(rubric, s, sid).level, lastScenario);
@@ -495,8 +524,9 @@ export async function recheck(p: Paths, opts: RecheckOptions): Promise<{ line: H
     rubric: audit.rubric,
     scriptsDigest: skillDigest(),
     result: failed.length ? "failed" : unproven ? "blocked" : "passed",
-    note: firstFail ? `${firstFail.cmd.command} ${firstFail.status === "not_run" ? "not run" : "failed"}${firstFail.diagnosis ? `: ${firstFail.diagnosis.detail}` : ""}` : unproven ? `no level: the last audit's levels couldn't be proved here (${blockedBy})` : undefined,
+    note: firstFail ? `${firstFail.cmd.command} failed${firstFail.diagnosis ? `: ${firstFail.diagnosis.detail}` : ""}` : unproven ? `no level: the last audit's levels couldn't be proved here (${blockedBy})` : undefined,
     levels,
+    ...(undetermined.length ? { undeterminedComponents: undetermined } : {}),
     repoLevel: repoLevelNow,
     ...(unproven ? { noLevel: true } : {}),
     scenarioLevels,
@@ -505,7 +535,7 @@ export async function recheck(p: Paths, opts: RecheckOptions): Promise<{ line: H
     outcomes: null,
     seedPinned: audit.seed.pinned,
   };
-  const record = { schema: "agent-readiness/recheck@1", id, from: audit.id, at: nowIso(), commit, environment: work.environment, results: results.map((r) => ({ id: r.cmd.id, kind: r.cmd.kind, component: r.cmd.component, status: r.status, exitCode: r.outcome?.exitCode ?? null, diagnosis: r.diagnosis, note: r.note })) };
+  const record = { schema: "agent-readiness/recheck@1", id, from: audit.id, at: nowIso(), commit, environment: work.environment, results: judged.map(({ r, row, j }) => ({ id: r.cmd.id, kind: r.cmd.kind, component: r.cmd.component, status: RECORD_WORD[j.verdict], exitCode: r.outcome?.exitCode ?? null, diagnosis: r.diagnosis, ...(j.verdict === "blocked" || j.verdict === "undetermined" ? { reason: j.reason } : {}), ...(r.blocked ? { blocked: r.blocked } : {}), ...(row.attribution ? { attribution: row.attribution } : {}), note: r.note })) };
   storeRecheck(p, id, record, namedValues(audit));
   appendHistory(p, line, namedValues(audit));
   return { line, record };

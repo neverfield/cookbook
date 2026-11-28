@@ -1,17 +1,9 @@
 import { languageOf } from "../languages/index.ts";
-import { isTestFile } from "../mutate.ts";
 import type { Component, Profile } from "../types.ts";
 
-const JS = /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/;
-
-// Whether a file is a test by the component's language rule: its language file's, or the Node and
-// Python rule faults are planted by.
+// Whether a file is a test by the component's language rule; none for a language without one.
 function testRule(c: Component): (f: string) => boolean {
-  const own = languageOf(c.language)?.replay?.mutation?.isTest;
-  if (own) return own;
-  if (c.language === "py") return (f) => f.endsWith(".py") && isTestFile(f);
-  if (c.language === "ts" || c.language === "js") return (f) => JS.test(f) && isTestFile(f) && !f.includes("node_modules/");
-  return () => false;
+  return languageOf(c.language)?.checks.countedTests ?? (() => false);
 }
 
 const under = (path: string, f: string) => path === "." || f.startsWith(`${path}/`);

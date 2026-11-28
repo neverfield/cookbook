@@ -142,7 +142,7 @@ describe("PHP", () => {
     assert.deepEqual([c.language, c.packageManager], ["php", "composer"]);
     assert.deepEqual(testFiles(dir, c), ["tests/Unit/OrderTest.php"]);
     assert.deepEqual(targetFiles(dir, c), ["src/Order.php"]);
-    assert.equal(php.replay!.mutation.compileError!("PHP Parse error:  syntax error, unexpected token \";\" in src/Order.php on line 4"), true);
+    assert.equal(php.mutation!.compileError!("PHP Parse error:  syntax error, unexpected token \";\" in src/Order.php on line 4"), true);
   });
 });
 
@@ -232,7 +232,7 @@ describe("Ruby", () => {
     assert.deepEqual(targetFiles(dir, c), ["lib/shop/cart.rb"]);
     const contract = discoverContract(profile, dir, rubric, []).map((x) => [x.kind, x.command]);
     assert.deepEqual(contract, [["doctor", "ruby --version && bundle --version"], ["install", "BUNDLE_FROZEN=true bundle install"], ["test", "bundle exec rspec"]]);
-    assert.equal(ruby.replay!.mutation.compileError!("lib/shop/cart.rb:3: syntax errors found (SyntaxError)"), true);
+    assert.equal(ruby.mutation!.compileError!("lib/shop/cart.rb:3: syntax errors found (SyntaxError)"), true);
   });
 
   test("allSites uses the Ruby rules for a Ruby component", () => {

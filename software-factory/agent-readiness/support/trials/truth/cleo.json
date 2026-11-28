@@ -1,0 +1,51 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "python-poetry/cleo",
+  "commit": "fd264efa3702c6de0231b8235741881d70bb4e3e",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/python-poetry/cleo/commits/fd264efa3702c6de0231b8235741881d70bb4e3e/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/python-poetry/cleo/commits/fd264efa3702c6de0231b8235741881d70bb4e3e/status (all 18 Tests jobs, Ubuntu/macOS/Windows x py3.9-3.14, succeeded; pre-commit.ci status success)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 1.0,
+      "hasTests": true,
+      "install": [
+        "poetry install",
+        "poetry install --with test"
+      ],
+      "test": [
+        "poetry run pytest",
+        "poetry run mypy",
+        "pytest"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "Poetry library; CI runs poetry install, poetry run mypy, poetry run pytest (testpaths = tests)."
+    },
+    {
+      "path": "docs",
+      "ecosystem": "python",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Sphinx docs (docs dependency group in the root pyproject); not built in CI."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md giving the CI commands (poetry install, poetry run mypy, poetry run pytest) and the towncrier news-fragment rule for changes."
+  },
+  "dropped": 0
+}

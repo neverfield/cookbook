@@ -91,7 +91,7 @@ describe("Go", () => {
   });
 
   test("fault sites: if without parentheses, after an init statement, and never in strings, comments or timings", () => {
-    const sites = goHooks.mutation.sites!;
+    const sites = go.mutation!.sites!;
     assert.deepEqual(ops(sites("\tif reserved >= onHand {")), [["boundary_flip", "if reserved > onHand {"], ["negate_condition", "if !(reserved >= onHand) {"]]);
     assert.deepEqual(ops(sites("\tif v, ok := m[k]; ok {")), [["negate_condition", "if v, ok := m[k]; !(ok) {"]]);
     assert.deepEqual(ops(sites("\t} else if n > 10 { // more than 3")), [["boundary_flip", "} else if n >= 10 { // more than 3"], ["negate_condition", "} else if !(n > 10) { // more than 3"], ["change_constant", "} else if n > 11 { // more than 3"]]);
@@ -99,16 +99,16 @@ describe("Go", () => {
     assert.deepEqual(sites("\ttime.Sleep(5 * time.Second)"), []);
     assert.deepEqual(sites('import "example.com/v2"'), []);
     const text = ["func a() string {", "\treturn `x", "y 3`", "}", "/* c", " 4 */", "var z = 1"].join("\n");
-    assert.deepEqual([...goHooks.mutation.quoted!(text)].sort(), [1, 2, 4, 5]);
+    assert.deepEqual([...go.mutation!.quoted!(text)].sort(), [1, 2, 4, 5]);
   });
 
   test("go test -v counts top-level tests; a compile error is told from a failing test", () => {
     const out = "=== RUN   TestA\n--- PASS: TestA (0.00s)\n=== RUN   TestB\n    --- PASS: TestB/sub (0.00s)\n--- FAIL: TestB (0.00s)\n    b_test.go:9: got 1, want 2\nFAIL\n";
     assert.deepEqual(goHooks.testCounts!(out), { passed: 1, failed: 1, total: 2 });
     assert.equal(goHooks.testCounts!("ok  \tx\t0.01s\n"), null);
-    assert.equal(goHooks.mutation.compileError!(out), false);
-    assert.equal(goHooks.mutation.compileError!("# x/stock\nstock/stock.go:5:2: undefined: y\nFAIL\tx/stock [build failed]\n"), true);
-    assert.equal(goHooks.mutation.compileError!("./stock.go:5:2: syntax error: unexpected }\n"), true);
+    assert.equal(go.mutation!.compileError!(out), false);
+    assert.equal(go.mutation!.compileError!("# x/stock\nstock/stock.go:5:2: undefined: y\nFAIL\tx/stock [build failed]\n"), true);
+    assert.equal(go.mutation!.compileError!("./stock.go:5:2: syntax error: unexpected }\n"), true);
   });
 });
 
@@ -175,7 +175,7 @@ describe("Rust", () => {
   });
 
   test("fault sites: lifetimes and char literals aren't strings, if let isn't negated, attributes and use lines have none", () => {
-    const sites = rustHooks.mutation.sites!;
+    const sites = rust.mutation!.sites!;
     assert.deepEqual(ops(sites("    fn f<'a>(x: &'a str) -> bool { x.len() > 3 }")), [["boundary_flip", "fn f<'a>(x: &'a str) -> bool { x.len() >= 3 }"], ["change_constant", "fn f<'a>(x: &'a str) -> bool { x.len() > 4 }"]]);
     assert.deepEqual(ops(sites("    while i < n {")), [["boundary_flip", "while i <= n {"], ["negate_condition", "while !(i < n) {"]]);
     assert.deepEqual(sites("    if let Some(x) = y {"), []);
@@ -184,15 +184,15 @@ describe("Rust", () => {
     assert.deepEqual(sites("pub(crate) use std::io;"), []);
     assert.deepEqual(ops(sites("    let n = 1_000 + 2;")), [["change_constant", "let n = 1_000 + 3;"]]);
     const text = ["pub fn a() -> u32 {", "    /* block", "       2 */", '    let s = "multi', 'line 3";', "    5", "}", "#[cfg(test)]", "mod tests {", "    fn t() {}", "}", "#[cfg(test)]", "use foo;", "fn b() -> u8 { 1 }"].join("\n");
-    assert.deepEqual([...rustHooks.mutation.quoted!(text)].sort((a, b) => a - b), [1, 2, 3, 4, 7, 8, 9, 10, 11, 12]);
+    assert.deepEqual([...rust.mutation!.quoted!(text)].sort((a, b) => a - b), [1, 2, 3, 4, 7, 8, 9, 10, 11, 12]);
   });
 
   test("test counts sum every test binary; a compile error is told from a failing test", () => {
     const out = "running 3 tests\n...\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nrunning 2 tests\n.F\ntest result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out\n\nerror: test failed, to rerun pass `--lib`\n";
     assert.deepEqual(rustHooks.testCounts!(out), { passed: 4, failed: 1, total: 5 });
-    assert.equal(rustHooks.mutation.compileError!(out), false);
-    assert.equal(rustHooks.mutation.compileError!("error[E0308]: mismatched types\n --> src/lib.rs:3:5\n"), true);
-    assert.equal(rustHooks.mutation.compileError!("error: expected `;`, found `}`\nerror: could not compile `a` (lib) due to 1 previous error\n"), true);
+    assert.equal(rust.mutation!.compileError!(out), false);
+    assert.equal(rust.mutation!.compileError!("error[E0308]: mismatched types\n --> src/lib.rs:3:5\n"), true);
+    assert.equal(rust.mutation!.compileError!("error: expected `;`, found `}`\nerror: could not compile `a` (lib) due to 1 previous error\n"), true);
   });
 });
 
@@ -237,13 +237,13 @@ describe("fault targets for tests that don't sit in or name their source (final 
       "src/other.rs": "pub fn h() -> u8 { 2 }\n",
       "tests/it.rs": "",
     });
-    assert.equal(rust.replay!.mutation.isTest("src/tests.rs"), true);
+    assert.equal(rust.mutation!.isTest("src/tests.rs"), true);
     assert.deepEqual(rustCovered(dir, ".", ["src/tests.rs", "tests/it.rs"], ["src/lib.rs", "src/tests.rs", "src/inline.rs", "src/other.rs"]), ["src/inline.rs", "src/lib.rs"]);
   });
 
   test("an item under a cfg that isn't on everywhere gets no fault: features, other platforms, architectures", () => {
     const text = ["pub fn a(n: u64) -> bool {", "    n > 3", "}", "#[cfg(feature = \"float_roundtrip\")]", "fn b(n: u64) -> bool {", "    n > 4", "}", "#[cfg(windows)]", "fn c() -> u8 { 5 }", "#[cfg(unix)]", "fn d() -> u8 { 6 }", "#[cfg(target_arch = \"x86_64\")]", "fn e() -> u8 { 7 }", "#[cfg_attr(test, derive(Debug))]", "struct S(u8);"].join("\n");
-    assert.deepEqual([...rust.replay!.mutation.quoted!(text)].sort((a, b) => a - b), [3, 4, 5, 6, 7, 8, 11, 12]);
+    assert.deepEqual([...rust.mutation!.quoted!(text)].sort((a, b) => a - b), [3, 4, 5, 6, 7, 8, 11, 12]);
     assert.equal(cfgActive('all(unix, not(target_os = "macos"))', null), true);
     assert.equal(cfgActive('any(feature = "std", windows)', new Set(["std"])), true);
     assert.equal(cfgActive('feature = "std"', null), null);

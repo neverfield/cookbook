@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { Site } from "../mutate.ts";
 import type { Component } from "../types.ts";
-import { exists, git, listFiles, readJson, readText } from "../util.ts";
+import { clip, exists, git, listFiles, readJson, readText } from "../util.ts";
 import { inComponent, namedAfter } from "./coverage.ts";
 import type { DraftCommand, Ecosystem, LanguageDef } from "./language.ts";
 
@@ -374,6 +374,45 @@ export function phpQuoted(text: string): Set<number> {
 // Every PHP file of the component outside vendor/, linted one at a time, since `php -l` reads one.
 const LINT_ALL = "find . -name '*.php' -not -path './vendor/*' -not -path './node_modules/*' -not -path './var/*' -not -path './storage/*' -print0 | xargs -0 -n1 php -l >/dev/null";
 
+// Composer's problem list and PHPStan's error table, as the build's cause.
+function composerRoot(text: string): string | null {
+  const problems = [...text.matchAll(/^\s*Problem \d+\s*\n((?:\s+- [^\n]*\n?)+)/gm)];
+  if (!problems.length) return null;
+  const bullets = problems[0][1].split("\n").map((l) => l.trim().replace(/^- /, "")).filter(Boolean);
+  const last = bullets[bullets.length - 1].replace(/ from composer repo \([^)]*\)/g, "").replace(/\s*See https?:\/\/\S+ for [^.]*\.?$/, "").trim();
+  const more = problems.length > 1 ? ` (and ${problems.length - 1} more ${problems.length === 2 ? "problem" : "problems"})` : "";
+  return `${clip(last, 260)}${more}`;
+}
+
+// Lines PHPStan decorates with an emoji (its identifier and tip lines); the report never shows one.
+const PICTOGRAPH = /\p{Extended_Pictographic}/u;
+
+function phpstanRoot(text: string): string | null {
+  const found = text.match(/\[ERROR\] Found (\d+) errors?/);
+  if (!found) return null;
+  const lines = text.split("\n");
+  const sep = /^\s*-{2,}(\s+-{2,})+\s*$/;
+  for (let i = 0; i < lines.length; i++) {
+    const head = lines[i].match(/^\s*(Line|Error)\s+(\S.*?)?\s*$/);
+    if (!head || !sep.test(lines[i + 1] ?? "")) continue;
+    const file = head[1] === "Line" ? head[2] : undefined;
+    const parts: string[] = [];
+    let line: string | undefined;
+    for (let j = i + 2; j < lines.length && !sep.test(lines[j]); j++) {
+      const row = lines[j].match(/^\s*(:?\d+)?\s{2,}(\S.*?)\s*$/) ?? lines[j].match(/^\s*()(\S.*?)\s*$/);
+      if (!row || PICTOGRAPH.test(lines[j])) continue;
+      if (row[1] && parts.length) break;
+      if (row[1]) line = row[1].replace(/^:/, "");
+      parts.push(row[2]);
+    }
+    if (!parts.length) continue;
+    const n = Number(found[1]);
+    const where = file ? ` in ${file}${line ? `:${line}` : ""}` : "";
+    return clip(`${n === 1 ? `PHPStan found 1 error${where}` : `PHPStan found ${n} errors; the first${where}`}: ${parts.join(" ")}`, 260);
+  }
+  return null;
+}
+
 export const php: LanguageDef = {
   id: "php",
   label: "PHP",
@@ -397,6 +436,23 @@ export const php: LanguageDef = {
     projectName: (_tree, manifest, text) => (manifest === "composer.json" ? text.match(/"name"\s*:\s*"(?:[^"/]+\/)?([^"]+)"/)?.[1] : undefined),
   },
   ecosystems: [composer],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: /^(composer|php|phpunit|vendor\/bin\/\S+)$/,
+    countedTests: isTest,
+    ciTest: null,
+  },
+  mutation: {
+    isTest,
+    isSource,
+    covered: (_tree, comp, tests, files) => namedAfter(tests, inComponent(files, comp.path), isSource),
+    sites: phpSites,
+    quoted: phpQuoted,
+    compileProbe: (comp) => ({ command: LINT_ALL, cwd: comp.path }),
+    compileError: (output) => /(PHP )?Parse error:|Errors parsing /.test(output),
+  },
   replay: {
     classify: () => ({ language: "php", packageManager: "composer" }),
     image: phpImage,
@@ -408,14 +464,6 @@ export const php: LanguageDef = {
     },
     commands: phpCommands,
     testCounts: phpTestCounts,
-    mutation: {
-      isTest,
-      isSource,
-      covered: (_tree, comp, tests, files) => namedAfter(tests, inComponent(files, comp.path), isSource),
-      sites: phpSites,
-      quoted: phpQuoted,
-      compileProbe: (comp) => ({ command: LINT_ALL, cwd: comp.path }),
-      compileError: (output) => /(PHP )?Parse error:|Errors parsing /.test(output),
-    },
   },
+  output: { rootErrors: [composerRoot, phpstanRoot] },
 };

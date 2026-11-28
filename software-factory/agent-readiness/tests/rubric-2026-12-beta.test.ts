@@ -40,7 +40,7 @@ const DONE_WHEN = ["commands", "faults", "instructions"];
 describe("rubric 2026-12-beta", () => {
   test("is the rubric new audits use, and lists what changed", () => {
     assert.equal(latestRubricVersion(), "2026-12-beta");
-    assert.equal((next.changes ?? []).length, 13);
+    assert.equal((next.changes ?? []).length, 14);
   });
 
   test("is written as JSON.stringify(rubric, null, 2), so a reformat never moves its digest", () => {
