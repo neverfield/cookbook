@@ -92,7 +92,8 @@ export function recordProblems(ws: Workspace): string[] {
   for (const e of r.details.evidence) {
     const a = inAudit.get(e.id);
     if (!a) problems.push(`latest/report.json cites ${e.id}, which audit.json doesn't have`);
-    else if (e.result !== "blocked" && (a.result !== e.result || a.summary !== e.summary)) problems.push(`${e.id} reads "${a.result}: ${a.summary}" in audit.json but "${e.result}: ${e.summary}" in latest/report.json`);
+    // The report gives the verdict: a failure blocked on this machine or undetermined reads as such.
+    else if (e.result !== "blocked" && (!(a.result === e.result || (a.result === "fail" && e.result === "undetermined")) || a.summary !== e.summary)) problems.push(`${e.id} reads "${a.result}: ${a.summary}" in audit.json but "${e.result}: ${e.summary}" in latest/report.json`);
   }
   if (inAudit.size !== r.details.evidence.length) problems.push(`audit.json has ${inAudit.size} evidence items, latest/report.json ${r.details.evidence.length}`);
   return problems;

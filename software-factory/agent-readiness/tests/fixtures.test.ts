@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { detectRuntime } from "../skill/agent-readiness/scripts/lib/container.ts";
+import { accusations } from "../support/evals/lib/expected.ts";
 import { auditFixture, expected, fixtureNames } from "../support/tools/fixture.ts";
 
 const runtime = detectRuntime("auto");
@@ -36,6 +37,7 @@ describe("fixtures match expected.json", { concurrency: 3, skip: runtime ? false
         if (run.waiting) for (const w of run.waiting) assert.equal(a.roadmap.items.find((i: { id: string }) => i.id === w)?.status, "waiting", `${w} waits`);
         if (run.diagnosis) assert.ok(r.details.evidence.some((e: { summary: string }) => e.summary.includes(run.diagnosis!)), `evidence says ${run.diagnosis}`);
         if (run.outcome) assert.equal(r.maturity.outcome, run.outcome, "outcome");
+        if (run.neverAccused) assert.deepEqual(accusations(r, a.audit), [], "a repo healthy by construction is never accused");
         if (run.shares) {
           const all = [...r.components.included, ...r.components.excluded.filter((c: { reason: string }) => !c.reason.startsWith("not a component"))];
           assert.deepEqual(Object.fromEntries(all.filter((c: { id: string }) => c.id in run.shares!).map((c: { id: string; changeShare: number }) => [c.id, c.changeShare])), run.shares, "share of changes, kept for components that aren't assessed");

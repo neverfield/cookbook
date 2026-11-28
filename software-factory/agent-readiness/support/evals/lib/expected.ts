@@ -36,6 +36,15 @@ export function checkOf(condition: string): string {
   return "safety.execution_boundary";
 }
 
+// Everything that would say the repo is at fault: a condition not met (outcome targets and planted
+// faults aside) or a blocking safety finding.
+export function accusations(report: AuditRecords["report"], audit: AuditRecords["audit"]): string[] {
+  const caps = [...(report.maturity?.capReasons ?? []), ...(report.components?.included ?? []).flatMap((c: { capReasons?: unknown[] }) => c.capReasons ?? [])] as { component: string; condition: string; state: string; reason: string }[];
+  const notMet = [...new Set(caps.filter((c) => c.state === "not_met" && c.condition !== "outcomes" && c.condition !== "faults").map((c) => `${c.component} ${c.condition} not met: ${c.reason}`))];
+  const blocking = (audit.safety ?? []).filter((s: { blocking: boolean }) => s.blocking).map((s: { file: string; detail: string }) => `blocking ${s.file}: ${s.detail}`);
+  return [...notMet, ...blocking];
+}
+
 const notComponent = (u: { reason: string }) => u.reason.startsWith("not a component");
 const topOf = (r: AuditRecords["report"]) => (r.actions ?? []).filter((x: { startNow: boolean }) => !x.startNow).map((x: { itemId: string }) => x.itemId);
 
@@ -72,6 +81,7 @@ const CHECKS: Checks = {
   waiting: (want, { roadmap }) => want.flatMap((w) => differ(`${w} status`, "waiting", (roadmap.items ?? []).find((i: { id: string }) => i.id === w)?.status ?? "missing")),
   diagnosis: (want, { report }) => ((report.details?.evidence ?? []).some((e: { summary: string }) => e.summary.includes(want)) ? [] : [`no evidence says "${want}"`]),
   outcome: (want, { report }) => differ("outcome", want, report.maturity?.outcome),
+  neverAccused: (want, { report, audit }) => (want ? accusations(report, audit) : []),
   shares: (want, { report }) => {
     const all = [...(report.components?.included ?? []), ...(report.components?.excluded ?? []).filter((c: { reason: string }) => !notComponent(c))];
     return differ("change shares", want, Object.fromEntries(all.filter((c: { id: string }) => c.id in want).map((c: { id: string; changeShare: number }) => [c.id, c.changeShare])));

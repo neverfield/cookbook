@@ -156,6 +156,9 @@ export interface ExpectedRun {
   skipped?: number;
   // Values, such as a committed secret, that must appear nowhere in the report or the sealed audit.
   absent?: string[];
+  // A repo healthy by construction in a hostile environment: no condition is not met and no safety
+  // finding blocks.
+  neverAccused?: boolean;
   // Part 1's line for what the level doesn't cover: its share, and whether it links the support list.
   unassessed?: { share: number; supportLink: boolean } | null;
 }

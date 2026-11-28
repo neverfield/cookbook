@@ -60,6 +60,7 @@ New audits use rubric `2026-12-beta`. Audits sealed under earlier rubrics are ne
 ### Install and release
 
 - The README Quickstart clones `--branch agent-readiness-v0.2.0`, and the example CI workflows name that release and ask you to pin the commit it points to. `npm run release-manifest` refuses to write `RELEASE.json` when the Quickstart or either workflow names another release.
+- The holdout adapter's one-fact check (K6) reads a blocked command's word only in the explanations about its own component, keyed by contract and component, so in a monorepo another package that runs the same command line and fails on its own no longer reads as a conflict. An instrument change: `support/holdout/observe.ts` only; `score.ts` and the frozen protocol files are unchanged.
 - Narration is outside the release gate: the headline judge lift is reported, not required (`RELEASE_POLICY.narrationLift` is false). A release needs a passing blind holdout test and an empty `tests/known-failures.json`.
 
 Later work, not in this release: a planted lint error (lint configs differ too much between repos to plant one error every config flags, so "whether the lint command catches anything" is listed as not assessed), a revert-rate target, a review-capacity guard for Level 4, scoring the drive-the-app signal, a committed component-map override, and rootless Podman.
