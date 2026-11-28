@@ -10,7 +10,9 @@ import { componentLevel, repoLevel, statesOf } from "../skill/agent-readiness/sc
 import { ciCommands, ciEnvFor, ciTestScript, scriptCalled, testScriptOf } from "../skill/agent-readiness/scripts/lib/plan/ci.ts";
 import { ownTestFiles } from "../skill/agent-readiness/scripts/lib/plan/test-files.ts";
 import { DELEGATES } from "../skill/agent-readiness/scripts/lib/profile.ts";
-import { addToolCommand } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { currentEvidence } from "../skill/agent-readiness/scripts/lib/evidence.ts";
+import { addToolCommand, evidenceFromPhase, newBudget, runContract } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
 import type { Component, Profile } from "../skill/agent-readiness/scripts/lib/types.ts";
@@ -60,6 +62,57 @@ describe("attribution: whose failure a failed step is", () => {
     assert.equal(networkVerdict(first, false, "x failed").verdict, "repo");
     const runner = attribute(fail("sh: 1: vitest: not found"));
     assert.ok(!rerunsOnline(runner), "a missing test runner isn't the network's to settle");
+  });
+
+  // pocketbase@7f2773e: TestRecordAuthWithOAuth2 needs the network, and the rerun with it on now and
+  // then fails a test flaky on its own (TestNotifyWatcher_SettingsUpdate, TestRandomStringByRegex).
+  const flakyRun = async (online: { exitCode: number; output: string }[]) => {
+    const audit = makeAudit({ components: [{ id: "app", share: 1 }] });
+    audit.evidence = [];
+    const testCmd = audit.contract.find((c) => c.kind === "test")!;
+    const answers = [{ exitCode: 1, output: "--- FAIL: TestRecordAuthWithOAuth2 (0.01s)\n    dial tcp: lookup pocketbase.io: no such host\nFAIL\n" }, ...online];
+    let testRuns = 0;
+    const ex: Executor = {
+      where: "container",
+      strength: "clean_replay",
+      image: "golang:1.27",
+      imageSource: "audit",
+      root: "/work",
+      exec: async (command) => ({ timedOut: false, durationMs: 1, ...(command === testCmd.command ? answers[testRuns++] : { exitCode: 0, output: "" }) }),
+      offline: () => (ex.networkOff = true),
+      online: () => (ex.networkOff = false, true),
+      networkOff: null,
+      close: () => {},
+    };
+    const results = await runContract(ex, audit.contract, { components: new Set(["app"]), budget: newBudget(10, 10), registryValues: [], reruns: ["network"] });
+    for (const r of results) evidenceFromPhase(audit, ex, r, []);
+    const tests = currentEvidence(audit).filter((e) => e.condition === "clean.test");
+    return { testRuns, state: componentStates(audit, next, "app")["clean.test"].state, tests, offline: audit.evidence.find((e) => e.condition === "clean.test")! };
+  };
+  const pass = { exitCode: 0, output: "--- PASS: TestRecordAuthWithOAuth2 (0.01s)\nok\n" };
+  const flake = { exitCode: 1, output: "--- FAIL: TestNotifyWatcher_SettingsUpdate (1.00s)\nFAIL\n" };
+
+  test("a rerun with the network on that passes is the only extra run", async () => {
+    const r = await flakyRun([pass]);
+    assert.equal(r.testRuns, 2);
+    assert.equal(r.state, "met");
+  });
+
+  test("a rerun with the network on that fails gets one more try, and a pass there records the tests as flaky", async () => {
+    const r = await flakyRun([flake, pass]);
+    assert.equal(r.testRuns, 3);
+    assert.equal(r.state, "met", "a test flaky on its own isn't a clean checkout's failing tests");
+    assert.equal(r.tests.length, 1);
+    assert.match(r.tests[0].summary, /on a second try: the first with it on failed \(TestNotifyWatcher_SettingsUpdate failed\), so the tests are flaky/);
+    assert.equal(r.offline.attribution?.verdict, "environment");
+  });
+
+  test("a third failure is the repo's, as a second was before", async () => {
+    const r = await flakyRun([flake, flake]);
+    assert.equal(r.testRuns, 3);
+    assert.equal(r.state, "not_met");
+    assert.equal(r.tests[0].attribution?.verdict, "repo");
+    assert.match(r.tests[0].summary, /it failed again with the network on/);
   });
 
   test("diagnoses Python's missing module, GitPython's missing git and a missing shared library", () => {
