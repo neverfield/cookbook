@@ -915,9 +915,11 @@ The Plan A trials (#68) recorded rate misses in discovery and the run plan, and 
 - **Remeasure:** with rounds 21 to 25, at the Mac release session.
 - **Verdict:** pending.
 
-## Not a round: per-language facts move into the language files (November 27, 2026)
+## Round 27 (no measurement needed): per-language facts move into the language files (November 27, 2026)
 
-Findings 8, 16 and 19 of the skill architecture review. Scripts only: SKILL.md, the references, the templates, the report wording, the rubric, each fixture's `expected.json`, the judge prompts and the calibration are unchanged, so nothing here is measured as a round.
+Findings 8, 16 and 19 of the skill architecture review (#72). Scripts only: SKILL.md, the references, the templates, the report wording, the rubric, each fixture's `expected.json`, the judge prompts and the calibration are unchanged, so there is nothing for the judges to measure.
 
-- **Held fixed:** a probe over every fixture records the profile, safety findings, instruction items, the contract (with and without install hooks, under 2026-12-beta and 2026-11-beta), the image plan, tool setup, toolchain copies, timeouts, test and target files, fault sites, the faults chosen, narrowing, the run plan's test counts and `readiness diff` over a weakening commit. Its output is byte-identical to the base's. The goldens rerun with every level unchanged, and the trials' recorded results hold.
-- **Verdict:** none needed.
+- **Failure mode:** none the agent or the reader sees. A new language could leave a check silently unimplemented, and Node and Python bypassed the language interface.
+- **Change:** every per-language fact moves into the language files; see the PR.
+- **Held fixed:** a probe over every fixture and every pinned trial repo records the profile, safety findings, instruction items, the contract (with and without install hooks, under 2026-12-beta and 2026-11-beta), the image plan, tool setup, toolchain copies, timeouts, test and target files, fault sites, the faults chosen, narrowing, the run plan's test counts and `readiness diff`. Its output is byte-identical to the base's. The goldens rerun with every level unchanged.
+- **Verdict:** kept; no measurement needed.
