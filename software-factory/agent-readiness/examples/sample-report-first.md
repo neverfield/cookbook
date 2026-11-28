@@ -296,9 +296,9 @@ Every level, every unproven or not-assessed result and every finding, with what 
 
 | ID | Check | Component | What ran | Result |
 |---|---|---|---|---|
-| `ev-003` | `context.instructions_verified` | repo | (read from files) | fail: .cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no "changelog" script in package.json |
-| `ev-001` | `context.instructions_verified` | repo | (read from files) | superseded by `ev-002`; was fail: AGENTS.md:7 `pnpm test`: uses pnpm, but the repo uses npm |
-| `ev-002` | `context.instructions_verified` | repo | (read from files) | superseded by `ev-003`; was fail: AGENTS.md:8 `docs/architecture.md`: docs/architecture.md doesn't exist |
+| `ev-003` | `context.instructions_verified` | repo | (read from files) | undetermined: .cursor/skills/release-notes/SKILL.md:8 `npm run changelog`: no "changelog" script in package.json |
+| `ev-001` | `context.instructions_verified` | repo | (read from files) | superseded by `ev-002`; was undetermined: AGENTS.md:7 `pnpm test`: uses pnpm, but the repo uses npm |
+| `ev-002` | `context.instructions_verified` | repo | (read from files) | superseded by `ev-003`; was undetermined: AGENTS.md:8 `docs/architecture.md`: docs/architecture.md doesn't exist |
 | `ev-004` | `safety.execution_boundary` | repo | (read from files) | pass: no blocking findings; 0 items listed for review |
 | `ev-005` | `bootstrap.cold_replay` | repo | (read from files) | pass: toolchain pinned in .nvmrc |
 | `ev-006` | `bootstrap.cold_replay` | repo | node --version && npm --version (ran in a clean container, under 1 s) | pass: doctor passed |
@@ -344,7 +344,7 @@ Audited Oct 27, 2026 at 7070f44. Eval run with a pinned seed; not a production r
 - **Permission tier:** local-exec
 - **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
 - **Integrity:** unsigned: the seal is a digest that shows edits, but anyone with the scripts could reseal an edited audit
-- **Skill digest:** db08ff6647cf
+- **Skill digest:** bbe976acc22f
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** docker container, node:22-bookworm; the network is on for the install and build and switched off for tests, type-checks and planted faults, so a test that needs the internet fails here
 - **Environment self-check:** passed: mount visible, mount writable, run user, git identity, network cut

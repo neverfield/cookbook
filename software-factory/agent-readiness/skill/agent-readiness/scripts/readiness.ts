@@ -186,7 +186,7 @@ function cmdScan(a: Args): void {
   for (const c of profile.components) log(`  ${c.id.padEnd(14)} ${String(Math.round(c.changeShare * 100)).padStart(3)}% of changes  ${c.assessed ? "assessed" : `not assessed: ${c.notAssessedReason}`}`);
   const agentWork = agentHistory(repo);
   if (agentWork && audit.tier !== "external-systems") log(`Agent work in the history (${agentWork}). Offer --tier external-systems so the report can measure agent PRs against other PRs; it reads pull requests through gh.`);
-  log(`Contract: ${audit.contract.length} commands. Instructions: ${audit.instructions.length} items, ${audit.instructions.filter((i) => i.result === "fail").length} wrong. Safety: ${blocking.length} blocking, ${audit.safety.length - blocking.length} listed.`);
+  log(`Contract: ${audit.contract.length} commands. Instructions: ${audit.instructions.length} items, ${instructionCounts(audit, rubric)}. Safety: ${blocking.length} blocking, ${audit.safety.length - blocking.length} listed.`);
   if (a.flags.strict) {
     // Only an item that holds a level fails the check; a wrong README line or path is listed in the report.
     const wrong = audit.instructions.filter((i) => i.result === "fail" && gatingInstruction(rubric, i));
@@ -411,6 +411,13 @@ function cmdNarrate(a: Args): void {
 function levelText(row: { level: Level | null; couldBe: Level | null; unproven: boolean; status?: string; settleBy?: { text: string } | null } | undefined): string {
   if (!row) return "not assessed";
   return row.status === "undetermined" && row.settleBy ? `${levelResult(row)}; to settle it: ${row.settleBy.text}` : levelResult(row);
+}
+
+// Wrong items that gate, and those listed for the reader, as the scan's summary line counts them.
+function instructionCounts(audit: Audit, rubric: Rubric): string {
+  const wrong = audit.instructions.filter((i) => i.result === "fail");
+  const gating = wrong.filter((i) => gatingInstruction(rubric, i)).length;
+  return `${gating} wrong${wrong.length > gating ? `, ${wrong.length - gating} wrong outside the agent files, listed` : ""}`;
 }
 
 // A row's verdict as `status` prints it, with why it is blocked or where it ran.

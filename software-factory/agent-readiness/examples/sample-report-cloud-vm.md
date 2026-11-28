@@ -253,7 +253,7 @@ Audited Oct 27, 2026 at dc50d7a. Eval run with a pinned seed; not a production r
 - **Permission tier:** local-exec
 - **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
 - **Integrity:** unsigned: the seal is a digest that shows edits, but anyone with the scripts could reseal an edited audit
-- **Skill digest:** db08ff6647cf
+- **Skill digest:** bbe976acc22f
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** fresh copy on a disposable VM as provisioned, including its preinstalled tools and running services (no container runtime, detected by /exec-daemon and CLOUD_AGENT_INJECTED_SECRET_NAMES), network cut for the tests
 - **Environment self-check:** passed: mount visible, mount writable, run user, git identity

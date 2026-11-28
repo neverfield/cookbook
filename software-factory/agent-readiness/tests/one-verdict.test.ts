@@ -189,7 +189,7 @@ describe("instructions are judged by the same gate", () => {
     commitAll(repo, "A wrong README line");
     assert.equal(readiness(repo, ["init", "--tier", "read-only"]).code, 0);
     const scan = readiness(repo, ["scan", "--strict"]);
-    assert.match(scan.out, /1 wrong/, "the README line is still found wrong and listed");
+    assert.match(scan.out, /0 wrong, 1 wrong outside the agent files, listed/, "the README line is still found wrong and listed");
     assert.equal(scan.code, 0, scan.out);
   });
 });

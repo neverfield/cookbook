@@ -9,7 +9,7 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "db08ff6647cfaf3b50c55b6786d3dbbcc4181589aba53f022e2b5ae8596473af",
+    "scriptsDigest": "bbe976acc22fc4df910184b0c6849bc2df0ed9db9a7df86b89cd4f5243bea4bd",
     "seedPinned": true,
     "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
@@ -288,6 +288,8 @@
         "counts": {
           "passed": 0,
           "failed": 0,
+          "blocked": 0,
+          "undetermined": 0,
           "notRun": 0
         },
         "evidence": []
@@ -302,6 +304,8 @@
         "counts": {
           "passed": 0,
           "failed": 0,
+          "blocked": 0,
+          "undetermined": 0,
           "notRun": 0
         },
         "evidence": []
@@ -322,7 +326,9 @@
         "counts": {
           "passed": 1,
           "failed": 0,
-          "notRun": 5
+          "blocked": 5,
+          "undetermined": 0,
+          "notRun": 0
         },
         "evidence": [
           "ev-002",
@@ -343,7 +349,9 @@
         "counts": {
           "passed": 0,
           "failed": 0,
-          "notRun": 3
+          "blocked": 3,
+          "undetermined": 0,
+          "notRun": 0
         },
         "evidence": [
           "ev-005",
@@ -367,6 +375,8 @@
         "counts": {
           "passed": 0,
           "failed": 0,
+          "blocked": 0,
+          "undetermined": 0,
           "notRun": 1
         },
         "evidence": [
@@ -611,7 +621,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "db08ff6647cf"
+        "value": "bbe976acc22f"
       },
       {
         "label": "Planted faults",

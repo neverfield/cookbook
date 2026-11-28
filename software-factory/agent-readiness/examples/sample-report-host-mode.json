@@ -9,7 +9,7 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "db08ff6647cfaf3b50c55b6786d3dbbcc4181589aba53f022e2b5ae8596473af",
+    "scriptsDigest": "bbe976acc22fc4df910184b0c6849bc2df0ed9db9a7df86b89cd4f5243bea4bd",
     "seedPinned": true,
     "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
@@ -294,6 +294,8 @@
         "counts": {
           "passed": 0,
           "failed": 0,
+          "blocked": 0,
+          "undetermined": 0,
           "notRun": 0
         },
         "evidence": []
@@ -308,6 +310,8 @@
         "counts": {
           "passed": 0,
           "failed": 0,
+          "blocked": 0,
+          "undetermined": 0,
           "notRun": 0
         },
         "evidence": []
@@ -328,6 +332,8 @@
         "counts": {
           "passed": 6,
           "failed": 0,
+          "blocked": 0,
+          "undetermined": 0,
           "notRun": 0
         },
         "evidence": [
@@ -349,6 +355,8 @@
         "counts": {
           "passed": 3,
           "failed": 0,
+          "blocked": 0,
+          "undetermined": 0,
           "notRun": 0
         },
         "evidence": [
@@ -373,6 +381,8 @@
         "counts": {
           "passed": 1,
           "failed": 0,
+          "blocked": 0,
+          "undetermined": 0,
           "notRun": 0
         },
         "evidence": [
@@ -513,7 +523,7 @@
         "where": "ran on host",
         "result": "pass",
         "summary": "doctor passed",
-        "durationMs": 82,
+        "durationMs": 80,
         "repro": "bash -lc 'node --version && npm --version'",
         "supersededBy": null
       },
@@ -525,7 +535,7 @@
         "where": "ran on host",
         "result": "pass",
         "summary": "install passed",
-        "durationMs": 270,
+        "durationMs": 358,
         "repro": "bash -lc 'npm ci'",
         "supersededBy": null
       },
@@ -537,7 +547,7 @@
         "where": "ran on host",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 104,
+        "durationMs": 121,
         "repro": "bash -lc 'npm ci && npm run lint'",
         "supersededBy": null
       },
@@ -549,7 +559,7 @@
         "where": "ran on host",
         "result": "pass",
         "summary": "build passed",
-        "durationMs": 112,
+        "durationMs": 108,
         "repro": "bash -lc 'npm ci && npm run build'",
         "supersededBy": null
       },
@@ -561,7 +571,7 @@
         "where": "ran on host",
         "result": "pass",
         "summary": "test passed (5 of 5 tests)",
-        "durationMs": 164,
+        "durationMs": 163,
         "repro": "bash -lc 'npm ci && npm run build && npm run test'",
         "supersededBy": null
       },
@@ -617,7 +627,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "db08ff6647cf"
+        "value": "bbe976acc22f"
       },
       {
         "label": "Planted faults",
