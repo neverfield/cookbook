@@ -2,6 +2,7 @@ import { statSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { inComponent } from "./languages/coverage.ts";
 import { languageOf } from "./languages/index.ts";
+import { insideString } from "./patterns.ts";
 import type { Component, FaultEstimate, Language } from "./types.ts";
 import { exists, lastChanged, listFiles, readText, sha256 } from "./util.ts";
 
@@ -17,18 +18,6 @@ const TEST_FILE = /(\.test\.|\.spec\.|(^|\/)tests?\/|(^|\/)__tests__\/|(^|\/)tes
 
 export function isTestFile(path: string): boolean {
   return TEST_FILE.test(path);
-}
-
-function insideString(line: string, index: number): boolean {
-  let quote: string | null = null;
-  for (let i = 0; i < index; i++) {
-    const ch = line[i];
-    if (quote) {
-      if (ch === "\\") i++;
-      else if (ch === quote) quote = null;
-    } else if (ch === "'" || ch === '"' || ch === "`") quote = ch;
-  }
-  return quote !== null;
 }
 
 function isCommentOrImport(trimmed: string, lang: Language): boolean {

@@ -1,3 +1,4 @@
+import { CREDENTIAL_NAME } from "./patterns.ts";
 import type { Diagnosis } from "./types.ts";
 
 const PORTS: Record<string, string> = {
@@ -30,8 +31,6 @@ export function serviceLabel(d: Diagnosis, unnamed: (port: string) => string): s
   if (!port) return d.service ?? "a service";
   return d.serviceNamed && d.service ? `${d.service} on port ${port}` : unnamed(port);
 }
-
-const SECRET_NAME = /(KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)/;
 
 // The test totals a runner prints, so the report can say "82 of 82 tests" instead of "passed".
 // Covers node --test (tap and spec), bun test, vitest, jest, mocha, pytest and unittest; null when none match.
@@ -577,7 +576,7 @@ export function diagnose(rawOutput: string, timedOut: boolean, phase: string, ex
   const cred = output.match(/\bMissing (?:required )?(?:env(?:ironment)? (?:var(?:iable)?)?\s*)?([A-Z][A-Z0-9_]{2,})\b|\b([A-Z][A-Z0-9_]{2,}) (?:is )?(?:not set|required|missing)\b/);
   if (cred) {
     const name = cred[1] ?? cred[2];
-    if (SECRET_NAME.test(name)) return { cause: "credential", detail: `needs ${name}` };
+    if (CREDENTIAL_NAME.test(name)) return { cause: "credential", detail: `needs ${name}` };
   }
   if ((phase === "install" || phase === "doctor") && (/\b(E?401|Unauthorized|authentication required|no auth token)\b/i.test(output) || /Failed to replace env in config: \$\{[A-Z_]+\}/.test(output))) {
     return { cause: "registry", detail: "registry credentials not provided" };

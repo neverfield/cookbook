@@ -9,6 +9,7 @@ import { addEvidence, registryValuesOf } from "./evidence.ts";
 import { attribute, networkVerdict, rerunsOnline } from "./attribute.ts";
 import type { AttributionInput } from "./attribute.ts";
 import { fmtDuration } from "./format.ts";
+import { SUDO } from "./patterns.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
 import { ecosystemOf } from "./languages/index.ts";
@@ -81,7 +82,6 @@ export function banRepeats(ex: Executor, timedOut: Set<string>): Executor {
   return ex;
 }
 
-export const SUDO = /(^|[\s;&|(`]|\$\()sudo(\s|$)/;
 export const SUDO_REFUSED = "not run on the host: it uses sudo, which the audit only runs inside a container";
 export const NETWORK_ON = "the network couldn't be switched off for the test phase, so this pass doesn't prove a clean checkout";
 export const NEEDS_NETWORK = "the tests pass only with the network on, and it couldn't be switched back on to plant faults";
