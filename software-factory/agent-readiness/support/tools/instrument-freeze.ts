@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url";
 // expected.json and truth.json, the holdout's scorer and adapter, the trials (their recordings,
 // ceilings, tracking and tiers in trials.json, their truth and runner), the known-failures list, and
 // the agent-readiness workflows, which are the gate itself, with the docs list that lets CI skip part
-// of it (ci-scope.ts). A fixture's repo/ tree is an input, not
-// a grader, so a new fixture can land with the fix it tests, and a change to tests/known-failures.json
-// that only removes entries is the fix landing, not the instrument moving. A PR that must change both
-// says why on a line of its description:
+// of it (ci-scope.ts) and the checks that CI's shards and logs skipped nothing. A fixture's repo/ tree
+// is an input, not a grader, so a new fixture can land with the fix it tests, and a change to
+// tests/known-failures.json that only removes entries is the fix landing, not the instrument moving.
+// A PR that must change both says why on a line of its description:
 //   Instrument-freeze exception: <reason>
 //
 // The cheapest way to go green is to assert less, which an instrument-only PR can do without
@@ -40,7 +40,7 @@ export function sideOf(path: string): Side {
     return "scripts";
   }
   if (/^support\/evals\/(lib|cases)\//.test(path) || path === "support/evals/run.ts") return "instrument";
-  if (["support/tools/fixture.ts", "support/tools/known-failures.ts", "support/tools/instrument-freeze.ts", "support/tools/ci-scope.ts"].includes(path)) return "instrument";
+  if (["support/tools/fixture.ts", "support/tools/known-failures.ts", "support/tools/instrument-freeze.ts", "support/tools/ci-scope.ts", "support/tools/shard-reporter.ts", "support/tools/test-shards.ts", "support/tools/no-skips.sh"].includes(path)) return "instrument";
   if (/^support\/fixtures\/[^/]+\/(expected|truth)\.json$/.test(path)) return "instrument";
   if (path.startsWith("support/holdout/") && path !== "support/holdout/collision-log.json" && !path.startsWith("support/holdout/records/")) return "instrument";
   if (path.startsWith("support/trials/")) return "instrument";
