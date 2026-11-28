@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { ContainerSession, HOME_DIR, buildImage, detectRuntime, hostUser, probeLimits, removeOrphanedContainers } from "./container.ts";
@@ -878,7 +878,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
     const filePath = join(ex.root, site.file);
     const command = await testCommandFor(site.file);
     const original = readText(filePath);
-    writeFileSync(filePath, applySite(original, site));
+    writeStamped(filePath, applySite(original, site));
     const codes: number[] = [];
     let result: Mutant["result"] = "survived";
     try {
@@ -920,7 +920,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
         result = "caught";
       }
     } finally {
-      writeFileSync(filePath, original);
+      writeStamped(filePath, original);
     }
     mutants.push({ ...record, result, exitCodes: codes });
   }
@@ -997,7 +997,7 @@ async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Exe
   const original = readText(filePath);
   const caught: ContractCommand[] = [];
   let stalled: string | null = null;
-  writeFileSync(filePath, withCanary(original, site.line));
+  writeStamped(filePath, withCanary(original, site.line));
   try {
     for (const c of typechecks) {
       const limit = capped(budget, comp.id, c.timeoutSec);
@@ -1010,7 +1010,7 @@ async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Exe
       if (out.exitCode !== 0) caught.push(c);
     }
   } finally {
-    writeFileSync(filePath, original);
+    writeStamped(filePath, original);
   }
   if (stalled) return record("not_run", `the type-check with a type error planted in ${site.file} didn't finish: ${stalled}`, stalled === BUDGET_OUT ? { blocked: BUDGET_OUT } : {});
   const shown = `\`${site.line}\``;
@@ -1026,6 +1026,18 @@ async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Exe
 }
 
 // Next to the audit tree, outside the repository, and deleted with it once the seal copies it in.
+// Writes a planted fault, or the original back, with a modification time in whole seconds later than
+// any this audit gave before and later than now. Caches that trust a file whose time and size are
+// unchanged, such as Python's .pyc files (which compare whole seconds), can't then run one version as
+// the other when a run takes under a second, and a build that compares times with its outputs sees
+// each write as newer than anything built from the one before.
+let lastStamp = 0;
+export function writeStamped(path: string, text: string): void {
+  writeFileSync(path, text);
+  lastStamp = Math.max(Math.floor(Date.now() / 1000) + 1, lastStamp + 1);
+  utimesSync(path, lastStamp, lastStamp);
+}
+
 export function mutantsFile(tree: string): string {
   return join(dirname(tree), "mutants.json");
 }
