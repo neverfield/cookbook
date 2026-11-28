@@ -1,6 +1,7 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { BUILD_SUBS, BUILD_TOOLS, DENO_RUNS, NPM_RUNS, PM_HARMLESS, RUNNERS, SHELLS, WRAPPERS } from "../../../skill/agent-readiness/scripts/lib/runners.ts";
 import { protectedFiles } from "./protected.ts";
 
 // Just enough of a shell parser to tell which program each part of an agent's command runs, so
@@ -201,8 +202,6 @@ export function segments(cmd: string): Segment[] {
   endSegment("end");
   return out;
 }
-
-const WRAPPERS = new Set(["time", "nohup", "command", "exec", "builtin", "nice", "sudo", "doas", "xargs", "stdbuf", "caffeinate"]);
 
 // The program a simple command runs, past variable assignments and wrappers such as env and timeout.
 export function program(words: string[]): string[] {
@@ -630,11 +629,6 @@ export function isCliCall(words: string[], ctx: Context): boolean {
   return real(at(ctx, w[i])) === real(join(ctx.repo, CLI_PATH));
 }
 
-const NPM_RUNS = new Set(["test", "t", "tst", "run", "run-script", "rum", "urn", "start", "stop", "restart", "ci", "clean-install", "install", "i", "in", "ins", "inst", "insta", "instal", "isnt", "isntal", "isntall", "add", "it", "cit", "install-test", "install-ci-test", "clean-install-test", "exec", "x", "rebuild", "rb", "explore", "pack", "publish"]);
-const PM_HARMLESS = new Set(["--version", "-v", "-V", "--help", "-h", "help", "info", "view", "why", "list", "ls", "config", "outdated", "audit", "store", "bin", "root", "licenses", "env"]);
-const RUNNERS = new Set(["npx", "pnpx", "bunx", "pytest", "py.test", "tox", "nox", "make", "gmake", "tsc", "vitest", "jest", "mocha", "ava", "tap", "playwright", "cypress", "eslint", "biome", "prettier", "ruff", "mypy", "pyright", "flake8", "black", "rspec", "phpunit", "rake", "gradle", "gradlew", "mvn", "mvnw", "turbo", "nx", "lerna", "tsx", "ts-node", "jasmine", "karma", "nodemon"]);
-const BUILD_SUBS = new Set(["test", "run", "build", "bench", "generate", "vet", "check", "exec", "task", "install", "sync", "compile"]);
-const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
 const PYTHON = /^python(\d+(\.\d+)*)?$/;
 
 function firstArg(w: string[], from = 1): string | undefined {
@@ -691,9 +685,9 @@ export function repoEvidence(words: string[], ctx: Context): string | null {
     if (!sub) return p === "yarn" ? line : null;
     return PM_HARMLESS.has(sub) ? null : line;
   }
-  if (p === "deno") return ["test", "run", "task", "bench", "compile", "install"].includes(w[1] ?? "") ? line : null;
+  if (p === "deno") return DENO_RUNS.has(w[1] ?? "") ? line : null;
   if (RUNNERS.has(p)) return line;
-  if (["cargo", "go", "dotnet", "swift", "uv", "poetry", "pipenv", "pdm", "hatch", "rye", "composer", "bundle", "mix"].includes(p)) {
+  if (BUILD_TOOLS.has(p)) {
     const sub = firstArg(w);
     return sub && (BUILD_SUBS.has(sub) || (p === "uv" && sub === "pip")) ? line : null;
   }
