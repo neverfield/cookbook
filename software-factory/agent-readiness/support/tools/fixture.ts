@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -65,6 +65,22 @@ export function materialize(fixture: string, opts: { now?: string; into?: string
     });
   }
   return repo;
+}
+
+// The same as readiness(), without blocking the event loop, so a suite's concurrency runs audits side by side.
+export function readinessAsync(repo: string, args: string[], env: Record<string, string> = {}, cli = CLI): Promise<{ code: number; out: string }> {
+  return new Promise((done, fail) => {
+    const child = spawn(process.execPath, ["--experimental-strip-types", "--no-warnings", cli, ...args], { cwd: repo, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on("data", (b: Buffer) => stdout.push(b));
+    child.stderr.on("data", (b: Buffer) => stderr.push(b));
+    child.on("error", fail);
+    child.on("close", (code) => {
+      const out = Buffer.concat(stdout).toString("utf8");
+      done(code === 0 ? { code: 0, out } : { code: code ?? 1, out: out + Buffer.concat(stderr).toString("utf8") });
+    });
+  });
 }
 
 export function readiness(repo: string, args: string[], env: Record<string, string> = {}, cli = CLI): { code: number; out: string } {
@@ -183,7 +199,7 @@ export interface FixtureAudit {
   audit: Record<string, any>;
 }
 
-export function auditFixture(fixture: string, run: ExpectedRun, opts: { seed?: string; image?: string; now?: string } = {}): FixtureAudit {
+function fixtureArgs(fixture: string, run: ExpectedRun, opts: { seed?: string; image?: string; now?: string }): { repo: string; args: string[]; env: Record<string, string> } {
   const exp = expected(fixture);
   const now = opts.now ?? new Date().toISOString();
   const repo = materialize(fixture, { now });
@@ -197,11 +213,24 @@ export function auditFixture(fixture: string, run: ExpectedRun, opts: { seed?: s
   if (exp.outcomes) args.push("--outcomes-input", materializePrs(fixture, now, exp.outcomes));
   if (opts.image) args.push("--image", opts.image);
   if (run.runtime) args.push("--runtime", run.runtime);
-  const r = readiness(repo, args, env);
+  return { repo, args, env };
+}
+
+function fixtureResult(repo: string, r: { code: number; out: string }): FixtureAudit {
   const read = (p: string) => (existsSync(join(repo, p)) ? JSON.parse(readFileSync(join(repo, p), "utf8")) : {});
   const report = read(".agent-readiness/latest/report.json");
   const md = join(repo, ".agent-readiness/latest/report.md");
   return { repo, code: r.code, out: r.out, report, markdown: existsSync(md) ? readFileSync(md, "utf8") : "", roadmap: read(".agent-readiness/roadmap.json"), audit: report.audit ? read(`.agent-readiness/history/audits/${report.audit.id}/audit.json`) : {} };
+}
+
+export function auditFixture(fixture: string, run: ExpectedRun, opts: { seed?: string; image?: string; now?: string } = {}): FixtureAudit {
+  const { repo, args, env } = fixtureArgs(fixture, run, opts);
+  return fixtureResult(repo, readiness(repo, args, env));
+}
+
+export async function auditFixtureAsync(fixture: string, run: ExpectedRun, opts: { seed?: string; image?: string; now?: string } = {}): Promise<FixtureAudit> {
+  const { repo, args, env } = fixtureArgs(fixture, run, opts);
+  return fixtureResult(repo, await readinessAsync(repo, args, env));
 }
 
 // Fixtures with an expected.json: conformance fixtures, each also an eval case.

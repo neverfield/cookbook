@@ -55,10 +55,18 @@ jobs:
           node --experimental-strip-types --no-warnings "$tool" --base "origin/${{ github.base_ref }}" --head HEAD
         working-directory: .
 
-  check:
-    name: npm run check (Docker, no skips)
+  # npm test on three runners, split by test file with --test-shard; tests/fixtures.test.ts, the
+  # longest file, audits three fixtures at once. tests/workflow.test.ts keeps the count in step.
+  test:
+    name: npm test (Docker, no skips, shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      SA_TEST_SHARD: ${{ matrix.shard }}/3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -69,13 +77,49 @@ jobs:
       - name: Docker is available
         run: docker info --format 'Docker {{.ServerVersion}}'
       - run: npm ci
-      - name: npm run check
+      - name: npm test
         run: |
           set -o pipefail
-          npm run check 2>&1 | tee "$RUNNER_TEMP/check.log"
+          mkdir -p "$RUNNER_TEMP/shard"
+          SA_TEST_COUNTS="$RUNNER_TEMP/shard/counts.json" npm test 2>&1 | tee "$RUNNER_TEMP/shard/test.log"
       - name: No suite skipped
         if: always()
-        run: support/tools/no-skips.sh "$RUNNER_TEMP/check.log"
+        run: support/tools/no-skips.sh "$RUNNER_TEMP/shard/test.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/shard
+          retention-days: 7
+
+  # The check the gate reads: the typecheck, every shard green, and the shards' counts adding up to
+  # every test file in tests/, each run once (support/tools/test-shards.ts).
+  check:
+    name: npm run check (Docker, no skips)
+    needs: test
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: software-factory/agent-readiness/.nvmrc
+          cache: npm
+          cache-dependency-path: software-factory/agent-readiness/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: test-shard-*
+          path: ${{ runner.temp }}/shards
+      - name: The shards ran every test file once
+        run: node --experimental-strip-types --no-warnings support/tools/test-shards.ts tests "$RUNNER_TEMP"/shards/test-shard-*
+      - name: Every shard passed
+        if: always()
+        run: |
+          echo "npm test shards: ${{ needs.test.result }}"
+          test "${{ needs.test.result }}" = success
 
   trials:
     name: Pinned trial repos (Docker)

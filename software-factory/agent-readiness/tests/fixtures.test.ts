@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { detectRuntime } from "../skill/agent-readiness/scripts/lib/container.ts";
 import { accusations } from "../support/evals/lib/expected.ts";
-import { auditFixture, expected, fixtureNames } from "../support/tools/fixture.ts";
+import { auditFixtureAsync, expected, fixtureNames } from "../support/tools/fixture.ts";
 
 const runtime = detectRuntime("auto");
 
@@ -10,8 +10,8 @@ describe("fixtures match expected.json", { concurrency: 3, skip: runtime ? false
   for (const name of fixtureNames()) {
     const exp = expected(name);
     for (const run of exp.runs) {
-      test(`${name}: ${run.name}`, { timeout: 15 * 60 * 1000 }, () => {
-        const a = auditFixture(name, run);
+      test(`${name}: ${run.name}`, { timeout: 15 * 60 * 1000 }, async () => {
+        const a = await auditFixtureAsync(name, run);
         assert.equal(a.code, 0, a.out);
         const r = a.report;
         assert.equal(r.maturity.level, run.level, "repo rollup");
