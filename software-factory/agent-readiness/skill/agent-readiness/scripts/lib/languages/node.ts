@@ -1,8 +1,9 @@
 import { dirname, join } from "node:path";
-import { exists, readJson, readText, shellQuote } from "../util.ts";
+import type { Component, ContractCommand, PackageManager } from "../types.ts";
+import { exists, listFiles, readJson, readText, shellQuote } from "../util.ts";
 import { quotedLines, sitesForLine } from "./fault-sites.ts";
 import { importedFiles, plantable, reachingTests } from "./imports.ts";
-import type { Ecosystem, LanguageDef } from "./language.ts";
+import type { ContractContext, Ecosystem, LanguageDef, ToolSetup } from "./language.ts";
 import { typecheckProbe } from "./probes.ts";
 import { isTestFile } from "./test-paths.ts";
 
@@ -177,6 +178,154 @@ const bun: Ecosystem = {
   unpinned: lockedBy(["bun.lock", "bun.lockb"]),
 };
 
+// Node majors the audit has a pinned image for (images.ts). Even majors are the LTS lines.
+export const NODE_MAJORS = [16, 18, 20, 22, 24, 26];
+export const DEFAULT_NODE = 22;
+
+const PLACEHOLDER_TEST = /no test specified/;
+
+const SCRIPT_ALIASES: Record<"build" | "lint" | "typecheck" | "test", string[]> = {
+  build: ["build"],
+  lint: ["lint"],
+  typecheck: ["typecheck", "type-check", "check-types", "tsc"],
+  test: ["test"],
+};
+
+function runScript(pm: string | null, script: string): string {
+  if (pm === "pnpm") return `corepack pnpm run ${script}`;
+  if (pm === "yarn") return `corepack yarn run ${script}`;
+  if (pm === "bun") return `bun run ${script}`;
+  return `npm run ${script}`;
+}
+
+// The root test script when it is a bare vitest or jest run that a path argument narrows.
+const ROOT_RUNNER = /^(?:npx\s+|(?:corepack\s+)?(?:pnpm|yarn)\s+(?:exec\s+)?)?(vitest|jest)((?:\s+(?:run|--?[\w-]+(?:=\S+)?))*)\s*$/;
+
+export function rootTestRunner(tree: string): { script: string; runner: string } | null {
+  const scripts = readPackageJson(tree)?.scripts ?? {};
+  const m = scripts.test?.trim().match(ROOT_RUNNER);
+  return m ? { script: "test", runner: m[1] } : null;
+}
+
+const TEST_FILE = /(^|\/)(__tests__\/.+|[^/]+\.(test|spec)\.[cm]?[jt]sx?)$/;
+
+function hasTestFiles(dir: string): boolean {
+  return exists(dir) && listFiles(dir).some((f) => !f.includes("node_modules/") && TEST_FILE.test(f));
+}
+
+function scopedRun(pm: string | null, script: string, path: string): string {
+  const arg = /^[\w./@-]+$/.test(path) ? path : shellQuote(path);
+  return pm === "npm" || !pm ? `npm run ${script} -- ${arg}` : `${runScript(pm, script)} ${arg}`;
+}
+
+function nodeImage(tree: string, dirs: string[]): string {
+  let major: number | null = null;
+  for (const dir of dirs) {
+    for (const f of [".nvmrc", ".node-version"]) {
+      if (exists(join(tree, dir, f))) major = nodeMajor(readText(join(tree, dir, f)), true);
+      if (major) break;
+    }
+    if (!major && exists(join(tree, dir, "package.json"))) {
+      try {
+        const engines = (JSON.parse(readText(join(tree, dir, "package.json"))) as { engines?: { node?: string } }).engines?.node ?? "";
+        major = engines.trim() ? nodeMajor(engines, false) : null;
+      } catch {
+        major = null;
+      }
+    }
+    if (major) break;
+  }
+  // The full image, like a CI runner, has python3, make and g++ for native npm builds.
+  return `node:${major ?? DEFAULT_NODE}-bookworm`;
+}
+
+const LTS_NAMES: Record<string, number> = { argon: 4, boron: 6, carbon: 8, dubnium: 10, erbium: 12, fermium: 14, gallium: 16, hydrogen: 18, iron: 20, jod: 22, krypton: 24 };
+
+// The Node major to run, always one the audit has an image for. A version file names one line, and
+// keeps it when there is an image, else the nearest newer LTS: node:12-bookworm doesn't exist. An
+// engines range runs on the default LTS when it allows it, as a CI runner would, so ">=12.20.0"
+// gets Node 22 rather than a Node 12 that has no image and couldn't run current tooling.
+export function nodeMajor(spec: string, versionFile: boolean): number | null {
+  const s = spec.trim().toLowerCase();
+  if (!s) return null;
+  if (s === "node" || s === "latest" || s === "lts/*" || s === "*" || s === "x") return DEFAULT_NODE;
+  const lts = s.match(/^lts\/([a-z]+)/)?.[1];
+  const range = s.split("||").map((p) => p.trim()).filter(Boolean).pop() ?? s;
+  const lower = lts && LTS_NAMES[lts] ? LTS_NAMES[lts] : Number(range.match(/(\d+)/)?.[1] ?? NaN);
+  if (!Number.isFinite(lower)) return null;
+  // "<21" and "<21.0" stop at 20; "<=21" and "<21.4" allow 21.
+  const um = range.match(/<(=?)\s*v?(\d+)(?:\.(\d+))?/);
+  const upper = !um ? Infinity : um[1] === "=" || Number(um[3] ?? 0) > 0 ? Number(um[2]) : Number(um[2]) - 1;
+  const open = !versionFile && !lts && /^>/.test(range) && upper === Infinity;
+  const within = NODE_MAJORS.filter((m) => m >= lower && m <= upper);
+  const atOrAbove = NODE_MAJORS.filter((m) => m >= lower);
+  if (open) return lower <= DEFAULT_NODE ? DEFAULT_NODE : (atOrAbove[0] ?? NODE_MAJORS[NODE_MAJORS.length - 1]);
+  const bounded = !versionFile && upper !== Infinity && upper > lower;
+  if (bounded && within.length) return within.filter((m) => m <= DEFAULT_NODE).pop() ?? within[0];
+  if (NODE_MAJORS.includes(lower)) return lower;
+  return atOrAbove[0] ?? NODE_MAJORS[NODE_MAJORS.length - 1];
+}
+
+// A component's build, lint, type-check and test scripts. From 2026-12-beta the test script CI runs
+// in the component's folder outranks the manifest's test script, when it is a different one. With
+// no test script, a Make target that runs the tests, such as `make test` calling a test:unit script:
+// the repo's own entry point is the test command.
+function nodeCommands(tree: string, c: Component, ctx: ContractContext): ContractCommand[] {
+  const out: ContractCommand[] = [];
+  const pm = ctx.profile.packageManager;
+  const timeout = ctx.timeoutSec;
+  for (const kind of ["build", "lint", "typecheck", "test"] as const) {
+    const script = SCRIPT_ALIASES[kind].find((s) => c.scripts[s] && !(kind === "test" && PLACEHOLDER_TEST.test(c.scripts[s])));
+    const fromCi = kind === "test" && ctx.rubric.attribution ? ctx.ciTestScript(c.path, c.scripts) : null;
+    if (fromCi && fromCi.script !== script) {
+      const via = fromCi.called === fromCi.script ? "" : `, through its ${fromCi.called} script`;
+      out.push(ctx.checkOnly({ id: `cmd-${c.id}-test`, kind, component: c.id, cwd: c.path, command: runScript(c.packageManager ?? pm, fromCi.script), source: fromCi.source, reason: `the test script CI runs${via}`, timeoutSec: timeout, tier: "ci", confidence: fromCi.called === fromCi.script ? "declared" : "derived" }, c.scripts, c.packageManager ?? pm));
+      continue;
+    }
+    if (!script) continue;
+    const cmd: ContractCommand = { id: `cmd-${c.id}-${kind}`, kind, component: c.id, cwd: c.path, command: runScript(c.packageManager ?? pm, script), source: `${c.manifest} scripts.${script}`, reason: `discovered ${kind} script`, timeoutSec: timeout, tier: "manifest", confidence: "declared" };
+    out.push(ctx.checkOnly(cmd, c.scripts, c.packageManager ?? pm));
+  }
+  if (!out.some((k) => k.kind === "test")) {
+    const makefile = c.path === "." ? "Makefile" : `${c.path}/Makefile`;
+    const make = ctx.makeTestTarget(exists(join(tree, makefile)) ? readText(join(tree, makefile)) : null);
+    if (make) out.push({ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: c.path, command: `make ${make.target}`, source: `${makefile}:${make.line}`, reason: `the Makefile's ${make.target} target runs the tests`, timeoutSec: timeout, tier: "task_runner", confidence: "derived" });
+  }
+  return out;
+}
+
+// The Corepack release on npm on Nov 27, 2026.
+const COREPACK = "corepack@0.36.0";
+
+// Bun in the Node image, at the version the repo pins. Corepack runs the version packageManager
+// names, or its own default. With no packageManager, an exact engines pin is the version the repo's
+// engine check accepts, so corepack is set to it.
+function nodeSetup(tree: string, pms: Map<PackageManager, string>, homeDir: string): ToolSetup[] {
+  const out: ToolSetup[] = [];
+  const bunDir = pms.get("bun");
+  if (bunDir !== undefined) {
+    const pkg = readPackageJson(join(tree, bunDir));
+    const pin = pkg?.packageManager?.match(/^bun@(\d[\w.+-]*)/)?.[1] ?? pkg?.engines?.bun;
+    const spec = `bun@${pin ?? "1"}`;
+    out.push({ tool: "bun", spec, install: `npm install -g --silent --no-fund --no-audit ${shellQuote(spec)}` });
+  }
+  // Node 25 and later ship without Corepack, which runs the pinned pnpm or Yarn, so it's added where
+  // the image lacks it.
+  if (pms.has("pnpm") || pms.has("yarn")) out.push({ tool: "corepack", spec: COREPACK, install: `npm install -g --silent --no-fund --no-audit ${COREPACK}` });
+  for (const pm of ["pnpm", "yarn"] as const) {
+    const dir = pms.get(pm);
+    if (dir === undefined) continue;
+    const pkg = readPackageJson(join(tree, dir));
+    const pin = pkg?.packageManager ? null : pkg?.engines?.[pm]?.trim().match(/^=?v?(\d+\.\d+\.\d+)$/)?.[1];
+    // Setup runs under its own home; the repo's commands read corepack's default from theirs.
+    const home = `COREPACK_HOME=${homeDir}/.cache/node/corepack`;
+    if (pin) out.push({ tool: pm, spec: `${pm}@${pin}`, install: `${home} corepack prepare ${shellQuote(`${pm}@${pin}`)} --activate`, present: `test "$(${home} corepack ${pm} --version 2>/dev/null)" = ${pin}` });
+  }
+  return out;
+}
+
+const nodeCode = (c: Component) => c.language === "ts" || c.language === "js";
+
 const JS_TEST = /\.(ts|tsx|js|mjs|cjs|mts|cts)$/;
 const JS_COUNTED = /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/;
 const isJsTest = (f: string) => isTestFile(f) && JS_TEST.test(f);
@@ -185,7 +334,6 @@ export const node: LanguageDef = {
   id: "node",
   label: "Node",
   codes: ["ts", "js"],
-  builtIn: true,
   stacks: [
     { id: "npm", label: "Node with npm", kind: "stack", tier: "supported", proof: ["fixtures/healthy-node", "sindresorhus/slugify@3b17b2e"] },
     { id: "npm-workspaces", label: "npm workspaces", kind: "stack", tier: "supported", proof: ["fixtures/monorepo-mixed", "fixtures/sampled-scope"] },
@@ -231,5 +379,31 @@ export const node: LanguageDef = {
       const tsc = [comp.path, "."].map((d) => join(d, "node_modules", ".bin", "tsc")).find((p) => exists(join(root, p)));
       return tsc ? { command: `${shellQuote(tsc)} --noEmit -p ${shellQuote(join(comp.path, "tsconfig.json"))}`, cwd: "." } : null;
     },
+  },
+  sharedRoot: {
+    // The repo's image when nothing else decides.
+    repoImage: (tree, _profile, standalone) => nodeImage(tree, [".", ...standalone.filter(nodeCode).map((c) => c.path)]),
+    ownImage: (tree, comp, repoImage) => (repoImage.startsWith("node:") ? null : nodeImage(tree, [comp.path])),
+    doctor: (pms) => {
+      const parts: string[] = [];
+      if ([...pms].some((p) => p === "npm" || p === "pnpm" || p === "yarn")) parts.push("node --version");
+      if (pms.has("bun")) parts.push("bun --version");
+      if (pms.has("npm")) parts.push("npm --version");
+      if (pms.has("pnpm")) parts.push("corepack pnpm --version");
+      if (pms.has("yarn")) parts.push("corepack yarn --version");
+      return parts;
+    },
+    setup: nodeSetup,
+    commands: nodeCommands,
+    testEnv: (comp, test, ctx) => ctx.ciEnvFor(comp.path, ctx.scriptCalled(test.command), test.source),
+    // A workspace whose tests run from the root (`"test": "vitest"`) has packages with no test
+    // script of their own. Each package that has test files gets the root run scoped to its folder,
+    // so it is credited with its own tests and one failing package doesn't fail the others.
+    scopedTest: (tree, comp, ctx) => {
+      const root = rootTestRunner(tree);
+      if (!root || !hasTestFiles(join(tree, comp.path))) return null;
+      return { id: `cmd-${comp.id}-test`, kind: "test", component: comp.id, cwd: ".", command: scopedRun(ctx.profile.packageManager, root.script, comp.path), source: `package.json scripts.${root.script}`, reason: `the root ${root.runner} run, scoped to ${comp.path}`, timeoutSec: ctx.timeoutSec, tier: "manifest", confidence: "derived" };
+    },
+    fallback: { doctor: "node --version" },
   },
 };

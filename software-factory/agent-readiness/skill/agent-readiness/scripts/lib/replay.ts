@@ -12,7 +12,7 @@ import { fmtDuration } from "./format.ts";
 import { SUDO } from "./patterns.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
-import { codesOfTool, ecosystemOf, languageOf } from "./languages/index.ts";
+import { LANGUAGES, codesOfTool, ecosystemOf, languageOf } from "./languages/index.ts";
 import { lockedEngineGap } from "./languages/node.ts";
 import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary } from "./mutate.ts";
 import { typecheckProbe } from "./languages/probes.ts";
@@ -1243,10 +1243,12 @@ function startContainer(audit: Audit, runtime: NonNullable<ReturnType<typeof det
   }
   const digest = digestOf(image);
   log(`Replaying${forWhom} in a clean ${runtime.bin} container (${image}${digest ? `, pinned at ${digest.slice(0, 19)}` : ""}; ${limits.cpus ? `${limits.cpus} CPUs, ` : ""}${limits.memoryMb} MB, ${limits.pids} processes).`);
-  // Python components in the Node image, as with --image, need the venv module it lacks.
-  if (image.startsWith("node:") && comps.some((c) => c.language === "py")) {
-    const added = session.asImageUser("python3 -m venv /tmp/venv-probe >/dev/null 2>&1 || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv >/dev/null)", 600000);
-    log(added.ok ? "Added python3-venv to the Node image for the Python components." : `Couldn't add python3-venv for the Python components: ${tail(added.output, 300)}`);
+  // Components of one language in another's image, as with --image, may need what that image lacks.
+  for (const l of LANGUAGES) {
+    const need = l.sharedRoot?.foreignImage?.(image);
+    if (!need || !comps.some((c) => l.codes.includes(c.language))) continue;
+    const added = session.asImageUser(need.command, 600000);
+    log(added.ok ? need.added : `${need.failed}: ${tail(added.output, 300)}`);
   }
   // A tool missing from the repo's own image is the repo's to add, so only the audit's images get
   // one. Poetry needs the venv module above.

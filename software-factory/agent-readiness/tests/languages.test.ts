@@ -79,12 +79,14 @@ describe("the language registry", () => {
     }
   });
 
-  test("a language with a supported stack has replay hooks, every image they name is pinned, and its proof is a fixture or a pinned repo", () => {
+  test("a language with a supported stack has replay or shared-root hooks, every image they name is pinned, and its proof is a fixture or a pinned repo", () => {
     for (const l of LANGUAGES) {
+      assert.ok(!(l.replay && l.sharedRoot), `${l.id} has both replay and shared-root hooks`);
       const scored = l.stacks.some((s) => s.tier === "supported");
-      if (!scored || l.builtIn) continue;
-      assert.ok(l.replay, `${l.id} has a supported stack but no replay hooks`);
-      for (const [tag, digest] of Object.entries(l.replay!.images)) {
+      if (!scored) continue;
+      assert.ok(l.replay || l.sharedRoot, `${l.id} has a supported stack but no replay or shared-root hooks`);
+      assert.ok(l.mutation, `${l.id} has a supported stack but no fault hooks`);
+      for (const [tag, digest] of Object.entries(l.replay?.images ?? {})) {
         assert.match(digest, /^sha256:[0-9a-f]{64}$/, `${tag} is pinned to an index digest`);
         assert.equal(IMAGE_DIGESTS[tag], digest, `${tag} reaches the image table`);
       }

@@ -6,8 +6,10 @@
 // types. Anything else (profile, contract, replay) imports the registry, so importing it back would
 // be a cycle.
 import type { Site } from "../mutate.ts";
+import type { CiCommand } from "../plan/ci.ts";
+import type { Rubric } from "../rubric.ts";
 import type { Stack } from "../support.ts";
-import type { CommandKind, Component, ContractCommand, Language, PackageManager } from "../types.ts";
+import type { CommandKind, Component, ContractCommand, Language, PackageManager, Profile } from "../types.ts";
 
 // A frozen install, or the closest the folder allows, and why.
 export interface InstallPlan {
@@ -139,8 +141,8 @@ export interface MutationHooks {
   compileError?(output: string): boolean;
 }
 
-// How the replay runs a component of this language. Required once a stack of the language moves to
-// the supported tier; Node and Python predate it and are scored by contract.ts (`builtIn`).
+// How the replay runs a component of this language in an image of its own, installed in its own
+// folder. A language with a supported stack has these or `sharedRoot`, never both.
 export interface ReplayHooks {
   // The component's language and ecosystem, from the folder its manifest is in.
   classify(tree: string, dir: string, manifest: string): { language: Language; packageManager: PackageManager | null };
@@ -161,6 +163,57 @@ export interface ReplayHooks {
   // Toolchains the build needs beside the image's own, copied in from other pinned images.
   toolchains?(tree: string, dir: string): ToolchainCopy[];
   budget?: ToolchainBudget;
+}
+
+// What contract.ts lends a language's hooks, which can't import it back.
+export interface ContractContext {
+  profile: Profile;
+  rubric: Rubric;
+  // The rubric's command limit.
+  timeoutSec: number;
+  // The run steps of the repo's GitHub Actions workflows, read once.
+  ci(): CiCommand[];
+  // The test script CI runs in a folder (plan/ci.ts), with workspace-delegating steps left out.
+  ciTestScript(path: string, scripts: Record<string, string>): { script: string; called: string; source: string } | null;
+  // The variables CI sets for the step that runs a script (plan/ci.ts).
+  ciEnvFor(path: string, script: string | null, source: string): Record<string, string>;
+  // The package.json script a command runs, such as `test` for `pnpm test` (plan/ci.ts).
+  scriptCalled(command: string): string | null;
+  // The same lint or type-check with its write flags removed (contract.ts).
+  checkOnly(cmd: ContractCommand, scripts: Record<string, string>, pm: string | null): ContractCommand;
+  // The Make target that runs the tests, and its line.
+  makeTestTarget(text: string | null): { target: string; line: number } | null;
+}
+
+// How the contract runs a language whose components share the repo root's install and image unless
+// they commit a lockfile of their own, as Node and Python projects do. Its hooks answer for every
+// component of the language in an image at once; contract.ts orders what they give.
+export interface SharedRootHooks {
+  // The repo's image, when the profile makes it this language's; null leaves it to the next. The
+  // language marked `fallback` is asked last and always answers. `standalone` is every component of
+  // a shared-root language with a package manager of its own below the root.
+  repoImage(tree: string, profile: Profile, standalone: Component[]): string | null;
+  // A component's own image, for one with its own package manager that can't run in the repo's.
+  ownImage(tree: string, comp: Component, repoImage: string): string | null;
+  // The toolchain checks an image needs for the package managers its components use.
+  doctor(pms: Set<PackageManager>, comps: Component[]): string[];
+  // Tools a frozen install needs that the image doesn't ship, by package manager and the folder
+  // that pins its version. `home` is the home every command shares.
+  setup(tree: string, pms: Map<PackageManager, string>, home: string): ToolSetup[];
+  // The component's build, lint, type-check and test commands, in that order.
+  commands(tree: string, comp: Component, ctx: ContractContext): ContractCommand[];
+  // From 2026-12-beta: the literal variables CI sets for the step that runs the component's tests,
+  // which every command of the component then runs with. Omitted: none.
+  testEnv?(comp: Component, test: ContractCommand, ctx: ContractContext): Record<string, string>;
+  // A test command for a component below the root with none of its own: the root's run, scoped to
+  // its folder. Omitted: none.
+  scopedTest?(tree: string, comp: Component, ctx: ContractContext): ContractCommand | null;
+  // Setup an image of another language needs before this language's components run in it, such as
+  // the venv module Python needs in the Node image. Omitted: none.
+  foreignImage?(image: string): { command: string; added: string; failed: string } | null;
+  // Only the language whose image is the repo's when nothing else decides: the doctor of an image
+  // whose components name no package manager.
+  fallback?: { doctor: string };
 }
 
 // A manifest's named scripts, which the safety scan reads for sudo, network pipes, deletes and
@@ -218,6 +271,5 @@ export interface LanguageDef {
   // this language.
   mutation: MutationHooks | null;
   replay?: ReplayHooks;
-  // Node and Python: detected, installed and tested by profile.ts and contract.ts.
-  builtIn?: boolean;
+  sharedRoot?: SharedRootHooks;
 }

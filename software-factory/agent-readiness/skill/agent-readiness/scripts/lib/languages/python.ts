@@ -1,8 +1,10 @@
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { exists, readText, workspaceDirs } from "../util.ts";
+import type { Component, ContractCommand, Profile } from "../types.ts";
+import { exists, readText, shellQuote, workspaceDirs } from "../util.ts";
 import { quotedLines, sitesForLine } from "./fault-sites.ts";
 import { importedFiles, plantable, reachingTests } from "./imports.ts";
-import type { Ecosystem, LanguageDef } from "./language.ts";
+import type { ContractContext, Ecosystem, LanguageDef } from "./language.ts";
 import { typecheckProbe } from "./probes.ts";
 import { isTestFile } from "./test-paths.ts";
 
@@ -125,13 +127,75 @@ const poetry: Ecosystem = {
   unpinned: (tree, path) => (exists(join(tree, path, "poetry.lock")) ? null : NO_LOCKFILE),
 };
 
+// uv sync and Poetry install into .venv; a uv workspace has one, at its root.
+function pythonTest(tree: string, path: string, pm: Profile["packageManager"], workspaceMember: boolean): string | null {
+  const dir = join(tree, path);
+  const up = workspaceMember ? path.split("/").map(() => "..").join("/") + "/" : "";
+  const python = pm === "uv" || pm === "poetry" ? `${up}.venv/bin/python` : `${VENV}/bin/python`;
+  // A workspace member runs the root's pytest when the root declares it.
+  const dirs = workspaceMember ? [dir, tree] : [dir];
+  const reqs = dirs.flatMap((d) => ["requirements.txt", "requirements-dev.txt", "pyproject.toml"].map((f) => (exists(join(d, f)) ? readText(join(d, f)) : ""))).join("\n");
+  if (PYTEST_DECLARED.test(reqs) || dirs.some((d) => exists(join(d, "pytest.ini")) || exists(join(d, "conftest.py")))) return `${python} -m pytest -q`;
+  const project = djangoProject(dir);
+  if (project === ".") return `${python} manage.py test`;
+  if (project) return `${python} ${project}/manage.py test ${project}/`;
+  if (pm === "pip" && toxRuns(dir)) return `${python} -m tox`;
+  if (exists(join(dir, "tests"))) return `${python} -m unittest discover -s tests -t .`;
+  return null;
+}
+
+// pytest as a dependency or its config table, not a word such as `.pytest_cache` in an exclude list.
+const PYTEST_DECLARED = /(?<![\w.-])pytest(?:-[\w-]+)?(?!\w)|^\[tool\.pytest\b/m;
+
+// The folder of a Django project's manage.py: the component's own, or the one folder below it that
+// holds the project, as netbox/manage.py does. Django's own runner runs its tests.
+function djangoProject(dir: string): string | null {
+  if (exists(join(dir, "manage.py"))) return ".";
+  const below = readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && exists(join(dir, d.name, "manage.py")));
+  return below.length === 1 ? below[0].name : null;
+}
+
+const DEFAULT_PYTHON = "3.12";
+
+// The lowest Python a project's requires-python, or Poetry's python dependency, allows.
+export function requiredPython(dir: string): string | null {
+  const text = pyproject(dir);
+  const poetry = text.match(/^\[tool\.poetry\.dependencies\][^\n]*\n([\s\S]*?)(?=^\[|(?![\s\S]))/m)?.[1] ?? "";
+  const spec = text.match(/^requires-python\s*=\s*["']([^"']+)["']/m)?.[1] ?? poetry.match(/^python\s*=\s*["']([^"']+)["']/m)?.[1];
+  const m = spec?.match(/(?:>=|\^|~=|==|~)\s*(\d+)\.(\d+)/);
+  return m ? `${m[1]}.${m[2]}` : null;
+}
+
+const newer = (a: string, b: string) => {
+  const [x, y] = [a, b].map((v) => v.split(".").map(Number));
+  return x[0] !== y[0] ? x[0] > y[0] : x[1] > y[1];
+};
+
+// The default Python, or a newer one when a project needs it, so the image satisfies requires-python.
+function pythonFor(dirs: string[]): string {
+  return dirs.map(requiredPython).filter((v): v is string => v !== null).reduce((best, v) => (newer(v, best) ? v : best), DEFAULT_PYTHON);
+}
+
+function pythonImage(tree: string, dir: string, pm: Profile["packageManager"]): string {
+  const file = [dir, "."].map((d) => join(tree, d, ".python-version")).find(exists);
+  const pv = file ? readText(file).trim().match(/^(\d+\.\d+)/)?.[1] : null;
+  const version = pv ?? pythonFor([join(tree, dir)]);
+  return pm === "uv" ? `ghcr.io/astral-sh/uv:python${version}-trixie-slim` : `python:${version}-slim`;
+}
+
+const PY_MANAGERS = new Set<Profile["packageManager"]>(["pip", "uv", "poetry"]);
+
+function pythonCommands(tree: string, c: Component, ctx: ContractContext): ContractCommand[] {
+  const test = pythonTest(tree, c.path, c.packageManager ?? ctx.profile.packageManager, c.stack === "uv-workspace" && c.path !== "." && !c.packageManager);
+  return test ? [{ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: c.path, command: test, source: c.manifest ?? "readiness", reason: "discovered test runner", timeoutSec: ctx.timeoutSec, tier: "convention", confidence: "derived" }] : [];
+}
+
 const isPyTest = (f: string) => f.endsWith(".py") && isTestFile(f);
 
 export const python: LanguageDef = {
   id: "python",
   label: "Python",
   codes: ["py"],
-  builtIn: true,
   stacks: [
     { id: "pip", label: "Python with pip", kind: "stack", tier: "supported", proof: ["fixtures/python-unpinned"] },
     { id: "uv", label: "Python with uv", kind: "stack", tier: "supported", proof: ["encode/starlette@2745bbc"] },
@@ -163,5 +227,32 @@ export const python: LanguageDef = {
     quoted: (text) => quotedLines(text, "py"),
     reaching: (tree, comp, tests) => reachingTests(tree, comp, tests, "py"),
     compileProbe: (comp, { contract }) => typecheckProbe(comp, contract),
+  },
+  sharedRoot: {
+    repoImage: (tree, profile, standalone) => {
+      if (PY_MANAGERS.has(profile.packageManager)) return pythonImage(tree, ".", profile.packageManager);
+      if (!profile.packageManager && standalone.length > 0 && standalone.every((c) => c.language === "py")) return `python:${pythonFor(standalone.map((c) => join(tree, c.path)))}-slim`;
+      return null;
+    },
+    ownImage: (tree, comp, repoImage) => (repoImage.startsWith("node:") ? pythonImage(tree, comp.path, comp.packageManager ?? null) : null),
+    doctor: (pms, comps) => {
+      const parts: string[] = [];
+      if (pms.has("pip") || pms.has("uv") || pms.has("poetry") || comps.some((c) => c.language === "py")) parts.push("python3 --version");
+      if (pms.has("uv")) parts.push("uv --version");
+      if (pms.has("poetry")) parts.push("poetry --version");
+      return parts;
+    },
+    // Poetry in the Python image, the version that wrote poetry.lock.
+    setup: (tree, pms) => {
+      const poetryDir = pms.get("poetry");
+      if (poetryDir === undefined) return [];
+      const version = poetryVersion(join(tree, poetryDir));
+      const spec = version ? `poetry==${version}` : "poetry";
+      const venv = "/opt/readiness-poetry";
+      return [{ tool: "poetry", spec, install: `python3 -m venv ${venv} && ${venv}/bin/pip install -q --disable-pip-version-check ${shellQuote(spec)} && ln -sf ${venv}/bin/poetry /usr/local/bin/poetry` }];
+    },
+    commands: pythonCommands,
+    // Python components in the Node image, as with --image, need the venv module it lacks.
+    foreignImage: (image) => (image.startsWith("node:") ? { command: "python3 -m venv /tmp/venv-probe >/dev/null 2>&1 || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv >/dev/null)", added: "Added python3-venv to the Node image for the Python components.", failed: "Couldn't add python3-venv for the Python components" } : null),
   },
 };
