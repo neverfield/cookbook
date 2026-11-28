@@ -365,6 +365,7 @@ export const rust: LanguageDef = {
     manifests: [{ match: /^Cargo\.toml$/, stack: "rust", rank: 30 }],
     sources: [{ ext: /\.rs$/, stack: "rust", rank: 30 }],
     rootApp: { names: ["Cargo.toml"], stack: "rust", toolchain: "Rust", suffix: "rust", rank: 40 },
+    runners: /\bcargo\s+(test|nextest)\b/,
     lockfiles: ["Cargo.lock"],
     projectName: (_tree, manifest, text) => (manifest === "Cargo.toml" ? text.match(/^name\s*=\s*["']([^"']+)["']/m)?.[1] : undefined),
     // A nested crate outside any workspace is built and tested apart. A workspace builds its members,

@@ -38,8 +38,12 @@ export interface Detect {
   manifests?: { match: RegExp; stack: string; rank: number }[];
   // Source files that make a top-level folder with no manifest a project of this language.
   sources?: { ext: RegExp; stack: string; rank: number }[];
-  // A project at the root next to a root package.json, listed with its own share of changes.
-  rootApp?: { names: string[]; stack: string; toolchain: string; suffix: string; rank: number };
+  // A project at the root next to a root package.json, listed with its own share of changes. `match`
+  // finds a manifest whose name varies, such as a solution file.
+  rootApp?: { names: string[]; match?: RegExp; stack: string; toolchain: string; suffix: string; rank: number };
+  // The test commands of this language's build tool, so a package.json whose test script only hands
+  // over to them, such as `"test": "cargo test"` next to Cargo.toml, wraps a project of this language.
+  runners?: RegExp;
   // Lockfile names, so a component reports the one it has.
   lockfiles?: string[];
   // The name a root-level project gives itself, read from its manifest (a path relative to the tree).

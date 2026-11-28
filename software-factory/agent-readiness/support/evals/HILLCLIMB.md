@@ -902,3 +902,15 @@ The failing-verdict review's changes 1, 3, 4 and 7 (Andrew, Nov 27). They change
 - **Remeasure:** with rounds 21 to 24, at the Mac release session.
 >>>>>>> f787ae2 (agent-readiness: one verdict word per result (lib/verdict.ts), host-mode symmetry, the recheck through the audit's gate, and instruction verdicts)
 - **Verdict:** pending.
+
+## Round 26 (pending measurement): the Plan A trials' rate misses and false instruction findings (November 27, 2026)
+
+The Plan A trials (#68) recorded rate misses in discovery and the run plan, and ceilings of false instruction findings on eight repos. This round fixes their general causes in discovery, the run plan, the language files and the instruction checker. Scoring rules, level rules, each fixture's `expected.json`, the judge prompts and the calibration are unchanged. The wording that changes is new skip reasons on instruction items (`per-package`, `pm-command`, a lockfile-conditional block, a folder a guide's step makes) and a paragraph in `references/supported.md`.
+
+- **Failure mode:** components the trials' truth lists were missed or got another toolchain's test command, and instruction items that aren't wrong were reported as wrong: scripts and files written without their folder, the package manager's own commands, Make targets with `/`, folder cues the checker didn't read, paths in another repository, on the contributor's machine, written by a tool or shown as a template.
+- **Change:** see CHANGELOG, "What the Plan A trials corrected".
+- **Tests:** `tests/trial-misses.test.ts`, one test per cause; 19 of its 20 fail on the base (the 20th guards that pytest still outranks `manage.py`).
+- **Before and after, on the trials at their pinned commits** (truth guards and false instruction findings, the base's recording against this branch's scripts run by #68's runner on one VM): false instruction findings langfuse 58 to 0, spree 38 to 26 (the rest are replay failures of its unsupported task-graph and gem layout), netbox 19 to 0, airflow 17 to 2, sentry-javascript 13 to 1, dd-trace-go 13 to 2 (one, `make test-integration`, names a target the Makefile doesn't have), jellyfin 3 to 0, saleor 3 to 2. R1: airflow 0 to 1 of 1. R2: airflow 7 to 9 of 10 (the root's CI runs breeze), langfuse 6 to 8 of 8, netbox and eShop from a miss to a hit; apollo-client unchanged at 1 of 2. command-line-api, undetermined for want of a test command, now passes every truth guard at Level 2: Arcade's `*.Tests` projects are test projects, and its net472 target is left to Windows. Mastodon's install gets Corepack on node:26 and the 4.0.10 Ruby image; its Ruby install now stops at `idn-ruby`, which needs a system library from its Aptfile.
+- **Expected:** no change on the hard gates; the skip reasons sit in the instructions table, below part 1.
+- **Remeasure:** with rounds 21 to 25, at the Mac release session.
+- **Verdict:** pending.
