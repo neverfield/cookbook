@@ -13,7 +13,7 @@ import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
 import { ecosystemOf } from "./languages/index.ts";
 import { lockedEngineGap } from "./languages/node.ts";
-import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary } from "./mutate.ts";
+import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary, writeStamped } from "./mutate.ts";
 import { Progress, budgetSummary } from "./progress.ts";
 import { redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
@@ -878,7 +878,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
     const filePath = join(ex.root, site.file);
     const command = await testCommandFor(site.file);
     const original = readText(filePath);
-    writeFileSync(filePath, applySite(original, site));
+    writeStamped(filePath, applySite(original, site));
     const codes: number[] = [];
     let result: Mutant["result"] = "survived";
     try {
@@ -920,7 +920,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
         result = "caught";
       }
     } finally {
-      writeFileSync(filePath, original);
+      writeStamped(filePath, original);
     }
     mutants.push({ ...record, result, exitCodes: codes });
   }
@@ -997,7 +997,7 @@ async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Exe
   const original = readText(filePath);
   const caught: ContractCommand[] = [];
   let stalled: string | null = null;
-  writeFileSync(filePath, withCanary(original, site.line));
+  writeStamped(filePath, withCanary(original, site.line));
   try {
     for (const c of typechecks) {
       const limit = capped(budget, comp.id, c.timeoutSec);
@@ -1010,7 +1010,7 @@ async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Exe
       if (out.exitCode !== 0) caught.push(c);
     }
   } finally {
-    writeFileSync(filePath, original);
+    writeStamped(filePath, original);
   }
   if (stalled) return record("not_run", `the type-check with a type error planted in ${site.file} didn't finish: ${stalled}`, stalled === BUDGET_OUT ? { blocked: BUDGET_OUT } : {});
   const shown = `\`${site.line}\``;
