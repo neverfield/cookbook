@@ -265,6 +265,8 @@ export interface PhaseResult {
   attribution?: Attribution;
   // The rerun, with the network on, of a test run that failed with it cut.
   networkOn?: boolean;
+  // On a pass after a failed rerun with the network on: what that rerun failed on.
+  flaky?: string;
 }
 
 export const INSTALL_BLOCKED = "not run because the install was blocked on this machine";
@@ -551,8 +553,10 @@ export async function runContract(
 }
 
 // Each test run that failed with the network cut, for no reason the audit's install or image already
-// explains, runs once more with the network on. A pass makes the failure the environment's; a second
-// failure makes it the repo's. The network goes back off for the steps after.
+// explains, runs once more with the network on. A pass makes the failure the environment's. A second
+// failure gets one more try with the network on, since a test flaky on its own fails a rerun as often
+// as a first run: a pass there makes the failures flaky, recorded as such; a third failure makes them
+// the repo's. The network goes back off for the steps after.
 async function networkExperiment(ex: Executor, offline: PhaseResult[], attempt: (cmd: ContractCommand) => Promise<PhaseResult | null>, push: (r: PhaseResult) => void): Promise<void> {
   const verdictOf = (r: PhaseResult) => r.attribution ?? attribute(phaseAttributionInput(ex, r), ex.imageSource);
   const latest = [...new Map(offline.map((r) => [r.cmd.id, r])).values()];
@@ -563,8 +567,13 @@ async function networkExperiment(ex: Executor, offline: PhaseResult[], attempt: 
       const again = await attempt(r.cmd);
       if (!again || again.status === "not_run") continue;
       const first = verdictOf(r);
-      r.attribution = networkVerdict(first, again.status === "pass", again.diagnosis?.detail ?? "non-zero exit");
-      push({ ...again, networkOn: true, attribution: again.status === "fail" ? r.attribution : undefined, note: again.status === "pass" ? NETWORK_RERUN_PASSED : "failed again with the network on" });
+      const failedOnline = again.status === "fail" ? (again.diagnosis?.detail ?? "non-zero exit") : null;
+      const last = failedOnline ? await attempt(r.cmd) : null;
+      const flaky = last?.status === "pass" ? failedOnline : null;
+      r.attribution = networkVerdict(first, again.status === "pass" || flaky !== null, failedOnline ?? "");
+      push({ ...again, networkOn: true, attribution: again.status === "fail" && !flaky ? r.attribution : undefined, note: again.status === "pass" ? NETWORK_RERUN_PASSED : "failed again with the network on" });
+      if (!last || last.status === "not_run") continue;
+      push({ ...last, networkOn: true, attribution: flaky ? undefined : r.attribution, note: flaky ? FLAKY_RERUN_PASSED : "failed a third time with the network on", ...(flaky ? { flaky } : {}) });
     }
   } finally {
     ex.offline();
@@ -572,6 +581,7 @@ async function networkExperiment(ex: Executor, offline: PhaseResult[], attempt: 
 }
 
 export const NETWORK_RERUN_PASSED = "passed with the network on, after failing with it cut";
+export const FLAKY_RERUN_PASSED = "passed on a second try with the network on, after failing once with it on as well, so the tests are flaky";
 
 // The tools the audit adds to an image it picked when a test run fails for want of one: only git,
 // since the audit already sets the identity tests that commit use.
@@ -624,7 +634,8 @@ export function evidenceFromPhase(audit: Audit, ex: Executor, r: PhaseResult, re
   else summary = `${r.cmd.kind} failed: ${r.diagnosis?.detail ?? "non-zero exit"}${counts && counts.failed ? ` (${counts.failed} of ${counts.total} tests failed)` : ""}`;
   if (r.status === "fail" && r.diagnosis?.detail === "registry credentials not provided" && audit.environment.registryEnv.length === 0) summary = `${r.cmd.kind} failed: registry credentials not provided (pass them with --registry-env)`;
   if (r.cmd.declared && r.status !== "not_run") summary += `; ran check-only, without the write flags in \`${r.cmd.declared}\``;
-  if (r.networkOn) summary = r.status === "pass" ? `${summary}, with the network on, after failing with it cut` : `${summary}; it failed again with the network on`;
+  if (r.flaky) summary = `${summary}, with the network on, on a second try: the first with it on failed (${r.flaky}), so the tests are flaky`;
+  else if (r.networkOn) summary = r.status === "pass" ? `${summary}, with the network on, after failing with it cut` : `${summary}; it failed again with the network on`;
   else if (/once the audit added /.test(r.note)) summary += `, ${r.note.replace(/^(passed|ran) /, "")}`;
   const attribution = r.attribution ?? attribute(phaseAttributionInput(ex, r), ex.imageSource) ?? undefined;
   const failedIn = r.status === "fail" && r.cmd.component === "*" && ATTRIBUTED.has(r.cmd.kind) && r.outcome && !r.blocked ? failingComponents(r.outcome.output, r.cmd.cwd, audit.profile?.components.filter((c) => c.assessed) ?? [], ex.root) : null;
