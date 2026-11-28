@@ -295,7 +295,7 @@ describe("planting faults within the budget", () => {
     const details = JSON.parse(readFileSync(join(repo, "..", "mutants.json"), "utf8")) as { faultId: string }[];
     assert.deepEqual(details.slice(0, 5).map((d) => d.faultId), named.map(faultId), "the named faults go first");
     assert.match(ev.summary, /^caught 0 of 5 new planted faults \(0%\): weak/);
-    assert.match(ev.summary, /planted again from the last audit and not counted: 5 of the 5 the last audit missed are now caught/);
+    assert.match(ev.summary, /; 5 of the 5 faults the last audit missed are now caught, planted again and not counted/);
   });
 
   test("15 named faults now caught and 0 of 5 new is not strong, and named faults past the carry cap never come back as new", async () => {

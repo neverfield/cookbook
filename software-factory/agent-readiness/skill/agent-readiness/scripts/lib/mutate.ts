@@ -777,8 +777,8 @@ export function atLook(decided: number, rule: EstimateRule): boolean {
   return decided > 0 && decided % rule.batch === 0;
 }
 
-// How many earlier faults may be planted again. They don't count toward the estimate, so they are
-// extra runs; one batch shows whether the last audit's misses are now caught.
+// How many of the last audit's missed faults may be planted again. They don't count toward the
+// estimate, so they are extra runs; one batch shows whether those misses are now caught.
 export function carriedCap(rule: EstimateRule): number {
   return rule.batch;
 }

@@ -793,13 +793,14 @@ function faultRunSec(rubric: Rubric, comp: Component): number {
   return Math.max(rubric.mutation.runTimeoutSec, hooked(comp)?.budget?.mutationRunTimeoutSec ?? 0);
 }
 
-// Earlier sealed audits' faults in this component. `carried`: the last audit's decided faults, missed
-// ones first, to plant again first and report beside the estimate. `missed`: every fault a sealed
-// report named as missed, which never counts as new again, so tests aimed at the named lines can't
-// move the estimate. `missedLast`: the carried faults the last audit missed.
-function priorFaults(repo: string, componentId: string, cap: number): { carried: string[]; missed: string[]; missedLast: string[] } {
+// Earlier sealed audits' faults in this component. `carried`: up to `cap` of the faults the last
+// audit missed, planted again first and reported beside the estimate, never in it. `missed`: every
+// other fault a sealed report named as missed, which is never planted as new again, so tests aimed at
+// the named lines can't move the estimate. A fault an earlier audit caught stays in the pool: its
+// line was never named, and tests can't be aimed at catching what they already catch.
+function priorFaults(repo: string, componentId: string, cap: number): { carried: string[]; missed: string[] } {
   const p = paths(repo);
-  const decidedIn = (audit: Audit) => audit.mutants.filter((m) => m.component === componentId && m.file && m.operator && m.before && (m.result === "survived" || m.result === "caught"));
+  const missedIn = (audit: Audit) => audit.mutants.filter((m) => m.component === componentId && m.file && m.operator && m.before && m.result === "survived");
   const idOf = (m: Mutant) => m.faultId ?? faultId({ file: m.file!, before: m.before!, operator: m.operator! });
   const ids = readHistory(p).filter((h) => h.kind === "audit").map((h) => h.id);
   const audits = new Map<string, Audit>();
@@ -810,13 +811,10 @@ function priorFaults(repo: string, componentId: string, cap: number): { carried:
       // An audit the history lists but this clone doesn't hold names nothing here.
     }
   }
-  const missed = [...new Set([...audits.values()].flatMap((a) => decidedIn(a).filter((m) => m.result === "survived").map(idOf)))];
   const last = audits.get(ids.at(-1) ?? "");
-  if (!last) return { carried: [], missed, missedLast: [] };
-  const mine = decidedIn(last);
-  const carried = [...mine.filter((m) => m.result === "survived"), ...mine.filter((m) => m.result === "caught")].map(idOf).slice(0, cap);
-  const missedLast = mine.filter((m) => m.result === "survived").map(idOf).filter((id) => carried.includes(id));
-  return { carried, missed: missed.filter((id) => !carried.includes(id)), missedLast };
+  const carried = last ? [...new Set(missedIn(last).map(idOf))].slice(0, cap) : [];
+  const missed = [...new Set([...audits.values()].flatMap((a) => missedIn(a).map(idOf)))].filter((id) => !carried.includes(id));
+  return { carried, missed };
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -839,7 +837,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   }
   const rule = estimateRule(rubric.mutation);
   const identity = rubric.mutation.identity;
-  const earlier = identity === "fault" ? priorFaults(repo, comp.id, rule ? carriedCap(rule) : rubric.mutation.perComponent) : { carried: [], missed: [], missedLast: [] };
+  const earlier = identity === "fault" ? priorFaults(repo, comp.id, rule ? carriedCap(rule) : rubric.mutation.perComponent) : { carried: [], missed: [] };
   const prior = earlier.carried;
   const count = (rule ? rule.maxPlanted : rubric.mutation.perComponent) + (rule ? prior.length : 0);
   const sites = chooseSites(repo, tree, comp, plantSeed(audit, { tree, createdAt: audit.createdAt }), count, audit.repo.commit, { identity, prior, exclude: earlier.missed });
@@ -975,7 +973,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
     const share = `caught ${est.caught} of ${est.decided} ${est.carried ? "new " : ""}planted faults (${pct(est.rate)})`;
     result = est.verdict === "strong" ? "pass" : est.verdict === "weak" ? "fail" : "not_run";
     const why = est.decided < rubric.mutation.minForPass ? `; at least ${rubric.mutation.minForPass} must give a clear result` : est.decided >= rule.maxDecided || est.planted >= rule.maxPlanted ? `; the cap of ${rule.maxDecided} was reached` : !cut && !stalledOut ? "; no more places to plant a fault" : "";
-    const tailNote = control + carriedNote(mutants.filter((m) => isCarried(m) && (m.result === "caught" || m.result === "survived")), earlier.missedLast) + missedNote;
+    const tailNote = control + carriedNote(mutants.filter((m) => isCarried(m) && (m.result === "caught" || m.result === "survived"))) + missedNote;
     summary =
       est.verdict === "strong"
         ? `${share}: strong, at least ${pct(est.low)} with ${confidence(rule.strongConfidence)} confidence (tried: ${operators})${scopedNote}${cutNote}${tailNote}`
@@ -1036,16 +1034,10 @@ async function controlRun(audit: Audit, ex: Executor, comp: Component, testCmd: 
   return record(`no fault was planted: the test command failed when only a comment was added to ${file}, a change that can't alter behaviour, so a failure with a planted fault couldn't be told from a failure on any edit (a \`git diff\`, hash or generated-code check, or a linter that rejects the comment)`, { exitCode: out.exitCode ?? undefined });
 }
 
-// The faults planted again from the last audit, reported apart from the estimate they don't count in.
-function carriedNote(carried: Mutant[], missedLast: string[]): string {
+// The faults the last audit missed, planted again and reported apart from the estimate they don't count in.
+function carriedNote(carried: Mutant[]): string {
   if (!carried.length) return "";
-  const wasMissed = carried.filter((m) => missedLast.includes(m.faultId!));
-  const wasCaught = carried.filter((m) => !missedLast.includes(m.faultId!));
-  const parts = [
-    ...(wasMissed.length ? [`${wasMissed.filter((m) => m.result === "caught").length} of the ${wasMissed.length} the last audit missed are now caught`] : []),
-    ...(wasCaught.length ? [`${wasCaught.filter((m) => m.result === "caught").length} of the ${wasCaught.length} it caught still are`] : []),
-  ];
-  return `; planted again from the last audit and not counted: ${parts.join(", and ")}`;
+  return `; ${carried.filter((m) => m.result === "caught").length} of the ${carried.length} faults the last audit missed are now caught, planted again and not counted`;
 }
 
 // A type-check that exits 0 proves nothing until it has been seen to fail: one known type error goes

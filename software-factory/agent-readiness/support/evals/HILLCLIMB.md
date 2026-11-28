@@ -885,7 +885,7 @@ The independent architecture review at `062443f` found that a re-audit could cal
 - **Change:**
   - `remediate.md` "Tests that don't catch planted faults" step 1 says the sealed report names each missed fault's line for people, and that only faults no sealed report named decide the estimate.
   - `references/checks.md` describes the carried batch, the new-faults-only estimate and the comment-only control run.
-  - The faults row reads "caught N of M new planted faults" on a re-audit and adds "planted again from the last audit and not counted: …"; a comment-only run that failed reads "no fault was planted: the test command failed when only a comment was added to …".
+  - The faults row reads "caught N of M new planted faults" on a re-audit and adds "N of the M faults the last audit missed are now caught, planted again and not counted"; a comment-only run that failed reads "no fault was planted: the test command failed when only a comment was added to …".
 - **Tests:** `tests/level2-gates.test.ts` (named faults caught and none new is weak; 15 named and 0 of 5 new is not strong, and a named fault past the carry cap is never planted as new; the control run), `tests/review-2.test.ts` (a draft whose temp folder is gone is refused at the seal).
 - **Expected:** no change on the hard gates. tautological-tests and diff-catches-weakening should hold or improve; a seeded re-audit case where the agent writes tests against the named lines would now stay below Level 2.
 - **Remeasure:** with rounds 21 and 22, at the Mac release session.
