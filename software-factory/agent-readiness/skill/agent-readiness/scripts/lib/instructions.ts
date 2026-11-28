@@ -1,10 +1,12 @@
 import { dirname, join, normalize } from "node:path";
+import { attribute, attributes } from "./attribute.ts";
 import { BUNDLE_GAP, diagnose } from "./diagnose.ts";
 import { addEvidence } from "./evidence.ts";
 import { redact, tail } from "./redact.ts";
 import { charge, overBudget } from "./replay.ts";
 import type { Budget, Executor } from "./replay.ts";
 import { SUDO_SHIM_MARK } from "./run.ts";
+import { loadRubric } from "./rubric.ts";
 import { makeRecipe } from "./static.ts";
 import { CUT_OFF } from "./scope.ts";
 import type { Audit, InstructionItem } from "./types.ts";
@@ -115,6 +117,7 @@ export function packageCommand(output: string, audit: Audit, tree: string, cwd: 
 // of the component it targets.
 export async function replayInstructions(audit: Audit, executors: Executor | ((cwd: string, command: string) => Executor), copyDir: string, budget: Budget, registryValues: string[], notInstalled: { blocked?: string } | null): Promise<void> {
   const ran = new Map<string, InstructionItem>();
+  const attributed = attributes(loadRubric(audit.rubric));
   for (const item of audit.instructions.filter((i) => i.category === "replay" && i.staticResult === "pass")) {
     if (notInstalled) {
       item.result = "not_run";
@@ -141,14 +144,15 @@ export async function replayInstructions(audit: Audit, executors: Executor | ((c
       Object.assign(item, { cwd, result: earlier.result, reason: earlier.reason, rule: earlier.rule, evidenceId: earlier.evidenceId, blocked: earlier.blocked, category: earlier.category });
       continue;
     }
-    await replayOne(audit, item, ex, cwd, copyDir, budget, registryValues, leftSec);
+    await replayOne(audit, item, ex, cwd, copyDir, budget, registryValues, leftSec, attributed);
     ran.set(key, item);
   }
   applyWaivers(audit);
 }
 
 // One documented command, run in the replay copy and judged; its result goes on the item.
-async function replayOne(audit: Audit, item: InstructionItem, ex: Executor, cwd: string, copyDir: string, budget: Budget, registryValues: string[], leftSec: number): Promise<void> {
+// attributed: the rubric's rule that a failure is the repo's only when nothing the audit chose explains it.
+async function replayOne(audit: Audit, item: InstructionItem, ex: Executor, cwd: string, copyDir: string, budget: Budget, registryValues: string[], leftSec: number, attributed: boolean): Promise<void> {
   // The same command a check already ran, such as `npm run test` next to the test check's
   // `npm test`: its result is that check's, counted once, there.
   const same = sameAsCheck(audit, item.text, cwd, copyDir);
@@ -253,6 +257,10 @@ async function replayOne(audit: Audit, item: InstructionItem, ex: Executor, cwd:
     item.rule = "long-running";
     return;
   }
+  // The same gate as a check's failure: one the audit's image or machine could explain leaves the
+  // instruction unproven, not wrong.
+  const owner = ok || !attributed ? null : attribute({ result: "fail", where: ex.where, diagnosis: why!, timedOut: out.timedOut, summary: why!.detail, outputTail: redacted }, ex.imageSource);
+  const held = owner && owner.verdict !== "repo" ? owner : null;
   const ev = addEvidence(audit, {
     checkId: "context.instructions_verified",
     condition: "instructions",
@@ -268,7 +276,16 @@ async function replayOne(audit: Audit, item: InstructionItem, ex: Executor, cwd:
     outputTail: tail(redacted, 1500),
     outputDigest: sha256(redacted),
     summary: `${item.source}:${item.line} \`${item.text}\` ${ok ? "replays" : "fails: " + why!.detail}`,
+    ...(owner ? { attribution: owner } : {}),
   });
+  if (held) {
+    item.result = "not_run";
+    item.reason = `not proven: it failed (${why!.detail}), and ${held.detail}, so only a run that rules that out can show the instruction is wrong`;
+    if (held.verdict === "environment") item.blocked = held.detail;
+    item.rule = "replay";
+    item.evidenceId = ev.id;
+    return;
+  }
   item.result = ok ? "pass" : "fail";
   item.reason = ok ? undefined : why!.detail;
   item.rule = "replay";

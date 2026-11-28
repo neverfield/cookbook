@@ -1,8 +1,9 @@
 import { levelResult } from "./format.ts";
 import type { ModelInput } from "./model.ts";
-import { blockedBy } from "./score.ts";
 import { INSTRUCTION_RULES, SAFETY_RULES } from "./static.ts";
 import type { Audit, CondId, CondState, Evidence, Explanation, InstructionItem, ReportJson, ReportWaivers, SafetyFinding } from "./types.ts";
+import { verdictWord } from "./verdict.ts";
+import type { Rubric } from "./rubric.ts";
 import { usedWaivers } from "./waivers.ts";
 
 const STATE_WORD: Record<CondState, string> = { met: "met", not_met: "not met", unknown: "not proven", blocked: "blocked on this machine" };
@@ -44,19 +45,14 @@ function places(audit: Audit, evs: Evidence[]): string {
   return all.length ? list(all) : "not run";
 }
 
-// A step a limit of this machine kept from finishing reads as blocked, whatever its exit code.
-export function resultWord(e: Evidence): string {
-  return blockedBy(e) ? "blocked" : e.result === "not_run" ? "not run" : e.result;
-}
-
 // Components in their own folders often run the same command line, such as `corepack pnpm run
 // test`, so the folder tells one result from another.
 function commandAt(command: string, cwd: string | undefined): string {
   return cwd && cwd !== "." ? `\`${command}\` in \`${cwd}\`` : `\`${command}\``;
 }
 
-function ranOf(evs: Evidence[]): string {
-  const all = [...new Set(evs.map((e) => (e.command ? `${commandAt(e.command, e.cwd)} (${resultWord(e)})` : e.summary)))];
+function ranOf(evs: Evidence[], rubric: Rubric): string {
+  const all = [...new Set(evs.map((e) => (e.command ? `${commandAt(e.command, e.cwd)} (${verdictWord(e, rubric)})` : e.summary)))];
   return all.length ? list(all) : "nothing ran for it";
 }
 
@@ -106,7 +102,7 @@ function componentLevel(input: ModelInput, report: ReportJson): Explanation[] {
   for (const c of report.components.included) {
     const contract = audit.contract.filter((k) => k.component === c.id || k.component === "*");
     const evs = contract.map((k) => [...audit.evidence].reverse().find((e) => e.contractId === k.id)).filter((e): e is Evidence => Boolean(e));
-    const ran = contract.length ? list(contract.map((k) => { const e = evs.find((x) => x.contractId === k.id); return `${commandAt(k.command, k.cwd)} (${e ? resultWord(e) : "not run"})`; }), 6) : "no command: the scan found none to run";
+    const ran = contract.length ? list(contract.map((k) => { const e = evs.find((x) => x.contractId === k.id); return `${commandAt(k.command, k.cwd)} (${e ? verdictWord(e, rubric) : "not run"})`; }), 6) : "no command: the scan found none to run";
     const result = levelResult(c);
     const held = c.capReasons.map((k) => `${k.label}: ${STATE_WORD[k.state]} (${k.reason})`);
     const happened = c.level === null ? "no level: the audit has no real check results to give one from" : held.length ? `Held ${c.unproven ? "unproven" : `at Level ${c.level}`} by ${list(held, 6)}` : c.level >= 4 ? "every condition up to Level 4 is met" : `every Level ${c.level} condition is met`;
@@ -144,7 +140,7 @@ function conditions(input: ModelInput): Explanation[] {
       const evs = evidenceFor(audit, d.evidence);
       const offline = (c === "clean.test" || c === "faults") && evs.some((e) => e.where === "container" && e.result !== "not_run") ? ` ${OFFLINE_RULE}` : "";
       const canary = c === "commands" && rubric.canary?.typecheck ? ` ${CANARY_RULE}` : "";
-      out.push({ kind: "condition", subject: repo ? `repo: ${rubric.conditions[c].label}` : `${comp.id}: ${rubric.conditions[c].label}`, result: STATE_WORD[d.state], ran: ranOf(evs), where: evs.length ? places(audit, evs) : repo ? STATIC_PLACE : "not run", happened: d.reason, rule: conditionRule(input, c, d.state) + offline + canary });
+      out.push({ kind: "condition", subject: repo ? `repo: ${rubric.conditions[c].label}` : `${comp.id}: ${rubric.conditions[c].label}`, result: STATE_WORD[d.state], ran: ranOf(evs, rubric), where: evs.length ? places(audit, evs) : repo ? STATIC_PLACE : "not run", happened: d.reason, rule: conditionRule(input, c, d.state) + offline + canary });
     }
   }
   return out;

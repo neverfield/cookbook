@@ -1,10 +1,13 @@
-import { attributes, attributionOf } from "./attribute.ts";
+import { attributes } from "./attribute.ts";
 import { currentEvidence } from "./evidence.ts";
 import type { Rubric } from "./rubric.ts";
-import { provingPlace, strengthRank } from "./rubric.ts";
+import { provingPlace } from "./rubric.ts";
 import { agentFacing } from "./profile.ts";
 import { SECRET_PATTERN_COUNT } from "./secrets.ts";
 import type { Audit, CondId, CondState, Evidence } from "./types.ts";
+import { UNDETERMINED, belowProof, blockedBy, countVerdicts, judge } from "./verdict.ts";
+
+export { UNDETERMINED, blockedBy, hostToolMissing } from "./verdict.ts";
 
 export interface CondDetail {
   state: CondState;
@@ -56,17 +59,6 @@ function needsContainer(rubric: Rubric, check: string): boolean {
   return c?.minStrengthForPass === "clean_replay";
 }
 
-// A host fallback runs on whatever this machine has installed. A missing tool there is an
-// environment limit: only a clean container from the repo's own setup can show a repo defect.
-export function hostToolMissing(ev: Evidence): boolean {
-  return ev.result === "fail" && ev.where !== "container" && ev.where !== "static" && ev.diagnosis?.cause === "missing_tool";
-}
-
-export function blockedBy(ev: Evidence): string | null {
-  if (ev.blocked) return ev.blocked;
-  return hostToolMissing(ev) ? `${ev.diagnosis!.detail} on this machine` : null;
-}
-
 // No real results, no level: a level needs at least one Level 1 check that ran and passed, or failed
 // for a reason in the repo. Returns why there is none, or null when there is one. Checks that this
 // machine blocked aren't "no result": they make the level unproven here, which levels.ts reports
@@ -89,30 +81,34 @@ export function noRealResults(audit: Audit, states: Map<string, CompStates>): st
 
 function fromEvidence(rubric: Rubric, ev: Evidence | undefined, check: string, missingReason: string, componentId?: string): CondDetail {
   if (!ev) return { state: "unknown", reason: missingReason, evidence: [] };
-  const blocked = blockedBy(ev);
-  if (blocked) return { state: "blocked", reason: ev.where === "container" ? `${blocked}, a limit of the audit's environment rather than a repo defect` : `${blocked}, an environment limit rather than a repo defect; Level 1 needs a clean container`, evidence: [ev.id] };
   // A repo-wide run whose every failing file is in other components passes for this one.
-  if (ev.result === "fail" && componentId && ev.failedIn?.length && !ev.failedIn.includes(componentId)) {
+  if (ev.result === "fail" && !blockedBy(ev) && componentId && ev.failedIn?.length && !ev.failedIn.includes(componentId)) {
     const passed = fromEvidence(rubric, { ...ev, result: "pass", failedIn: undefined }, check, missingReason);
     return passed.state === "met" ? { ...passed, reason: `the repo-wide ${ev.kind ?? "command"} passes for ${componentId}: every failure is in ${ev.failedIn.join(", ")}` } : passed;
   }
-  if (ev.result === "fail" && attributes(rubric)) {
-    const a = attributionOf(ev);
-    if (a?.verdict === "environment") return { state: "blocked", reason: `${a.detail}, a limit of the audit's environment rather than a repo defect`, evidence: [ev.id] };
-    if (a?.verdict === "undetermined") return { state: "unknown", reason: `${UNDETERMINED}${a.detail}`, evidence: [ev.id] };
+  const j = judge(ev, rubric, check);
+  switch (j.verdict) {
+    case "blocked":
+      return { state: "blocked", reason: j.reason, evidence: [ev.id] };
+    case "undetermined":
+    case "not_run":
+      return { state: "unknown", reason: j.reason, evidence: [ev.id] };
+    case "repo_fault":
+      return { state: "not_met", reason: j.reason, evidence: [ev.id] };
+    case "pass":
+      break;
+    default: {
+      const never: never = j.verdict;
+      throw new Error(`unknown verdict ${String(never)}`);
+    }
   }
-  if (ev.result === "fail") return { state: "not_met", reason: ev.summary, evidence: [ev.id] };
-  if (ev.result === "not_run") return { state: "unknown", reason: ev.summary, evidence: [ev.id] };  const min = rubric.checks.find((c) => c.id === check)?.minStrengthForPass ?? "executed";
-  if (strengthRank(rubric, ev.strength) < strengthRank(rubric, min)) {
+  if (belowProof(rubric, ev, check)) {
     if (needsContainer(rubric, check) && ev.where === "disposable_vm") return { state: "blocked", reason: "passed on a disposable VM, which this audit's rubric doesn't count as proof; Level 1 needs a clean container", evidence: [ev.id] };
     if (needsContainer(rubric, check)) return { state: "blocked", reason: `passed in host mode, which ran on this machine and could read its local files, so it isn't a sandbox; Level 1 needs ${provingPlace(rubric)}`, evidence: [ev.id] };
     return { state: "unknown", reason: `passed, but only ${rubric.strengthLabels[ev.strength]}`, evidence: [ev.id] };
   }
   return { state: "met", reason: ev.summary, evidence: [ev.id] };
 }
-
-// A reason that starts with this is a condition the audit couldn't decide, and says what would.
-export const UNDETERMINED = "undetermined: ";
 
 // No test command found. From 2026-12-beta that is "no tests" only when no file under the component
 // matches its language's test-file rule; with test files, or uncounted ones, the audit couldn't
@@ -209,6 +205,12 @@ export function gatingInstruction(rubric: Rubric, item: Audit["instructions"][nu
   return item.kind === "command" && agentFacing(item.source);
 }
 
+// An instruction that ran and failed for a reason the audit can't pin on the repo, as the reason.
+function unprovenInstruction(pending: Audit["instructions"]): string | null {
+  const i = pending.find((x) => x.evidenceId && x.reason?.startsWith("not proven"));
+  return i ? `${UNDETERMINED}${i.source}:${i.line} \`${i.text}\` is ${i.reason!}${pending.length > 1 ? `; ${pending.length - 1} more instruction ${pending.length === 2 ? "command hasn't" : "commands haven't"} been shown right or wrong` : ""}` : null;
+}
+
 export function repoStates(audit: Audit, rubric: Rubric): Record<"instructions" | "safety" | "toolchain" | "lockfile", CondDetail> {
   const items = audit.instructions;
   const gating = items.filter((i) => gatingInstruction(rubric, i));
@@ -222,7 +224,7 @@ export function repoStates(audit: Audit, rubric: Rubric): Record<"instructions" 
       : pending.length > 0 && pending.every((i) => i.blocked)
         ? { state: "blocked", reason: `${pending.length} instruction commands couldn't be replayed: ${pending[0].blocked}`, evidence: insEvidence }
         : pending.length > 0
-          ? { state: "unknown", reason: `${pending.length} instruction commands haven't been run`, evidence: insEvidence }
+          ? { state: "unknown", reason: unprovenInstruction(pending) ?? `${pending.length} instruction commands haven't been run`, evidence: insEvidence }
           : { state: "met", reason: instructionsMetReason(items) + (listed.length ? `; ${listed.length} wrong ${listed.length === 1 ? "item" : "items"} in the README, contributor guide or a path ${listed.length === 1 ? "is" : "are"} listed and ${listed.length === 1 ? "doesn't" : "don't"} gate` : ""), evidence: insEvidence };
   const blocking = audit.safety.filter((s) => s.blocking);
   const safety: CondDetail = blocking.length > 0 ? { state: "not_met", reason: blocking.map((b) => b.detail).join("; "), evidence: [] } : { state: "met", reason: safetyCoverage(audit), evidence: [] };
@@ -232,16 +234,19 @@ export function repoStates(audit: Audit, rubric: Rubric): Record<"instructions" 
   return { instructions, safety, toolchain, lockfile };
 }
 
+// failed counts the repo's failures only; a failure blocked on this machine or undetermined has its own count.
 export interface CheckCounts {
   passed: number;
   failed: number;
+  blocked?: number;
+  undetermined?: number;
   notRun: number;
   // Instruction items skipped on purpose (vendored-skill, placeholder, interactive or package-adding
   // commands); never also counted as not run.
   skipped?: number;
 }
 
-export function checkCounts(audit: Audit, checkId: string): CheckCounts {
+export function checkCounts(audit: Audit, rubric: Rubric, checkId: string): CheckCounts {
   if (checkId === "context.instructions_verified") {
     const items = audit.instructions;
     const skipped = items.filter((i) => i.result === "not_run" && i.category === "skipped").length;
@@ -253,8 +258,7 @@ export function checkCounts(audit: Audit, checkId: string): CheckCounts {
   }
   const latestByKey = new Map<string, Evidence>();
   for (const e of currentEvidence(audit).filter((x) => x.checkId === checkId)) latestByKey.set(`${e.contractId ?? e.condition ?? e.id}:${e.component ?? ""}`, e);
-  const evs = [...latestByKey.values()];
-  return { passed: evs.filter((e) => e.result === "pass").length, failed: evs.filter((e) => e.result === "fail").length, notRun: evs.filter((e) => e.result === "not_run").length };
+  return countVerdicts([...latestByKey.values()], rubric);
 }
 
 export const ALL_COMPONENT_CONDS = COMPONENT_CONDS;

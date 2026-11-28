@@ -275,14 +275,14 @@ describe("fixes from the second independent review", () => {
     assert.ok(r.actions.some((a) => /^Takes app to Level 2 together with/.test(a.movesTheNeedle)), JSON.stringify(r.actions.map((a) => a.movesTheNeedle)));
   });
 
-  test("a recheck on the host records no level even when a command failed there", () => {
+  test("a recheck on the host records no level, and a test failing there doesn't fail it", () => {
     const repo = materialize("healthy-node");
     hostAudit(repo);
     writeFileSync(join(repo, "test/pricing.test.js"), 'import test from "node:test";\nimport assert from "node:assert";\ntest("broken", () => assert.fail("x"));\n');
     commitAll(repo, "Break a test");
     readiness(repo, ["recheck", "--runtime", "none"], HOST);
     const last = JSON.parse(readFileSync(join(repo, ".agent-readiness/history/history.jsonl"), "utf8").trim().split("\n").pop()!) as HistoryLine;
-    assert.equal(last.result, "failed");
+    assert.equal(last.result, "blocked", "a pass on the host proves no Level 1 check, so a failure there doesn't fail one");
     assert.equal(last.noLevel, true);
   });
 
