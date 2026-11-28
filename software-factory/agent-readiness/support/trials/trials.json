@@ -876,7 +876,7 @@
       "minutes": 61.7,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-26T12:00:00Z",
-      "notes": "Yarn and Nx monorepo (11.18.0) of about 267 package.json files with nested AGENTS.md, 67 skill files and .cursor/environment.json. CI tests every packages/* SDK through the root Nx task graph, so they are members of the root; each dev-packages/* suite (e2e, node, browser and bundler integration tests) runs from its own folder and needs services or the network. Task-graph builds aren't supported yet. Its ceiling of 11 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
+      "notes": "Yarn and Nx monorepo (11.18.0) of about 267 package.json files with nested AGENTS.md, 67 skill files and .cursor/environment.json. CI tests every packages/* SDK through the root Nx task graph, so they are members of the root; each dev-packages/* suite (e2e, node, browser and bundler integration tests) runs from its own folder and needs services or the network. Task-graph builds aren't supported yet. Its ceiling of 12 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it. CONTRIBUTING.md:105 is a false finding in some runs and not in others.",
       "tracking": {
         "R2": "unsupported feature: CI tests the SDKs through the root Nx task graph (test:ci:node, test:ci:browser; supported.md, task-graph), so the root gets test:scripts, and the e2e, bun, deno and browser-min-version suites get no command",
         "R3": "unsupported feature: the bun-integration-tests suite, which needs nothing beyond its install, isn't assessed inside the Nx task-graph monorepo"
@@ -885,7 +885,7 @@
         "registry.npmjs.org"
       ],
       "realInstructionFindings": [],
-      "falseInstructionFindings": 11,
+      "falseInstructionFindings": 12,
       "recorded": {
         "open": {
           "exit": 0,
@@ -1886,7 +1886,7 @@
       "minutes": 0.4,
       "review": "trial-representativeness-review.md",
       "now": "2026-10-16T12:00:00Z",
-      "notes": "Small Poetry library, the commit supported.md cites as Poetry's proof; its tests need nothing beyond the install, so this re-verifies that claim.",
+      "notes": "Small Poetry library, the commit supported.md cites as Poetry's proof; its tests need nothing beyond the install, so this re-verifies that claim. Its headline isn't recorded: since 062443f the same planted faults (mut-cleo-6 to 9) survive on an 8-CPU cloud VM and are caught on CI's runners, which changes the headline but not the level; a defect, fix pending.",
       "egress": [
         "pypi.org",
         "files.pythonhosted.org"
@@ -1910,8 +1910,7 @@
           },
           "notAssessed": [],
           "instructionFailures": [],
-          "blockingSafety": [],
-          "headline": "Agents can build and test cleo, but its tests can't yet catch wrong changes."
+          "blockingSafety": []
         }
       }
     },
