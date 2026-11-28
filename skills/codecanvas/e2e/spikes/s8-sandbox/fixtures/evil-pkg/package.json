@@ -1,0 +1,9 @@
+{
+  "name": "s8-evil-postinstall-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Adversarial fixture package whose postinstall script attempts to modify the parent repo outside the agent clone.",
+  "scripts": {
+    "postinstall": "node postinstall.js"
+  }
+}
