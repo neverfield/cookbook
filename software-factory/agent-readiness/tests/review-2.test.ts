@@ -139,6 +139,24 @@ describe("fixes from the second independent review", () => {
     assert.match(r.out, /audit\.json was edited outside the scripts/);
   });
 
+  test("with the audit's temp folder gone, an edited draft is refused at the seal instead of sealing", () => {
+    const repo = materialize("healthy-node");
+    assert.equal(readiness(repo, ["init", "--tier", "local-exec"]).code, 0);
+    assert.equal(readiness(repo, ["scan"]).code, 0);
+    const tree = JSON.parse(readFileSync(join(draftDir(repo), "local.json"), "utf8")).tree as string;
+    rmSync(dirname(tree), { recursive: true, force: true });
+    const f = join(draftDir(repo), "audit.json");
+    const draft = JSON.parse(readFileSync(f, "utf8")) as Audit;
+    draft.evidence.push({ id: "ev-forged", at: draft.createdAt, checkId: "verify.behavioral_oracle", condition: "faults", component: "healthy-node", strength: "clean_replay", where: "container", result: "pass", summary: "caught 5 of 5 planted faults" });
+    writeFileSync(f, JSON.stringify(draft, null, 2));
+    for (const step of [["seal"], ["status"], ["scan"]]) {
+      const r = readiness(repo, step);
+      assert.notEqual(r.code, 0, `${step[0]}: ${r.out}`);
+      assert.match(r.out, /temp folder .* is gone, so edits to audit\.json can't be ruled out/);
+    }
+    assert.equal(readiness(repo, ["init", "--tier", "local-exec", "--force"]).code, 0, "init --force still starts over");
+  });
+
   test("the draft holds only a digest of the seed; the sealed audit records the seed itself", () => {
     const repo = materialize("healthy-node");
     // Keyed, since an unkeyed code seed is "" and there would be nothing to hide.

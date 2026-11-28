@@ -390,7 +390,8 @@ function draftDigest(audit: Audit): string {
 
 function checkDraft(p: Paths, id: string, audit: Audit): void {
   const f = digestFile(p, id);
-  if (!f || !exists(dirname(f))) return;
+  if (!f) fail(`${id}'s local.json is missing, so edits to audit.json can't be ruled out. Start again with \`readiness init --force\`.`);
+  if (!exists(dirname(f))) fail(`${id}'s temp folder (${dirname(f)}) is gone, so edits to audit.json can't be ruled out and the planted-fault details kept there are lost. A temp cleaner or a reboot removes it. Start again with \`readiness init --force\`.`);
   if (!exists(f)) fail(`${id}'s draft digest is missing, so edits to audit.json can't be ruled out. Start again with \`readiness init --force\`.`);
   const stored = readText(f).trim();
   const now = draftDigest(audit);
@@ -429,7 +430,8 @@ export function saveDraft(p: Paths, audit: Audit): void {
   assertDraft(audit);
   writeJson(join(p.work, audit.id, "audit.json"), audit);
   const f = digestFile(p, audit.id);
-  if (f && exists(dirname(f))) writeText(f, draftDigest(audit) + "\n");
+  if (!f || !exists(dirname(f))) fail(`${audit.id}'s temp folder is gone, so the draft can't be saved with its digest. Start again with \`readiness init --force\`.`);
+  writeText(f, draftDigest(audit) + "\n");
   renewSession(p.repo);
 }
 

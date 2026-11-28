@@ -293,8 +293,10 @@ export interface FaultEstimate {
   low: number;
   high: number;
   verdict: "strong" | "weak" | "inconclusive";
-  // Faults an earlier sealed audit planted that this one planted again.
+  // Faults an earlier sealed audit planted that this one planted again, decided either way, and how
+  // many of them were caught. Neither counts in planted, decided, caught or the verdict.
   carried: number;
+  carriedCaught?: number;
 }
 
 export interface Mutant {
