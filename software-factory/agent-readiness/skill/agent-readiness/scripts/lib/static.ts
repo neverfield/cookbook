@@ -487,7 +487,7 @@ interface CheckCtx {
   fileDir: string;
   names: RepoNames;
   via: Extracted["via"];
-  // Folders the instruction file says one of its steps makes, such as a clone of a starter app.
+  // Folders a guide of the repo says one of its steps makes, such as a clone of a starter app.
   made: string[];
   files: () => string[];
 }
@@ -688,7 +688,7 @@ function checkCommand(cmd: string, ctx: CheckCtx, start: string): Check {
       if (next.startsWith("..")) continue;
       if (existsExact(ctx.tree, next)) dir = next;
       else if (existsExact(ctx.tree, normalize(target))) dir = normalize(target);
-      else if (ctx.made.some((d) => within(next, d) || within(normalize(target), d))) return { ...PASS, rule: "built-program", skip: `not replayed: it works in ${target}, a folder an earlier step of the guide makes, which a clean checkout doesn't have` };
+      else if (ctx.made.some((d) => within(next, d) || within(normalize(target), d))) return { ...PASS, rule: "built-program", skip: `not replayed: it works in ${target}, a folder a step of the repo's guides makes, which a clean checkout doesn't have` };
       else return { result: "fail", rule: "folder-exists", reason: `there is no ${target} folder to cd into` };
       continue;
     }
@@ -775,7 +775,7 @@ const FUTURE = /\b(will (be )?(add|creat|live|hold|contain)\w*|(to be|not yet) (
 // None of them can be replayed as written, so they are listed as skipped instead.
 const PLACEHOLDER = /<[A-Za-z][\w.:/ -]*[\w.]>|<[A-Za-z]>|\{\{[^}]+\}\}|…|(^|\s)\.\.\.(\s|$)/;
 // A launcher with nothing after it, as prose names it: "`uv run` creates the venv".
-const LAUNCHER_ONLY = /^(uv run|uvx|npx|pnpx|bunx|npm (run|exec)|pnpm (run|exec|dlx)|yarn (run|exec|dlx)|poetry run|pipenv run|bundle exec|go run|cargo run)$/;
+const LAUNCHER_ONLY = /^(uv run|uvx|npx|pnpx|bunx|npm (run|exec)|pnpm (run|exec|dlx)|yarn (run|exec|dlx)|poetry run|pipenv run|bundle exec|go run|cargo run|dotnet run)$/;
 // A lowercase shell variable, which only the lines around it (a loop, an earlier assignment) set.
 const SHELL_VARIABLE = /\$\{?([a-z_][a-z0-9_]*)\}?/;
 const RUNNER = String.raw`(npx|bunx|pnpx|(corepack\s+)?(pnpm|yarn)\s+dlx)\s+(-\S+\s+)*`;
@@ -909,8 +909,7 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
     const thirdParty = vendored.get(file);
     const readme = README.test(file);
     const fromHere = (p: string) => existsExact(tree, normalize(join(fileDir, p))) || existsExact(tree, p);
-    const made = madeAnywhere;
-    const ctx: CheckCtx = { tree, profile, fileDir, names, via: "fence", made, files: tracked };
+    const ctx: CheckCtx = { tree, profile, fileDir, names, via: "fence", made: madeAnywhere, files: tracked };
     for (const e of extractFromMarkdown(text, { exists: fromHere })) {
       // A vendored skill's paths belong to its own workflow, such as the plans it writes, not this repo.
       if (e.kind === "path" && thirdParty) continue;
@@ -925,7 +924,7 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
           const line = lines[e.line - 1] ?? "";
           if (FUTURE.test(line) || GENERATED.test(line) || NOT_COMMITTED.test(line) || NOT_COMMITTED.test(leadIn(lines, e.line - 1)) || uncommitted.has(normalize(rel)) || e.cue === "deleted") continue;
           if (e.elsewhere || e.otherRepo || e.cue === "example" || e.cue === "negated") continue;
-          if (made.some((d) => within(normalize(rel), d))) continue;
+          if (madeAnywhere.some((d) => within(normalize(rel), d))) continue;
           // Written in prose, ../x is relative to the reader's working directory, such as a sibling worktree.
           if (e.via !== "link" && normalize(rel).startsWith("..")) continue;
           if (e.via === "code" && (BUILD_OUTPUT.test(normalize(rel)) || MADE_SEGMENT.test(`${normalize(rel)}/`) || PATH_TEMPLATE.test(rel) || HOST.test(rel))) continue;

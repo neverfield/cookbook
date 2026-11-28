@@ -302,6 +302,76 @@
       "date": "2026-11-24",
       "by": "pr-f",
       "why": "audited as a Level 1 golden candidate in PR F; rejected, Level 0"
+    },
+    {
+      "repo": "netbox-community/netbox",
+      "commit": "4cfaa8f7b45fc2e8bf95309909880c70e80bef64",
+      "date": "2026-11-27",
+      "by": "ci:trials",
+      "why": "pinned trial added by Plan A of the trial representativeness review: audited by npm run trials"
+    },
+    {
+      "repo": "getsentry/sentry-javascript",
+      "commit": "0ac5dd117b622998783a1fa1b1694e409d3233ca",
+      "date": "2026-11-27",
+      "by": "ci:trials",
+      "why": "pinned trial added by Plan A of the trial representativeness review: audited by npm run trials"
+    },
+    {
+      "repo": "dotnet/eShop",
+      "commit": "3c6e531a6063676ece317644f72172fb42a935b3",
+      "date": "2026-11-27",
+      "by": "ci:trials",
+      "why": "pinned trial added by Plan A of the trial representativeness review: audited by npm run trials"
+    },
+    {
+      "repo": "mastodon/mastodon",
+      "commit": "6c29cb4b9c1f8b3f9a1be23f0efb9c5ac64155a3",
+      "date": "2026-11-27",
+      "by": "ci:trials",
+      "why": "pinned trial added by Plan A of the trial representativeness review: audited by npm run trials"
+    },
+    {
+      "repo": "jellyfin/jellyfin",
+      "commit": "6b786b36eed49bf83860d9b652b96f475aeb2668",
+      "date": "2026-11-27",
+      "by": "ci:trials",
+      "why": "pinned trial added by Plan A of the trial representativeness review: audited by npm run trials"
+    },
+    {
+      "repo": "dotnet/command-line-api",
+      "commit": "1b0c04a4ac1651129c72533ceae51e791430429e",
+      "date": "2026-11-27",
+      "by": "ci:trials",
+      "why": "pinned trial added by Plan A of the trial representativeness review: audited by npm run trials"
+    },
+    {
+      "repo": "langfuse/langfuse",
+      "commit": "c2557ba42437a947026bcfa29570df4f075350db",
+      "date": "2026-11-27",
+      "by": "ci:trials",
+      "why": "pinned trial added by Plan A of the trial representativeness review: scanned read-only by npm run trials"
+    },
+    {
+      "repo": "apache/airflow",
+      "commit": "619a787ac81e8b7c8a9102fc78e3f0b00625d04e",
+      "date": "2026-11-27",
+      "by": "ci:trials",
+      "why": "pinned trial added by Plan A of the trial representativeness review: scanned read-only by npm run trials"
+    },
+    {
+      "repo": "DataDog/dd-trace-go",
+      "commit": "48d446a8f02c83ec30a1067a471218606593a4a5",
+      "date": "2026-11-27",
+      "by": "ci:trials",
+      "why": "pinned trial added by Plan A of the trial representativeness review: scanned read-only by npm run trials"
+    },
+    {
+      "repo": "apollographql/apollo-client",
+      "commit": "0ff461cb235b98f9940b0e333ad7d6b5c2c71ffb",
+      "date": "2026-11-27",
+      "by": "ci:trials",
+      "why": "pinned trial added by Plan A of the trial representativeness review: scanned read-only by npm run trials"
     }
   ]
 }

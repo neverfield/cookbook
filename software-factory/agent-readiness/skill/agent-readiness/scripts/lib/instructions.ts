@@ -48,7 +48,8 @@ function testRunKey(cmd: string): string | null {
   if (/^python3?$/.test(tool ?? "") && words[1] === "-m" && words[2] === "pytest") return `pytest:${positional(3)}`;
   if (/^(mvn|mvnw)$/.test(tool ?? "")) return `maven:${positional(1)}`;
   if (/^(gradle|gradlew)$/.test(tool ?? "")) return `gradle:${positional(1)}`;
-  if (tool === "dotnet" && words[1] === "test") return `dotnet-test:${positional(2)}`;
+  if (tool === "dotnet" && (words[1] === "test" || words[1] === "build")) return `dotnet-${words[1]}:${positional(2)}`;
+  if ((tool === "cargo" || tool === "go") && words[1] === "build") return `${tool}-build:${positional(2)}`;
   if (tool === "phpunit") return `phpunit:${positional(1)}`;
   if (tool === "rspec") return `rspec:${positional(1)}`;
   if (tool === "rake" && words[1] === "test") return "rake:test";

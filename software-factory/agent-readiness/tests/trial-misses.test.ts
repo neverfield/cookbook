@@ -8,6 +8,7 @@ import { discoverContract, toolSetup } from "../skill/agent-readiness/scripts/li
 import { rubyImage } from "../skill/agent-readiness/scripts/lib/languages/ruby.ts";
 import { buildProfile } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
+import { instructionKey } from "../skill/agent-readiness/scripts/lib/instructions.ts";
 import { instructionItems } from "../skill/agent-readiness/scripts/lib/static.ts";
 import type { InstructionItem, Profile } from "../skill/agent-readiness/scripts/lib/types.ts";
 
@@ -285,6 +286,16 @@ describe("instruction findings that aren't wrong", () => {
       "web/AGENTS.md": "# Web\n\nUse the MCP server from `.cursor/mcp.json`.\n",
     });
     assert.deepEqual(failures(by), ["CONTRIBUTING.md:23 src/gone/away.ts: src/gone/away.ts doesn't exist"]);
+  });
+
+  test("a documented build is the build check's command, and a bare `dotnet run` in prose names the launcher (jellyfin)", () => {
+    const dir = repo({ "a.txt": "" });
+    assert.equal(instructionKey("dotnet build", dir, "."), instructionKey("dotnet build --no-restore", dir, "."));
+    assert.equal(instructionKey("cargo build", dir, "."), instructionKey("cargo build --locked --offline", dir, "."));
+    assert.notEqual(instructionKey("dotnet build src/App", dir, "."), instructionKey("dotnet build", dir, "."));
+    const by = items({ "App.sln": "", "src/App/App.csproj": `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>\n`, "src/App/Program.cs": "", "CONTRIBUTING.md": "# App\n\n## Running From the Command Line\n\nYou can use the `dotnet run` command. Run `dotnet run --project src/App`.\n" });
+    assert.equal(by.get("CONTRIBUTING.md:5 dotnet run")?.rule, "mention");
+    assert.notEqual(by.get("CONTRIBUTING.md:5 dotnet run --project src/App")?.rule, "mention");
   });
 
   test("a skill dotagents installs from another repository is vendored (sentry-javascript)", () => {

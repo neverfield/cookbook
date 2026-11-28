@@ -228,20 +228,21 @@ function discoverManifests(tree: string, files: string[], claimed: Claim[], hasR
   for (const dir of [...byDir.keys()].sort((a, b) => (a === "." ? -1 : b === "." ? 1 : a.split("/").length - b.split("/").length || a.localeCompare(b)))) {
     const names = byDir.get(dir)!;
     const has = (n: string) => names.includes(n);
+    const claim = deepest(claimed, dir);
+    if (claim?.path === dir) continue;
+    // The deepest project holding the folder: a component already placed, or a Node or Python
+    // manifest found above it. A web client inside an unsupported project is still its own.
+    const package_ = deepestFound([...found, ...satellites].filter((f) => f.kind !== "other"), dir);
+    const outer = [claim, package_ && { path: package_.dir, kind: package_.kind }].filter((x): x is Claim => Boolean(x)).sort((a, b) => b.path.length - a.path.length)[0];
     // A Node package with its own lockfile inside a Python project, such as a UI inside a Python
     // package, is a project of its own, and so is a locked Python project inside a Node package.
-    const apartFrom = (outer: { kind: string } | undefined, kind: "js" | "py") => Boolean(outer && outer.kind !== "other" && outer.kind !== kind && (kind === "js" ? NODE_LOCKFILES : PY_LOCKFILES).some(has));
-    const js = has("package.json");
-    const py = pythonManifest(names);
-    const claim = deepest(claimed, dir);
-    if (claim && (claim.path === dir || !((js && apartFrom(claim, "js")) || (py && apartFrom(claim, "py"))))) continue;
-    const supportedOuter = deepestFound([...found, ...satellites].filter((f) => f.kind !== "other"), dir);
-    const freeOf = (kind: "js" | "py") => !supportedOuter || apartFrom(supportedOuter, kind);
-    if (dir !== "." && js && freeOf("js") && (!hasRoot || NODE_LOCKFILES.some(has)) && (!claim || apartFrom(claim, "js"))) {
+    const free = (kind: "js" | "py") => !outer || (outer.kind !== "other" && outer.kind !== kind && (kind === "js" ? NODE_LOCKFILES : PY_LOCKFILES).some(has));
+    if (dir !== "." && has("package.json") && free("js") && (!hasRoot || NODE_LOCKFILES.some(has))) {
       add({ dir, kind: "js", manifest: `${dir}/package.json` });
       continue;
     }
-    if (dir !== "." && py && freeOf("py") && (!hasRoot || !rootPy || PY_LOCKFILES.some(has)) && (!claim || apartFrom(claim, "py"))) {
+    const py = pythonManifest(names);
+    if (dir !== "." && py && free("py") && (!hasRoot || !rootPy || PY_LOCKFILES.some(has))) {
       add({ dir, kind: "py", manifest: `${dir}/${py}` });
       continue;
     }
