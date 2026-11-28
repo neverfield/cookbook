@@ -995,7 +995,7 @@ export function buildReport(raw: ModelInput): ReportJson {
   const progress =
     prevAudits.length > 0
       ? {
-          history: allLines.map((h) => ({ date: h.date, kind: h.kind, result: h.result, note: h.note ?? null, levels: Object.fromEntries(Object.entries(h.levels ?? {}).map(([k, v]) => [k, h.noLevel || typeof v !== "number" ? null : v])), repoLevel: h.noLevel || typeof h.repoLevel !== "number" ? null : h.repoLevel, rubric: h.rubric })),
+          history: allLines.map((h) => ({ date: h.date, kind: h.kind, result: h.result, note: h.note ?? null, levels: Object.fromEntries([...Object.entries(h.levels ?? {}).map(([k, v]) => [k, h.noLevel || typeof v !== "number" ? null : v]), ...(h.undeterminedComponents ?? []).map((k) => [k, null])]), repoLevel: h.noLevel || typeof h.repoLevel !== "number" ? null : h.repoLevel, rubric: h.rubric })),
           closed: roadmap.items
             .filter((i) => i.status === "done" && i.closedAt && i.kind === "fix")
             .map((i) => ({
