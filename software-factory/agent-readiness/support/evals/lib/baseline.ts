@@ -92,7 +92,7 @@ export interface Baseline {
   totals: Totals;
   holdout: Totals | null;
   runs: RunRow[];
-  controls?: Partial<Record<Arm, { totals: Totals; lift: Lift }>>;
+  controls?: Partial<Record<Arm, { totals: Totals; lift: Lift; repeats?: Record<string, ControlRepeats> }>>;
   // The commit and code digests the run measured (binding.ts); absent before release binding.
   binding?: Binding;
 }
@@ -236,12 +236,26 @@ export function lift(agent: CaseRun[], control: CaseRun[]): Lift {
   return { pooled: a === null || c === null ? null : Math.round((a - c) * 1000) / 1000, gates: bootstrapDiff(passes(agent), passes(control)), judge: bootstrapDiff(scores(agent, "judge"), scores(control, "judge")), page: bootstrapDiff(scores(agent, "page"), scores(control, "page")), judgeByCase: caseDiffs(scores(agent, "judge"), scores(control, "judge")) };
 }
 
+// How many runs a control case had, and whether they all left the same fingerprint (fingerprint.ts)
+// with none lost: the release check accepts fewer than every repeat only then. Absent in baselines
+// recorded before deterministic arms could stop early.
+export interface ControlRepeats {
+  runs: number;
+  matched: boolean;
+}
+
+export function controlRepeats(runs: CaseRun[]): Record<string, ControlRepeats> {
+  return Object.fromEntries(
+    [...byCase(runs)].map(([id, list]) => [id, { runs: list.length, matched: list.length >= 2 && list.every((r) => !r.infra?.lost && r.fingerprint) && new Set(list.map((r) => r.fingerprint)).size === 1 }]),
+  );
+}
+
 export function withControls(base: Baseline, agent: CaseRun[], controls: Partial<Record<Arm, CaseRun[]>>, holdout?: Set<string>): Baseline {
   const out: Baseline["controls"] = {};
   for (const [arm, runs] of Object.entries(controls) as [Arm, CaseRun[]][]) {
     if (!runs.length) continue;
     const ids = new Set(runs.map((r) => r.id));
-    out[arm] = { totals: totalsOf(new Map([...byCase(runs)].filter(([id]) => !holdout?.has(id)))), lift: lift(agent.filter((r) => ids.has(r.id)), runs) };
+    out[arm] = { totals: totalsOf(new Map([...byCase(runs)].filter(([id]) => !holdout?.has(id)))), lift: lift(agent.filter((r) => ids.has(r.id)), runs), repeats: controlRepeats(runs) };
   }
   return Object.keys(out).length ? { ...base, controls: out } : base;
 }

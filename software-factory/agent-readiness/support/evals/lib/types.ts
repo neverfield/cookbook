@@ -113,4 +113,6 @@ export interface CaseRun {
   // Set when the run was retried for an infrastructure error (capacity, network, a crashed
   // worker). lost: every attempt failed that way, so the run says nothing about the agent.
   infra?: { attempts: number; errors: string[]; lost: boolean } | null;
+  // Arms with no agent only (fingerprint.ts): what the run left, so two matching runs can stand for every repeat.
+  fingerprint?: string | null;
 }

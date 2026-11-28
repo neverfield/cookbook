@@ -4,7 +4,7 @@ These are the criteria a release of the agent-readiness skill has to meet on its
 
 | Criterion | Bar | Fails the release? |
 | --- | --- | --- |
-| Repeats | 5 per case | Yes, below 5 |
+| Repeats | 5 per case in the agent arm. The scripted arm stops at 2 runs of a case that match byte for byte, and runs 5 otherwise | Yes, below 5, or a scripted case with fewer than 5 runs that don't match |
 | Hard gates, per case (k of n) | 1 run short is a flag; 2 or more short is a regression | Yes, on any regression |
 | Flags | At most a tenth of the in-sample cases (at least 1) | Yes, above the cap |
 | Pooled all-gates pass rate | 95% Wilson lower bound at least 0.8 | Yes |
