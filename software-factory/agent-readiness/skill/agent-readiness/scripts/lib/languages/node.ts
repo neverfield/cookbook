@@ -1,6 +1,7 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { exists, readJson, readText } from "../util.ts";
 import type { Ecosystem, LanguageDef } from "./language.ts";
+import { isTestFile } from "./test-paths.ts";
 
 export interface PackageJson {
   name?: string;
@@ -189,4 +190,21 @@ export const node: LanguageDef = {
   ],
   detect: { lockfiles: NODE_LOCKFILES },
   ecosystems: [npm, pnpm, yarn, bun],
+  checks: {
+    weakening: {
+      isTest: isTestFile,
+      markers: { skip: /\b(it|test|describe)\.(skip|only|todo)\(|\bx(it|describe|test)\(/, testCase: /\b(it|test)\(\s*['"`]/ },
+    },
+    lockfiles: {
+      diff: NODE_LOCKFILES,
+      secretScanSkips: ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"],
+      foreign: { npm: "package-lock.json", yarn: "yarn.lock", pnpm: "pnpm-lock.yaml" },
+    },
+    manifestScripts: {
+      manifest: (path) => path.endsWith("package.json"),
+      read: (tree, manifest) => readPackageJson(join(tree, dirname(manifest)))?.scripts ?? null,
+      installHook: /^(pre|post)?install$|^prepare$|^prepublish$/,
+    },
+    tool: /^(npm|npx|pnpm|pnpx|yarn|node|bun|bunx|corepack|tsc|vitest|jest)$/,
+  },
 };

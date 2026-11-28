@@ -373,6 +373,12 @@ export const dotnet: LanguageDef = {
     ownUnit: (tree, _parent, dir) => readdirSync(join(tree, dir)).some((n) => SOLUTION.test(n)),
   },
   ecosystems: [nuget],
+  checks: {
+    weakening: { isTest: isTest, markers: null },
+    lockfiles: { diff: ["packages.lock.json"], secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: /^dotnet$/,
+  },
   replay: {
     classify: () => ({ language: "csharp", packageManager: "nuget" }),
     image: (tree, dir) => `mcr.microsoft.com/dotnet/sdk:${sdkFor(tree, dir)}.0`,

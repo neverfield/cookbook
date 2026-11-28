@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { exists, readText, workspaceDirs } from "../util.ts";
 import type { Ecosystem, LanguageDef } from "./language.ts";
+import { isTestFile } from "./test-paths.ts";
 
 export const VENV = ".readiness-venv";
 
@@ -134,4 +135,18 @@ export const python: LanguageDef = {
   ],
   detect: { lockfiles: PY_LOCKFILES },
   ecosystems: [pip, uv, poetry],
+  checks: {
+    weakening: {
+      isTest: isTestFile,
+      markers: { skip: /@pytest\.mark\.(skip|xfail)|\bpytest\.skip\(|@unittest\.skip/, testCase: /^\s*def test_|^\s*async def test_/ },
+    },
+    lockfiles: {
+      // pip pins in requirements.txt, which is its lockfile.
+      diff: [...PY_LOCKFILES, "requirements.txt"],
+      secretScanSkips: ["uv.lock", "poetry.lock"],
+      foreign: null,
+    },
+    manifestScripts: null,
+    tool: /^(python3?|pip3?|pytest|uv|uvx|poetry|tox|nox)$/,
+  },
 };

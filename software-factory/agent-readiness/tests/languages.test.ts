@@ -9,8 +9,9 @@ import { chmodSync } from "node:fs";
 import { commandTimeout, discoverContract, imagePlan } from "../skill/agent-readiness/scripts/lib/contract.ts";
 import { IMAGE_DIGESTS } from "../skill/agent-readiness/scripts/lib/images.ts";
 import { inComponent, namedAfter, sameFolder, withInlineTests } from "../skill/agent-readiness/scripts/lib/languages/coverage.ts";
-import { ECOSYSTEMS, LANGUAGES, ecosystemOf, languageOf } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
-import type { ReplayHooks } from "../skill/agent-readiness/scripts/lib/languages/language.ts";
+import { ECOSYSTEMS, LANGUAGES, ecosystemOf, languageOf, notCheckedFor } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
+import type { CheckName } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
+import type { ManifestScripts, ReplayHooks } from "../skill/agent-readiness/scripts/lib/languages/language.ts";
 import { php } from "../skill/agent-readiness/scripts/lib/languages/php.ts";
 import { ruby } from "../skill/agent-readiness/scripts/lib/languages/ruby.ts";
 import { chooseSites, targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
@@ -26,7 +27,7 @@ import { scanText } from "../skill/agent-readiness/scripts/lib/secrets.ts";
 import { jvm } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
 import { loadRubric, latestRubricVersion } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { STACKS, supported } from "../skill/agent-readiness/scripts/lib/support.ts";
-import type { Language } from "../skill/agent-readiness/scripts/lib/types.ts";
+import type { Language, PackageManager } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { makeAudit } from "./helpers.ts";
 import { SKILL } from "../support/tools/fixture.ts";
 
@@ -107,6 +108,56 @@ describe("the language registry", () => {
 
   test("the stacks support.ts lists are the language files' stacks plus the cross-language and machine entries", () => {
     for (const l of LANGUAGES) for (const s of l.stacks) assert.ok(STACKS.includes(s), `${s.id} reaches support.ts`);
+  });
+
+  // support/README.md "Adding a language" points here. Each rule is given, or null for "no rule".
+  const RULES: Record<CheckName | "lockfiles.secretScanSkips", (v: unknown) => boolean> = {
+    "weakening.isTest": (v) => typeof v === "function",
+    "weakening.markers": (v) => v instanceof Object && (v as { skip: unknown }).skip instanceof RegExp && (v as { testCase: unknown }).testCase instanceof RegExp,
+    "lockfiles.diff": (v) => Array.isArray(v) && v.every((x) => typeof x === "string"),
+    "lockfiles.secretScanSkips": (v) => Array.isArray(v) && v.every((x) => typeof x === "string"),
+    "lockfiles.foreign": (v) => v instanceof Object && Object.values(v).every((x) => typeof x === "string"),
+    manifestScripts: (v) => v instanceof Object && typeof (v as ManifestScripts).manifest === "function" && typeof (v as ManifestScripts).read === "function" && (v as ManifestScripts).installHook instanceof RegExp,
+    tool: (v) => v instanceof RegExp,
+  };
+  const at = (checks: unknown, path: string) => path.split(".").reduce<unknown>((o, k) => (o instanceof Object ? (o as Record<string, unknown>)[k] : undefined), checks);
+  const leaves = (o: object, prefix = ""): string[] => Object.entries(o).flatMap(([k, v]) => (v instanceof Object && !(v instanceof RegExp) && !Array.isArray(v) && typeof v !== "function" && ["weakening", "lockfiles"].includes(k) ? leaves(v, `${k}.`) : [`${prefix}${k}`]));
+
+  test("every language file declares each rule the language-neutral checks read, or null to say it has none", () => {
+    for (const l of LANGUAGES) {
+      assert.ok(l.checks, `${l.id} has no checks block`);
+      for (const [path, valid] of Object.entries(RULES)) {
+        const v = at(l.checks, path);
+        assert.notEqual(v, undefined, `${l.id} leaves ${path} undeclared: give the rule, or null when the language has none`);
+        if (v === null) assert.notEqual(path, "lockfiles.secretScanSkips", `${l.id}: secretScanSkips is a list, [] when it skips nothing`);
+        else assert.ok(valid(v), `${l.id}: ${path} isn't a rule of the right shape`);
+      }
+      assert.deepEqual(leaves(l.checks).sort(), Object.keys(RULES).sort(), `${l.id} declares exactly the rules RULES lists`);
+      if (l.replay) assert.equal(l.checks.weakening.isTest, l.replay.mutation.isTest, `${l.id}: readiness diff uses the same test-file rule faults are planted by`);
+      if (l.stacks.some((s) => s.tier === "supported")) assert.ok(l.checks.tool, `${l.id} has a supported stack, so a replayed instruction needs its tool`);
+      for (const f of l.detect.lockfiles ?? []) if (l.checks.lockfiles.diff) assert.ok(l.checks.lockfiles.diff.includes(f), `${l.id}: readiness diff lists changes to ${f}`);
+    }
+  });
+
+  test("notCheckedFor names the languages with no rule, once each, and leaves out code no file scores", () => {
+    assert.deepEqual(notCheckedFor("weakening.markers", ["go", "ts", "csharp", "js", "go", "other"]), ["Go", ".NET"]);
+    assert.deepEqual(notCheckedFor("weakening.markers", ["py", "ts"]), []);
+    assert.deepEqual(notCheckedFor("manifestScripts", ["py", "java", "kotlin"]), ["Python", "JVM"]);
+  });
+
+  test("the Language and PackageManager unions are exactly the registry's codes and ecosystem ids", () => {
+    // A new union member fails to compile here until it is listed; a new code or ecosystem fails below.
+    const codes: Record<Exclude<Language, "other">, true> = { ts: true, js: true, py: true, go: true, rust: true, java: true, kotlin: true, csharp: true, php: true, ruby: true };
+    const pms: Record<PackageManager, true> = { npm: true, pnpm: true, yarn: true, bun: true, pip: true, uv: true, poetry: true, go: true, cargo: true, maven: true, gradle: true, nuget: true, composer: true, bundler: true };
+    assert.deepEqual(LANGUAGES.flatMap((l) => l.codes).sort(), Object.keys(codes).sort());
+    assert.deepEqual(ECOSYSTEMS.map((e) => e.id).sort(), Object.keys(pms).sort());
+  });
+
+  test("every lockfile a rubric counts is a name some language file declares", () => {
+    const declared = new Set(LANGUAGES.flatMap((l) => [...(l.detect.lockfiles ?? []), ...l.ecosystems.flatMap((e) => e.lockfiles), ...(l.checks.lockfiles.diff ?? []), ...l.checks.lockfiles.secretScanSkips, ...Object.values(l.checks.lockfiles.foreign ?? {})]));
+    for (const f of readdirSync(join(SKILL, "rubric")).filter((x) => x.endsWith(".json"))) {
+      for (const name of loadRubric(f.replace(/\.json$/, "")).components.lockfiles) assert.ok(declared.has(name), `rubric ${f} counts ${name}, which no language file declares`);
+    }
   });
 });
 

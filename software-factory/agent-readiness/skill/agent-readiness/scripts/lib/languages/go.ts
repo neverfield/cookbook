@@ -245,6 +245,12 @@ export const go: LanguageDef = {
     ownUnit: (tree, _parent, dir) => hasGoSource(join(tree, dir)),
   },
   ecosystems: [goModules],
+  checks: {
+    weakening: { isTest: isGoTest, markers: null },
+    lockfiles: { diff: ["go.sum"], secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: /^(go|gofmt|golangci-lint)$/,
+  },
   replay: {
     classify: () => ({ language: "go", packageManager: "go" }),
     image: goImage,

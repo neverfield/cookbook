@@ -397,6 +397,12 @@ export const php: LanguageDef = {
     projectName: (_tree, manifest, text) => (manifest === "composer.json" ? text.match(/"name"\s*:\s*"(?:[^"/]+\/)?([^"]+)"/)?.[1] : undefined),
   },
   ecosystems: [composer],
+  checks: {
+    weakening: { isTest: isTest, markers: null },
+    lockfiles: { diff: ["composer.lock"], secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: /^(composer|php|phpunit|vendor\/bin\/\S+)$/,
+  },
   replay: {
     classify: () => ({ language: "php", packageManager: "composer" }),
     image: phpImage,

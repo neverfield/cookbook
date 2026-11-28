@@ -52,6 +52,12 @@ export const swift: LanguageDef = {
     notes: (tree, dir, stackId) => (stackId === "xcode" ? xcodeNotes(tree, dir) : []),
   },
   ecosystems: [],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: ["Package.resolved"], secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: null,
+  },
 };
 
 export const dart: LanguageDef = {
@@ -68,6 +74,12 @@ export const dart: LanguageDef = {
     workspaceOnly: (manifest, text) => manifest.endsWith("pubspec.yaml") && /^workspace:/m.test(text),
   },
   ecosystems: [],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: ["pubspec.lock"], secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: null,
+  },
 };
 
 export const elixir: LanguageDef = {
@@ -82,6 +94,12 @@ export const elixir: LanguageDef = {
     projectName: (_tree, manifest, text) => (manifest === "mix.exs" ? text.match(/\bapp:\s*:(\w+)/)?.[1] : undefined),
   },
   ecosystems: [],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: ["mix.lock"], secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: null,
+  },
 };
 
 // A folder of .tf files is a Terraform module, so a root module and nested root modules are found
@@ -97,6 +115,12 @@ export const terraform: LanguageDef = {
     lockfiles: [".terraform.lock.hcl"],
   },
   ecosystems: [],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: [".terraform.lock.hcl"], secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: null,
+  },
 };
 
 // Found by its build file only: a .c or .cc file next to a Node addon or a Python extension is part
@@ -110,4 +134,10 @@ export const cpp: LanguageDef = {
     manifests: [{ match: /^(CMakeLists\.txt|meson\.build)$/, stack: "cpp", rank: 85 }],
   },
   ecosystems: [],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: [], secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: null,
+  },
 };

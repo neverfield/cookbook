@@ -373,6 +373,12 @@ export const rust: LanguageDef = {
     ownUnit: (tree, parent) => !isWorkspace(tree, parent),
   },
   ecosystems: [cargo],
+  checks: {
+    weakening: { isTest: isRustTest, markers: null },
+    lockfiles: { diff: ["Cargo.lock"], secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: /^(cargo|rustc|rustup)$/,
+  },
   replay: {
     classify: () => ({ language: "rust", packageManager: "cargo" }),
     image: rustImage,

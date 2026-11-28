@@ -594,6 +594,12 @@ export const jvm: LanguageDef = {
     refine: (manifest, text) => (/build\.gradle(\.kts)?$/.test(manifest) && ANDROID.test(text) ? "android" : undefined),
   },
   ecosystems: [maven, gradle],
+  checks: {
+    weakening: { isTest: isTest, markers: null },
+    lockfiles: { diff: ["gradle.lockfile"], secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: /^(mvn|\.\/mvnw|mvnw|gradle|\.\/gradlew|gradlew|java|javac|kotlinc)$/,
+  },
   replay: {
     classify: (tree, dir, manifest) => {
       const sources = listFiles(join(tree, dir)).filter((f) => !OUTPUT.test(f));

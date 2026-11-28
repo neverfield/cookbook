@@ -12,7 +12,7 @@ import { fmtDuration } from "./format.ts";
 import { SUDO } from "./patterns.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
-import { ecosystemOf } from "./languages/index.ts";
+import { codesOfTool, ecosystemOf } from "./languages/index.ts";
 import { lockedEngineGap } from "./languages/node.ts";
 import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary, withControlComment } from "./mutate.ts";
 import { Progress, budgetSummary } from "./progress.ts";
@@ -20,7 +20,7 @@ import { redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { SUDO_SHIM_MARK, disposeHome, endGroups, runCommand, scrubbedEnv } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
-import type { Attribution, Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Language, Mutant, Profile, Strength, Where } from "./types.ts";
+import type { Attribution, Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Mutant, Profile, Strength, Where } from "./types.ts";
 import { onTeardown, removeOrphanedTempDirs, tempDir } from "./teardown.ts";
 import type { TempDir } from "./teardown.ts";
 import { assertFreeSpace, containedPath, exists, fail, treeBytes, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
@@ -1198,19 +1198,6 @@ function executorSet(groups: ExecutorGroup[], profile: Profile): Executors {
   return { groups, forComponent, repo, close: () => groups.forEach((g) => g.ex.close()) };
 }
 
-// The tool a command starts with, and the component languages it belongs to. A command that runs
-// one of these goes to an assessed component of that language, in that component's image.
-const TOOL_LANGUAGES: { tool: RegExp; codes: Language[] }[] = [
-  { tool: /^(go|gofmt|golangci-lint)$/, codes: ["go"] },
-  { tool: /^(cargo|rustc|rustup)$/, codes: ["rust"] },
-  { tool: /^(mvn|\.\/mvnw|mvnw|gradle|\.\/gradlew|gradlew|java|javac|kotlinc)$/, codes: ["java", "kotlin"] },
-  { tool: /^dotnet$/, codes: ["csharp"] },
-  { tool: /^(composer|php|phpunit|vendor\/bin\/\S+)$/, codes: ["php"] },
-  { tool: /^(bundle|bundler|ruby|rake|rspec|rails|bin\/rails|bin\/rake)$/, codes: ["ruby"] },
-  { tool: /^(python3?|pip3?|pytest|uv|uvx|poetry|tox|nox)$/, codes: ["py"] },
-  { tool: /^(npm|npx|pnpm|pnpx|yarn|node|bun|bunx|corepack|tsc|vitest|jest)$/, codes: ["ts", "js"] },
-];
-
 // The program a command line runs first, past `cd dir &&` and variable assignments.
 function leadingTool(command: string): string {
   const first = command.split(/\s*(?:&&|;|\|\|)\s*/).map((p) => p.trim()).find((p) => p && !/^cd\s/.test(p)) ?? "";
@@ -1230,7 +1217,7 @@ export function instructionExecutor(exs: Pick<Executors, "forComponent" | "repo"
     const target = command.trim().split(/\s+/).slice(1).find((w) => !w.startsWith("-")) ?? "";
     tool = target ? leadingTool(makeRecipe(tree, cwd, target).split("\n")[0] ?? "") : "";
   }
-  const codes = TOOL_LANGUAGES.find((t) => t.tool.test(tool))?.codes ?? [];
+  const codes = codesOfTool(tool);
   const byTool = assessed.filter((c) => codes.includes(c.language)).sort((a, b) => Number(holds(b)) - Number(holds(a)) || b.changeShare - a.changeShare)[0];
   if (byTool) return exs.forComponent(byTool.id);
   const root = assessed.find((c) => c.path === ".");

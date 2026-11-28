@@ -318,6 +318,12 @@ export const ruby: LanguageDef = {
     lockfiles: ["Gemfile.lock"],
   },
   ecosystems: [bundler],
+  checks: {
+    weakening: { isTest: isTest, markers: null },
+    lockfiles: { diff: ["Gemfile.lock"], secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: /^(bundle|bundler|ruby|rake|rspec|rails|bin\/rails|bin\/rake)$/,
+  },
   replay: {
     classify: () => ({ language: "ruby", packageManager: "bundler" }),
     image: rubyImage,

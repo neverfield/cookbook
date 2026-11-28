@@ -2,9 +2,12 @@ import { statSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { inComponent } from "./languages/coverage.ts";
 import { languageOf } from "./languages/index.ts";
+import { isTestFile } from "./languages/test-paths.ts";
 import { insideString } from "./patterns.ts";
 import type { Component, FaultEstimate, Language } from "./types.ts";
 import { exists, lastChanged, listFiles, readText, sha256 } from "./util.ts";
+
+export { isTestFile };
 
 export interface Site {
   file: string;
@@ -12,12 +15,6 @@ export interface Site {
   operator: string;
   before: string;
   after: string;
-}
-
-const TEST_FILE = /(\.test\.|\.spec\.|(^|\/)tests?\/|(^|\/)__tests__\/|(^|\/)tests?\.(m?[jt]sx?|cjs|py)$|(^|\/)test_[^/]*\.py$|_test\.py$)/;
-
-export function isTestFile(path: string): boolean {
-  return TEST_FILE.test(path);
 }
 
 function isCommentOrImport(trimmed: string, lang: Language): boolean {

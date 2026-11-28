@@ -1,6 +1,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, normalize } from "node:path";
 import { checkOnly, makeRuleFor, makeTargets as targetsIn } from "./contract.ts";
+import { LANGUAGES, secretScanSkips } from "./languages/index.ts";
 import { pyproject, readPackageJson } from "./profile.ts";
 import { SUDO, insideString } from "./patterns.ts";
 import { secretFindings } from "./secrets.ts";
@@ -1073,6 +1074,8 @@ export const SAFETY_RULES: Record<string, string> = {
   waived: INSTRUCTION_RULES.waived,
 };
 
+const SECRET_SCAN_SKIPS = new Set(secretScanSkips());
+
 // Past the scan's time bound, the secret scan stops and records how many files it read; the
 // manifest and script checks after it are cheap and always run.
 // `blockingSecrets`: the secret classes that block in shipped code, from the rubric's safety block.
@@ -1090,7 +1093,7 @@ export function safetyScan(tree: string, profile: Profile, bound?: ScanBound, bl
     if (bound && Date.now() > bound.until) break;
     if (bound) bound.scope.secrets.scanned++;
     if (ownSkillPath(file)) continue;
-    if (/(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|uv\.lock|poetry\.lock|bun\.lock)$/.test(file)) continue;
+    if (SECRET_SCAN_SKIPS.has(basename(file))) continue;
     const full = join(tree, file);
     if (!isText(full)) continue;
     const text = readText(full);
@@ -1109,15 +1112,16 @@ export function safetyScan(tree: string, profile: Profile, bound?: ScanBound, bl
   for (const [field, cmd] of [["install", env?.install], ["start", env?.start]] as const) {
     if (cmd && SUDO.test(cmd)) add({ kind: "elevated", file: env!.path, detail: `${field} runs sudo (\`${cmd}\`); the audit runs it only inside a container, never on the host`, blocking: false, rule: "elevated" });
   }
-  for (const manifest of profile.manifests.filter((m) => m.endsWith("package.json"))) {
-    const pkg = readPackageJson(join(tree, dirname(manifest)));
-    for (const [name, cmd] of Object.entries(pkg?.scripts ?? {})) {
-      const hook = /^(pre|post)?install$|^prepare$|^prepublish$/.test(name);
-      if (SUDO.test(cmd)) add({ kind: "elevated", file: manifest, detail: `scripts.${name} runs sudo; the audit runs it only inside a container, never on the host`, blocking: false, rule: "elevated" });
-      if (NETWORK_PIPED.test(cmd)) add({ kind: "network_piped", file: manifest, detail: `scripts.${name} pipes a download into a shell`, blocking: hook, rule: "network-piped" });
-      else if (hook) add({ kind: "lifecycle_hook", file: manifest, detail: `scripts.${name} runs on every install`, blocking: false, rule: "lifecycle-hook" });
-      if (DESTRUCTIVE.test(cmd)) add({ kind: "destructive", file: manifest, detail: `scripts.${name} deletes data`, blocking: false, rule: "destructive" });
-      if (DEPLOY.test(cmd) || /^(deploy|publish|release)/.test(name)) add({ kind: "deploy_publish", file: manifest, detail: `scripts.${name} deploys or publishes`, blocking: false, rule: "deploy-publish" });
+  for (const rule of LANGUAGES.flatMap((l) => (l.checks.manifestScripts ? [l.checks.manifestScripts] : []))) {
+    for (const manifest of profile.manifests.filter((m) => rule.manifest(m))) {
+      for (const [name, cmd] of Object.entries(rule.read(tree, manifest) ?? {})) {
+        const hook = rule.installHook.test(name);
+        if (SUDO.test(cmd)) add({ kind: "elevated", file: manifest, detail: `scripts.${name} runs sudo; the audit runs it only inside a container, never on the host`, blocking: false, rule: "elevated" });
+        if (NETWORK_PIPED.test(cmd)) add({ kind: "network_piped", file: manifest, detail: `scripts.${name} pipes a download into a shell`, blocking: hook, rule: "network-piped" });
+        else if (hook) add({ kind: "lifecycle_hook", file: manifest, detail: `scripts.${name} runs on every install`, blocking: false, rule: "lifecycle-hook" });
+        if (DESTRUCTIVE.test(cmd)) add({ kind: "destructive", file: manifest, detail: `scripts.${name} deletes data`, blocking: false, rule: "destructive" });
+        if (DEPLOY.test(cmd) || /^(deploy|publish|release)/.test(name)) add({ kind: "deploy_publish", file: manifest, detail: `scripts.${name} deploys or publishes`, blocking: false, rule: "deploy-publish" });
+      }
     }
   }
   for (const file of files.filter((f) => /(^|\/)Makefile$/.test(f) || /^(scripts|\.cursor)\/[^/]+\.sh$/.test(f))) {

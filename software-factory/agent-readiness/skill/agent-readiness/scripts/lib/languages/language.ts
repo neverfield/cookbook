@@ -1,6 +1,6 @@
 // The interface every file in this folder implements: one file per language, listed once in
-// index.ts. A language group adds or changes its own file and nothing shared. The rules a file
-// must follow, and the recipe for a new one, are in tests/languages.test.ts and the handoff notes.
+// index.ts. A language group adds or changes its own file and nothing shared. The checklist for a
+// new one is "Adding a language" in support/README.md; tests/languages.test.ts enforces it.
 //
 // A language file may import only `../util.ts`, its siblings in this folder, and types. Anything
 // else (profile, contract, replay) imports the registry, so importing it back would be a cycle.
@@ -159,6 +159,43 @@ export interface ReplayHooks {
   mutation: MutationHooks;
 }
 
+// A manifest's named scripts, which the safety scan reads for sudo, network pipes, deletes and
+// deploys, and for the ones every install runs.
+export interface ManifestScripts {
+  // Whether a manifest the scan found (tree-relative) is one of this language's.
+  manifest(path: string): boolean;
+  // The scripts by name, or null when the manifest can't be read.
+  read(tree: string, manifest: string): Record<string, string> | null;
+  // Script names the package manager runs on every install, such as npm's postinstall.
+  installHook: RegExp;
+}
+
+// The rules the language-neutral checks read for one language. Every key must be given; null says
+// this language has no rule for that check, and a report says "not checked for <label>" rather
+// than an all-clear (notCheckedFor in index.ts).
+export interface LanguageChecks {
+  // `readiness diff`: which paths are test files, and which added lines are skip markers or test
+  // cases. A language with fault hooks uses their `isTest`.
+  weakening: {
+    isTest: ((path: string) => boolean) | null;
+    markers: { skip: RegExp; testCase: RegExp } | null;
+  };
+  lockfiles: {
+    // Lockfile names whose changes `readiness diff` lists.
+    diff: string[] | null;
+    // Generated lockfiles the secret scan skips: they are full of hashes that look like keys.
+    secretScanSkips: string[];
+    // For each package manager, the lockfile a pull request adds when it starts using that manager
+    // in a repo that uses another: outcomes and the roadmap watch for it.
+    foreign: Partial<Record<PackageManager, string>> | null;
+  };
+  // Install hooks, sudo, network pipes and deploys in a manifest's scripts.
+  manifestScripts: ManifestScripts | null;
+  // The first program of a command line that marks it as this language's, so a replayed
+  // instruction runs in the image of a component of this language.
+  tool: RegExp | null;
+}
+
 export interface LanguageDef {
   // The file's name: `go` for go.ts.
   id: string;
@@ -169,6 +206,7 @@ export interface LanguageDef {
   stacks: Stack[];
   detect: Detect;
   ecosystems: Ecosystem[];
+  checks: LanguageChecks;
   replay?: ReplayHooks;
   // Node and Python: detected, installed and tested by profile.ts and contract.ts.
   builtIn?: boolean;
