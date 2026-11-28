@@ -14,7 +14,9 @@ describe("fixtures match expected.json", { concurrency: 3, skip: runtime ? false
         const a = auditFixture(name, run);
         assert.equal(a.code, 0, a.out);
         const r = a.report;
-        assert.equal(r.maturity.level, run.level, "repo rollup");
+        // A level that differs on one machine names what decided it, since the audit still exits 0.
+        const unpassed = r.details.evidence.filter((e: { result: string; supersededBy?: string }) => e.result !== "pass" && !e.supersededBy).map((e: { id: string; check: string; component?: string; result: string; summary: string }) => `${e.id} ${e.check} ${e.component ?? "*"} ${e.result}: ${e.summary}`);
+        assert.equal(r.maturity.level, run.level, ["repo rollup", ...unpassed].join("\n"));
         const levels: Record<string, number> = {};
         for (const c of r.components.included) levels[c.id] = c.level;
         assert.deepEqual(levels, run.levels, "one standard level per assessed component");
