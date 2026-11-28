@@ -877,18 +877,6 @@ The Plan A trial recording ([#68](https://github.com/neverfield/cookbook/pull/68
 - **Expected:** no change on the hard gates. Explanations get longer where commands run in folders; the headline judge reads the heading, which doesn't change.
 - **Remeasure:** with rounds 21 and 22, at the Mac release session.
 =======
-## Round 24 (pending measurement): one verdict word per result (November 27, 2026)
-
-The failing-verdict review's changes 1, 3, 4 and 7 (Andrew, Nov 27). They change which rows the reader sees as failed, so the wording is logged as one round. Each fixture's `expected.json`, the judge prompts and the calibration are unchanged.
-
-- **Failure mode:** a step blocked on this machine, or one the audit couldn't pin on the repo, read as failed in the headline, the counts, the roadmap titles and `(fail)` in the explanations; a host-mode failure read as Level 0 while a host-mode pass read as unproven; a recheck could fail where the audit, with its experiments, had passed.
-- **Change:** the headline's failing commands, the cause rows narration may choose, the roadmap's step titles and evidence, the explanations' result words, the check counts and the evidence log read each row's verdict from `lib/verdict.ts`; a host-mode failure of a Level 1 check reads "blocked on this machine" with why; an unproven instruction says why it isn't shown wrong.
-- **Tests:** `tests/one-verdict.test.ts`; each block fails on the base scripts.
-- **Expected:** no change on the hard gates. The headline names fewer failing commands only where a named one was blocked. The risk to watch is a host-mode audit that now reads as unproven where a reader expected Level 0.
-- **Remeasure:** with rounds 21 to 23, at the Mac release session.
->>>>>>> f787ae2 (agent-readiness: one verdict word per result (lib/verdict.ts), host-mode symmetry, the recheck through the audit's gate, and instruction verdicts)
-- **Verdict:** pending.
-
 ## Round 24 (pending measurement): planted-fault wording after the architecture review (November 27, 2026)
 
 The independent architecture review at `062443f` found that a re-audit could call a suite strong when it missed every new fault, because faults carried over from the last report were pooled with new ones, and that tests checking the source's bytes caught every fault. The fixes are scripts (lever 3); these lines change what the agent reads or the reader sees, logged as one round under the Nov 24 decision. Level rules, each fixture's `expected.json`, the judge prompts and the calibration are unchanged.
@@ -901,4 +889,16 @@ The independent architecture review at `062443f` found that a re-audit could cal
 - **Tests:** `tests/level2-gates.test.ts` (named faults caught and none new is weak; 15 named and 0 of 5 new is not strong, and a named fault past the carry cap is never planted as new; the control run), `tests/review-2.test.ts` (a draft whose temp folder is gone is refused at the seal).
 - **Expected:** no change on the hard gates. tautological-tests and diff-catches-weakening should hold or improve; a seeded re-audit case where the agent writes tests against the named lines would now stay below Level 2.
 - **Remeasure:** with rounds 21 and 22, at the Mac release session.
+- **Verdict:** pending.
+
+## Round 25 (pending measurement): one verdict word per result (November 27, 2026)
+
+The failing-verdict review's changes 1, 3, 4 and 7 (Andrew, Nov 27). They change which rows the reader sees as failed, so the wording is logged as one round. Each fixture's `expected.json`, the judge prompts and the calibration are unchanged.
+
+- **Failure mode:** a step blocked on this machine, or one the audit couldn't pin on the repo, read as failed in the headline, the counts, the roadmap titles and `(fail)` in the explanations; a host-mode failure read as Level 0 while a host-mode pass read as unproven; a recheck could fail where the audit, with its experiments, had passed.
+- **Change:** the headline's failing commands, the cause rows narration may choose, the roadmap's step titles and evidence, the explanations' result words, the check counts and the evidence log read each row's verdict from `lib/verdict.ts`; a host-mode failure of a Level 1 check reads "blocked on this machine" with why; an unproven instruction says why it isn't shown wrong.
+- **Tests:** `tests/one-verdict.test.ts`; each block fails on the base scripts.
+- **Expected:** no change on the hard gates. The headline names fewer failing commands only where a named one was blocked. The risk to watch is a host-mode audit that now reads as unproven where a reader expected Level 0.
+- **Remeasure:** with rounds 21 to 24, at the Mac release session.
+>>>>>>> f787ae2 (agent-readiness: one verdict word per result (lib/verdict.ts), host-mode symmetry, the recheck through the audit's gate, and instruction verdicts)
 - **Verdict:** pending.
