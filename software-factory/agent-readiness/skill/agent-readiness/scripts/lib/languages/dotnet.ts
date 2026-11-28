@@ -378,6 +378,19 @@ export const dotnet: LanguageDef = {
     lockfiles: { diff: ["packages.lock.json"], secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: /^dotnet$/,
+    countedTests: isTest,
+  },
+  mutation: {
+    isTest,
+    isSource,
+    covered: (tree, comp, tests, files) => {
+      const windows = windowsProjects(tree, comp.path).filter((p) => dirname(p.file) !== ".").map((p) => posix.join(comp.path, dirname(p.file)));
+      return namedAfter(tests, files.filter((f) => !windows.some((w) => f.startsWith(`${w}/`))), isSource);
+    },
+    sites: (line) => cLikeSites(line, true),
+    quoted: (text) => cLikeQuoted(text, true),
+    compileProbe: (comp) => ({ command: `dotnet build${comp.manifest ? ` ${basename(comp.manifest)}` : ""} --no-restore -v q -nologo`, cwd: comp.path }),
+    compileError: (output) => /\berror CS\d{4}\b/.test(output),
   },
   replay: {
     classify: () => ({ language: "csharp", packageManager: "nuget" }),
@@ -418,17 +431,5 @@ export const dotnet: LanguageDef = {
     },
     testCounts: dotnetTestCounts,
     budget: { commandTimeoutSec: 1200, componentMinutes: 45, mutationRunTimeoutSec: 900 },
-    mutation: {
-      isTest,
-      isSource,
-      covered: (tree, comp, tests, files) => {
-        const windows = windowsProjects(tree, comp.path).filter((p) => dirname(p.file) !== ".").map((p) => posix.join(comp.path, dirname(p.file)));
-        return namedAfter(tests, files.filter((f) => !windows.some((w) => f.startsWith(`${w}/`))), isSource);
-      },
-      sites: (line) => cLikeSites(line, true),
-      quoted: (text) => cLikeQuoted(text, true),
-      compileProbe: (comp) => ({ command: `dotnet build${comp.manifest ? ` ${basename(comp.manifest)}` : ""} --no-restore -v q -nologo`, cwd: comp.path }),
-      compileError: (output) => /\berror CS\d{4}\b/.test(output),
-    },
   },
 };

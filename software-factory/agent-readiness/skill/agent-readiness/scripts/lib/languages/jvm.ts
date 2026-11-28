@@ -599,6 +599,16 @@ export const jvm: LanguageDef = {
     lockfiles: { diff: ["gradle.lockfile"], secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: /^(mvn|\.\/mvnw|mvnw|gradle|\.\/gradlew|gradlew|java|javac|kotlinc)$/,
+    countedTests: isTest,
+  },
+  mutation: {
+    isTest,
+    isSource,
+    covered: (_tree, _comp, tests, files) => namedAfter(tests, files, isSource),
+    sites: (line) => cLikeSites(line, true),
+    quoted: (text) => cLikeQuoted(text, false),
+    compileProbe: (comp) => ({ command: compileProbe(comp.packageManager), cwd: comp.path }),
+    compileError: (output) => /COMPILATION ERROR|Compilation failure|Compilation failed|\.java:\d+: error:|^e: (file:\/\/)?\/|Compilation error\. See log/m.test(output),
   },
   replay: {
     classify: (tree, dir, manifest) => {
@@ -632,14 +642,5 @@ export const jvm: LanguageDef = {
       extraJdks(tree, dir).map((j) => ({ spec: `JDK ${j.version}`, image: temurin(j.version), from: "/opt/java/openjdk", to: `${JDK_COPIES}${j.version}`, reason: j.reason, register: registerJdks })),
     testCounts: jvmTestCounts,
     budget: { commandTimeoutSec: 1200, componentMinutes: 45, mutationRunTimeoutSec: 900 },
-    mutation: {
-      isTest,
-      isSource,
-      covered: (_tree, _comp, tests, files) => namedAfter(tests, files, isSource),
-      sites: (line) => cLikeSites(line, true),
-      quoted: (text) => cLikeQuoted(text, false),
-      compileProbe: (comp) => ({ command: compileProbe(comp.packageManager), cwd: comp.path }),
-      compileError: (output) => /COMPILATION ERROR|Compilation failure|Compilation failed|\.java:\d+: error:|^e: (file:\/\/)?\/|Compilation error\. See log/m.test(output),
-    },
   },
 };

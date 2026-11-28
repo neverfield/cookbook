@@ -1,13 +1,14 @@
-import { statSync } from "node:fs";
-import { dirname, join, normalize } from "node:path";
+import { join, normalize } from "node:path";
 import { inComponent } from "./languages/coverage.ts";
+import { quotedLines, sitesForLine } from "./languages/fault-sites.ts";
 import { languageOf } from "./languages/index.ts";
 import { isTestFile } from "./languages/test-paths.ts";
-import { insideString } from "./patterns.ts";
 import type { Component, FaultEstimate, Language } from "./types.ts";
-import { exists, lastChanged, listFiles, readText, sha256 } from "./util.ts";
+import { lastChanged, listFiles, readText, sha256 } from "./util.ts";
 
 export { isTestFile };
+export { cosmetic, quotedLines, sitesForLine } from "./languages/fault-sites.ts";
+export { parseJsonc, resolveJs } from "./languages/imports.ts";
 
 export interface Site {
   file: string;
@@ -17,437 +18,29 @@ export interface Site {
   after: string;
 }
 
-function isCommentOrImport(trimmed: string, lang: Language): boolean {
-  if (lang === "py") return trimmed.startsWith("#") || /^(import |from \S+ import )/.test(trimmed) || trimmed.startsWith('"""') || trimmed.startsWith("'''");
-  return trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*") || /^(import |export \* from|export \{[^}]*\} from)/.test(trimmed) || /require\(/.test(trimmed);
-}
-
-// A type has no behaviour to test, and a changed literal type usually stops the code compiling.
-const TYPE_ONLY = /^(export\s+)?(declare\s+|type\s+\w|interface\s+\w)/;
-
-function firstMatch(line: string, re: RegExp): RegExpExecArray | null {
-  const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
-  let m: RegExpExecArray | null;
-  while ((m = g.exec(line))) {
-    if (!insideString(line, m.index)) return m;
-  }
-  return null;
-}
-
-const BOUNDARY: Record<string, string> = { "<": "<=", "<=": "<", ">": ">=", ">=": ">" };
-
-// Styling values no reasonable test checks, such as `margin: 0` in an inline style or a JSX
-// `strokeWidth={2}`. A changed constant there is noise, not a gap in the tests.
-const CSS_KEY = /\b(margin\w*|padding\w*|width|height|min(Width|Height)|max(Width|Height)|top|left|right|bottom|inset|gap|rowGap|columnGap|font(Size|Weight)|lineHeight|letterSpacing|opacity|zIndex|flex(Grow|Shrink|Basis)?|order|border\w*|outline\w*|grid(Column|Row)\w*|elevation|transition\w*|animation\w*)\s*:\s*['"]?-?\d/;
-const JSX_PRESENTATION = /\b(style|sx|className|width|height|size|strokeWidth|spacing|elevation|tabIndex|rows|cols)=\{\s*\{?[^}]*\d/;
-
-export function cosmetic(line: string): boolean {
-  return CSS_KEY.test(line) || JSX_PRESENTATION.test(line) || /\bstyle=\{\{/.test(line);
-}
-
-// A delay, timeout or cache lifetime one unit longer behaves the same to any test that isn't timing
-// the code, so the mutant is equivalent in practice and can only survive.
-const TIMING = /(setTimeout|setInterval|\bsleep|delay|timeout|debounce|throttle|interval|backoff|\bttl\b|maxAge|max_age|\bexpires?\b)/i;
-
-export function sitesForLine(line: string, lang: Language): Omit<Site, "file" | "line">[] {
-  const trimmed = line.trim();
-  if (!trimmed || isCommentOrImport(trimmed, lang)) return [];
-  if (lang !== "py" && TYPE_ONLY.test(trimmed)) return [];
-  const out: Omit<Site, "file" | "line">[] = [];
-  const b = firstMatch(line, / (<=|>=|<|>) /);
-  if (b) out.push({ operator: "boundary_flip", before: line, after: line.slice(0, b.index) + ` ${BOUNDARY[b[1]]} ` + line.slice(b.index + b[0].length) });
-  if (lang === "py") {
-    const m = line.match(/^(\s*)(if|elif|while) (.+):\s*$/);
-    if (m) out.push({ operator: "negate_condition", before: line, after: `${m[1]}${m[2]} not (${m[3]}):` });
-  } else {
-    const m = firstMatch(line, /\b(if|while) \(/);
-    if (m) {
-      const start = m.index + m[0].length;
-      let depth = 1;
-      let i = start;
-      for (; i < line.length && depth > 0; i++) {
-        if (line[i] === "(") depth++;
-        else if (line[i] === ")") depth--;
-      }
-      if (depth === 0) {
-        const cond = line.slice(start, i - 1);
-        out.push({ operator: "negate_condition", before: line, after: line.slice(0, start) + `!(${cond})` + line.slice(i - 1) });
-      }
-    }
-  }
-  const s = firstMatch(line, / ([+-]) 1(?![\d.])/);
-  if (s) out.push({ operator: "shift_by_one", before: line, after: line.slice(0, s.index) + ` ${s[1] === "+" ? "-" : "+"} 1` + line.slice(s.index + s[0].length) });
-  const r = lang === "py" ? firstMatch(line, /\breturn (True|False)\b/) : firstMatch(line, /\breturn (true|false)\b/);
-  if (r) {
-    const swapped = { true: "false", false: "true", True: "False", False: "True" }[r[1]] as string;
-    out.push({ operator: "swap_return", before: line, after: line.slice(0, r.index) + `return ${swapped}` + line.slice(r.index + r[0].length) });
-  }
-  const indent = line.match(/^\s*/)?.[0] ?? "";
-  if (lang === "py") {
-    if (/^raise\b/.test(trimmed)) out.push({ operator: "drop_throw_or_return", before: line, after: `${indent}pass` });
-  } else if (/^throw\b.*;\s*$/.test(trimmed) || /^return;\s*$/.test(trimmed)) {
-    out.push({ operator: "drop_throw_or_return", before: line, after: `${indent}void 0;` });
-  }
-  const c = firstMatch(line, /(?<![\w.$])(\d+)(?![\w.])/);
-  if (c && !/^\s*(case |default)/.test(line) && !cosmetic(line) && !TIMING.test(line)) {
-    const n = Number(c[1]);
-    if (Number.isSafeInteger(n)) out.push({ operator: "change_constant", before: line, after: line.slice(0, c.index) + String(n + 1) + line.slice(c.index + c[0].length) });
-  }
-  return out.filter((x) => x.after !== x.before);
-}
-
-// The 0-based lines a fault must never land on because some of the line is text, not code: a
-// block comment, docstring, triple-quoted string or template literal that spans lines. Strings
-// and comments that open and close on one line are left to sitesForLine.
-export function quotedLines(text: string, lang: Language): Set<number> {
-  const out = new Set<number>();
-  let line = 0;
-  let opened = -1;
-  const span = (from: number, to: number) => {
-    if (to > from) for (let l = from; l <= to; l++) out.add(l);
-  };
-  const n = text.length;
-  if (lang === "py") {
-    for (let i = 0; i < n; i++) {
-      const ch = text[i];
-      if (ch === "\n") line++;
-      else if (ch === "#") {
-        while (i + 1 < n && text[i + 1] !== "\n") i++;
-      } else if (text.startsWith('"""', i) || text.startsWith("'''", i)) {
-        const q = text.slice(i, i + 3);
-        opened = line;
-        for (i += 3; i < n && !text.startsWith(q, i); i++) {
-          if (text[i] === "\\") i++;
-          if (text[i] === "\n") line++;
-        }
-        i += 2;
-        span(opened, line);
-      } else if (ch === "'" || ch === '"') {
-        for (i++; i < n && text[i] !== ch && text[i] !== "\n"; i++) if (text[i] === "\\") i++;
-        if (text[i] === "\n") line++;
-      }
-    }
-    return out;
-  }
-  // JS and TS. A stack of the template literals still open; each entry counts the braces of the
-  // `${...}` it is in, so a backtick inside an interpolation opens a nested template.
-  const templates: { start: number; braces: number; inExpr: boolean }[] = [];
-  let prev = "";
-  for (let i = 0; i < n; i++) {
-    const ch = text[i];
-    const top = templates.at(-1);
-    if (ch === "\n") {
-      line++;
-      continue;
-    }
-    if (top && !top.inExpr) {
-      if (ch === "\\") i++;
-      else if (ch === "`") {
-        templates.pop();
-        span(top.start, line);
-        prev = "`";
-      } else if (ch === "$" && text[i + 1] === "{") {
-        top.inExpr = true;
-        top.braces = 0;
-        i++;
-      }
-      continue;
-    }
-    if (ch === " " || ch === "\t" || ch === "\r") continue;
-    if (ch === "/" && text[i + 1] === "/") {
-      while (i + 1 < n && text[i + 1] !== "\n") i++;
-      continue;
-    }
-    if (ch === "/" && text[i + 1] === "*") {
-      opened = line;
-      for (i += 2; i < n && !text.startsWith("*/", i); i++) if (text[i] === "\n") line++;
-      i++;
-      span(opened, line);
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      for (i++; i < n && text[i] !== ch && text[i] !== "\n"; i++) if (text[i] === "\\") i++;
-      if (text[i] === "\n") line++;
-      prev = ch;
-      continue;
-    }
-    // A regex literal can hold quotes and backticks; it starts where an operand is expected.
-    if (ch === "/" && (prev === "" || /[(,=:[!&|?{};+\-*%<>~^]/.test(prev))) {
-      let inClass = false;
-      for (i++; i < n && text[i] !== "\n"; i++) {
-        if (text[i] === "\\") i++;
-        else if (text[i] === "[") inClass = true;
-        else if (text[i] === "]") inClass = false;
-        else if (text[i] === "/" && !inClass) break;
-      }
-      if (text[i] === "\n") line++;
-      prev = "/";
-      continue;
-    }
-    if (ch === "`") {
-      templates.push({ start: line, braces: 0, inExpr: false });
-      continue;
-    }
-    if (top?.inExpr) {
-      if (ch === "{") top.braces++;
-      else if (ch === "}") {
-        if (top.braces === 0) {
-          top.inExpr = false;
-          continue;
-        }
-        top.braces--;
-      }
-    }
-    prev = ch;
-  }
-  for (const t of templates) span(t.start, line);
-  return out;
-}
-
-const JS_EXT = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
-
-function isFile(path: string): boolean {
-  try {
-    return statSync(path).isFile();
-  } catch {
-    return false;
-  }
-}
-
-// A path relative to the tree, with or without its extension, or a folder with an index file.
-function resolveJsPath(tree: string, base: string): string | null {
-  const b = normalize(base).replace(/\/$/, "");
-  if (b.startsWith("..")) return null;
-  const candidates = [b, ...JS_EXT.map((e) => b + e), b.replace(/\.js$/, ".ts"), b.replace(/\.js$/, ".tsx"), b.replace(/\.mjs$/, ".mts"), b.replace(/\.cjs$/, ".cts"), ...JS_EXT.map((e) => `${b}/index${e}`)];
-  for (const c of candidates) if (isFile(join(tree, c))) return c;
-  return null;
-}
-
-// `import "../store"` can name a folder, which resolves to its index file.
-export function resolveJs(tree: string, fromFile: string, spec: string): string | null {
-  return resolveJsPath(tree, join(dirname(fromFile), spec));
-}
-
-function resolvePy(tree: string, comp: Component, fromFile: string, mod: string): string | null {
-  const rel = mod.startsWith(".") ? normalize(join(dirname(fromFile), mod.replace(/^\.+/, "").replace(/\./g, "/"))) : mod.replace(/\./g, "/");
-  const roots = mod.startsWith(".") ? [""] : [comp.path === "." ? "" : comp.path, join(comp.path === "." ? "" : comp.path, "src")];
-  for (const root of roots) {
-    for (const cand of [join(root, rel + ".py"), join(root, rel, "__init__.py")]) if (isFile(join(tree, cand))) return cand;
-  }
-  return null;
-}
-
-// tsconfig.json and jsconfig.json allow comments and trailing commas.
-export function parseJsonc(text: string): unknown {
-  let out = "";
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (ch === '"') {
-      let j = i + 1;
-      for (; j < text.length && text[j] !== '"'; j++) if (text[j] === "\\") j++;
-      out += text.slice(i, j + 1);
-      i = j;
-    } else if (ch === "/" && text[i + 1] === "/") {
-      while (i < text.length && text[i] !== "\n") i++;
-      out += "\n";
-    } else if (ch === "/" && text[i + 1] === "*") {
-      const end = text.indexOf("*/", i + 2);
-      i = end < 0 ? text.length : end + 1;
-    } else out += ch;
-  }
-  return JSON.parse(out.replace(/,(\s*[}\]])/g, "$1"));
-}
-
-interface Alias {
-  // A tsconfig `paths` key or a package.json `imports` key, with at most one `*`.
-  pattern: string;
-  // Tree-relative targets, each with at most one `*`.
-  targets: string[];
-}
-
-function readConfig(tree: string, file: string, depth = 0): { baseUrl?: string; paths?: Record<string, string[]>; dir: string } | null {
-  if (!isFile(join(tree, file)) || depth > 3) return null;
-  let cfg: { extends?: unknown; compilerOptions?: { baseUrl?: string; paths?: Record<string, string[]> } };
-  try {
-    cfg = parseJsonc(readText(join(tree, file))) as typeof cfg;
-  } catch {
-    return null;
-  }
-  const dir = dirname(file);
-  const parent = typeof cfg.extends === "string" && cfg.extends.startsWith(".") ? readConfig(tree, normalize(join(dir, cfg.extends.endsWith(".json") ? cfg.extends : `${cfg.extends}.json`)), depth + 1) : null;
-  const own = cfg.compilerOptions ?? {};
-  return {
-    baseUrl: own.baseUrl !== undefined ? join(dir, own.baseUrl) : parent?.baseUrl,
-    paths: own.paths ?? parent?.paths,
-    dir: own.paths ? dir : (parent?.dir ?? dir),
-  };
-}
-
-// Path aliases a test can import code through: tsconfig or jsconfig `paths` and `baseUrl`, and
-// package.json `imports` (`#name`). The component's own config wins over the repo root's.
-export function jsAliases(tree: string, comp: Component): { aliases: Alias[]; baseUrl: string | null } {
-  const root = comp.path === "." ? "" : comp.path;
-  const aliases: Alias[] = [];
-  let baseUrl: string | null = null;
-  for (const dir of [...new Set([root, ""])]) {
-    for (const name of ["tsconfig.json", "jsconfig.json"]) {
-      const cfg = readConfig(tree, join(dir, name));
-      if (!cfg) continue;
-      if (baseUrl === null && cfg.baseUrl !== undefined) baseUrl = normalize(cfg.baseUrl);
-      const from = cfg.baseUrl ?? cfg.dir;
-      for (const [pattern, targets] of Object.entries(cfg.paths ?? {})) {
-        if (Array.isArray(targets)) aliases.push({ pattern, targets: targets.filter((t) => typeof t === "string").map((t) => normalize(join(from, t))) });
-      }
-    }
-    const pkg = join(dir, "package.json");
-    if (isFile(join(tree, pkg))) {
-      try {
-        const imports = (JSON.parse(readText(join(tree, pkg))) as { imports?: Record<string, unknown> }).imports ?? {};
-        for (const [pattern, target] of Object.entries(imports)) {
-          const t = pickImportTarget(target);
-          if (t) aliases.push({ pattern, targets: [normalize(join(dir, t))] });
-        }
-      } catch {}
-    }
-  }
-  return { aliases, baseUrl };
-}
-
-// A package.json `imports` value: a path, or conditions whose first source-like path wins.
-function pickImportTarget(v: unknown): string | null {
-  if (typeof v === "string") return v.startsWith("./") ? v : null;
-  if (v && typeof v === "object") {
-    for (const k of ["source", "development", "import", "node", "require", "default"]) {
-      const t = pickImportTarget((v as Record<string, unknown>)[k]);
-      if (t) return t;
-    }
-  }
-  return null;
-}
-
-function resolveAlias(tree: string, spec: string, a: { aliases: Alias[]; baseUrl: string | null }): string | null {
-  for (const { pattern, targets } of a.aliases) {
-    const star = pattern.indexOf("*");
-    let hole: string | null = null;
-    if (star < 0) hole = spec === pattern ? "" : null;
-    else if (spec.startsWith(pattern.slice(0, star)) && spec.endsWith(pattern.slice(star + 1)) && spec.length >= pattern.length - 1) hole = spec.slice(star, spec.length - (pattern.length - star - 1));
-    if (hole === null) continue;
-    for (const t of targets) {
-      const f = resolveJsPath(tree, t.replace("*", hole));
-      if (f) return f;
-    }
-  }
-  if (a.baseUrl !== null && /^[\w@][\w@./-]*$/.test(spec)) return resolveJsPath(tree, join(a.baseUrl, spec));
-  return null;
-}
-
-// Built output such as dist/ is a copy of the source, often stale, and a test command that rebuilds
-// it overwrites the fault. A fault goes in the source the build comes from, or nowhere.
-const BUILD_OUTPUT = /(^|\/)(dist|build)\//;
-
-function sourceOf(tree: string, file: string): string | null {
-  if (!BUILD_OUTPUT.test(file)) return file;
-  const src = file.replace(BUILD_OUTPUT, "$1src/").replace(/\.(m|c)?js$/, "");
-  return resolveJsPath(tree, src);
-}
-
-const plantable = (f: string) => !isTestFile(f) && !f.includes("node_modules") && !/\.d\.[mc]?ts$|\.min\.js$/.test(f);
-
-// A language file's fault hooks, for a language Node's and Python's rules don't cover.
+// A language file's fault hooks; none for a language faults aren't planted in.
 function hooksFor(lang: Language) {
-  return languageOf(lang)?.replay?.mutation;
+  return languageOf(lang)?.mutation ?? null;
 }
 
 export function testFiles(tree: string, comp: Component): string[] {
-  const lang = comp.language;
-  const hooks = hooksFor(lang);
-  if (hooks) return inComponent(listFiles(tree), comp.path).filter((f) => hooks.isTest(f));
-  return listFiles(tree)
-    .filter((f) => comp.path === "." || f.startsWith(comp.path + "/"))
-    .filter((f) => isTestFile(f) && (lang === "py" ? f.endsWith(".py") : /\.(ts|tsx|js|mjs|cjs|mts|cts)$/.test(f)));
+  const hooks = hooksFor(comp.language);
+  return hooks ? inComponent(listFiles(tree), comp.path).filter((f) => hooks.isTest(f)) : [];
 }
 
-const JS_IMPORT = /(?:from\s*|import\s*\(\s*|require\(\s*|import\s+)['"]([^'"]+)['"]/g;
-const JS_REEXPORT = /^\s*export\s+(?:\*(?:\s+as\s+\w+)?|(?:type\s+)?\{[^}]*\})\s*from\s*['"]([^'"]+)['"]/gm;
-const PY_IMPORT = /^\s*(?:from\s+(\S+)\s+import|import\s+([\w.]+))/gm;
-
-// The files the component's tests import, directly, through path aliases, or through barrel files
-// (an index.ts of `export * from` lines, an __init__.py of relative imports) that re-export them.
+// The source files the component's tests cover, by its language file: for JavaScript and Python,
+// the files they import, directly, through path aliases, or through barrel files that re-export them.
 export function targetFiles(tree: string, comp: Component): string[] {
-  const lang = comp.language;
-  const hooks = hooksFor(lang);
-  if (hooks) return [...new Set(hooks.covered(tree, comp, testFiles(tree, comp), inComponent(listFiles(tree), comp.path)))].filter((f) => hooks.isSource(f) && !hooks.isTest(f)).sort();
-  const aliases = lang === "py" ? { aliases: [], baseUrl: null } : jsAliases(tree, comp);
-  const targets = new Set<string>();
-  const queue: string[] = [];
-  const add = (f: string | null) => {
-    const src = f ? sourceOf(tree, f) : null;
-    if (src && plantable(src) && !targets.has(src)) {
-      targets.add(src);
-      queue.push(src);
-    }
-  };
-  const jsSpec = (from: string, spec: string) => (spec.startsWith(".") ? resolveJs(tree, from, spec) : resolveAlias(tree, spec, aliases));
-  for (const t of testFiles(tree, comp)) {
-    const text = readText(join(tree, t));
-    if (lang === "py") for (const m of text.matchAll(PY_IMPORT)) add(resolvePy(tree, comp, t, m[1] ?? m[2]));
-    else for (const m of text.matchAll(JS_IMPORT)) add(jsSpec(t, m[1]));
-  }
-  for (let i = 0; i < queue.length && i < 500; i++) {
-    const f = queue[i];
-    const text = readText(join(tree, f));
-    if (lang === "py") {
-      if (!f.endsWith("__init__.py")) continue;
-      for (const m of text.matchAll(/^\s*from\s+(\.\S*)\s+import/gm)) add(resolvePy(tree, comp, f, m[1]));
-    } else for (const m of text.matchAll(JS_REEXPORT)) add(jsSpec(f, m[1]));
-  }
-  return [...targets].sort();
+  const hooks = hooksFor(comp.language);
+  if (!hooks) return [];
+  return [...new Set(hooks.covered(tree, comp, testFiles(tree, comp), inComponent(listFiles(tree), comp.path)))].filter((f) => hooks.isSource(f) && !hooks.isTest(f)).sort();
 }
 
-// Files every test loads without importing them: pytest's conftest.py and the setup files Jest and
-// Vitest name in their config. A fault reached through one can be caught by any test.
-const SHARED_SETUP = /(^|\/)conftest\.py$|(^|\/)(jest|vitest)\.(setup|config)\.[mc]?[jt]s$|(^|\/)setup(Tests|-tests)?\.[mc]?[jt]s$/;
-
-// For each file, the test files that import it, directly or through other files of the component;
-// null for a file the run can't be narrowed for: a shared setup file reaches it, or no test does.
-// The whole index is null for a language this file doesn't read imports of.
+// For each file, the test files that reach it, so a fault's run can be narrowed to them; null for
+// a file the run can't be narrowed for. The whole index is null for a language that doesn't say.
 export function testsReaching(tree: string, comp: Component): ((file: string) => string[] | null) | null {
-  const lang = comp.language;
-  if (hooksFor(lang) || (lang !== "py" && lang !== "ts" && lang !== "js")) return null;
-  const aliases = lang === "py" ? { aliases: [], baseUrl: null } : jsAliases(tree, comp);
-  const tests = new Set(testFiles(tree, comp));
-  const roots = [...tests, ...inComponent(listFiles(tree), comp.path).filter((f) => SHARED_SETUP.test(f))];
-  const importedBy = new Map<string, Set<string>>();
-  const seen = new Set<string>(roots);
-  const queue = [...roots];
-  for (let i = 0; i < queue.length && i < 5000; i++) {
-    const from = queue[i];
-    const text = readText(join(tree, from));
-    const specs = lang === "py" ? [...text.matchAll(PY_IMPORT)].map((m) => resolvePy(tree, comp, from, m[1] ?? m[2])) : [...text.matchAll(JS_IMPORT)].map((m) => (m[1].startsWith(".") ? resolveJs(tree, from, m[1]) : resolveAlias(tree, m[1], aliases)));
-    for (const to of specs) {
-      if (!to || to.includes("node_modules")) continue;
-      if (!importedBy.has(to)) importedBy.set(to, new Set());
-      importedBy.get(to)!.add(from);
-      if (!seen.has(to)) {
-        seen.add(to);
-        queue.push(to);
-      }
-    }
-  }
-  return (file: string) => {
-    const reached = new Set<string>([file]);
-    const back = [file];
-    for (let i = 0; i < back.length; i++) {
-      for (const from of importedBy.get(back[i]) ?? []) {
-        if (reached.has(from)) continue;
-        reached.add(from);
-        back.push(from);
-      }
-    }
-    if ([...reached].some((f) => SHARED_SETUP.test(f))) return null;
-    const out = [...reached].filter((f) => tests.has(f)).sort();
-    return out.length ? out : null;
-  };
+  const hooks = hooksFor(comp.language);
+  return hooks?.reaching ? hooks.reaching(tree, comp, testFiles(tree, comp)) : null;
 }
 
 // pytest and `node --test` options that take the next word as their value.
@@ -563,8 +156,8 @@ export function allSites(tree: string, files: string[], lang: Language): Site[] 
   const sites: Site[] = [];
   // A language without hooks of its own for sites or quoting gets the C-like rules.
   const hooks = hooksFor(lang);
-  const quote = (text: string) => (hooks ? (hooks.quoted?.(text) ?? quotedLines(text, "ts")) : quotedLines(text, lang));
-  const onLine = (line: string) => (hooks ? (hooks.sites?.(line) ?? sitesForLine(line, "ts")) : sitesForLine(line, lang));
+  const quote = (text: string) => hooks?.quoted?.(text) ?? quotedLines(text, "ts");
+  const onLine = (line: string) => hooks?.sites?.(line) ?? sitesForLine(line, "ts");
   for (const file of files) {
     const text = readText(join(tree, file));
     const quoted = quote(text);

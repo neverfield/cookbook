@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
@@ -11,7 +11,7 @@ import { IMAGE_DIGESTS } from "../skill/agent-readiness/scripts/lib/images.ts";
 import { inComponent, namedAfter, sameFolder, withInlineTests } from "../skill/agent-readiness/scripts/lib/languages/coverage.ts";
 import { ECOSYSTEMS, LANGUAGES, ecosystemOf, languageOf, notCheckedFor } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
 import type { CheckName } from "../skill/agent-readiness/scripts/lib/languages/index.ts";
-import type { ManifestScripts, ReplayHooks } from "../skill/agent-readiness/scripts/lib/languages/language.ts";
+import type { ManifestScripts, MutationHooks, ReplayHooks } from "../skill/agent-readiness/scripts/lib/languages/language.ts";
 import { php } from "../skill/agent-readiness/scripts/lib/languages/php.ts";
 import { ruby } from "../skill/agent-readiness/scripts/lib/languages/ruby.ts";
 import { chooseSites, targetFiles, testFiles } from "../skill/agent-readiness/scripts/lib/mutate.ts";
@@ -22,7 +22,7 @@ import { IDLE_MARK, IDLE_OFFLINE, compilerError, diagnose, failingTests, missing
 import { extractFromMarkdown, instructionItems } from "../skill/agent-readiness/scripts/lib/static.ts";
 import { staticSignals } from "../skill/agent-readiness/scripts/lib/signals.ts";
 import { instructionKey, packageCommand, replayInstructions } from "../skill/agent-readiness/scripts/lib/instructions.ts";
-import { existsExact } from "../skill/agent-readiness/scripts/lib/util.ts";
+import { existsExact, listFiles } from "../skill/agent-readiness/scripts/lib/util.ts";
 import { scanText } from "../skill/agent-readiness/scripts/lib/secrets.ts";
 import { jvm } from "../skill/agent-readiness/scripts/lib/languages/jvm.ts";
 import { loadRubric, latestRubricVersion } from "../skill/agent-readiness/scripts/lib/rubric.ts";
@@ -68,12 +68,12 @@ describe("the language registry", () => {
     for (const code of rubric.mutation.languages) assert.ok(languageOf(code as Language), `${code} has no language file`);
   });
 
-  test("a language file imports only util.ts, its siblings and types, so the registry has no cycle", () => {
+  test("a language file imports only util.ts, patterns.ts, its siblings and types, so the registry has no cycle", () => {
     for (const f of readdirSync(LANG_DIR).filter((x) => x.endsWith(".ts"))) {
       const text = readFileSync(join(LANG_DIR, f), "utf8");
       for (const m of text.matchAll(/^import\s+(type\s+)?[^;]*?from\s+"([^"]+)";/gm)) {
         const [, isType, from] = m;
-        if (isType || from.startsWith("node:") || from.startsWith("./") || from === "../util.ts") continue;
+        if (isType || from.startsWith("node:") || from.startsWith("./") || from === "../util.ts" || from === "../patterns.ts") continue;
         assert.fail(`${f} imports ${from} at runtime`);
       }
     }
@@ -119,12 +119,18 @@ describe("the language registry", () => {
     "lockfiles.foreign": (v) => v instanceof Object && Object.values(v).every((x) => typeof x === "string"),
     manifestScripts: (v) => v instanceof Object && typeof (v as ManifestScripts).manifest === "function" && typeof (v as ManifestScripts).read === "function" && (v as ManifestScripts).installHook instanceof RegExp,
     tool: (v) => v instanceof RegExp,
+    countedTests: (v) => typeof v === "function",
   };
   const at = (checks: unknown, path: string) => path.split(".").reduce<unknown>((o, k) => (o instanceof Object ? (o as Record<string, unknown>)[k] : undefined), checks);
   const leaves = (o: object, prefix = ""): string[] => Object.entries(o).flatMap(([k, v]) => (v instanceof Object && !(v instanceof RegExp) && !Array.isArray(v) && typeof v !== "function" && ["weakening", "lockfiles"].includes(k) ? leaves(v, `${k}.`) : [`${prefix}${k}`]));
 
   test("every language file declares each rule the language-neutral checks read, or null to say it has none", () => {
+    const fixturePaths = readdirSync(join(SKILL, "..", "..", "support", "fixtures")).flatMap((f) => {
+      const dir = join(SKILL, "..", "..", "support", "fixtures", f, "repo");
+      return existsSync(dir) ? listFiles(dir) : [];
+    });
     for (const l of LANGUAGES) {
+      assert.notEqual(l.mutation, undefined, `${l.id} leaves mutation undeclared: give the fault hooks, or null when faults aren't planted`);
       assert.ok(l.checks, `${l.id} has no checks block`);
       for (const [path, valid] of Object.entries(RULES)) {
         const v = at(l.checks, path);
@@ -133,7 +139,11 @@ describe("the language registry", () => {
         else assert.ok(valid(v), `${l.id}: ${path} isn't a rule of the right shape`);
       }
       assert.deepEqual(leaves(l.checks).sort(), Object.keys(RULES).sort(), `${l.id} declares exactly the rules RULES lists`);
-      if (l.replay) assert.equal(l.checks.weakening.isTest, l.replay.mutation.isTest, `${l.id}: readiness diff uses the same test-file rule faults are planted by`);
+      if (l.mutation) {
+        const faults = fixturePaths.filter((f) => l.mutation!.isTest(f));
+        assert.deepEqual(faults.filter((f) => !l.checks.weakening.isTest!(f)), [], `${l.id}: readiness diff counts every test faults are planted around`);
+        assert.deepEqual(faults.filter((f) => !l.checks.countedTests!(f)), [], `${l.id}: the run plan counts every test faults are planted around`);
+      } else assert.equal(l.checks.countedTests, null, `${l.id} plants no faults, so it has no test rule to count by`);
       if (l.stacks.some((s) => s.tier === "supported")) assert.ok(l.checks.tool, `${l.id} has a supported stack, so a replayed instruction needs its tool`);
       for (const f of l.detect.lockfiles ?? []) if (l.checks.lockfiles.diff) assert.ok(l.checks.lockfiles.diff.includes(f), `${l.id}: readiness diff lists changes to ${f}`);
     }
@@ -291,13 +301,13 @@ const toy: ReplayHooks = {
     return { passed: Number(ran[1]) - failed, failed, total: Number(ran[1]) };
   },
   budget: { commandTimeoutSec: 900, componentMinutes: 20, mutationRunTimeoutSec: 400 },
-  mutation: {
-    isTest: (f) => /(^|\/)tests\/test_[^/]+\.py$/.test(f),
-    isSource: (f) => f.endsWith(".py") && !f.includes("tests/"),
-    covered: (_tree, _comp, tests, files) => namedAfter(tests, files, (f) => f.endsWith(".py") && !f.includes("tests/")),
-    compileProbe: (comp) => ({ command: "python3 -m py_compile calc.py", cwd: comp.path }),
-    compileError: (output) => /SyntaxError/.test(output),
-  },
+};
+const toyMutation: MutationHooks = {
+  isTest: (f) => /(^|\/)tests\/test_[^/]+\.py$/.test(f),
+  isSource: (f) => f.endsWith(".py") && !f.includes("tests/"),
+  covered: (_tree, _comp, tests, files) => namedAfter(tests, files, (f) => f.endsWith(".py") && !f.includes("tests/")),
+  compileProbe: (comp) => ({ command: "python3 -m py_compile calc.py", cwd: comp.path }),
+  compileError: (output) => /SyntaxError/.test(output),
 };
 
 const TOY_REPO = {
@@ -336,11 +346,13 @@ const TOY_REPO = {
 };
 
 function withToy<T>(fn: () => T): T {
-  const saved = { replay: ruby.replay, tier: ruby.stacks[0].tier };
+  const saved = { replay: ruby.replay, mutation: ruby.mutation, tier: ruby.stacks[0].tier };
   ruby.replay = toy;
+  ruby.mutation = toyMutation;
   ruby.stacks[0].tier = "supported";
   const restore = () => {
     ruby.replay = saved.replay;
+    ruby.mutation = saved.mutation;
     ruby.stacks[0].tier = saved.tier;
   };
   try {

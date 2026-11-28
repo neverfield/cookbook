@@ -323,6 +323,16 @@ export const ruby: LanguageDef = {
     lockfiles: { diff: ["Gemfile.lock"], secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: /^(bundle|bundler|ruby|rake|rspec|rails|bin\/rails|bin\/rake)$/,
+    countedTests: isTest,
+  },
+  mutation: {
+    isTest,
+    isSource,
+    covered: (_tree, comp, tests, files) => namedAfter(tests, inComponent(files, comp.path), isSource),
+    sites: rubySites,
+    quoted: rubyQuoted,
+    compileProbe: (comp) => ({ command: SYNTAX_ALL, cwd: comp.path }),
+    compileError: (output) => /SyntaxError|syntax errors? found|syntax error,/.test(output),
   },
   replay: {
     classify: () => ({ language: "ruby", packageManager: "bundler" }),
@@ -335,14 +345,5 @@ export const ruby: LanguageDef = {
     },
     commands: rubyCommands,
     testCounts: rubyTestCounts,
-    mutation: {
-      isTest,
-      isSource,
-      covered: (_tree, comp, tests, files) => namedAfter(tests, inComponent(files, comp.path), isSource),
-      sites: rubySites,
-      quoted: rubyQuoted,
-      compileProbe: (comp) => ({ command: SYNTAX_ALL, cwd: comp.path }),
-      compileError: (output) => /SyntaxError|syntax errors? found|syntax error,/.test(output),
-    },
   },
 };

@@ -1,6 +1,9 @@
 import { join } from "node:path";
 import { exists, readText, workspaceDirs } from "../util.ts";
+import { quotedLines, sitesForLine } from "./fault-sites.ts";
+import { importedFiles, plantable, reachingTests } from "./imports.ts";
 import type { Ecosystem, LanguageDef } from "./language.ts";
+import { typecheckProbe } from "./probes.ts";
 import { isTestFile } from "./test-paths.ts";
 
 export const VENV = ".readiness-venv";
@@ -122,6 +125,8 @@ const poetry: Ecosystem = {
   unpinned: (tree, path) => (exists(join(tree, path, "poetry.lock")) ? null : NO_LOCKFILE),
 };
 
+const isPyTest = (f: string) => f.endsWith(".py") && isTestFile(f);
+
 export const python: LanguageDef = {
   id: "python",
   label: "Python",
@@ -148,5 +153,15 @@ export const python: LanguageDef = {
     },
     manifestScripts: null,
     tool: /^(python3?|pip3?|pytest|uv|uvx|poetry|tox|nox)$/,
+    countedTests: isPyTest,
+  },
+  mutation: {
+    isTest: isPyTest,
+    isSource: plantable,
+    covered: (tree, comp, tests) => importedFiles(tree, comp, tests, "py"),
+    sites: (line) => sitesForLine(line, "py"),
+    quoted: (text) => quotedLines(text, "py"),
+    reaching: (tree, comp, tests) => reachingTests(tree, comp, tests, "py"),
+    compileProbe: (comp, { contract }) => typecheckProbe(comp, contract),
   },
 };

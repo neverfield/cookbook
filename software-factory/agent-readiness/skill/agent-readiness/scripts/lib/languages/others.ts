@@ -57,7 +57,9 @@ export const swift: LanguageDef = {
     lockfiles: { diff: ["Package.resolved"], secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: null,
+    countedTests: null,
   },
+  mutation: null,
 };
 
 export const dart: LanguageDef = {
@@ -79,7 +81,9 @@ export const dart: LanguageDef = {
     lockfiles: { diff: ["pubspec.lock"], secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: null,
+    countedTests: null,
   },
+  mutation: null,
 };
 
 export const elixir: LanguageDef = {
@@ -99,7 +103,9 @@ export const elixir: LanguageDef = {
     lockfiles: { diff: ["mix.lock"], secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: null,
+    countedTests: null,
   },
+  mutation: null,
 };
 
 // A folder of .tf files is a Terraform module, so a root module and nested root modules are found
@@ -120,7 +126,9 @@ export const terraform: LanguageDef = {
     lockfiles: { diff: [".terraform.lock.hcl"], secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: null,
+    countedTests: null,
   },
+  mutation: null,
 };
 
 // Found by its build file only: a .c or .cc file next to a Node addon or a Python extension is part
@@ -139,5 +147,7 @@ export const cpp: LanguageDef = {
     lockfiles: { diff: [], secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: null,
+    countedTests: null,
   },
+  mutation: null,
 };

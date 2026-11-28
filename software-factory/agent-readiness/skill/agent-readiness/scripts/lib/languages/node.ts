@@ -1,6 +1,9 @@
 import { dirname, join } from "node:path";
-import { exists, readJson, readText } from "../util.ts";
+import { exists, readJson, readText, shellQuote } from "../util.ts";
+import { quotedLines, sitesForLine } from "./fault-sites.ts";
+import { importedFiles, plantable, reachingTests } from "./imports.ts";
 import type { Ecosystem, LanguageDef } from "./language.ts";
+import { typecheckProbe } from "./probes.ts";
 import { isTestFile } from "./test-paths.ts";
 
 export interface PackageJson {
@@ -174,6 +177,10 @@ const bun: Ecosystem = {
   unpinned: lockedBy(["bun.lock", "bun.lockb"]),
 };
 
+const JS_TEST = /\.(ts|tsx|js|mjs|cjs|mts|cts)$/;
+const JS_COUNTED = /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/;
+const isJsTest = (f: string) => isTestFile(f) && JS_TEST.test(f);
+
 export const node: LanguageDef = {
   id: "node",
   label: "Node",
@@ -206,5 +213,23 @@ export const node: LanguageDef = {
       installHook: /^(pre|post)?install$|^prepare$|^prepublish$/,
     },
     tool: /^(npm|npx|pnpm|pnpx|yarn|node|bun|bunx|corepack|tsc|vitest|jest)$/,
+    // Unlike the fault hooks' rule, .jsx tests count, and nothing under node_modules does.
+    countedTests: (f) => JS_COUNTED.test(f) && isTestFile(f) && !f.includes("node_modules/"),
+  },
+  mutation: {
+    isTest: isJsTest,
+    isSource: plantable,
+    covered: (tree, comp, tests) => importedFiles(tree, comp, tests, "js"),
+    sites: (line) => sitesForLine(line, "ts"),
+    quoted: (text) => quotedLines(text, "ts"),
+    reaching: (tree, comp, tests) => reachingTests(tree, comp, tests, "js"),
+    // The type-check command, or the TypeScript compiler the install put in place.
+    compileProbe: (comp, { contract, root }) => {
+      const typecheck = typecheckProbe(comp, contract);
+      if (typecheck) return typecheck;
+      if (comp.language !== "ts" || !exists(join(root, comp.path, "tsconfig.json"))) return null;
+      const tsc = [comp.path, "."].map((d) => join(d, "node_modules", ".bin", "tsc")).find((p) => exists(join(root, p)));
+      return tsc ? { command: `${shellQuote(tsc)} --noEmit -p ${shellQuote(join(comp.path, "tsconfig.json"))}`, cwd: "." } : null;
+    },
   },
 };

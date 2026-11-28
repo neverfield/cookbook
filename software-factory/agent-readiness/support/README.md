@@ -42,9 +42,11 @@ A language is one file in `../skill/agent-readiness/scripts/lib/languages/`, lis
    - `lockfiles.diff` (changes `readiness diff` lists), `lockfiles.secretScanSkips` (`[]` when none), and `lockfiles.foreign` (the lockfile a PR adds when it switches package managers)
    - `manifestScripts` (install hooks, sudo, network pipes and deploys in the manifest's scripts)
    - `tool` (the first program of a command line that belongs to this language)
-5. `replay`, required before any stack is `supported`: `classify`, `image` and `images` (each digest also goes in `scripts/lib/images.ts`), `doctor`, `pins`, `commands`, and the `mutation` hooks, which decide where faults may be planted and how to tell that one compiles.
-6. Proof: a fixture under `fixtures/` with an `expected.json`, a `tests/lang-<id>.test.ts`, a pinned public repo in the stack's `proof`, and the stack's row in `references/supported.md`.
-7. Run `npm run check`. `tests/languages.test.ts` fails if a rule is undeclared or has the wrong shape, if a code or ecosystem is missing from the unions, if a rubric counts a lockfile no language declares, or if a language file imports anything outside its folder at runtime. Then run `npm run release-manifest`.
+   - `countedTests` (the files that show the run plan a component has tests; the fault hooks' `isTest` when there are hooks)
+5. `mutation`, or `null` when faults aren't planted: which files are tests and sources, which sources the tests cover, the fault sites on a line, the lines that are text rather than code, and how to tell a planted fault compiles. Without `sites` and `quoted`, the C-like rules in `fault-sites.ts` apply.
+6. `replay`, required before any stack is `supported`: `classify`, `image` and `images` (each digest also goes in `scripts/lib/images.ts`), `doctor`, `pins` and `commands`.
+7. Proof: a fixture under `fixtures/` with an `expected.json`, a `tests/lang-<id>.test.ts`, a pinned public repo in the stack's `proof`, and the stack's row in `references/supported.md`.
+8. Run `npm run check`. `tests/languages.test.ts` fails if a rule is undeclared or has the wrong shape, if a code or ecosystem is missing from the unions, if a rubric counts a lockfile no language declares, or if a language file imports anything at runtime beyond its folder, `util.ts` and `patterns.ts`. Then run `npm run release-manifest`.
 
 ## Pinned trial repos
 

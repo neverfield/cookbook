@@ -12,9 +12,10 @@ import { fmtDuration } from "./format.ts";
 import { SUDO } from "./patterns.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
-import { codesOfTool, ecosystemOf } from "./languages/index.ts";
+import { codesOfTool, ecosystemOf, languageOf } from "./languages/index.ts";
 import { lockedEngineGap } from "./languages/node.ts";
-import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary, withControlComment } from "./mutate.ts";
+import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary } from "./mutate.ts";
+import { typecheckProbe } from "./languages/probes.ts";
 import { Progress, budgetSummary } from "./progress.ts";
 import { redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
@@ -248,7 +249,7 @@ export function countTests(profile: Profile | null | undefined, component: strin
 
 // Whether output says the code doesn't compile, by the component's language file when it has a rule.
 function compileFailed(comp: Component, output: string, kind: CommandKind): boolean {
-  const own = hooked(comp)?.mutation.compileError;
+  const own = languageOf(comp.language)?.mutation?.compileError;
   return own ? own(output) : diagnose(output, false, kind).cause === "compile";
 }
 
@@ -800,17 +801,10 @@ function lockfileEvidence(audit: Audit, ex: Executor, profile: Profile, tree: st
 
 export const NO_MUTANTS = "planted faults skipped by --no-mutants";
 
-// How to tell whether a planted fault compiles, on its own: the component's type-check command, or
-// the TypeScript compiler the install put in place. A test script that runs tsc next to the tests
-// can't tell it, because which of them reports first depends on how fast the machine is.
+// How to tell whether a planted fault compiles, on its own, by the component's language file.
 function compileProbe(audit: Audit, ex: Executor, comp: Component): { command: string; cwd: string } | null {
-  const hooks = hooked(comp);
-  if (hooks) return hooks.mutation.compileProbe(comp);
-  const typecheck = audit.contract.find((c) => c.kind === "typecheck" && (c.component === comp.id || c.component === "*"));
-  if (typecheck) return { command: typecheck.command, cwd: typecheck.cwd };
-  if (comp.language !== "ts" || !exists(join(ex.root, comp.path, "tsconfig.json"))) return null;
-  const tsc = [comp.path, "."].map((d) => join(d, "node_modules", ".bin", "tsc")).find((p) => exists(join(ex.root, p)));
-  return tsc ? { command: `${shellQuote(tsc)} --noEmit -p ${shellQuote(join(comp.path, "tsconfig.json"))}`, cwd: "." } : null;
+  const hooks = languageOf(comp.language)?.mutation;
+  return hooks ? hooks.compileProbe(comp, { contract: audit.contract, root: ex.root }) : typecheckProbe(comp, audit.contract);
 }
 
 // How long one test run with a planted fault may take: the rubric's, or a slow toolchain's floor.

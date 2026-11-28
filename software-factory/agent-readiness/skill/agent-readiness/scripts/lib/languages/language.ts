@@ -2,11 +2,12 @@
 // index.ts. A language group adds or changes its own file and nothing shared. The checklist for a
 // new one is "Adding a language" in support/README.md; tests/languages.test.ts enforces it.
 //
-// A language file may import only `../util.ts`, its siblings in this folder, and types. Anything
-// else (profile, contract, replay) imports the registry, so importing it back would be a cycle.
+// A language file may import only `../util.ts`, `../patterns.ts`, its siblings in this folder, and
+// types. Anything else (profile, contract, replay) imports the registry, so importing it back would
+// be a cycle.
 import type { Site } from "../mutate.ts";
 import type { Stack } from "../support.ts";
-import type { CommandKind, Component, Language, PackageManager } from "../types.ts";
+import type { CommandKind, Component, ContractCommand, Language, PackageManager } from "../types.ts";
 
 // A frozen install, or the closest the folder allows, and why.
 export interface InstallPlan {
@@ -126,11 +127,15 @@ export interface MutationHooks {
   // 0-based lines that are text rather than code (block comments, multi-line strings). Omitted: the
   // C-like scanner, which treats `/* */`, quotes and backticks as JavaScript does.
   quoted?(text: string): Set<number>;
+  // For each file, the test files that reach it, so a run with a fault in it can be narrowed to
+  // them; null for a file no narrowed run can be trusted for. Omitted: every run is the whole suite.
+  reaching?(tree: string, comp: Component, tests: string[]): (file: string) => string[] | null;
   // How to tell a planted fault compiles, run before the tests. A fault that doesn't compile is
-  // discarded, never counted as caught.
-  compileProbe(comp: Component): { command: string; cwd: string } | null;
+  // discarded, never counted as caught. `contract` is the audit's commands and `root` the folder
+  // the replay runs in.
+  compileProbe(comp: Component, ctx: { contract: ContractCommand[]; root: string }): { command: string; cwd: string } | null;
   // Whether a probe's or test run's output says the code doesn't compile, such as Go's
-  // "undefined: x". Omitted: only TypeScript's and Python's errors count.
+  // "undefined: x". Omitted: diagnose.ts decides, which knows TypeScript's and Python's errors.
   compileError?(output: string): boolean;
 }
 
@@ -156,7 +161,6 @@ export interface ReplayHooks {
   // Toolchains the build needs beside the image's own, copied in from other pinned images.
   toolchains?(tree: string, dir: string): ToolchainCopy[];
   budget?: ToolchainBudget;
-  mutation: MutationHooks;
 }
 
 // A manifest's named scripts, which the safety scan reads for sudo, network pipes, deletes and
@@ -194,6 +198,9 @@ export interface LanguageChecks {
   // The first program of a command line that marks it as this language's, so a replayed
   // instruction runs in the image of a component of this language.
   tool: RegExp | null;
+  // The files that show the run plan a component has tests at all (plan/test-files.ts). A language
+  // with fault hooks uses their `isTest`.
+  countedTests: ((path: string) => boolean) | null;
 }
 
 export interface LanguageDef {
@@ -207,6 +214,9 @@ export interface LanguageDef {
   detect: Detect;
   ecosystems: Ecosystem[];
   checks: LanguageChecks;
+  // Where faults may be planted and how a planted one is run; null when faults aren't planted in
+  // this language.
+  mutation: MutationHooks | null;
   replay?: ReplayHooks;
   // Node and Python: detected, installed and tested by profile.ts and contract.ts.
   builtIn?: boolean;

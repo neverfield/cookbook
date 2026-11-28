@@ -402,6 +402,16 @@ export const php: LanguageDef = {
     lockfiles: { diff: ["composer.lock"], secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: /^(composer|php|phpunit|vendor\/bin\/\S+)$/,
+    countedTests: isTest,
+  },
+  mutation: {
+    isTest,
+    isSource,
+    covered: (_tree, comp, tests, files) => namedAfter(tests, inComponent(files, comp.path), isSource),
+    sites: phpSites,
+    quoted: phpQuoted,
+    compileProbe: (comp) => ({ command: LINT_ALL, cwd: comp.path }),
+    compileError: (output) => /(PHP )?Parse error:|Errors parsing /.test(output),
   },
   replay: {
     classify: () => ({ language: "php", packageManager: "composer" }),
@@ -414,14 +424,5 @@ export const php: LanguageDef = {
     },
     commands: phpCommands,
     testCounts: phpTestCounts,
-    mutation: {
-      isTest,
-      isSource,
-      covered: (_tree, comp, tests, files) => namedAfter(tests, inComponent(files, comp.path), isSource),
-      sites: phpSites,
-      quoted: phpQuoted,
-      compileProbe: (comp) => ({ command: LINT_ALL, cwd: comp.path }),
-      compileError: (output) => /(PHP )?Parse error:|Errors parsing /.test(output),
-    },
   },
 };
