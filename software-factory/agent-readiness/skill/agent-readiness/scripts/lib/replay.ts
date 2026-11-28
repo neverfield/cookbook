@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { ContainerSession, HOME_DIR, buildImage, detectRuntime, hostUser, probeLimits, removeOrphanedContainers } from "./container.ts";
@@ -9,25 +9,26 @@ import { addEvidence, registryValuesOf } from "./evidence.ts";
 import { attribute, networkVerdict, rerunsOnline } from "./attribute.ts";
 import type { AttributionInput } from "./attribute.ts";
 import { fmtDuration } from "./format.ts";
+import { SUDO } from "./patterns.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
-import { ecosystemOf } from "./languages/index.ts";
-import { lockedEngineGap } from "./languages/node.ts";
-import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary } from "./mutate.ts";
+import { LANGUAGES, codesOfTool, ecosystemOf, languageOf } from "./languages/index.ts";
+import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary, withControlComment } from "./mutate.ts";
+import { typecheckProbe } from "./languages/probes.ts";
 import { Progress, budgetSummary } from "./progress.ts";
 import { redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { SUDO_SHIM_MARK, disposeHome, endGroups, runCommand, scrubbedEnv } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
-import type { Attribution, Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Language, Mutant, Profile, Strength, Where } from "./types.ts";
+import type { Attribution, Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Mutant, Profile, Strength, Where } from "./types.ts";
 import { onTeardown, removeOrphanedTempDirs, tempDir } from "./teardown.ts";
 import type { TempDir } from "./teardown.ts";
-import { assertFreeSpace, containedPath, exists, fail, treeBytes, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
+import { assertFreeSpace, containedPath, exists, fail, treeBytes, listFiles, randomHex, readJson, readText, sha256, writeJson } from "./util.ts";
 import { commandsFor } from "./score.ts";
 import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
 import { makeRecipe } from "./static.ts";
 import { SUPPORTED_DOC, notSupportedReason } from "./support.ts";
-import { loadSealedAudit } from "./history.ts";
+import { loadSealedAudit, readHistory } from "./history.ts";
 import { paths, plantSeed, refreshTree } from "./workspace.ts";
 import { GIT_IDENTITY_CONFIG, canCutNetwork, canaryFailure, detectDisposableVm, normalizedEnv, offlineCommand, provesIn, runCanary, vmNotDetectedNote } from "./proofenv.ts";
 import type { Canary, ProofEnv, VmDetection } from "./proofenv.ts";
@@ -81,7 +82,6 @@ export function banRepeats(ex: Executor, timedOut: Set<string>): Executor {
   return ex;
 }
 
-export const SUDO = /(^|[\s;&|(`]|\$\()sudo(\s|$)/;
 export const SUDO_REFUSED = "not run on the host: it uses sudo, which the audit only runs inside a container";
 export const NETWORK_ON = "the network couldn't be switched off for the test phase, so this pass doesn't prove a clean checkout";
 export const NEEDS_NETWORK = "the tests pass only with the network on, and it couldn't be switched back on to plant faults";
@@ -248,7 +248,7 @@ export function countTests(profile: Profile | null | undefined, component: strin
 
 // Whether output says the code doesn't compile, by the component's language file when it has a rule.
 function compileFailed(comp: Component, output: string, kind: CommandKind): boolean {
-  const own = hooked(comp)?.mutation.compileError;
+  const own = languageOf(comp.language)?.mutation?.compileError;
   return own ? own(output) : diagnose(output, false, kind).cause === "compile";
 }
 
@@ -265,6 +265,8 @@ export interface PhaseResult {
   attribution?: Attribution;
   // The rerun, with the network on, of a test run that failed with it cut.
   networkOn?: boolean;
+  // On a pass after a failed rerun with the network on: what that rerun failed on.
+  flaky?: string;
 }
 
 export const INSTALL_BLOCKED = "not run because the install was blocked on this machine";
@@ -444,17 +446,22 @@ export async function runContract(
     if (failedInstalls.has(cmd.component) && !rescued.has(cmd.component)) return true;
     return failedInstalls.has("*") && !rescued.has(cmd.component) && !rescued.has("*");
   };
-  // Outside a container the repo's commands run on this machine's Node. One older than a locked
-  // dependency's engines.node allows, as undici 8 needs 22.19 where the machine has 22.14, is a
-  // limit of the machine: the same lockfile passes in an image with a Node it supports.
-  let hostNode: string | null | undefined;
+  // Outside a container the repo's commands run on this machine's toolchains. One older than the
+  // locked dependencies allow is a limit of the machine, by the language files that check it; each
+  // asks this machine for its version once.
+  const hostVersions = new Map<string, string | null>();
   const hostEngineGap = async (cwd: string): Promise<Diagnosis | null> => {
-    if (hostNode === undefined) {
-      const v = await ex.exec("node --version", ".", 30);
-      hostNode = v.exitCode === 0 ? (v.output.trim().split("\n").pop() ?? null) : null;
+    for (const l of LANGUAGES) {
+      if (!l.hostGap) continue;
+      if (!hostVersions.has(l.id)) {
+        const v = await ex.exec(l.hostGap.probe, ".", 30);
+        hostVersions.set(l.id, v.exitCode === 0 ? (v.output.trim().split("\n").pop() ?? null) : null);
+      }
+      const version = hostVersions.get(l.id);
+      const gap = version ? l.hostGap.gap(ex.root, cwd, version) : null;
+      if (gap) return gap;
     }
-    const gap = hostNode ? lockedEngineGap(ex.root, cwd, hostNode) : null;
-    return gap ? { cause: "missing_tool", detail: `Node ${gap.range}, which the locked ${gap.pkg} needs, is not installed; Node ${hostNode} is` } : null;
+    return null;
   };
   const attempt = async (cmd: ContractCommand): Promise<PhaseResult | null> => {
     if (cmd.fallbackFor && (ex.unavailable || !blockedIds.has(cmd.fallbackFor))) return null;
@@ -551,8 +558,10 @@ export async function runContract(
 }
 
 // Each test run that failed with the network cut, for no reason the audit's install or image already
-// explains, runs once more with the network on. A pass makes the failure the environment's; a second
-// failure makes it the repo's. The network goes back off for the steps after.
+// explains, runs once more with the network on. A pass makes the failure the environment's. A second
+// failure gets one more try with the network on, since a test flaky on its own fails a rerun as often
+// as a first run: a pass there makes the failures flaky, recorded as such; a third failure makes them
+// the repo's. The network goes back off for the steps after.
 async function networkExperiment(ex: Executor, offline: PhaseResult[], attempt: (cmd: ContractCommand) => Promise<PhaseResult | null>, push: (r: PhaseResult) => void): Promise<void> {
   const verdictOf = (r: PhaseResult) => r.attribution ?? attribute(phaseAttributionInput(ex, r), ex.imageSource);
   const latest = [...new Map(offline.map((r) => [r.cmd.id, r])).values()];
@@ -563,8 +572,13 @@ async function networkExperiment(ex: Executor, offline: PhaseResult[], attempt: 
       const again = await attempt(r.cmd);
       if (!again || again.status === "not_run") continue;
       const first = verdictOf(r);
-      r.attribution = networkVerdict(first, again.status === "pass", again.diagnosis?.detail ?? "non-zero exit");
-      push({ ...again, networkOn: true, attribution: again.status === "fail" ? r.attribution : undefined, note: again.status === "pass" ? NETWORK_RERUN_PASSED : "failed again with the network on" });
+      const failedOnline = again.status === "fail" ? (again.diagnosis?.detail ?? "non-zero exit") : null;
+      const last = failedOnline ? await attempt(r.cmd) : null;
+      const flaky = last?.status === "pass" ? failedOnline : null;
+      r.attribution = networkVerdict(first, again.status === "pass" || flaky !== null, failedOnline ?? "");
+      push({ ...again, networkOn: true, attribution: again.status === "fail" && !flaky ? r.attribution : undefined, note: again.status === "pass" ? NETWORK_RERUN_PASSED : "failed again with the network on" });
+      if (!last || last.status === "not_run") continue;
+      push({ ...last, networkOn: true, attribution: flaky ? undefined : r.attribution, note: flaky ? FLAKY_RERUN_PASSED : "failed a third time with the network on", ...(flaky ? { flaky } : {}) });
     }
   } finally {
     ex.offline();
@@ -572,6 +586,7 @@ async function networkExperiment(ex: Executor, offline: PhaseResult[], attempt: 
 }
 
 export const NETWORK_RERUN_PASSED = "passed with the network on, after failing with it cut";
+export const FLAKY_RERUN_PASSED = "passed on a second try with the network on, after failing once with it on as well, so the tests are flaky";
 
 // The tools the audit adds to an image it picked when a test run fails for want of one: only git,
 // since the audit already sets the identity tests that commit use.
@@ -606,6 +621,31 @@ function phaseAttributionInput(ex: Pick<Executor, "where">, r: PhaseResult): Att
   return { result: r.status, kind: r.cmd.kind, where: ex.where, blocked: r.blocked, diagnosis: r.diagnosis ?? undefined, timedOut: r.outcome?.timedOut, summary: r.diagnosis?.detail ?? "", outputTail: r.outcome?.output };
 }
 
+// A result as an evidence row that isn't added to any audit, so the recheck judges it as the audit would.
+export function phaseRow(ex: Executor, r: PhaseResult): Evidence {
+  const map = KIND_CHECK[r.cmd.kind];
+  const attribution = r.attribution ?? attribute(phaseAttributionInput(ex, r), ex.imageSource) ?? undefined;
+  return {
+    id: r.cmd.id,
+    checkId: map.check,
+    condition: map.condition,
+    component: r.cmd.component,
+    kind: r.cmd.kind,
+    contractId: r.cmd.id,
+    strength: ex.strength,
+    where: ex.where,
+    result: r.status,
+    command: r.cmd.command,
+    timedOut: r.outcome?.timedOut ?? false,
+    summary: r.status === "fail" ? `${r.cmd.kind} failed: ${r.diagnosis?.detail ?? "non-zero exit"}` : `${r.cmd.kind} ${r.status === "pass" ? "passed" : r.note || "not run"}`,
+    diagnosis: r.diagnosis ?? undefined,
+    blocked: r.blocked,
+    ...(attribution ? { attribution } : {}),
+    ...(r.networkOn ? { network: "on" as const } : {}),
+    at: "",
+  };
+}
+
 // The output's last 4 KB, led by the build tool's root error when that falls outside them, as
 // Maven's does once its stack trace and resume hint fill the end.
 export function outputTail(redacted: string): string {
@@ -624,7 +664,8 @@ export function evidenceFromPhase(audit: Audit, ex: Executor, r: PhaseResult, re
   else summary = `${r.cmd.kind} failed: ${r.diagnosis?.detail ?? "non-zero exit"}${counts && counts.failed ? ` (${counts.failed} of ${counts.total} tests failed)` : ""}`;
   if (r.status === "fail" && r.diagnosis?.detail === "registry credentials not provided" && audit.environment.registryEnv.length === 0) summary = `${r.cmd.kind} failed: registry credentials not provided (pass them with --registry-env)`;
   if (r.cmd.declared && r.status !== "not_run") summary += `; ran check-only, without the write flags in \`${r.cmd.declared}\``;
-  if (r.networkOn) summary = r.status === "pass" ? `${summary}, with the network on, after failing with it cut` : `${summary}; it failed again with the network on`;
+  if (r.flaky) summary = `${summary}, with the network on, on a second try: the first with it on failed (${r.flaky}), so the tests are flaky`;
+  else if (r.networkOn) summary = r.status === "pass" ? `${summary}, with the network on, after failing with it cut` : `${summary}; it failed again with the network on`;
   else if (/once the audit added /.test(r.note)) summary += `, ${r.note.replace(/^(passed|ran) /, "")}`;
   const attribution = r.attribution ?? attribute(phaseAttributionInput(ex, r), ex.imageSource) ?? undefined;
   const failedIn = r.status === "fail" && r.cmd.component === "*" && ATTRIBUTED.has(r.cmd.kind) && r.outcome && !r.blocked ? failingComponents(r.outcome.output, r.cmd.cwd, audit.profile?.components.filter((c) => c.assessed) ?? [], ex.root) : null;
@@ -764,17 +805,10 @@ function lockfileEvidence(audit: Audit, ex: Executor, profile: Profile, tree: st
 
 export const NO_MUTANTS = "planted faults skipped by --no-mutants";
 
-// How to tell whether a planted fault compiles, on its own: the component's type-check command, or
-// the TypeScript compiler the install put in place. A test script that runs tsc next to the tests
-// can't tell it, because which of them reports first depends on how fast the machine is.
+// How to tell whether a planted fault compiles, on its own, by the component's language file.
 function compileProbe(audit: Audit, ex: Executor, comp: Component): { command: string; cwd: string } | null {
-  const hooks = hooked(comp);
-  if (hooks) return hooks.mutation.compileProbe(comp);
-  const typecheck = audit.contract.find((c) => c.kind === "typecheck" && (c.component === comp.id || c.component === "*"));
-  if (typecheck) return { command: typecheck.command, cwd: typecheck.cwd };
-  if (comp.language !== "ts" || !exists(join(ex.root, comp.path, "tsconfig.json"))) return null;
-  const tsc = [comp.path, "."].map((d) => join(d, "node_modules", ".bin", "tsc")).find((p) => exists(join(ex.root, p)));
-  return tsc ? { command: `${shellQuote(tsc)} --noEmit -p ${shellQuote(join(comp.path, "tsconfig.json"))}`, cwd: "." } : null;
+  const hooks = languageOf(comp.language)?.mutation;
+  return hooks ? hooks.compileProbe(comp, { contract: audit.contract, root: ex.root }) : typecheckProbe(comp, audit.contract);
 }
 
 // How long one test run with a planted fault may take: the rubric's, or a slow toolchain's floor.
@@ -782,16 +816,28 @@ function faultRunSec(rubric: Rubric, comp: Component): number {
   return Math.max(rubric.mutation.runTimeoutSec, hooked(comp)?.budget?.mutationRunTimeoutSec ?? 0);
 }
 
-// Fault ids the last sealed audit decided in this component, missed ones first, to plant again first.
-function priorFaults(repo: string, componentId: string, cap: number): string[] {
-  try {
-    const { audit } = loadSealedAudit(paths(repo), "latest");
-    const mine = audit.mutants.filter((m) => m.component === componentId && m.file && m.operator && m.before && (m.result === "survived" || m.result === "caught"));
-    const ordered = [...mine.filter((m) => m.result === "survived"), ...mine.filter((m) => m.result === "caught")];
-    return ordered.map((m) => m.faultId ?? faultId({ file: m.file!, before: m.before!, operator: m.operator! })).slice(0, cap);
-  } catch {
-    return [];
+// Earlier sealed audits' faults in this component. `carried`: up to `cap` of the faults the last
+// audit missed, planted again first and reported beside the estimate, never in it. `missed`: every
+// other fault a sealed report named as missed, which is never planted as new again, so tests aimed at
+// the named lines can't move the estimate. A fault an earlier audit caught stays in the pool: its
+// line was never named, and tests can't be aimed at catching what they already catch.
+function priorFaults(repo: string, componentId: string, cap: number): { carried: string[]; missed: string[] } {
+  const p = paths(repo);
+  const missedIn = (audit: Audit) => audit.mutants.filter((m) => m.component === componentId && m.file && m.operator && m.before && m.result === "survived");
+  const idOf = (m: Mutant) => m.faultId ?? faultId({ file: m.file!, before: m.before!, operator: m.operator! });
+  const ids = readHistory(p).filter((h) => h.kind === "audit").map((h) => h.id);
+  const audits = new Map<string, Audit>();
+  for (const id of ids) {
+    try {
+      audits.set(id, loadSealedAudit(p, id).audit);
+    } catch {
+      // An audit the history lists but this clone doesn't hold names nothing here.
+    }
   }
+  const last = audits.get(ids.at(-1) ?? "");
+  const carried = last ? [...new Set(missedIn(last).map(idOf))].slice(0, cap) : [];
+  const missed = [...new Set([...audits.values()].flatMap((a) => missedIn(a).map(idOf)))].filter((id) => !carried.includes(id));
+  return { carried, missed };
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -814,12 +860,18 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   }
   const rule = estimateRule(rubric.mutation);
   const identity = rubric.mutation.identity;
-  const prior = identity === "fault" ? priorFaults(repo, comp.id, rule ? carriedCap(rule) : rubric.mutation.perComponent) : [];
-  const sites = chooseSites(repo, tree, comp, plantSeed(audit, { tree, createdAt: audit.createdAt }), rule ? rule.maxPlanted : rubric.mutation.perComponent, audit.repo.commit, { identity, prior });
+  const earlier = identity === "fault" ? priorFaults(repo, comp.id, rule ? carriedCap(rule) : rubric.mutation.perComponent) : { carried: [], missed: [] };
+  const prior = earlier.carried;
+  const count = (rule ? rule.maxPlanted : rubric.mutation.perComponent) + (rule ? prior.length : 0);
+  const sites = chooseSites(repo, tree, comp, plantSeed(audit, { tree, createdAt: audit.createdAt }), count, audit.repo.commit, { identity, prior, exclude: earlier.missed });
   if (sites.length === 0) {
     addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp.id, strength: ex.strength, where: ex.where, result: "not_run", summary: "no places to plant a fault were found in files the tests import" });
     return;
   }
+  const raw = ex.execFresh ?? ex.exec;
+  const fresh = (command: string, cwd: string, timeoutSec: number) => raw(command, cwd, timeoutSec, testCmd.env ? { env: testCmd.env } : undefined);
+  const control = rule ? await controlRun(audit, ex, comp, testCmd, sites, budget, faultSec, fresh, log) : "";
+  if (control === null) return;
   const mutants: Mutant[] = [];
   let n = audit.mutants.filter((m) => m.component === comp.id).length + 1;
   let cut = 0;
@@ -827,11 +879,14 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   // runs stall whatever the fault, so the rest aren't run.
   let stalls = 0;
   let stalledOut = 0;
-  const raw = ex.execFresh ?? ex.exec;
-  const fresh = (command: string, cwd: string, timeoutSec: number) => raw(command, cwd, timeoutSec, testCmd.env ? { env: testCmd.env } : undefined);
   const runs = rubric.mutation.caughtRuns ?? rubric.mutation.flakeRuns;
   const decided = () => mutants.filter((m) => m.result === "caught" || m.result === "survived");
-  const estimate = () => faultEstimate(decided().filter((m) => m.result === "caught").length, decided().length, rule!, rubric.mutation.minForPass, mutants.filter((m) => m.result !== "not_run").length, mutants.filter((m) => m.result !== "not_run" && prior.includes(m.faultId!)).length);
+  const isCarried = (m: Mutant) => prior.includes(m.faultId!);
+  const newDecided = () => decided().filter((m) => !isCarried(m));
+  const estimate = () => {
+    const carried = decided().filter(isCarried);
+    return faultEstimate(newDecided().filter((m) => m.result === "caught").length, newDecided().length, rule!, rubric.mutation.minForPass, mutants.filter((m) => m.result !== "not_run" && !isCarried(m)).length, carried.length, carried.filter((m) => m.result === "caught").length);
+  };
   // A narrowed run is used only once it passed on the clean tree, so a test that depends on another
   // file's setup can't read as a caught fault.
   const scopes = new Map<string, boolean>();
@@ -854,9 +909,9 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   let memoryStops = 0;
   for (const site of sites) {
     if (rule) {
-      const d = decided().length;
+      const d = newDecided().length;
       if (d >= rule.maxDecided) break;
-      if (atLook(d, rule, decided().filter((m) => prior.includes(m.faultId!)).length) && d !== lookedAt) {
+      if (atLook(d, rule) && d !== lookedAt) {
         lookedAt = d;
         if (!keepPlanting(estimate(), rule)) break;
       }
@@ -878,7 +933,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
     const filePath = join(ex.root, site.file);
     const command = await testCommandFor(site.file);
     const original = readText(filePath);
-    writeFileSync(filePath, applySite(original, site));
+    writeStamped(filePath, applySite(original, site));
     const codes: number[] = [];
     let result: Mutant["result"] = "survived";
     try {
@@ -920,7 +975,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
         result = "caught";
       }
     } finally {
-      writeFileSync(filePath, original);
+      writeStamped(filePath, original);
     }
     mutants.push({ ...record, result, exitCodes: codes });
   }
@@ -937,17 +992,17 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   if (rule) {
     est = estimate();
     const cutNote = (cut ? "; the time budget ran out before the estimate was decided" : "") + (stalledOut ? "; planting stopped after two runs with planted faults timed out" : "") + memoryNote(memoryStops);
-    const carried = est.carried ? `, ${est.carried} of them planted again from the last audit` : "";
     const scopedNote = [...scopes.values()].some(Boolean) ? "; each ran only the tests that import its file" : "";
-    const share = `caught ${caught} of ${counted.length} planted faults (${pct(est.rate)})${carried}`;
+    const share = `caught ${est.caught} of ${est.decided} ${est.carried ? "new " : ""}planted faults (${pct(est.rate)})`;
     result = est.verdict === "strong" ? "pass" : est.verdict === "weak" ? "fail" : "not_run";
-    const why = counted.length < rubric.mutation.minForPass ? `; at least ${rubric.mutation.minForPass} must give a clear result` : est.decided >= rule.maxDecided || est.planted >= rule.maxPlanted ? `; the cap of ${rule.maxDecided} was reached` : !cut && !stalledOut ? "; no more places to plant a fault" : "";
+    const why = est.decided < rubric.mutation.minForPass ? `; at least ${rubric.mutation.minForPass} must give a clear result` : est.decided >= rule.maxDecided || est.planted >= rule.maxPlanted ? `; the cap of ${rule.maxDecided} was reached` : !cut && !stalledOut ? "; no more places to plant a fault" : "";
+    const tailNote = control + carriedNote(mutants.filter((m) => isCarried(m) && (m.result === "caught" || m.result === "survived"))) + missedNote;
     summary =
       est.verdict === "strong"
-        ? `${share}: strong, at least ${pct(est.low)} with ${confidence(rule.strongConfidence)} confidence (tried: ${operators})${scopedNote}${cutNote}${missedNote}`
+        ? `${share}: strong, at least ${pct(est.low)} with ${confidence(rule.strongConfidence)} confidence (tried: ${operators})${scopedNote}${cutNote}${tailNote}`
         : est.verdict === "weak"
-          ? `${share}: weak, at most ${pct(est.high)} with ${confidence(rule.weakConfidence)} confidence${scopedNote}${cutNote}${missedNote}`
-          : `${share}: inconclusive, between ${pct(est.low)} and ${pct(est.high)}, too few to tell strong tests from weak ones${why}${scopedNote}${cutNote}${missedNote}`;
+          ? `${share}: weak, at most ${pct(est.high)} with ${confidence(rule.weakConfidence)} confidence${scopedNote}${cutNote}${tailNote}`
+          : `${share}: inconclusive, between ${pct(est.low)} and ${pct(est.high)}, too few to tell strong tests from weak ones${why}${scopedNote}${cutNote}${tailNote}`;
   } else {
     const cutNote = (cut ? `; the time budget cut off ${cut} of ${sites.length}` : "") + (stalledOut ? `; ${stalledOut} weren't run after two runs with planted faults timed out` : "") + memoryNote(memoryStops);
     const need = killRateOf(rubric.mutation);
@@ -969,6 +1024,44 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
 }
 
 const MISSED_AFTER_SEAL = " (the sealed report says where)";
+
+// Before any fault: one change that can't alter behaviour, a comment at the end of a file the faults
+// go in, and one run of the tests. Tests that check the source's text (a `git diff`, a hash, a
+// generated-code check chained before the runner) fail on it, and would read every planted fault as
+// caught, so the fault check is left undetermined with the reason. A linter that rejects the comment
+// fails it too; the reason names both. Returns the note for the faults
+// row when the tests passed, "" when no file takes a comment, and null when it recorded the result.
+async function controlRun(audit: Audit, ex: Executor, comp: Component, testCmd: ContractCommand, sites: { file: string }[], budget: Budget, faultSec: number, fresh: (command: string, cwd: string, timeoutSec: number) => Promise<RunOutcome>, log: (s: string) => void): Promise<string | null> {
+  const file = [...new Set(sites.map((s) => s.file))].find((f) => withControlComment(f, readText(join(ex.root, f))) !== null);
+  if (!file) return "";
+  const record = (summary: string, extra: Partial<Evidence> = {}): null => {
+    log(`  faults in ${comp.id}: ${summary}`);
+    addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp.id, strength: ex.strength, where: ex.where, result: "not_run", summary, command: testCmd.command, cwd: testCmd.cwd, image: ex.image ?? undefined, ...extra });
+    return null;
+  };
+  if (overBudget(budget, comp.id) || budgetLeftSec(budget, comp.id) < 1) return record("no fault was planted: the time budget ran out first", { blocked: BUDGET_OUT });
+  const filePath = join(ex.root, file);
+  const original = readText(filePath);
+  writeStamped(filePath, withControlComment(file, original)!);
+  let out: RunOutcome;
+  const limit = capped(budget, comp.id, faultSec);
+  try {
+    out = await fresh(testCmd.command, testCmd.cwd, limit.sec);
+    charge(budget, comp.id, out.durationMs);
+  } finally {
+    writeStamped(filePath, original);
+  }
+  if (out.timedOut) return record(`no fault was planted: the test run with only a comment added to ${file} timed out`, limit.byBudget ? { blocked: BUDGET_OUT } : {});
+  if (out.exitCode !== 0 && diagnose(out.output, false, "test", out.exitCode).cause === "resource") return record(`no fault was planted: the test run with only a comment added to ${file} was stopped at the audit's memory limit`, { blocked: "the control run was stopped at the audit's memory limit, so the fault check couldn't start" });
+  if (out.exitCode === 0 && !((countTests(audit.profile, comp.id, out.output)?.failed ?? 0) > 0)) return `; a comment added to ${file} left the tests passing`;
+  return record(`no fault was planted: the test command failed when only a comment was added to ${file}, a change that can't alter behaviour, so a failure with a planted fault couldn't be told from a failure on any edit (a \`git diff\`, hash or generated-code check, or a linter that rejects the comment)`, { exitCode: out.exitCode ?? undefined });
+}
+
+// The faults the last audit missed, planted again and reported apart from the estimate they don't count in.
+function carriedNote(carried: Mutant[]): string {
+  if (!carried.length) return "";
+  return `; ${carried.filter((m) => m.result === "caught").length} of the ${carried.length} faults the last audit missed are now caught, planted again and not counted`;
+}
 
 // A type-check that exits 0 proves nothing until it has been seen to fail: one known type error goes
 // at the end of a file the component's tests import, the type-check must fail on it, and it must
@@ -997,7 +1090,7 @@ async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Exe
   const original = readText(filePath);
   const caught: ContractCommand[] = [];
   let stalled: string | null = null;
-  writeFileSync(filePath, withCanary(original, site.line));
+  writeStamped(filePath, withCanary(original, site.line));
   try {
     for (const c of typechecks) {
       const limit = capped(budget, comp.id, c.timeoutSec);
@@ -1010,7 +1103,7 @@ async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Exe
       if (out.exitCode !== 0) caught.push(c);
     }
   } finally {
-    writeFileSync(filePath, original);
+    writeStamped(filePath, original);
   }
   if (stalled) return record("not_run", `the type-check with a type error planted in ${site.file} didn't finish: ${stalled}`, stalled === BUDGET_OUT ? { blocked: BUDGET_OUT } : {});
   const shown = `\`${site.line}\``;
@@ -1026,6 +1119,18 @@ async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Exe
 }
 
 // Next to the audit tree, outside the repository, and deleted with it once the seal copies it in.
+// Writes a planted fault, or the original back, with a modification time in whole seconds later than
+// any this audit gave before and later than now. Caches that trust a file whose time and size are
+// unchanged, such as Python's .pyc files (which compare whole seconds), can't then run one version as
+// the other when a run takes under a second, and a build that compares times with its outputs sees
+// each write as newer than anything built from the one before.
+let lastStamp = 0;
+export function writeStamped(path: string, text: string): void {
+  writeFileSync(path, text);
+  lastStamp = Math.max(Math.floor(Date.now() / 1000) + 1, lastStamp + 1);
+  utimesSync(path, lastStamp, lastStamp);
+}
+
 export function mutantsFile(tree: string): string {
   return join(dirname(tree), "mutants.json");
 }
@@ -1091,19 +1196,6 @@ function executorSet(groups: ExecutorGroup[], profile: Profile): Executors {
   return { groups, forComponent, repo, close: () => groups.forEach((g) => g.ex.close()) };
 }
 
-// The tool a command starts with, and the component languages it belongs to. A command that runs
-// one of these goes to an assessed component of that language, in that component's image.
-const TOOL_LANGUAGES: { tool: RegExp; codes: Language[] }[] = [
-  { tool: /^(go|gofmt|golangci-lint)$/, codes: ["go"] },
-  { tool: /^(cargo|rustc|rustup)$/, codes: ["rust"] },
-  { tool: /^(mvn|\.\/mvnw|mvnw|gradle|\.\/gradlew|gradlew|java|javac|kotlinc)$/, codes: ["java", "kotlin"] },
-  { tool: /^dotnet$/, codes: ["csharp"] },
-  { tool: /^(composer|php|phpunit|vendor\/bin\/\S+)$/, codes: ["php"] },
-  { tool: /^(bundle|bundler|ruby|rake|rspec|rails|bin\/rails|bin\/rake)$/, codes: ["ruby"] },
-  { tool: /^(python3?|pip3?|pytest|uv|uvx|poetry|tox|nox)$/, codes: ["py"] },
-  { tool: /^(npm|npx|pnpm|pnpx|yarn|node|bun|bunx|corepack|tsc|vitest|jest)$/, codes: ["ts", "js"] },
-];
-
 // The program a command line runs first, past `cd dir &&` and variable assignments.
 function leadingTool(command: string): string {
   const first = command.split(/\s*(?:&&|;|\|\|)\s*/).map((p) => p.trim()).find((p) => p && !/^cd\s/.test(p)) ?? "";
@@ -1123,7 +1215,7 @@ export function instructionExecutor(exs: Pick<Executors, "forComponent" | "repo"
     const target = command.trim().split(/\s+/).slice(1).find((w) => !w.startsWith("-")) ?? "";
     tool = target ? leadingTool(makeRecipe(tree, cwd, target).split("\n")[0] ?? "") : "";
   }
-  const codes = TOOL_LANGUAGES.find((t) => t.tool.test(tool))?.codes ?? [];
+  const codes = codesOfTool(tool);
   const byTool = assessed.filter((c) => codes.includes(c.language)).sort((a, b) => Number(holds(b)) - Number(holds(a)) || b.changeShare - a.changeShare)[0];
   if (byTool) return exs.forComponent(byTool.id);
   const root = assessed.find((c) => c.path === ".");
@@ -1155,10 +1247,12 @@ function startContainer(audit: Audit, runtime: NonNullable<ReturnType<typeof det
   }
   const digest = digestOf(image);
   log(`Replaying${forWhom} in a clean ${runtime.bin} container (${image}${digest ? `, pinned at ${digest.slice(0, 19)}` : ""}; ${limits.cpus ? `${limits.cpus} CPUs, ` : ""}${limits.memoryMb} MB, ${limits.pids} processes).`);
-  // Python components in the Node image, as with --image, need the venv module it lacks.
-  if (image.startsWith("node:") && comps.some((c) => c.language === "py")) {
-    const added = session.asImageUser("python3 -m venv /tmp/venv-probe >/dev/null 2>&1 || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv >/dev/null)", 600000);
-    log(added.ok ? "Added python3-venv to the Node image for the Python components." : `Couldn't add python3-venv for the Python components: ${tail(added.output, 300)}`);
+  // Components of one language in another's image, as with --image, may need what that image lacks.
+  for (const l of LANGUAGES) {
+    const need = l.sharedRoot?.foreignImage?.(image);
+    if (!need || !comps.some((c) => l.codes.includes(c.language))) continue;
+    const added = session.asImageUser(need.command, 600000);
+    log(added.ok ? need.added : `${need.failed}: ${tail(added.output, 300)}`);
   }
   // A tool missing from the repo's own image is the repo's to add, so only the audit's images get
   // one. Poetry needs the venv module above.
@@ -1500,7 +1594,7 @@ async function replayIn(audit: Audit, repo: string, tree: string, rubric: Rubric
     }
     if (r.blocked && r.diagnosis?.cause === "missing_tool" && rex.where === "container") {
       const tool = r.diagnosis.detail.replace(/ is not installed$/, "");
-      const failed = audit.environment.tools?.find((t) => !t.added && (t.spec.split(/[@=]/)[0] === tool || t.spec === tool.replace(/^\.NET SDK /, "dotnet-sdk@")));
+      const failed = audit.environment.tools?.find((t) => !t.added && (t.spec.split(/[@=]/)[0] === tool || t.spec === tool || LANGUAGES.some((l) => l.replay?.specFor?.(tool) === t.spec)));
       if (failed) r.blocked += `: the audit couldn't add ${failed.spec} to it on this machine`;
     }
     const ev = evidenceFromPhase(audit, rex, r, registryValues);

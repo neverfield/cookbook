@@ -208,7 +208,7 @@ Audited Oct 27, 2026 at dc50d7a. Eval run with a pinned seed; not a production r
 - **Permission tier:** local-exec
 - **Seal:** Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it
 - **Integrity:** unsigned: the seal is a digest that shows edits, but anyone with the scripts could reseal an edited audit
-- **Skill digest:** db08ff6647cf
+- **Skill digest:** ec54274f7483
 - **Planted faults:** seed pinned (eval run; not a production result)
 - **Replay environment:** none: no container runtime: this audit was run with container runtimes turned off (--runtime none or SA_READINESS_RUNTIME=none), and host mode wasn't allowed (--allow-host), so no repo command ran outside a container
 - **Stored in:** .agent-readiness/history/audits/aud-2026-10-27-dc50d7a-58b8

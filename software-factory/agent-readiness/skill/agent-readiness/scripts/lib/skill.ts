@@ -2,7 +2,7 @@ import { chmodSync } from "node:fs";
 import { join } from "node:path";
 import type { Rubric } from "./rubric.ts";
 import { strengthRank } from "./rubric.ts";
-import { ELEVATED } from "./static.ts";
+import { SUDO } from "./patterns.ts";
 import type { Audit, ContractCommand, Diagnosis, Evidence } from "./types.ts";
 import { SKILL_ROOT, exists, fail, readText, writeText } from "./util.ts";
 import { serviceLabel } from "./diagnose.ts";
@@ -38,9 +38,9 @@ function advice(d: Diagnosis, startCmd: string | null): string {
 
 export function renderVerifySkill(audit: Audit, rubric: Rubric, include: string[] = [], earlier: Audit[] = []): { text: string; commands: ContractCommand[] } {
   // A sudo command never goes into agent setup, even when it passed inside the throwaway container.
-  const allowed = new Set(audit.contract.filter((c) => passingEvidence(audit, c, rubric) && !ELEVATED.test(c.command)).map((c) => c.id));
+  const allowed = new Set(audit.contract.filter((c) => passingEvidence(audit, c, rubric) && !SUDO.test(c.command)).map((c) => c.id));
   for (const id of include) {
-    if (ELEVATED.test(audit.contract.find((c) => c.id === id)?.command ?? "")) fail(`Refusing to include ${id}: it uses sudo, and agent setup must work without it.`);
+    if (SUDO.test(audit.contract.find((c) => c.id === id)?.command ?? "")) fail(`Refusing to include ${id}: it uses sudo, and agent setup must work without it.`);
     if (!allowed.has(id)) fail(`Refusing to include ${id}: the audit has no passing run of it. Only commands the audit ran and saw pass go into the verify skill.`);
   }
   const pick = (kinds: string[]) => audit.contract.filter((c) => kinds.includes(c.kind) && allowed.has(c.id));

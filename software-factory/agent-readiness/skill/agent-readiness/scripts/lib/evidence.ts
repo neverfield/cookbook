@@ -1,17 +1,16 @@
 import { NETWORK_ENV } from "./container.ts";
+import { SECRET_ENV_NAME } from "./patterns.ts";
 import { proxyPasswords, redact } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { strengthRank } from "./rubric.ts";
 import type { Audit, Evidence, Result, Strength } from "./types.ts";
 import { fail, nowIso } from "./util.ts";
 
-const SECRET_NAME = /(KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|AUTH)/i;
-
 // Values to redact from command output: the registry variables, the passwords in proxy settings,
 // and with --inherit-env every inherited variable whose name looks like a secret.
 export function registryValuesOf(audit: Pick<Audit, "environment">): string[] {
   const names = new Set(audit.environment.registryEnv);
-  if (audit.environment.inheritEnv) for (const k of Object.keys(process.env)) if (SECRET_NAME.test(k)) names.add(k);
+  if (audit.environment.inheritEnv) for (const k of Object.keys(process.env)) if (SECRET_ENV_NAME.test(k)) names.add(k);
   return [...[...names].map((k) => process.env[k] ?? ""), ...proxyPasswords(process.env, NETWORK_ENV)].filter(Boolean);
 }
 

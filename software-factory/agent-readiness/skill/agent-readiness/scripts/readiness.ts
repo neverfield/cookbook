@@ -8,6 +8,7 @@ import { levelResult } from "./lib/format.ts";
 import { ghAvailable, ghJson } from "./lib/gh.ts";
 import { HOOKS_FILE, guardInstalled, installGuard, probeGuard, uninstallGuard } from "./lib/guard.ts";
 import { auditIds, loadSealedAudit, pushHistory, readHistory, readRoadmap, writeRoadmap } from "./lib/history.ts";
+import { foreignLockfiles } from "./lib/languages/index.ts";
 import { MAX_PRS, computeOutcomes, fetchPrs, loadPrsFile } from "./lib/outcomes.ts";
 import { PREVIEW } from "./lib/preview.ts";
 import { buildProfile } from "./lib/profile.ts";
@@ -17,7 +18,9 @@ import { ALLOW_HOST_ENV, HOST_NOT_ALLOWED, assertPlatformSupported, evidenceFrom
 import { latestRubricVersion, loadRubric } from "./lib/rubric.ts";
 import { SCAN_BOUND_MINUTES, capCutFolders, sampledScope } from "./lib/scope.ts";
 import { validateAgainst } from "./lib/schema.ts";
-import { blockedBy, componentStates } from "./lib/score.ts";
+import { componentStates, gatingInstruction } from "./lib/score.ts";
+import type { Rubric } from "./lib/rubric.ts";
+import { VERDICT_WORD, blockedBy, judge, verdictWord } from "./lib/verdict.ts";
 import { buildSealedReport, recheck, seal, verifySeal } from "./lib/seal.ts";
 import { LEASE_HOURS, endSession, lease, recordGrant, startSession } from "./lib/session.ts";
 import { cleanupLeftovers } from "./lib/cleanup.ts";
@@ -184,9 +187,10 @@ function cmdScan(a: Args): void {
   for (const c of profile.components) log(`  ${c.id.padEnd(14)} ${String(Math.round(c.changeShare * 100)).padStart(3)}% of changes  ${c.assessed ? "assessed" : `not assessed: ${c.notAssessedReason}`}`);
   const agentWork = agentHistory(repo);
   if (agentWork && audit.tier !== "external-systems") log(`Agent work in the history (${agentWork}). Offer --tier external-systems so the report can measure agent PRs against other PRs; it reads pull requests through gh.`);
-  log(`Contract: ${audit.contract.length} commands. Instructions: ${audit.instructions.length} items, ${audit.instructions.filter((i) => i.result === "fail").length} wrong. Safety: ${blocking.length} blocking, ${audit.safety.length - blocking.length} listed.`);
+  log(`Contract: ${audit.contract.length} commands. Instructions: ${audit.instructions.length} items, ${instructionCounts(audit, rubric)}. Safety: ${blocking.length} blocking, ${audit.safety.length - blocking.length} listed.`);
   if (a.flags.strict) {
-    const wrong = audit.instructions.filter((i) => i.result === "fail");
+    // Only an item that holds a level fails the check; a wrong README line or path is listed in the report.
+    const wrong = audit.instructions.filter((i) => i.result === "fail" && gatingInstruction(rubric, i));
     for (const i of wrong) log(`  wrong instruction ${i.source}:${i.line} \`${i.text}\`: ${i.reason}`);
     for (const s of blocking) log(`  blocking safety finding ${s.file}${s.line ? ":" + s.line : ""}: ${s.detail}`);
     if (wrong.length || blocking.length) fail("Static checks failed.", 1);
@@ -264,8 +268,11 @@ async function cmdRun(a: Args): Promise<void> {
   let ex: ReturnType<typeof hostExecutor> | null = null;
   try {
     ex = hostExecutor(scratch.dir, audit.environment.registryEnv, audit.environment.inheritEnv, "host");
-    const results = await runContract(ex, selected, { components: comps, budget: newBudget(rubric.budgets.componentMinutes, rubric.budgets.totalMinutes), registryValues, onResult: (r) => log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${r.status}${r.diagnosis ? ` (${r.diagnosis.detail})` : ""}`) });
-    for (const r of results) evidenceFromPhase(audit, ex, r, registryValues);
+    const results = await runContract(ex, selected, { components: comps, budget: newBudget(rubric.budgets.componentMinutes, rubric.budgets.totalMinutes), registryValues });
+    for (const r of results) {
+      const ev = evidenceFromPhase(audit, ex, r, registryValues);
+      log(`  ${r.cmd.kind.padEnd(9)} ${r.cmd.component.padEnd(12)} ${verdictWord(ev, rubric)}${r.diagnosis ? ` (${r.diagnosis.detail})` : ""}`);
+    }
     recordHostConsent(audit, repo);
     if (a.flags.instructions) {
       for (const item of audit.instructions.filter((i) => i.category === "replay" && i.staticResult === "pass")) {
@@ -278,9 +285,16 @@ async function cmdRun(a: Args): Promise<void> {
           log(`  ${item.source}:${item.line} ${item.text}: ${ok ? "pass" : "fail"} on the host; the replay's ${item.result} stands`);
           continue;
         }
-        item.result = ok ? "pass" : "fail";
+        // Like the replay's host fallback: this machine isn't a clean environment, so a failure here
+        // leaves the instruction unproven rather than wrong.
+        item.result = ok ? "pass" : "not_run";
+        if (ok) delete item.blocked;
+        else {
+          item.reason = `not proven: it failed on this machine (exit ${out.exitCode ?? "none"}${out.timedOut ? ", timed out" : ""}), and only a clean container can show an instruction is wrong`;
+          item.blocked = "it ran on this machine, not in a clean container";
+        }
         item.evidenceId = ev.id;
-        log(`  ${item.source}:${item.line} ${item.text}: ${item.result}`);
+        log(`  ${item.source}:${item.line} ${item.text}: ${ok ? "pass" : "not proven, failed on this machine"}`);
       }
     }
   } finally {
@@ -326,7 +340,7 @@ function cmdRecord(a: Args): void {
 }
 
 function lockPatterns(audit: Audit): string[] {
-  return ["package-lock.json", "yarn.lock", "pnpm-lock.yaml"].filter((f) => !audit.profile?.lockfiles.includes(f));
+  return foreignLockfiles().filter((f) => !audit.profile?.lockfiles.includes(f));
 }
 
 async function cmdOutcomes(a: Args): Promise<void> {
@@ -400,6 +414,19 @@ function levelText(row: { level: Level | null; couldBe: Level | null; unproven: 
   return row.status === "undetermined" && row.settleBy ? `${levelResult(row)}; to settle it: ${row.settleBy.text}` : levelResult(row);
 }
 
+// Wrong items that gate, and those listed for the reader, as the scan's summary line counts them.
+function instructionCounts(audit: Audit, rubric: Rubric): string {
+  const wrong = audit.instructions.filter((i) => i.result === "fail");
+  const gating = wrong.filter((i) => gatingInstruction(rubric, i)).length;
+  return `${gating} wrong${wrong.length > gating ? `, ${wrong.length - gating} wrong outside the agent files, listed` : ""}`;
+}
+
+// A row's verdict as `status` prints it, with why it is blocked or where it ran.
+function statusWord(e: Audit["evidence"][number], rubric: Rubric): string {
+  const j = judge(e, rubric);
+  return j.verdict === "blocked" ? `blocked (${blockedBy(e) ?? j.reason})` : `${VERDICT_WORD[j.verdict]} (${e.result === "not_run" ? "not run" : e.strength})`;
+}
+
 function cmdStatus(a: Args): void {
   const repo = repoOf(a);
   const { audit, paths: p } = loadDraft(repo);
@@ -428,7 +455,7 @@ function cmdStatus(a: Args): void {
       };
     }),
     contract: audit.contract.map((c) => `${c.id}: ${c.command}`),
-    evidence: audit.evidence.map((e) => `${e.id} ${e.checkId} ${e.component ?? ""} ${blockedBy(e) ? `blocked (${blockedBy(e)})` : `${e.result} (${e.result === "not_run" ? "not run" : e.strength})`}: ${e.summary}`),
+    evidence: audit.evidence.map((e) => `${e.id} ${e.checkId} ${e.component ?? ""} ${statusWord(e, rubric)}: ${e.summary}`),
     instructionsWrong: audit.instructions.filter((i) => i.result === "fail").map((i) => `${i.source}:${i.line} ${i.text}: ${i.reason}`),
     safety: audit.safety.map((s) => `${s.blocking ? "BLOCKING" : "listed"} ${s.kind} ${s.file}${s.line ? ":" + s.line : ""}: ${s.detail}`),
     outcomes: audit.outcomes ? { window: audit.outcomes.window, agent: audit.outcomes.agent.opened, control: audit.outcomes.control.opened } : null,

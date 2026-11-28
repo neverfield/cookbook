@@ -1,3 +1,4 @@
+import { foreignLockfileOf } from "./languages/index.ts";
 import { componentLevel } from "./levels.ts";
 import { describeRate, rate, windowLabel } from "./outcomes.ts";
 import type { Rubric, RubricTemplate } from "./rubric.ts";
@@ -5,8 +6,9 @@ import { provingPlace } from "./rubric.ts";
 import type { CompStates } from "./score.ts";
 import { commandsFor, gatingInstruction } from "./score.ts";
 import { removalAdvice } from "./secrets.ts";
-import type { Audit, CondId, CondState, Component, Effort, Fix, Level, OutcomeStats, OutcomesSnapshot, Roadmap, RoadmapItem, SafetyFinding, Watch } from "./types.ts";
+import type { Audit, CondId, CondState, Component, Effort, Evidence, Fix, Level, OutcomeStats, OutcomesSnapshot, Roadmap, RoadmapItem, SafetyFinding, Watch } from "./types.ts";
 import { fill, nowIso } from "./util.ts";
+import { verdictOf } from "./verdict.ts";
 import { serviceLabel } from "./diagnose.ts";
 
 type StateMap = Partial<Record<CondId, CondState>>;
@@ -34,7 +36,6 @@ interface Candidate {
 }
 
 const EFFORT_ORDER: Record<Effort, number> = { small: 0, medium: 1, large: 2 };
-const LOCK_FOR: Record<string, string> = { npm: "package-lock.json", yarn: "yarn.lock", pnpm: "pnpm-lock.yaml" };
 
 function stateMaps(ctx: RoadmapContext): Map<string, StateMap> {
   const out = new Map<string, StateMap>();
@@ -87,10 +88,11 @@ export function candidates(ctx: RoadmapContext): Candidate[] {
   const goalNeedsFaults = rubric.level2.includes("faults");
   const anyRepo = assessed[0] ? ctx.states.get(assessed[0].id) : undefined;
   const credentialComps: string[] = [];
+  const faulted = (e: Evidence | undefined): e is Evidence => e !== undefined && verdictOf(e, rubric) === "repo_fault";
   // The repo-wide install step is credited only to the components whose own install failed.
   const failedInstall = assessed.filter((c) => ctx.states.get(c.id)?.["clean.install"].state === "not_met");
   if (failedInstall.length) {
-    const ev = latestEvidence(audit, (e) => e.kind === "install" && e.result === "fail") ?? latestEvidence(audit, (e) => e.kind === "install");
+    const ev = latestEvidence(audit, (e) => e.kind === "install" && faulted(e)) ?? latestEvidence(audit, (e) => e.kind === "install");
     out.push({ id: "clean.install:repo", template: "clean.install", kind: "fix", component: "*", fixes: failedInstall.map((c) => ({ condition: "clean.install" as CondId, component: c.id })), vars: { component: failedInstall.length === assessed.length ? "the repo" : failedInstall.map((c) => c.id).join(", "), diagnosis: ev?.diagnosis?.detail ?? ev?.summary ?? "the install failed" }, evidence: ev ? [ev.id] : [] });
   }
   // A component's commands include the repo-wide ones, and a replay result outranks a host run.
@@ -98,7 +100,7 @@ export function candidates(ctx: RoadmapContext): Candidate[] {
   const resultOf = (contractId: string) => latestEvidence(audit, (e) => e.contractId === contractId && replayed(e)) ?? latestEvidence(audit, (e) => e.contractId === contractId);
   // A failing repo-wide lint, type-check or build is one fix for the repo, not one per component,
   // for the components it stands in for: those with no command of that kind of their own.
-  const repoWide = audit.contract.filter((k) => k.component === "*" && ["build", "lint", "typecheck"].includes(k.kind) && resultOf(k.id)?.result === "fail");
+  const repoWide = audit.contract.filter((k) => k.component === "*" && ["build", "lint", "typecheck"].includes(k.kind) && faulted(resultOf(k.id)));
   const heldByRepoWide = assessed.filter((c) => ctx.states.get(c.id)?.commands.state === "not_met" && repoWide.some((k) => commandsFor(audit.contract, c.id, k.kind).includes(k)));
   if (repoWide.length && heldByRepoWide.length) {
     const ev = resultOf(repoWide[0].id);
@@ -108,15 +110,15 @@ export function candidates(ctx: RoadmapContext): Candidate[] {
     const s = ctx.states.get(c.id)!;
     const mine = (component: string | undefined) => component === c.id || component === "*";
     if (s["clean.build"].state === "not_met" && s["clean.install"].state !== "not_met") {
-      const ev = latestEvidence(audit, (e) => e.kind === "build" && mine(e.component) && e.result === "fail") ?? latestEvidence(audit, (e) => e.kind === "build" && mine(e.component));
+      const ev = latestEvidence(audit, (e) => e.kind === "build" && mine(e.component) && faulted(e)) ?? latestEvidence(audit, (e) => e.kind === "build" && mine(e.component));
       out.push({ id: `clean.build:${c.id}`, template: "clean.build", kind: "fix", component: c.id, fixes: [{ condition: "clean.build", component: c.id }], vars: { component: c.id, diagnosis: ev?.diagnosis?.detail ?? "the build failed" }, evidence: ev ? [ev.id] : [] });
     }
     const failedKinds = ["build", "lint", "typecheck", "test"]
       .flatMap((kind) => commandsFor(audit.contract, c.id, kind))
-      .filter((k) => resultOf(k.id)?.result === "fail")
+      .filter((k) => faulted(resultOf(k.id)))
       .map((k) => k.kind);
     if (s["clean.test"].state === "not_met" && s["clean.install"].state !== "not_met") {
-      const ev = latestEvidence(audit, (e) => e.kind === "test" && mine(e.component) && e.result === "fail" && replayed(e));
+      const ev = latestEvidence(audit, (e) => e.kind === "test" && mine(e.component) && faulted(e) && replayed(e));
       const d = ev?.diagnosis;
       const missing = commandsFor(audit.contract, c.id, "test").length === 0;
       const template = missing ? "clean.test:missing" : d?.cause === "service" ? "clean.test:service" : d?.cause === "credential" ? "clean.test:credential" : "clean.test";
@@ -129,15 +131,15 @@ export function candidates(ctx: RoadmapContext): Candidate[] {
       out.push({ id: `clean.test:${c.id}`, template, kind: "fix", component: c.id, fixes, vars: { component: c.id, service, diagnosis }, evidence: ev ? [ev.id] : s["clean.test"].evidence });
     }
     // Repo-wide lint, type-check and build failures are the commands:repo item above.
-    const ownFailed = ["build", "lint", "typecheck", "test"].flatMap((kind) => commandsFor(audit.contract, c.id, kind)).filter((k) => (k.component === c.id || k.kind === "test") && resultOf(k.id)?.result === "fail").map((k) => k.kind);
+    const ownFailed = ["build", "lint", "typecheck", "test"].flatMap((kind) => commandsFor(audit.contract, c.id, kind)).filter((k) => (k.component === c.id || k.kind === "test") && faulted(resultOf(k.id))).map((k) => k.kind);
     const otherKinds = ownFailed.filter((k) => k !== "test" || s["clean.test"].state !== "not_met");
     if (s.commands.state === "not_met" && otherKinds.length > 0) {
-      const ev = latestEvidence(audit, (e) => mine(e.component) && e.result === "fail" && e.contractId !== undefined && e.kind !== undefined && otherKinds.includes(e.kind));
+      const ev = latestEvidence(audit, (e) => mine(e.component) && faulted(e) && e.contractId !== undefined && e.kind !== undefined && otherKinds.includes(e.kind));
       out.push({ id: `commands:${c.id}`, template: "commands", kind: "fix", component: c.id, fixes: [{ condition: "commands", component: c.id }], vars: { component: c.id, kinds: otherKinds.join(" and "), diagnosis: ev?.diagnosis?.detail ?? s.commands.reason }, evidence: ev ? [ev.id] : [] });
     }
     // A type-check that passed with the planted type error in place.
     const canary = latestEvidence(audit, (e) => e.canary?.kind === "typecheck" && e.component === c.id);
-    if (rubric.templates["commands:canary"] && s.commands.state === "not_met" && canary?.result === "fail" && canary.canary?.file && s.commands.evidence.includes(canary.id)) {
+    if (rubric.templates["commands:canary"] && s.commands.state === "not_met" && faulted(canary) && canary.canary?.file && s.commands.evidence.includes(canary.id)) {
       out.push({ id: `commands:canary:${c.id}`, template: "commands:canary", kind: "fix", component: c.id, fixes: [{ condition: "commands", component: c.id }], vars: { component: c.id, file: canary.canary.file, canary: canary.canary.line ?? "", command: canary.command ?? "the type-check", cwd: !canary.cwd || canary.cwd === "." ? "the repo root" : `\`${canary.cwd}\`` }, evidence: [canary.id] });
     }
     if (goalNeedsFaults && s.faults.state === "not_met") {
@@ -211,7 +213,8 @@ function expectedFor(c: Candidate, ctx: RoadmapContext): RoadmapItem["expected"]
   if (c.template === "instructions") {
     const wrongPm = audit.instructions.find((i) => i.result === "fail" && /^uses (npm|pnpm|yarn),/.test(i.reason ?? ""));
     const pm = wrongPm?.reason?.match(/^uses (\w+)/)?.[1];
-    if (pm && LOCK_FOR[pm]) return { outcome: `Agents stop following stale steps, such as running ${pm} in a repo that doesn't use it.`, watch: watchFor("prs_adding_path", "repo", outcomes, rubric, LOCK_FOR[pm]) };
+    const lock = pm ? foreignLockfileOf(pm) : undefined;
+    if (lock) return { outcome: `Agents stop following stale steps, such as running ${pm} in a repo that doesn't use it.`, watch: watchFor("prs_adding_path", "repo", outcomes, rubric, lock) };
     return { outcome: "Agents stop following stale steps.", watch: watchFor("changes_requested", "repo", outcomes, rubric) };
   }
   if (c.template.startsWith("safety")) return { outcome: "Agents can do normal work without production access.", watch: watchFor("first_time_ci_pass", "repo", outcomes, rubric) };

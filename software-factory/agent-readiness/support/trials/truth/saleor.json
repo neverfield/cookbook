@@ -1,0 +1,120 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "saleor/saleor",
+  "commit": "dfbf13948fa0f71094555fcbbbe4ceccf9ce4eff",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/saleor/saleor/commits/dfbf13948fa0f71094555fcbbbe4ceccf9ce4eff/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/saleor/saleor/commits/dfbf13948fa0f71094555fcbbbe4ceccf9ce4eff/status ('Run unit tests' (Tests workflow), 'Run linters', CodeQL, container publish builds and Socket Security all succeeded; only 'publish / notify' skipped; legacy status API has no contexts)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.994,
+      "hasTests": true,
+      "install": [
+        "uv sync --locked",
+        "uv sync"
+      ],
+      "test": [
+        "uv run pytest --reuse-db -m \"not e2e\" --junitxml=junit/test-results.xml -o junit_family=legacy --django-db-bench=./queries-results.json -n logical",
+        "uv run pytest --reuse-db -m \"not e2e\" -n logical",
+        "uv run pytest -m \"not e2e\"",
+        "uv run poe test",
+        "uv run pytest"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "pytest with --ds=saleor.tests.settings and pytest-socket; needs PostgreSQL (DATABASE_URL, default postgres://saleor:saleor@localhost:5432/saleor) and Redis/Valkey (CACHE_URL; CI uses redis://cache:6379/0) plus SECRET_KEY. CI excludes e2e-marked tests from the unit run. The root package.json is release-it tooling for version bumps (npm scripts: release), not a separately built or tested unit."
+    },
+    {
+      "path": "docs",
+      "ecosystem": "other",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.006,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "ADRs and agent-facing markdown (docs/adr, docs/agents); no manifest and no build."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "saleor/tests/settings.py",
+      "line": 60,
+      "real": false,
+      "why": "RSA private key generated for the test settings only"
+    },
+    {
+      "file": "saleor/plugins/openid_connect/tests/conftest.py",
+      "line": 149,
+      "real": false,
+      "why": "RSA private key test fixture for OIDC token signing"
+    },
+    {
+      "file": ".env.example",
+      "line": 5,
+      "real": false,
+      "why": "changeme placeholder SECRET_KEY"
+    },
+    {
+      "file": ".devcontainer/backend.env",
+      "line": 5,
+      "real": false,
+      "why": "changeme placeholder SECRET_KEY for the dev container"
+    },
+    {
+      "file": ".github/workflows/tests.yaml",
+      "line": 23,
+      "real": false,
+      "why": "ci-test SECRET_KEY placeholder"
+    },
+    {
+      "file": ".github/workflows/tests.yaml",
+      "line": 22,
+      "real": false,
+      "why": "CI postgres service DSN with saleor/saleor credentials"
+    },
+    {
+      "file": "saleor/settings.py",
+      "line": 139,
+      "real": false,
+      "why": "default local development DSN"
+    },
+    {
+      "file": ".devcontainer/docker-compose.yml",
+      "line": 34,
+      "real": false,
+      "why": "dev container postgres password"
+    },
+    {
+      "file": "Dockerfile",
+      "line": 55,
+      "real": false,
+      "why": "dummy SECRET_KEY for collectstatic at build time"
+    },
+    {
+      "file": "saleor/payment/gateways/stripe/tests/test_plugin.py",
+      "line": null,
+      "real": false,
+      "why": "fake Stripe keys in tests (22 grep hits)"
+    },
+    {
+      "file": "saleor/account/tests/fixtures/user.py",
+      "line": 78,
+      "real": false,
+      "why": "test user password fixture"
+    }
+  ],
+  "nextAction": {
+    "kind": "fix_instructions",
+    "text": "State in AGENTS.md the CI test commands (uv sync --locked, then uv run pytest --reuse-db -m \"not e2e\") and the DATABASE_URL, CACHE_URL and SECRET_KEY the unit tests need outside the dev container."
+  },
+  "dropped": 0
+}

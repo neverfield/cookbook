@@ -2,7 +2,7 @@ import type { Language, PackageManager } from "../types.ts";
 import { dotnet } from "./dotnet.ts";
 import { go } from "./go.ts";
 import { jvm } from "./jvm.ts";
-import type { Detect, Ecosystem, LanguageDef } from "./language.ts";
+import type { Detect, Ecosystem, LanguageChecks, LanguageDef } from "./language.ts";
 import { node } from "./node.ts";
 import { cpp, dart, elixir, swift, terraform } from "./others.ts";
 import { php } from "./php.ts";
@@ -46,6 +46,54 @@ export function rootAppRules(): (NonNullable<Detect["rootApp"]> & { language: La
 
 export function lockfileNames(): string[] {
   return [...new Set(LANGUAGES.flatMap((l) => l.detect.lockfiles ?? []))];
+}
+
+// The checks a language file may say it has no rule for, by their place in LanguageChecks.
+export type CheckName = "weakening.isTest" | "weakening.markers" | "lockfiles.diff" | "lockfiles.foreign" | "manifestScripts" | "tool" | "countedTests" | "ciTest";
+
+const RULE: Record<CheckName, (c: LanguageChecks) => unknown> = {
+  "weakening.isTest": (c) => c.weakening.isTest,
+  "weakening.markers": (c) => c.weakening.markers,
+  "lockfiles.diff": (c) => c.lockfiles.diff,
+  "lockfiles.foreign": (c) => c.lockfiles.foreign,
+  manifestScripts: (c) => c.manifestScripts,
+  tool: (c) => c.tool,
+  countedTests: (c) => c.countedTests,
+  ciTest: (c) => c.ciTest,
+};
+
+export function hasRule(l: LanguageDef, check: CheckName): boolean {
+  return RULE[check](l.checks) !== null;
+}
+
+// The labels of the given component languages that have no rule for a check, once each in registry
+// order, so a report can say "not checked for Go". A code no language file scores is left out.
+export function notCheckedFor(check: CheckName, codes: Iterable<Language>): string[] {
+  const wanted = new Set(codes);
+  return LANGUAGES.filter((l) => l.codes.some((c) => wanted.has(c)) && !hasRule(l, check)).map((l) => l.label);
+}
+
+// Lockfiles the secret scan skips, from every language.
+export function secretScanSkips(): string[] {
+  return [...new Set(LANGUAGES.flatMap((l) => l.checks.lockfiles.secretScanSkips))];
+}
+
+// The lockfile each package manager would add, in registry order.
+export function foreignLockfiles(): string[] {
+  return LANGUAGES.flatMap((l) => Object.values(l.checks.lockfiles.foreign ?? {}));
+}
+
+export function foreignLockfileOf(pm: string): string | undefined {
+  for (const l of LANGUAGES) {
+    const f = l.checks.lockfiles.foreign?.[pm as PackageManager];
+    if (f) return f;
+  }
+  return undefined;
+}
+
+// The component languages a command's first program belongs to, or none.
+export function codesOfTool(tool: string): Language[] {
+  return LANGUAGES.find((l) => l.checks.tool?.test(tool))?.codes ?? [];
 }
 
 // Every pinned image a language file contributes, tag to digest.
