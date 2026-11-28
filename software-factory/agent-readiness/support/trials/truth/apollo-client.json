@@ -1,0 +1,105 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "apollographql/apollo-client",
+  "commit": "0ff461cb235b98f9940b0e333ad7d6b5c2c71ffb",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/apollographql/apollo-client/commits/0ff461cb235b98f9940b0e333ad7d6b5c2c71ffb/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv' and gh api 'repos/apollographql/apollo-client/commits/0ff461cb235b98f9940b0e333ad7d6b5c2c71ffb/status?per_page=100'; the main CI is CircleCI 'Build and Test': all 35 ci/circleci statuses succeeded (Tests for Core, RxJS min, GraphQL 16, ReactDOM 17/18/19, Codegen plugins; Integration Tests; Typecheck; Lint; Codegen; peer-dep type tests) and the circleci-checks run 'Build and Test' succeeded. The failing GitHub runs are the nightly scheduled-test-canary matrix 'test (canary|experimental, <branch>)' against React canary/experimental builds on other branches, plus Dependabot, neither of which tests this commit's code as shipped"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.882,
+      "hasTests": true,
+      "install": [
+        "npm ci",
+        "npm install",
+        "npm i"
+      ],
+      "test": [
+        "npm run test:ci",
+        "npm test",
+        "npm run test"
+      ],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "@apollo/client with npm workspaces (., codegen, scripts/codemods/ac3-to-ac4). Jest (jsdom) projects: Core Tests, RxJS min, GraphQL 16, ReactDOM 17/18/19 and GraphQL Codegen Plugins; CI selects one per job with --selectProjects after restoring a built dist from npm run build. Node >=24 required by devEngines (onFail error). Core Tests job also runs npm run test:memory:only (scripts/memory)."
+    },
+    {
+      "path": "codegen",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": ".",
+      "changeShare": 0.026,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "@apollo/client-graphql-codegen workspace; its tests are the root Jest project 'GraphQL Codegen Plugins'. CI also builds its tarball and runs npm run test:codegen against integration-tests/codegen."
+    },
+    {
+      "path": "docs",
+      "ecosystem": "node",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.032,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Documentation sources and agent skills; linted from the root (npm run lint:docs), no tests."
+    },
+    {
+      "path": "integration-tests",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.0,
+      "hasTests": true,
+      "install": [
+        "pnpm install --no-frozen-lockfile",
+        "pnpm install",
+        "pnpm exec playwright install"
+      ],
+      "test": [
+        "pnpm run --if-present --filter <framework> \"/test(:.*|$)/\"",
+        "pnpm --filter vite test",
+        "pnpm --filter node run test:esm"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "Separate pnpm workspace (cra5, vite, vite-swc, node, wrapping-library, type-tests, codegen, next, browser-esm) installed against the packed @apollo/client tarball; CircleCI runs each framework with React 18.3.0/latest/next on cimg/node:24.22.0-browsers with Playwright browsers. Install fetches react@next etc. from npm."
+    },
+    {
+      "path": "integration-tests/type-tests",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": "integration-tests",
+      "changeShare": 0.053,
+      "hasTests": true,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "yes",
+      "notes": "tsc --build type tests; run by the integration-tests workspace job and also by the root npm run typecheck."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "CHANGELOG.md",
+      "line": 11703,
+      "real": false,
+      "why": "'some auth token' placeholder in a changelog code example; the only hit"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md (CLAUDE.md exists but is Claude-specific) giving CI's order: npm ci, npm run build, npm run test:ci with --selectProjects, and how to run the separate integration-tests pnpm workspace with Playwright."
+  },
+  "dropped": 0
+}
