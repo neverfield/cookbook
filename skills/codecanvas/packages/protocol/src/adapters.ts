@@ -24,8 +24,14 @@ export interface Diagnostic {
   file: string;
   message: string;
   severity: 'error' | 'warning';
+  /** 1-based line number when known. */
   line?: number;
+  /** 1-based column number (alias of `column` for adapter compatibility). */
   col?: number;
+  /** 1-based column number when known. */
+  column?: number;
+  code?: string;
+  source?: string;
 }
 
 export interface FileChange {
