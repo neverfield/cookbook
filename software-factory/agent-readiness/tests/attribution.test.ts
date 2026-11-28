@@ -246,11 +246,13 @@ describe("tool pins the audit honors", () => {
   test("an exact engines pin for pnpm, with no packageManager, sets corepack to it", () => {
     const dir = tree({ "package.json": JSON.stringify({ name: "x", engines: { pnpm: "12.3.4" } }), "pnpm-lock.yaml": "" });
     const profile = { packageManager: "pnpm", components: [{ id: "x", path: ".", language: "ts", manifest: "package.json", scripts: {}, changes: 1, changeShare: 1, assessed: true, packageManager: "pnpm" }] } as unknown as Profile;
-    const setup = toolSetup(profile, dir);
+    // Corepack itself, added where the image lacks it, is checked in tests/trial-misses.test.ts.
+    const pins = (p: Profile) => toolSetup(p, dir).filter((t) => t.tool !== "corepack");
+    const setup = pins(profile);
     assert.deepEqual(setup.map((t) => [t.spec, t.install]), [["pnpm@12.3.4", "COREPACK_HOME=/tmp/home/.cache/node/corepack corepack prepare 'pnpm@12.3.4' --activate"]]);
     assert.match(setup[0].present!, /corepack pnpm --version/);
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", packageManager: "pnpm@12.3.4", engines: { pnpm: "12.3.4" } }));
-    assert.deepEqual(toolSetup(profile, dir), []);
+    assert.deepEqual(pins(profile), []);
   });
 });
 

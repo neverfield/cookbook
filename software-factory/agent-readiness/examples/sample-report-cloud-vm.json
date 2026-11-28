@@ -9,7 +9,7 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "5c068f8d692fdc1a0d9f7dbd40ce9c907e08b08e8612b39a8c8beb845968cdf1",
+    "scriptsDigest": "ec54274f7483ae637e8e8f56924d32e16bf7f7e54ad7e1de98fade722000388e",
     "seedPinned": true,
     "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
@@ -595,7 +595,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "doctor passed",
-        "durationMs": 81,
+        "durationMs": 84,
         "repro": "bash -lc 'node --version && npm --version'",
         "supersededBy": null
       },
@@ -607,7 +607,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "install passed",
-        "durationMs": 304,
+        "durationMs": 264,
         "repro": "bash -lc 'npm ci'",
         "supersededBy": null
       },
@@ -619,7 +619,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 106,
+        "durationMs": 110,
         "repro": "bash -lc 'npm ci && npm run lint'",
         "supersededBy": null
       },
@@ -643,7 +643,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "test passed (5 of 5 tests)",
-        "durationMs": 170,
+        "durationMs": 183,
         "repro": "bash -lc 'npm ci && npm run build && npm run test'",
         "supersededBy": null
       },
@@ -699,7 +699,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "5c068f8d692f"
+        "value": "ec54274f7483"
       },
       {
         "label": "Planted faults",
