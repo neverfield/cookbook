@@ -68,3 +68,25 @@ describe("CI's scripted negative evals", () => {
     for (const id of LEFT_OUT) assert.match(ci, new RegExp(id.replace("/", "\\/")), `${id} left out without a reason in the workflow`);
   });
 });
+
+describe("CI's trial clone cache", () => {
+  const trials = ci.slice(ci.indexOf("\n  trials:\n"), ci.indexOf("\n  negative-evals:\n"));
+
+  test("caches only the clones' .git, restores on every run and saves only from the base branch", () => {
+    for (const m of trials.matchAll(/^ +path: (.*)$/gm)) assert.equal(m[1], "${{ runner.temp }}/trials-cache/*/.git", "only each clone's .git is cached");
+    assert.match(trials, /uses: actions\/cache\/restore@v4/);
+    assert.doesNotMatch(trials, /uses: actions\/cache@/, "the combined action would save from pull requests too");
+    assert.match(trials, /- name: Save the trial clones\n        if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/cursor\/agent-readiness-0\.2'\n        uses: actions\/cache\/save@v4/);
+    assert.match(trials, /SA_TRIALS_CACHE: \$\{\{ runner\.temp \}\}\/trials-cache/);
+  });
+
+  test("caches no dependency install inside the audit", () => {
+    assert.equal([...ci.matchAll(/uses: actions\/cache/g)].length, 2, "the clone cache's restore and save, and nothing else");
+  });
+
+  test("the runner verifies a reused clone and the pinned commit", () => {
+    const runner = readFileSync(join(import.meta.dirname, "..", "support/trials/trials.test.ts"), "utf8");
+    assert.match(runner, /git\(dir, \["fsck", "--no-dangling", "--no-progress"\]\);\n\s+rmSync\(join\(dir, "\.git", "index"\)/);
+    assert.match(runner, /if \(head !== t\.commit\) throw/);
+  });
+});

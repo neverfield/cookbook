@@ -75,8 +75,21 @@ function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 }
 
+// A clone already in SA_TRIALS_CACHE, such as one CI restored from its cache, is used only if every
+// object in it hashes to its name (git fsck), and its index is dropped so the work tree is written
+// from those objects alone; any doubt means a fresh clone. Either way the checkout must be the
+// pinned commit. Only the clone is reused: the audit's own installs always start cold.
 function checkout(t: Trial): string {
   const dir = join(CACHE, t.id);
+  if (existsSync(join(dir, ".git"))) {
+    try {
+      git(dir, ["fsck", "--no-dangling", "--no-progress"]);
+      rmSync(join(dir, ".git", "index"), { force: true });
+    } catch (e) {
+      process.stdout.write(`${t.id}: the cached clone failed git fsck, cloning afresh: ${(e instanceof Error ? e.message : String(e)).split("\n")[0]}\n`);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
   if (!existsSync(join(dir, ".git"))) {
     mkdirSync(CACHE, { recursive: true });
     git(CACHE, ["clone", "-q", "--filter=blob:none", "--no-checkout", `https://github.com/${t.repo}`, t.id]);
@@ -88,6 +101,8 @@ function checkout(t: Trial): string {
   }
   git(dir, ["checkout", "-q", "-f", "--detach", t.commit]);
   git(dir, ["clean", "-q", "-fdx"]);
+  const head = git(dir, ["rev-parse", "HEAD"]).trim();
+  if (head !== t.commit) throw new Error(`${t.id} checked out ${head}, not its pinned ${t.commit}`);
   return dir;
 }
 
