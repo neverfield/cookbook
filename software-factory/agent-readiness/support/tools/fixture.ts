@@ -67,9 +67,10 @@ export function materialize(fixture: string, opts: { now?: string; into?: string
   return repo;
 }
 
-export function readiness(repo: string, args: string[], env: Record<string, string> = {}, cli = CLI): { code: number; out: string } {
+// nodeArgs: Node options before the script, such as the trial runner's --import of its evidence hook.
+export function readiness(repo: string, args: string[], env: Record<string, string> = {}, cli = CLI, nodeArgs: string[] = []): { code: number; out: string } {
   try {
-    const out = execFileSync(process.execPath, ["--experimental-strip-types", "--no-warnings", cli, ...args], { cwd: repo, encoding: "utf8", env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+    const out = execFileSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ...nodeArgs, cli, ...args], { cwd: repo, encoding: "utf8", env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
     return { code: 0, out };
   } catch (e) {
     const err = e as { status: number; stdout: string; stderr: string };
