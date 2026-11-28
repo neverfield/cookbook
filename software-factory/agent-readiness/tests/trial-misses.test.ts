@@ -110,6 +110,21 @@ describe("discovery (airflow, eShop, langfuse)", () => {
     assert.match(testsOf(solution).get(root.id) ?? "", /^dotnet test\b/);
   });
 
+  test("with the Arcade SDK, a project named *.Tests is a test project, as Arcade makes it (command-line-api)", () => {
+    const proj = `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>\n`;
+    const files = {
+      "Lib.sln": "Microsoft Visual Studio Solution File, Format Version 12.00\n",
+      "global.json": `{ "sdk": { "version": "8.0.100" }, "msbuild-sdks": { "Microsoft.DotNet.Arcade.Sdk": "9.0.0-beta.1" } }\n`,
+      "src/Lib/Lib.csproj": proj,
+      "src/Lib/Parser.cs": "public class Parser {}\n",
+      "src/Lib.Tests/Lib.Tests.csproj": proj,
+      "src/Lib.Tests/ParserTests.cs": "public class ParserTests {}\n",
+    };
+    assert.match([...testsOf(files).values()][0] ?? "", /^dotnet test\b/);
+    const plain = { ...files, "global.json": `{ "sdk": { "version": "8.0.100" } }\n` };
+    assert.equal(testsOf(plain).size, 0, "without Arcade, the name alone doesn't make a test project");
+  });
+
   const wrapper = {
     "package.json": pkg("mono", { test: "turbo run test" }, { devDependencies: { turbo: "2" } }),
     "pnpm-workspace.yaml": "packages:\n  - web\n  - gateway\n",

@@ -243,8 +243,19 @@ export function aotProjects(tree: string, path: string): string[] {
   return portable(tree, path).filter((f) => /<PublishAot>\s*true\s*</i.test(readText(join(tree, path, f))));
 }
 
+// The Arcade SDK, which dotnet/* repos build with, makes a project named *.Tests, *.UnitTests or
+// *.IntegrationTests a test project and adds its test packages itself, so its .csproj names none.
+const ARCADE_TEST_NAME = /\.(Tests|UnitTests|IntegrationTests)\.(cs|fs|vb)proj$/;
+const ARCADE = /Microsoft\.DotNet\.Arcade\.Sdk/;
+
+function usesArcade(tree: string, path: string): boolean {
+  const dirs = path === "." ? ["."] : [path, "."];
+  return dirs.some((d) => ["global.json", "Directory.Build.props"].some((f) => exists(join(tree, d, f)) && ARCADE.test(readText(join(tree, d, f)))));
+}
+
 function testProjects(tree: string, path: string): string[] {
-  return portable(tree, path).filter((f) => TEST_PROJECT.test(readText(join(tree, path, f))));
+  const arcade = usesArcade(tree, path);
+  return portable(tree, path).filter((f) => TEST_PROJECT.test(readText(join(tree, path, f))) || (arcade && ARCADE_TEST_NAME.test(f)));
 }
 
 function dotnetCommands(tree: string, path: string): DraftCommand[] {
