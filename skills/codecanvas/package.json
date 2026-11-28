@@ -1,0 +1,21 @@
+{
+  "name": "codecanvas-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Zero-footprint visual design canvas for React 17-19 web apps (v2).",
+  "packageManager": "pnpm@10.9.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.1.1"
+  }
+}
