@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { startArgs } from "../skill/agent-readiness/scripts/lib/container.ts";
+import { attribute } from "../skill/agent-readiness/scripts/lib/attribute.ts";
 import { diagnose } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
 import { buildProfile, discoverLayout } from "../skill/agent-readiness/scripts/lib/profile.ts";
 import { environmentLimit } from "../skill/agent-readiness/scripts/lib/replay.ts";
@@ -87,6 +88,30 @@ describe("failures from the audit's own environment are blocked, not the repo's"
     assert.equal(diagnose("npm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/left-pda - Not found", false, "install").cause, "unknown", "a missing package can be the repo's typo");
     assert.equal(diagnose("npm error code E401\nnpm error 401 Unauthorized - GET https://npm.example.com/@acme%2fui", false, "install").cause, "registry");
     assert.equal(environmentLimit(container, cmd("test"), diagnose(apt, false, "test"), []), undefined, "tests that download run with the network off");
+  });
+
+  // Maven Central throttling or failing during the java-maven and kotlin-gradle fixtures' installs
+  // scored them Level 0 on CI ("repo rollup 0 !== 2", jobs 139352980058 and 140943302260).
+  test("Maven Central or the Gradle Plugin Portal answering 429 or 5xx is blocked, never the repo's", () => {
+    const jvm = { where: "container" as const, image: "eclipse-temurin:17-jdk", imageSource: "audit" as const };
+    const cases: [string, ContractCommand["kind"], string, string][] = [
+      ["Maven dependency, 429", "install", "[INFO] --- dependency:3.8.1:go-offline (default-cli) @ orders ---\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-dependency-plugin:3.8.1:go-offline (default-cli) on project orders: org.eclipse.aether.resolution.ArtifactResolutionException: Could not transfer artifact org.junit:junit-bom:pom:5.11.4 from/to central (https://repo.maven.apache.org/maven2): status code: 429, reason phrase: Too Many Requests (429) -> [Help 1]", "HTTP 429 from repo.maven.apache.org"],
+      ["Maven plugin that could not be resolved, 503", "build", "[ERROR] Plugin org.apache.maven.plugins:maven-surefire-plugin:3.5.2 or one of its dependencies could not be resolved:\n[ERROR] \tCould not transfer artifact org.apache.maven.surefire:surefire-junit-platform:jar:3.5.2 from/to central (https://repo.maven.apache.org/maven2): status code: 503, reason phrase: Service Unavailable (503)\n[ERROR] -> [Help 1]", "HTTP 503 from repo.maven.apache.org"],
+      ["Maven 3.8, 502", "install", "[ERROR] Failed to execute goal on project orders: Could not resolve dependencies for project com.example:orders:jar:1.0: Failed to transfer file https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.11.4/junit-bom-5.11.4.pom with status code 502 -> [Help 1]", "HTTP 502 from repo.maven.apache.org"],
+      ["Maven Wrapper download, 429", "install", 'Exception in thread "main" java.io.IOException: Server returned HTTP response code: 429 for URL: https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.9/apache-maven-3.9.9-bin.zip\n\tat java.base/sun.net.www.protocol.http.HttpURLConnection.getInputStream0(HttpURLConnection.java:2014)', "HTTP 429 from repo.maven.apache.org"],
+      ["Gradle dependency, Could not GET 429", "install", "FAILURE: Build failed with an exception.\n\n* What went wrong:\nExecution failed for task ':dependencies'.\n> Could not resolve all files for configuration ':compileClasspath'.\n   > Could not resolve org.jetbrains.kotlin:kotlin-stdlib:2.1.0.\n     Required by:\n         root project :\n      > Could not resolve org.jetbrains.kotlin:kotlin-stdlib:2.1.0.\n         > Could not get resource 'https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/2.1.0/kotlin-stdlib-2.1.0.pom'.\n            > Could not GET 'https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/2.1.0/kotlin-stdlib-2.1.0.pom'. Received status code 429 from server: Too Many Requests", "an unreachable package registry"],
+      ["Gradle plugin that could not be resolved, Could not GET 503", "build", "FAILURE: Build failed with an exception.\n\n* Where:\nBuild file '/work/build.gradle.kts' line: 1\n\n* What went wrong:\nPlugin [id: 'org.jetbrains.kotlin.jvm', version: '2.1.0'] was not found in any of the following sources:\n\n- Gradle Core Plugins (plugin is not in 'org.gradle' namespace)\n- Included Builds (No included builds contain this plugin)\n- Plugin Repositories (Could not resolve all dependencies for configuration 'detachedConfiguration1'.\n   > Could not resolve org.jetbrains.kotlin.jvm:org.jetbrains.kotlin.jvm.gradle.plugin:2.1.0.\n      > Could not get resource 'https://plugins.gradle.org/m2/org/jetbrains/kotlin/jvm/org.jetbrains.kotlin.jvm.gradle.plugin/2.1.0/org.jetbrains.kotlin.jvm.gradle.plugin-2.1.0.pom'.\n         > Could not GET 'https://plugins.gradle.org/m2/org/jetbrains/kotlin/jvm/org.jetbrains.kotlin.jvm.gradle.plugin/2.1.0/org.jetbrains.kotlin.jvm.gradle.plugin-2.1.0.pom'. Received status code 503 from server: Service Unavailable)", "an unreachable package registry"],
+    ];
+    for (const [name, kind, out, said] of cases) {
+      const dx = diagnose(out, false, kind, 1);
+      assert.equal(dx.cause, "network", name);
+      assert.ok(dx.detail.includes(said), `${name}: ${dx.detail}`);
+      const blocked = environmentLimit(jvm, cmd(kind, "."), dx, []);
+      assert.equal(blocked, `the ${kind} hit ${dx.detail}`, name);
+      assert.equal(attribute({ result: "fail", kind, where: "container", summary: dx.detail, diagnosis: dx, blocked }, "audit")?.verdict, "environment", `${name} is the environment's, not the repo's`);
+    }
+    assert.equal(diagnose("[ERROR] Failed to execute goal on project orders: Could not resolve dependencies for project com.example:orders:jar:1.0: Could not find artifact org.junit:junit-bom:pom:5.99.0 in central (https://repo.maven.apache.org/maven2) -> [Help 1]", false, "install", 1).cause, "unknown", "a version Maven Central doesn't have is the repo's typo");
+    assert.notEqual(diagnose("* What went wrong:\nPlugin [id: 'org.jetbrains.kotlin.jvm', version: '9.9.9'] was not found in any of the following sources:\n\n- Gradle Core Plugins (plugin is not in 'org.gradle' namespace)\n- Plugin Repositories (could not resolve plugin artifact 'org.jetbrains.kotlin.jvm:org.jetbrains.kotlin.jvm.gradle.plugin:9.9.9')\n  Searched in the following repositories:\n    Gradle Central Plugin Repository", false, "build", 1).cause, "network", "a plugin version the portal doesn't have, with no fetch error, is the repo's");
   });
 
   test("a sibling workspace package the audit didn't build first", () => {

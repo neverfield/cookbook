@@ -201,6 +201,12 @@ const MIRROR: RegExp[] = [
   new RegExp(String.raw`\b${STATUS}\b[^\n]{0,40}?${REASON}[^\n]*?${URL_}`),
   // pip: "HTTP error 403 while getting <url>"; pnpm: "ERR_PNPM_FETCH_403  GET <url>"
   new RegExp(String.raw`(?:HTTP error ${STATUS} while getting|ERR_PNPM_FETCH_${STATUS.replace("status", "pnpm")}\s+GET)\s+${URL_}`),
+  // Maven 3.9: "Could not transfer artifact <gav> from/to central (<url>): status code: 429, reason phrase: Too Many Requests (429)",
+  // for a dependency or a plugin; Maven 3.8 and older: "Failed to transfer file <url> with status code 503" or "Return code is: 503".
+  new RegExp(String.raw`from\/to [\w.-]+ \(${URL_}\): status code: ${STATUS}\b`),
+  new RegExp(String.raw`Failed to transfer file:? ${URL_}[^\n]*?(?:with status code|Return code is:) ${STATUS}\b`),
+  // The Maven Wrapper and other JVM downloaders: "Server returned HTTP response code: 429 for URL: <url>".
+  new RegExp(String.raw`Server returned HTTP response code: ${STATUS} for URL: ${URL_}`),
 ];
 
 export function mirrorRefused(output: string): string | null {
