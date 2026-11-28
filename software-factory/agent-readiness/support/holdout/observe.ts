@@ -27,11 +27,19 @@ export function auditFiles(repo: string): AuditFiles {
 
 const tick = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// The latest evidence row for each contract command, as the conditions read it.
+// The latest evidence row for each contract command and component, as the conditions read it.
 function latestByCommand(audit: Json): Map<string, Json> {
   const out = new Map<string, Json>();
-  for (const e of audit.evidence ?? []) if (e.contractId) out.set(e.contractId, e);
+  for (const e of audit.evidence ?? []) if (e.contractId) out.set(`${e.contractId}\u0000${e.component ?? ""}`, e);
   return out;
+}
+
+// The explanations about a component: its level and its conditions. A repo-wide command's row is
+// about every component.
+function explanationsOf(report: Json, component: string | undefined): Json[] {
+  const all = (report.explanations ?? []) as Json[];
+  if (!component || component === "*") return all.filter((x) => x.kind === "level" || x.kind === "condition");
+  return all.filter((x) => (x.kind === "level" && x.subject === component) || (x.kind === "condition" && String(x.subject).startsWith(`${component}: `)));
 }
 
 // One fact rendered with two values, across report.json, report.md and report.html. Each entry
@@ -41,12 +49,18 @@ export function factConflicts(f: AuditFiles): string[] {
   if (!report || !audit) return [];
   const out: string[] = [];
   // A command that a limit of this machine blocked reads as blocked everywhere, never as a failure.
+  // Only the explanations about its own component speak of it: in a monorepo another package can run
+  // the same command line and fail on its own.
+  const mdLines = markdown.split("\n");
   for (const e of latestByCommand(audit).values()) {
     if (!e.blocked || !e.command) continue;
-    const failed = new RegExp(`\`${tick(e.command)}\` \\(fail\\)`);
-    for (const [where, text] of [["report.md", markdown], ["report.json", JSON.stringify(report.explanations ?? [])]] as const) {
-      if (failed.test(text)) out.push(`${e.contractId}: blocked in the evidence, "fail" in ${where}`);
-    }
+    const failed = new RegExp(`\`${tick(e.command)}\`(?: in \`${tick(String(e.cwd ?? "."))}\`)? \\(fail\\)`);
+    const about = explanationsOf(report, e.component);
+    const inJson = about.some((x) => failed.test(String(x.ran ?? "")));
+    const subjects = new Set(about.map((x) => `| ${x.subject} |`));
+    const inMd = mdLines.some((l) => [...subjects].some((s) => l.startsWith(s)) && failed.test(l));
+    if (inMd) out.push(`${e.contractId}: blocked in the evidence, "fail" in report.md`);
+    if (inJson) out.push(`${e.contractId}: blocked in the evidence, "fail" in report.json`);
   }
   // The level the heading names is the level the ladder marks, in both views.
   const heading = String(report.executive?.heading ?? "");
