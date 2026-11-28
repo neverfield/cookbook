@@ -138,13 +138,31 @@ jobs:
       - name: Docker is available
         run: docker info --format 'Docker {{.ServerVersion}}'
       - run: npm ci
+      # The trial repos' clones, each only its .git, which the runner checks with git fsck and checks
+      # out at the pinned commit (support/trials/trials.test.ts). Only runs on the base branch save
+      # one, so a pull request can't hand the next one its clones. Dependency installs inside the
+      # audit are never cached: a cold install is part of what a trial measures.
+      - name: Restore the trial clones
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/trials-cache/*/.git
+          key: trial-clones-${{ hashFiles('software-factory/agent-readiness/support/trials/trials.json') }}
+          restore-keys: trial-clones-
       - name: npm run trials
+        env:
+          SA_TRIALS_CACHE: ${{ runner.temp }}/trials-cache
         run: |
           set -o pipefail
           npm run trials 2>&1 | tee "$RUNNER_TEMP/trials.log"
       - name: No trial skipped
         if: always()
         run: support/tools/no-skips.sh "$RUNNER_TEMP/trials.log"
+      - name: Save the trial clones
+        if: github.event_name == 'push' && github.ref == 'refs/heads/cursor/agent-readiness-0.2'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/trials-cache/*/.git
+          key: trial-clones-${{ hashFiles('software-factory/agent-readiness/support/trials/trials.json') }}
 
   negative-evals:
     name: Scripted negative evals (Docker, no API key)
