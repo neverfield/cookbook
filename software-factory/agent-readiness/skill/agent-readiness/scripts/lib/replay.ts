@@ -13,7 +13,7 @@ import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
 import { ecosystemOf } from "./languages/index.ts";
 import { lockedEngineGap } from "./languages/node.ts";
-import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary } from "./mutate.ts";
+import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary, withControlComment } from "./mutate.ts";
 import { Progress, budgetSummary } from "./progress.ts";
 import { redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
@@ -27,7 +27,7 @@ import { commandsFor } from "./score.ts";
 import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
 import { makeRecipe } from "./static.ts";
 import { SUPPORTED_DOC, notSupportedReason } from "./support.ts";
-import { loadSealedAudit } from "./history.ts";
+import { loadSealedAudit, readHistory } from "./history.ts";
 import { paths, plantSeed, refreshTree } from "./workspace.ts";
 import { GIT_IDENTITY_CONFIG, canCutNetwork, canaryFailure, detectDisposableVm, normalizedEnv, offlineCommand, provesIn, runCanary, vmNotDetectedNote } from "./proofenv.ts";
 import type { Canary, ProofEnv, VmDetection } from "./proofenv.ts";
@@ -793,16 +793,30 @@ function faultRunSec(rubric: Rubric, comp: Component): number {
   return Math.max(rubric.mutation.runTimeoutSec, hooked(comp)?.budget?.mutationRunTimeoutSec ?? 0);
 }
 
-// Fault ids the last sealed audit decided in this component, missed ones first, to plant again first.
-function priorFaults(repo: string, componentId: string, cap: number): string[] {
-  try {
-    const { audit } = loadSealedAudit(paths(repo), "latest");
-    const mine = audit.mutants.filter((m) => m.component === componentId && m.file && m.operator && m.before && (m.result === "survived" || m.result === "caught"));
-    const ordered = [...mine.filter((m) => m.result === "survived"), ...mine.filter((m) => m.result === "caught")];
-    return ordered.map((m) => m.faultId ?? faultId({ file: m.file!, before: m.before!, operator: m.operator! })).slice(0, cap);
-  } catch {
-    return [];
+// Earlier sealed audits' faults in this component. `carried`: the last audit's decided faults, missed
+// ones first, to plant again first and report beside the estimate. `missed`: every fault a sealed
+// report named as missed, which never counts as new again, so tests aimed at the named lines can't
+// move the estimate. `missedLast`: the carried faults the last audit missed.
+function priorFaults(repo: string, componentId: string, cap: number): { carried: string[]; missed: string[]; missedLast: string[] } {
+  const p = paths(repo);
+  const decidedIn = (audit: Audit) => audit.mutants.filter((m) => m.component === componentId && m.file && m.operator && m.before && (m.result === "survived" || m.result === "caught"));
+  const idOf = (m: Mutant) => m.faultId ?? faultId({ file: m.file!, before: m.before!, operator: m.operator! });
+  const ids = readHistory(p).filter((h) => h.kind === "audit").map((h) => h.id);
+  const audits = new Map<string, Audit>();
+  for (const id of ids) {
+    try {
+      audits.set(id, loadSealedAudit(p, id).audit);
+    } catch {
+      // An audit the history lists but this clone doesn't hold names nothing here.
+    }
   }
+  const missed = [...new Set([...audits.values()].flatMap((a) => decidedIn(a).filter((m) => m.result === "survived").map(idOf)))];
+  const last = audits.get(ids.at(-1) ?? "");
+  if (!last) return { carried: [], missed, missedLast: [] };
+  const mine = decidedIn(last);
+  const carried = [...mine.filter((m) => m.result === "survived"), ...mine.filter((m) => m.result === "caught")].map(idOf).slice(0, cap);
+  const missedLast = mine.filter((m) => m.result === "survived").map(idOf).filter((id) => carried.includes(id));
+  return { carried, missed: missed.filter((id) => !carried.includes(id)), missedLast };
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -825,12 +839,18 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   }
   const rule = estimateRule(rubric.mutation);
   const identity = rubric.mutation.identity;
-  const prior = identity === "fault" ? priorFaults(repo, comp.id, rule ? carriedCap(rule) : rubric.mutation.perComponent) : [];
-  const sites = chooseSites(repo, tree, comp, plantSeed(audit, { tree, createdAt: audit.createdAt }), rule ? rule.maxPlanted : rubric.mutation.perComponent, audit.repo.commit, { identity, prior });
+  const earlier = identity === "fault" ? priorFaults(repo, comp.id, rule ? carriedCap(rule) : rubric.mutation.perComponent) : { carried: [], missed: [], missedLast: [] };
+  const prior = earlier.carried;
+  const count = (rule ? rule.maxPlanted : rubric.mutation.perComponent) + (rule ? prior.length : 0);
+  const sites = chooseSites(repo, tree, comp, plantSeed(audit, { tree, createdAt: audit.createdAt }), count, audit.repo.commit, { identity, prior, exclude: earlier.missed });
   if (sites.length === 0) {
     addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp.id, strength: ex.strength, where: ex.where, result: "not_run", summary: "no places to plant a fault were found in files the tests import" });
     return;
   }
+  const raw = ex.execFresh ?? ex.exec;
+  const fresh = (command: string, cwd: string, timeoutSec: number) => raw(command, cwd, timeoutSec, testCmd.env ? { env: testCmd.env } : undefined);
+  const control = rule ? await controlRun(audit, ex, comp, testCmd, sites, budget, faultSec, fresh, log) : "";
+  if (control === null) return;
   const mutants: Mutant[] = [];
   let n = audit.mutants.filter((m) => m.component === comp.id).length + 1;
   let cut = 0;
@@ -838,11 +858,14 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   // runs stall whatever the fault, so the rest aren't run.
   let stalls = 0;
   let stalledOut = 0;
-  const raw = ex.execFresh ?? ex.exec;
-  const fresh = (command: string, cwd: string, timeoutSec: number) => raw(command, cwd, timeoutSec, testCmd.env ? { env: testCmd.env } : undefined);
   const runs = rubric.mutation.caughtRuns ?? rubric.mutation.flakeRuns;
   const decided = () => mutants.filter((m) => m.result === "caught" || m.result === "survived");
-  const estimate = () => faultEstimate(decided().filter((m) => m.result === "caught").length, decided().length, rule!, rubric.mutation.minForPass, mutants.filter((m) => m.result !== "not_run").length, mutants.filter((m) => m.result !== "not_run" && prior.includes(m.faultId!)).length);
+  const isCarried = (m: Mutant) => prior.includes(m.faultId!);
+  const newDecided = () => decided().filter((m) => !isCarried(m));
+  const estimate = () => {
+    const carried = decided().filter(isCarried);
+    return faultEstimate(newDecided().filter((m) => m.result === "caught").length, newDecided().length, rule!, rubric.mutation.minForPass, mutants.filter((m) => m.result !== "not_run" && !isCarried(m)).length, carried.length, carried.filter((m) => m.result === "caught").length);
+  };
   // A narrowed run is used only once it passed on the clean tree, so a test that depends on another
   // file's setup can't read as a caught fault.
   const scopes = new Map<string, boolean>();
@@ -865,9 +888,9 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   let memoryStops = 0;
   for (const site of sites) {
     if (rule) {
-      const d = decided().length;
+      const d = newDecided().length;
       if (d >= rule.maxDecided) break;
-      if (atLook(d, rule, decided().filter((m) => prior.includes(m.faultId!)).length) && d !== lookedAt) {
+      if (atLook(d, rule) && d !== lookedAt) {
         lookedAt = d;
         if (!keepPlanting(estimate(), rule)) break;
       }
@@ -948,17 +971,17 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
   if (rule) {
     est = estimate();
     const cutNote = (cut ? "; the time budget ran out before the estimate was decided" : "") + (stalledOut ? "; planting stopped after two runs with planted faults timed out" : "") + memoryNote(memoryStops);
-    const carried = est.carried ? `, ${est.carried} of them planted again from the last audit` : "";
     const scopedNote = [...scopes.values()].some(Boolean) ? "; each ran only the tests that import its file" : "";
-    const share = `caught ${caught} of ${counted.length} planted faults (${pct(est.rate)})${carried}`;
+    const share = `caught ${est.caught} of ${est.decided} ${est.carried ? "new " : ""}planted faults (${pct(est.rate)})`;
     result = est.verdict === "strong" ? "pass" : est.verdict === "weak" ? "fail" : "not_run";
-    const why = counted.length < rubric.mutation.minForPass ? `; at least ${rubric.mutation.minForPass} must give a clear result` : est.decided >= rule.maxDecided || est.planted >= rule.maxPlanted ? `; the cap of ${rule.maxDecided} was reached` : !cut && !stalledOut ? "; no more places to plant a fault" : "";
+    const why = est.decided < rubric.mutation.minForPass ? `; at least ${rubric.mutation.minForPass} must give a clear result` : est.decided >= rule.maxDecided || est.planted >= rule.maxPlanted ? `; the cap of ${rule.maxDecided} was reached` : !cut && !stalledOut ? "; no more places to plant a fault" : "";
+    const tailNote = control + carriedNote(mutants.filter((m) => isCarried(m) && (m.result === "caught" || m.result === "survived")), earlier.missedLast) + missedNote;
     summary =
       est.verdict === "strong"
-        ? `${share}: strong, at least ${pct(est.low)} with ${confidence(rule.strongConfidence)} confidence (tried: ${operators})${scopedNote}${cutNote}${missedNote}`
+        ? `${share}: strong, at least ${pct(est.low)} with ${confidence(rule.strongConfidence)} confidence (tried: ${operators})${scopedNote}${cutNote}${tailNote}`
         : est.verdict === "weak"
-          ? `${share}: weak, at most ${pct(est.high)} with ${confidence(rule.weakConfidence)} confidence${scopedNote}${cutNote}${missedNote}`
-          : `${share}: inconclusive, between ${pct(est.low)} and ${pct(est.high)}, too few to tell strong tests from weak ones${why}${scopedNote}${cutNote}${missedNote}`;
+          ? `${share}: weak, at most ${pct(est.high)} with ${confidence(rule.weakConfidence)} confidence${scopedNote}${cutNote}${tailNote}`
+          : `${share}: inconclusive, between ${pct(est.low)} and ${pct(est.high)}, too few to tell strong tests from weak ones${why}${scopedNote}${cutNote}${tailNote}`;
   } else {
     const cutNote = (cut ? `; the time budget cut off ${cut} of ${sites.length}` : "") + (stalledOut ? `; ${stalledOut} weren't run after two runs with planted faults timed out` : "") + memoryNote(memoryStops);
     const need = killRateOf(rubric.mutation);
@@ -980,6 +1003,50 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
 }
 
 const MISSED_AFTER_SEAL = " (the sealed report says where)";
+
+// Before any fault: one change that can't alter behaviour, a comment at the end of a file the faults
+// go in, and one run of the tests. Tests that check the source's text (a `git diff`, a hash, a
+// generated-code check chained before the runner) fail on it, and would read every planted fault as
+// caught, so the fault check is left undetermined with the reason. A linter that rejects the comment
+// fails it too; the reason names both. Returns the note for the faults
+// row when the tests passed, "" when no file takes a comment, and null when it recorded the result.
+async function controlRun(audit: Audit, ex: Executor, comp: Component, testCmd: ContractCommand, sites: { file: string }[], budget: Budget, faultSec: number, fresh: (command: string, cwd: string, timeoutSec: number) => Promise<RunOutcome>, log: (s: string) => void): Promise<string | null> {
+  const file = [...new Set(sites.map((s) => s.file))].find((f) => withControlComment(f, readText(join(ex.root, f))) !== null);
+  if (!file) return "";
+  const record = (summary: string, extra: Partial<Evidence> = {}): null => {
+    log(`  faults in ${comp.id}: ${summary}`);
+    addEvidence(audit, { checkId: "verify.behavioral_oracle", condition: "faults", component: comp.id, strength: ex.strength, where: ex.where, result: "not_run", summary, command: testCmd.command, cwd: testCmd.cwd, image: ex.image ?? undefined, ...extra });
+    return null;
+  };
+  if (overBudget(budget, comp.id) || budgetLeftSec(budget, comp.id) < 1) return record("no fault was planted: the time budget ran out first", { blocked: BUDGET_OUT });
+  const filePath = join(ex.root, file);
+  const original = readText(filePath);
+  writeFileSync(filePath, withControlComment(file, original)!);
+  let out: RunOutcome;
+  const limit = capped(budget, comp.id, faultSec);
+  try {
+    out = await fresh(testCmd.command, testCmd.cwd, limit.sec);
+    charge(budget, comp.id, out.durationMs);
+  } finally {
+    writeFileSync(filePath, original);
+  }
+  if (out.timedOut) return record(`no fault was planted: the test run with only a comment added to ${file} timed out`, limit.byBudget ? { blocked: BUDGET_OUT } : {});
+  if (out.exitCode !== 0 && diagnose(out.output, false, "test", out.exitCode).cause === "resource") return record(`no fault was planted: the test run with only a comment added to ${file} was stopped at the audit's memory limit`, { blocked: "the control run was stopped at the audit's memory limit, so the fault check couldn't start" });
+  if (out.exitCode === 0 && !((countTests(audit.profile, comp.id, out.output)?.failed ?? 0) > 0)) return `; a comment added to ${file} left the tests passing`;
+  return record(`no fault was planted: the test command failed when only a comment was added to ${file}, a change that can't alter behaviour, so a failure with a planted fault couldn't be told from a failure on any edit (a \`git diff\`, hash or generated-code check, or a linter that rejects the comment)`, { exitCode: out.exitCode ?? undefined });
+}
+
+// The faults planted again from the last audit, reported apart from the estimate they don't count in.
+function carriedNote(carried: Mutant[], missedLast: string[]): string {
+  if (!carried.length) return "";
+  const wasMissed = carried.filter((m) => missedLast.includes(m.faultId!));
+  const wasCaught = carried.filter((m) => !missedLast.includes(m.faultId!));
+  const parts = [
+    ...(wasMissed.length ? [`${wasMissed.filter((m) => m.result === "caught").length} of the ${wasMissed.length} the last audit missed are now caught`] : []),
+    ...(wasCaught.length ? [`${wasCaught.filter((m) => m.result === "caught").length} of the ${wasCaught.length} it caught still are`] : []),
+  ];
+  return `; planted again from the last audit and not counted: ${parts.join(", and ")}`;
+}
 
 // A type-check that exits 0 proves nothing until it has been seen to fail: one known type error goes
 // at the end of a file the component's tests import, the type-check must fail on it, and it must
