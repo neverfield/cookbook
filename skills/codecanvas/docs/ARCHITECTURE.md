@@ -14,7 +14,8 @@ skills/codecanvas/
 │   └── ARCHITECTURE.md       # This document
 └── packages/
     ├── protocol/             # @codecanvas/protocol
-    └── daemon/               # @codecanvas/daemon
+    ├── daemon/               # @codecanvas/daemon
+    └── edit-engine/          # @codecanvas/edit-engine
 ```
 
 ## Implemented Work Packages
@@ -59,3 +60,29 @@ Verified via `packages/daemon/test/security.test.ts` (12 tests, ephemeral port `
 - `pnpm test`: 12/12 passing in `packages/daemon/test/security.test.ts`.
 - `pnpm build`: clean ESM + `.d.ts` emit for `@codecanvas/protocol` and `@codecanvas/daemon`.
 - Compiled CLI smoke test (`node packages/daemon/dist/cli.js`): binds `127.0.0.1`, logs endpoints without leaking token, shuts down cleanly on `SIGTERM`.
+
+### WP0.2 — Edit Engine Containment, Validation, and Atomic Journal (Invariant I4, §8.2 steps 1, 2, 4)
+
+Implemented in `@codecanvas/protocol` (`packages/protocol/`) and `@codecanvas/edit-engine` (`packages/edit-engine/`).
+
+#### Packages
+
+- **`@codecanvas/protocol`** (`packages/protocol/src/`):
+  - `edit-engine.ts`: Shared edit-engine policy and transaction types (`WriteContainmentPolicy`, `ContainmentRejectionReason`, `ContainmentViolation`, `ResolvedWriteTarget`, `ProposedFileEdit`, `JournalStatus`, `JournalFileEntry`, `JournalRecord`, `EditTransactionFileResult`, `EditTransactionResult`, `EditFailureStage`, `JournalRecoveryReport`, `SyntaxValidator`).
+  - `adapters.ts`: `Diagnostic` carries 1-based `line`, `col`, `column`, `message`, `severity`, and optional `code`/`source`.
+  - `rpc.ts`: Added `CONTAINMENT_VIOLATION`, `VALIDATION_FAILED`, and `TRANSACTION_FAILED` to `RPC_ERROR_CODES`.
+
+- **`@codecanvas/edit-engine`** (`packages/edit-engine/src/`):
+  - `containment.ts`: Strict workspace-relative path parser and symlink-aware canonicalizer (`canonicalizeTargetPath`, `checkPathContainment`, `compileGlobPattern`, `isPathInside`). Rejects empty paths, null bytes and ASCII control characters, absolute/Windows-drive paths, `..` traversal, symlinked directories, symlinked leaf files, dangling symlinks escaping the root, symlink loops, `.git`, `node_modules`, `.codecanvas/cache`, targets outside `policy.writeRoots`, and `policy.protected` globs. Non-existent leaf targets resolve via the deepest existing ancestor's `realpath`.
+  - `validator.ts`: Pre-write syntax validator (`validateSyntax`, `createDefaultValidator`) supporting JS/MJS/CJS/JSX and TS/MTS/CTS/TSX via `@babel/parser`, CSS via `postcss`, SCSS via `postcss-scss`, and JSON via `JSON.parse`. Returns structured `Diagnostic` entries (`file`, `line`, `column`, `col`, `message`, `severity`) and accepts pluggable `SyntaxValidator` implementations (compatible with `LanguageAdapter.validate`).
+  - `text-edits.ts`: Pure non-overlapping `TextEdit[]` applier (`applyTextEdits`, `TextEditApplyError`) with bounds and overlap validation.
+  - `journal.ts`: Durable multi-file journal and atomic commit protocol (`executeJournaledWrite`, `recoverJournal`, `readJournalRecord`, `getCachePaths`). Stages all temp files strictly inside `.codecanvas/cache/tmp/` (honoring Invariant I1), persists SHA-256-verified before-snapshots under `.codecanvas/cache/journal/blobs/<txnId>/`, atomically writes a `pending` journal in `.codecanvas/cache/journal/<txnId>.json` before any target rename, commits via `fsync` + `rename` + directory `fsync`, transitions the journal to `committed`, rolls back all touched files (and removes newly created files/empty parent directories) on any mid-commit failure, and provides idempotent startup crash recovery via `recoverJournal()`.
+  - `engine.ts`: `EditEngine` orchestrating serialized transactions across containment → in-memory edit application → pre-write parse validation → atomic journaled commit, guaranteeing zero disk writes on containment or validation failure.
+
+#### Verification
+
+Verified via `packages/edit-engine/test/edit-engine.test.ts` (13 tests) alongside `packages/daemon/test/security.test.ts` (12 tests):
+- `pnpm -r --if-present typecheck`: pass across `@codecanvas/protocol`, `@codecanvas/daemon`, and `@codecanvas/edit-engine`.
+- `pnpm test`: 25/25 passing (12 in `@codecanvas/daemon`, 13 in `@codecanvas/edit-engine`) covering `../` traversal & control-char rejection, symlink dir / symlink file / dangling symlink / symlink loop escapes, `writeRoots` / `protected` / forbidden directory enforcement, JS/TS/JSX/TSX/CSS/SCSS/JSON pre-write parse validation with zero disk writes, 2-file write failure restoring exact original bytes (`soundness.ts` case D equivalent), rollback cleanup of newly created files/dirs, mid-commit and pre-marker crash recovery via `recoverJournal()`, `.codecanvas/cache/tmp/` cleanup, and concurrent transaction serialization.
+- `pnpm build`: clean ESM + `.d.ts` emit for `@codecanvas/protocol`, `@codecanvas/daemon`, and `@codecanvas/edit-engine`.
+
