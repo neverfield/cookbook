@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { ContainerSession, HOME_DIR, buildImage, detectRuntime, hostUser, probeLimits, removeOrphanedContainers } from "./container.ts";
@@ -265,6 +265,8 @@ export interface PhaseResult {
   attribution?: Attribution;
   // The rerun, with the network on, of a test run that failed with it cut.
   networkOn?: boolean;
+  // On a pass after a failed rerun with the network on: what that rerun failed on.
+  flaky?: string;
 }
 
 export const INSTALL_BLOCKED = "not run because the install was blocked on this machine";
@@ -551,8 +553,10 @@ export async function runContract(
 }
 
 // Each test run that failed with the network cut, for no reason the audit's install or image already
-// explains, runs once more with the network on. A pass makes the failure the environment's; a second
-// failure makes it the repo's. The network goes back off for the steps after.
+// explains, runs once more with the network on. A pass makes the failure the environment's. A second
+// failure gets one more try with the network on, since a test flaky on its own fails a rerun as often
+// as a first run: a pass there makes the failures flaky, recorded as such; a third failure makes them
+// the repo's. The network goes back off for the steps after.
 async function networkExperiment(ex: Executor, offline: PhaseResult[], attempt: (cmd: ContractCommand) => Promise<PhaseResult | null>, push: (r: PhaseResult) => void): Promise<void> {
   const verdictOf = (r: PhaseResult) => r.attribution ?? attribute(phaseAttributionInput(ex, r), ex.imageSource);
   const latest = [...new Map(offline.map((r) => [r.cmd.id, r])).values()];
@@ -563,8 +567,13 @@ async function networkExperiment(ex: Executor, offline: PhaseResult[], attempt: 
       const again = await attempt(r.cmd);
       if (!again || again.status === "not_run") continue;
       const first = verdictOf(r);
-      r.attribution = networkVerdict(first, again.status === "pass", again.diagnosis?.detail ?? "non-zero exit");
-      push({ ...again, networkOn: true, attribution: again.status === "fail" ? r.attribution : undefined, note: again.status === "pass" ? NETWORK_RERUN_PASSED : "failed again with the network on" });
+      const failedOnline = again.status === "fail" ? (again.diagnosis?.detail ?? "non-zero exit") : null;
+      const last = failedOnline ? await attempt(r.cmd) : null;
+      const flaky = last?.status === "pass" ? failedOnline : null;
+      r.attribution = networkVerdict(first, again.status === "pass" || flaky !== null, failedOnline ?? "");
+      push({ ...again, networkOn: true, attribution: again.status === "fail" && !flaky ? r.attribution : undefined, note: again.status === "pass" ? NETWORK_RERUN_PASSED : "failed again with the network on" });
+      if (!last || last.status === "not_run") continue;
+      push({ ...last, networkOn: true, attribution: flaky ? undefined : r.attribution, note: flaky ? FLAKY_RERUN_PASSED : "failed a third time with the network on", ...(flaky ? { flaky } : {}) });
     }
   } finally {
     ex.offline();
@@ -572,6 +581,7 @@ async function networkExperiment(ex: Executor, offline: PhaseResult[], attempt: 
 }
 
 export const NETWORK_RERUN_PASSED = "passed with the network on, after failing with it cut";
+export const FLAKY_RERUN_PASSED = "passed on a second try with the network on, after failing once with it on as well, so the tests are flaky";
 
 // The tools the audit adds to an image it picked when a test run fails for want of one: only git,
 // since the audit already sets the identity tests that commit use.
@@ -624,7 +634,8 @@ export function evidenceFromPhase(audit: Audit, ex: Executor, r: PhaseResult, re
   else summary = `${r.cmd.kind} failed: ${r.diagnosis?.detail ?? "non-zero exit"}${counts && counts.failed ? ` (${counts.failed} of ${counts.total} tests failed)` : ""}`;
   if (r.status === "fail" && r.diagnosis?.detail === "registry credentials not provided" && audit.environment.registryEnv.length === 0) summary = `${r.cmd.kind} failed: registry credentials not provided (pass them with --registry-env)`;
   if (r.cmd.declared && r.status !== "not_run") summary += `; ran check-only, without the write flags in \`${r.cmd.declared}\``;
-  if (r.networkOn) summary = r.status === "pass" ? `${summary}, with the network on, after failing with it cut` : `${summary}; it failed again with the network on`;
+  if (r.flaky) summary = `${summary}, with the network on, on a second try: the first with it on failed (${r.flaky}), so the tests are flaky`;
+  else if (r.networkOn) summary = r.status === "pass" ? `${summary}, with the network on, after failing with it cut` : `${summary}; it failed again with the network on`;
   else if (/once the audit added /.test(r.note)) summary += `, ${r.note.replace(/^(passed|ran) /, "")}`;
   const attribution = r.attribution ?? attribute(phaseAttributionInput(ex, r), ex.imageSource) ?? undefined;
   const failedIn = r.status === "fail" && r.cmd.component === "*" && ATTRIBUTED.has(r.cmd.kind) && r.outcome && !r.blocked ? failingComponents(r.outcome.output, r.cmd.cwd, audit.profile?.components.filter((c) => c.assessed) ?? [], ex.root) : null;
@@ -878,7 +889,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
     const filePath = join(ex.root, site.file);
     const command = await testCommandFor(site.file);
     const original = readText(filePath);
-    writeFileSync(filePath, applySite(original, site));
+    writeStamped(filePath, applySite(original, site));
     const codes: number[] = [];
     let result: Mutant["result"] = "survived";
     try {
@@ -920,7 +931,7 @@ export async function plantFaults(audit: Audit, repo: string, tree: string, ex: 
         result = "caught";
       }
     } finally {
-      writeFileSync(filePath, original);
+      writeStamped(filePath, original);
     }
     mutants.push({ ...record, result, exitCodes: codes });
   }
@@ -997,7 +1008,7 @@ async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Exe
   const original = readText(filePath);
   const caught: ContractCommand[] = [];
   let stalled: string | null = null;
-  writeFileSync(filePath, withCanary(original, site.line));
+  writeStamped(filePath, withCanary(original, site.line));
   try {
     for (const c of typechecks) {
       const limit = capped(budget, comp.id, c.timeoutSec);
@@ -1010,7 +1021,7 @@ async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Exe
       if (out.exitCode !== 0) caught.push(c);
     }
   } finally {
-    writeFileSync(filePath, original);
+    writeStamped(filePath, original);
   }
   if (stalled) return record("not_run", `the type-check with a type error planted in ${site.file} didn't finish: ${stalled}`, stalled === BUDGET_OUT ? { blocked: BUDGET_OUT } : {});
   const shown = `\`${site.line}\``;
@@ -1026,6 +1037,18 @@ async function typecheckCanary(audit: Audit, repo: string, tree: string, ex: Exe
 }
 
 // Next to the audit tree, outside the repository, and deleted with it once the seal copies it in.
+// Writes a planted fault, or the original back, with a modification time in whole seconds later than
+// any this audit gave before and later than now. Caches that trust a file whose time and size are
+// unchanged, such as Python's .pyc files (which compare whole seconds), can't then run one version as
+// the other when a run takes under a second, and a build that compares times with its outputs sees
+// each write as newer than anything built from the one before.
+let lastStamp = 0;
+export function writeStamped(path: string, text: string): void {
+  writeFileSync(path, text);
+  lastStamp = Math.max(Math.floor(Date.now() / 1000) + 1, lastStamp + 1);
+  utimesSync(path, lastStamp, lastStamp);
+}
+
 export function mutantsFile(tree: string): string {
   return join(dirname(tree), "mutants.json");
 }
