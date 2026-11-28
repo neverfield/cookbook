@@ -7,7 +7,7 @@
       "repo": "pmndrs/zustand",
       "commit": "9fed2eb2f3af672da9f7bf694b996df3831fc207",
       "runtime": "docker",
-      "minutes": 2.5,
+      "minutes": 2.3,
       "alsoRun": [
         "none",
         "host"
@@ -35,6 +35,27 @@
           "instructionFailures": [],
           "blockingSafety": []
         }
+      },
+      "recordedAlso": {
+        "none": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": true,
+          "couldBe": 1,
+          "components": {
+            "zustand": {
+              "level": 0,
+              "unproven": true
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": [],
+          "headline": "Level 1 couldn't be proved for zustand because container runtimes were turned off for this audit. A rerun where Docker is available, such as CI, can prove it."
+        }
       }
     },
     {
@@ -42,7 +63,7 @@
       "repo": "changesets/changesets",
       "commit": "9a035ec36045aeb6141dd0bbac9ab9e3c69ac0bc",
       "runtime": "docker",
-      "minutes": 4.5,
+      "minutes": 1.9,
       "review": "customer-trial-opus.md",
       "notes": "pnpm monorepo of 21 packages. The root vitest runs 818 tests, and cli alone has 17 test files, so no package lacks tests. 8 git-tag tests fail in a container only because git has no user identity there, which CI sets.",
       "realInstructionFindings": [],
@@ -78,7 +99,7 @@
       "repo": "motdotla/dotenv",
       "commit": "4c5450405612e4368e0d46d44da01942cf22a707",
       "runtime": "docker",
-      "minutes": 9,
+      "minutes": 11.3,
       "budgetEdge": true,
       "budgetComponentMinutes": 30,
       "review": "customer-trial-grok.md",
@@ -112,7 +133,7 @@
       "repo": "modelcontextprotocol/servers",
       "commit": "e1dc4b18dbb948921da37f3d4224a628730b43b0",
       "runtime": "docker",
-      "minutes": 28,
+      "minutes": 31.2,
       "review": "customer-trial-carbon.md",
       "notes": "Monorepo of 4 TypeScript npm workspaces and 2 uv Python servers. The TypeScript workspaces install, build and pass 1,747 vitest tests. All 17 instruction findings were false: trailing semicolons kept on script names, a deleted file named in a never-re-add rule, package-relative paths checked from the root, and an example worktree path. 3 of the 6 missed planted faults were genuine gaps; the rest were equivalent mutants or a stale dist/. Each Python server runs in the uv image, so with PyPI reachable it installs and tests on its own; where PyPI is blocked it is unproven on that machine. On an open network the whole instruction replay runs (40 findings at 214d349), and each is explained on its merits. Real: .claude/skills/release/SKILL.md:566 gives `npm run release:notes` with no arguments, and the script exits with \"--milestone, --merge-sha, --merge-branch and --ledger-url are all required\"; the docs point at the script's header instead of giving them. Environment, blocked with the reason: local:gate, verify:dco, interface-diff and changeset need origin/v2/main, which the one-commit clean copy has no remote for; skills:eval needs the claude CLI; coverage:py runs uv from the Node image. Needs the network: uv --directory src/<server> run and uvx --from download a Python while the replay is offline. Needs access: npm whoami. Skipped as written: the `cd src/<server>` block and `uv run pytest` in `src/<server>` (a folder left to the reader), uv lock in \"that server\" (one of src/fetch, src/git, src/time, unnamed), a bare `uv run` in prose, `<lower branch>`, ../servers-release outside the repo, the loop's $s, and `node --test` in the table's Runner column. validate, validate:guards and test:scripts pass now that the container reaps orphaned processes (--init); without it two gate-lease tests saw zombies as a live process tree. src/git is Level 1 in the uv trixie image once the audit adds git: with bookworm's git 2.39 its merge-driver test failed, and with the audit's identity in GIT_AUTHOR_* variables 9 tests that set their own identity in a temporary repo failed.",
       "realInstructionFindings": [
@@ -179,7 +200,7 @@
       "repo": "pocketbase/pocketbase",
       "commit": "7f2773ec234b62d0b80ca47c508397cb3d0da3ea",
       "runtime": "docker",
-      "minutes": 8.6,
+      "minutes": 11.9,
       "review": "customer-trial-carbon.md",
       "notes": "Go backend with 90% of changes, now scored in golang:1.27 (its go line), plus a Svelte and Vite ui/ that builds and has no test script, so ui at Level 0 is correct. The backend builds, and 930 of its 931 top-level tests pass offline; TestRecordAuthWithOAuth2 downloads an avatar from pocketbase.io, and the audit runs tests without the network on every machine, so pocketbase at Level 0 is the honest result. Its CI runs go test only, so go vet isn't run (vet would flag a test fixture's deliberately unexported field). Both earlier blocking private-key findings were false: a Go doc comment and a textarea placeholder. The README's Go tutorial and release-binary commands are not instructions for ui. No instruction is wrong, and none is a finding. CONTRIBUTING.md:48 `go test ./...` and :51 `make test` run the test check's command, so they take its result instead of failing twice. :60 `make lint` is blocked, because golangci-lint, which the guide links to install, isn't in the image. :85 `npm run build` runs in ui, the folder its section starts in, and takes the build check's pass.",
       "realInstructionFindings": [],
@@ -216,7 +237,7 @@
       "repo": "neverfield/cookbook",
       "commit": "0695c7896dca31d95adfca8aeecaebcf98b59265",
       "runtime": "none",
-      "minutes": 0.2,
+      "minutes": 0.1,
       "review": "broad-readiness-opus.md",
       "notes": "Run with no container runtime. agent-readiness installs, type-checks and passes its tests (435 of 436, 1 skipped without Docker), yet the review's audit sealed Level 0, not bootable. With no container the honest result is unproven on this machine. The test fixtures' tokens and the tool's own tests needing credentials are not blocking safety findings. README.md:15 links to cloud-agent, which doesn't exist (the folder is self-hosted-cloud-agent); that one instruction finding is real, and upstream main has the same broken link.",
       "egress": [
@@ -337,7 +358,7 @@
       "repo": "symfony/demo",
       "commit": "f42980c690b4bf335fa41bbafdb075bb67b719c2",
       "runtime": "docker",
-      "minutes": 0.8,
+      "minutes": 1.2,
       "review": "lang-php-ruby-handoff.md",
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
@@ -389,7 +410,7 @@
       "repo": "Shopify/packwerk",
       "commit": "31e534283f93a225b520cddab3c2d735557c76de",
       "runtime": "docker",
-      "minutes": 0.9,
+      "minutes": 0.8,
       "review": "lang-php-ruby-handoff.md",
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
@@ -442,7 +463,7 @@
       "repo": "BurntSushi/ripgrep",
       "commit": "91f5d22ef48bde459d90a8c7dbeab416e97d0f2b",
       "runtime": "docker",
-      "minutes": 4.1,
+      "minutes": 5.4,
       "review": "agent-readiness-hardening-plan.md",
       "notes": "A Cargo workspace whose root is also the ripgrep package, with nine member crates under crates/ and a committed Cargo.lock. One component covers the workspace and runs cargo build, cargo test with --workspace in rust:1.97, the newest pinned Rust (no toolchain file). Its CI doesn't run clippy, so there is no lint. All 1242 tests pass offline and the tests catch at least 3 of 5 faults planted in member crates, so Level 2 is correct.",
       "realInstructionFindings": [],
@@ -476,7 +497,7 @@
       "repo": "spring-projects/spring-petclinic",
       "commit": "500158f732419217507c7656904b8e6aa1bcc0d6",
       "runtime": "docker",
-      "minutes": 5.3,
+      "minutes": 5,
       "review": "lang-jvm-dotnet",
       "notes": "Spring Boot 4 sample on Java 17 with a committed Maven Wrapper. With Maven Central reachable it installs, builds and passes its tests offline in eclipse-temurin:17-jdk (the MySQL and Postgres Testcontainers tests skip without Docker), and all 5 planted faults are caught: Level 2. Where Maven Central is blocked the wrapper can't fetch Maven, so it is unproven on that machine.",
       "egress": [
@@ -528,7 +549,7 @@
       "repo": "mockito/mockito-kotlin",
       "commit": "5969d27280ea670520003c75776057b20f7f3dfb",
       "runtime": "docker",
-      "minutes": 13.1,
+      "minutes": 12.4,
       "review": "lang-jvm-dotnet",
       "notes": "JVM-only Kotlin library, a Gradle 9.4 composite build (tests live in included builds) with a JDK 11 toolchain. Gradle 9 needs Java 17 to run, so it runs in eclipse-temurin:17-jdk and the foojay resolver provisions JDK 11 during the build. With the Gradle services and Maven Central reachable it installs, builds and tests offline, and 3 of the 4 planted faults that compiled are caught (one survives, one didn't compile): Level 2. Where they are blocked it is unproven on that machine.",
       "egress": [
@@ -586,7 +607,7 @@
       "repo": "umami-software/umami",
       "commit": "dbb8d606fbd4e99220fb83bcb4abad3e0f97f42a",
       "runtime": "docker",
-      "minutes": 16.2,
+      "minutes": 17.2,
       "alsoRun": [
         "none",
         "host"
@@ -628,6 +649,35 @@
           "blockingSafety": [],
           "headline": "Agents can build and test umami, but its lint command fails and its tests can't yet catch wrong changes."
         }
+      },
+      "recordedAlso": {
+        "none": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": true,
+          "couldBe": 1,
+          "components": {
+            "umami": {
+              "level": 0,
+              "unproven": true
+            },
+            "api-client": {
+              "level": 0,
+              "unproven": true
+            },
+            "mcp": {
+              "level": 0,
+              "unproven": true
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": [],
+          "headline": "Level 1 couldn't be proved for umami because container runtimes were turned off for this audit. A rerun where Docker is available, such as CI, can prove it."
+        }
       }
     },
     {
@@ -635,7 +685,7 @@
       "repo": "uber-go/zap",
       "commit": "4892335e05f14bce8a98a69a577fcf3844a42623",
       "runtime": "docker",
-      "minutes": 1.3,
+      "minutes": 1.4,
       "review": "first-run-sims.md",
       "now": "2026-11-24T12:00:00Z",
       "notes": "Go library with five go.mod modules (root, exp, benchmarks, internal tooling, assets). The Nov 24 Go sim found only the root module, with benchmarks recorded as a satellite whose manifest is a test file. CONTRIBUTING.md's `make test` walks every module; with the network cut, the modules beyond the root can't fetch their dependencies, and the audit records that as a failure in two runs of three and as blocked in the third (blame by output regex). Recorded as the failure; the ceiling of 1 false instruction finding is that item.",
@@ -713,57 +763,313 @@
       "repo": "netbox-community/netbox",
       "commit": "4cfaa8f7b45fc2e8bf95309909880c70e80bef64",
       "runtime": "docker",
-      "minutes": 5,
+      "minutes": 0.7,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-25T12:00:00Z",
-      "notes": "Django app (v4.7.6) with pip requirements.txt, a root AGENTS.md and CLAUDE.md, and skill files. Its tests need Postgres and Redis (CI service containers), so the root can't be proven Level 1 without them. netbox/project-static is a Yarn frontend with lint and type checks but no tests; netbox/translations is regenerated by a bot and is excluded. Covers instruction findings in agent files and a database-backed Python app.",
+      "notes": "Django app (v4.7.6) with pip requirements.txt, a root AGENTS.md and CLAUDE.md, and skill files. Its tests need Postgres and Redis (CI service containers), so the root can't be proven Level 1 without them. netbox/project-static is a Yarn frontend with lint and type checks but no tests; netbox/translations is regenerated by a bot and is excluded. Covers instruction findings in agent files and a database-backed Python app. Its ceiling of 19 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
+      "tracking": {
+        "R2": "defect found by a new trial, fix pending: the audit plans pytest, but netbox's CI runs Django's runner (coverage run netbox/manage.py test netbox/ --parallel)"
+      },
       "egress": [
         "pypi.org",
         "files.pythonhosted.org"
       ],
       "realInstructionFindings": [],
-      "falseInstructionFindings": 0,
-      "recorded": {}
+      "falseInstructionFindings": 19,
+      "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": 1,
+          "components": {
+            "netbox": {
+              "level": null,
+              "unproven": false
+            },
+            "project-static": {
+              "level": 0,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [
+            "AGENTS.md:145",
+            "AGENTS.md:146",
+            "AGENTS.md:147",
+            "AGENTS.md:148",
+            "AGENTS.md:149",
+            "AGENTS.md:150",
+            "AGENTS.md:151",
+            "AGENTS.md:152",
+            ".claude/skills/draft-release-notes/SKILL.md:8",
+            ".claude/skills/prepare-release/SKILL.md:110",
+            ".claude/skills/prepare-release/SKILL.md:111",
+            ".claude/skills/prepare-release/SKILL.md:112",
+            ".claude/skills/prepare-release/SKILL.md:130",
+            ".claude/skills/prepare-release/SKILL.md:131",
+            ".claude/skills/prepare-release/SKILL.md:174",
+            ".claude/skills/prepare-release/SKILL.md:228",
+            ".claude/skills/remove-model/SKILL.md:158",
+            ".claude/skills/remove-model/SKILL.md:165",
+            ".claude/skills/remove-model-field/SKILL.md:178"
+          ],
+          "blockingSafety": [],
+          "headline": "Level 1 is undetermined for netbox: no check failed for a reason in the repo, but the install failed in an image the audit picked, and its output doesn't say why."
+        }
+      }
     },
     {
       "id": "sentry-javascript",
       "repo": "getsentry/sentry-javascript",
       "commit": "0ac5dd117b622998783a1fa1b1694e409d3233ca",
       "runtime": "docker",
-      "minutes": 12,
+      "minutes": 61.7,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-26T12:00:00Z",
-      "notes": "Yarn and Nx monorepo (11.18.0) of about 267 package.json files with nested AGENTS.md, 67 skill files and .cursor/environment.json. CI tests every packages/* SDK through the root Nx task graph, so they are members of the root; each dev-packages/* suite (e2e, node, browser and bundler integration tests) runs from its own folder and needs services or the network. Task-graph builds aren't supported yet.",
+      "notes": "Yarn and Nx monorepo (11.18.0) of about 267 package.json files with nested AGENTS.md, 67 skill files and .cursor/environment.json. CI tests every packages/* SDK through the root Nx task graph, so they are members of the root; each dev-packages/* suite (e2e, node, browser and bundler integration tests) runs from its own folder and needs services or the network. Task-graph builds aren't supported yet. Its ceiling of 13 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
+      "tracking": {
+        "R2": "unsupported feature: CI tests the SDKs through the root Nx task graph (test:ci:node, test:ci:browser; supported.md, task-graph), so the root gets test:scripts, and the e2e, bun, deno and browser-min-version suites get no command",
+        "R3": "unsupported feature: the bun-integration-tests suite, which needs nothing beyond its install, isn't assessed inside the Nx task-graph monorepo"
+      },
       "egress": [
         "registry.npmjs.org"
       ],
       "realInstructionFindings": [],
-      "falseInstructionFindings": 0,
-      "recorded": {}
+      "falseInstructionFindings": 13,
+      "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": 1,
+          "components": {
+            "sentry-javascript": {
+              "level": 1,
+              "unproven": false
+            },
+            "browser-integration-tests": {
+              "level": 0,
+              "unproven": true
+            },
+            "bundler-plugin-integration-tests": {
+              "level": 1,
+              "unproven": false
+            },
+            "cloudflare-integration-tests": {
+              "level": 1,
+              "unproven": false
+            },
+            "e2e-tests": {
+              "level": null,
+              "unproven": false
+            },
+            "node-integration-tests": {
+              "level": null,
+              "unproven": false
+            },
+            "cloudflare": {
+              "level": 1,
+              "unproven": false
+            },
+            "core": {
+              "level": 1,
+              "unproven": false
+            },
+            "nextjs": {
+              "level": 1,
+              "unproven": false
+            },
+            "server-utils": {
+              "level": 1,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "angular",
+            "astro",
+            "aws-serverless",
+            "browser",
+            "browser-min-version-tests",
+            "browser-utils",
+            "bun",
+            "bun-integration-tests",
+            "bundler-plugins",
+            "bundler-tests",
+            "clear-cache-gh-action",
+            "deno",
+            "deno-integration-tests",
+            "effect",
+            "elysia",
+            "ember",
+            "esbuild-plugin",
+            "eslint-config-sdk",
+            "eslint-plugin-sdk",
+            "external-contributor-gh-action",
+            "feedback",
+            "gatsby",
+            "google-cloud-serverless",
+            "hono",
+            "integration-shims",
+            "nestjs",
+            "nitro",
+            "node",
+            "node-native",
+            "nuxt",
+            "opentelemetry",
+            "optional-e2e-gh-action",
+            "profiling-node",
+            "react",
+            "react-router",
+            "remix",
+            "replay-canvas",
+            "replay-internal",
+            "replay-worker",
+            "rollup-plugin",
+            "rollup-utils",
+            "server-runtime-injection",
+            "size-limit-gh-action",
+            "solid",
+            "solidstart",
+            "svelte",
+            "sveltekit",
+            "tanstackstart-react",
+            "test-utils",
+            "typescript",
+            "vercel-edge",
+            "vite-plugin",
+            "vue",
+            "wasm",
+            "webpack-plugin"
+          ],
+          "instructionFailures": [
+            "CONTRIBUTING.md:28",
+            "CONTRIBUTING.md:105",
+            "CONTRIBUTING.md:121",
+            ".agents/skills/dotagents/SKILL.md:79",
+            ".agents/skills/e2e/SKILL.md:119",
+            ".agents/skills/e2e/SKILL.md:119",
+            ".agents/skills/track-framework-updates/SKILL.md:83",
+            ".agents/skills/track-framework-updates/SKILL.md:116",
+            ".agents/skills/track-framework-updates/SKILL.md:117",
+            ".agents/skills/track-framework-updates/SKILL.md:118",
+            ".agents/skills/vendor-otel/SKILL.md:98",
+            ".agents/skills/write-tests/SKILL.md:243",
+            ".agents/skills/write-tests/SKILL.md:244"
+          ],
+          "blockingSafety": [],
+          "headline": "Level 1 is undetermined for e2e-tests: no check failed for a reason in the repo, but the audit couldn't tell how its tests run: it has 792 test files, and the audit found nothing that runs them."
+        }
+      }
     },
     {
       "id": "eshop",
       "repo": "dotnet/eShop",
       "commit": "3c6e531a6063676ece317644f72172fb42a935b3",
       "runtime": "docker",
-      "minutes": 8,
+      "minutes": 1.4,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-25T12:00:00Z",
       "notes": ".NET Aspire reference app: one solution (.slnx, central package management) built and tested from the root. Its functional tests start Redis, Postgres and RabbitMQ through Aspire, so they need Docker. src/ClientApp is a MAUI client built only on Windows; the root package.json is the Playwright e2e harness.",
+      "tracking": {
+        "R2": "defect found by a new trial, fix pending: the .slnx solution CI tests with dotnet test from the root gets no test command (\"the audit found nothing that runs them\"), though supported.md lists .slnx"
+      },
       "egress": [
         "api.nuget.org",
         "mcr.microsoft.com"
       ],
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "recorded": {}
+      "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": 1,
+          "components": {
+            "eshop": {
+              "level": null,
+              "unproven": false
+            },
+            "Catalog.API": {
+              "level": 0,
+              "unproven": false
+            },
+            "ClientApp": {
+              "level": 0,
+              "unproven": false
+            },
+            "eShop.AppHost": {
+              "level": 0,
+              "unproven": false
+            },
+            "eShop.ServiceDefaults": {
+              "level": 0,
+              "unproven": false
+            },
+            "Identity.API": {
+              "level": 0,
+              "unproven": false
+            },
+            "Ordering.API": {
+              "level": 0,
+              "unproven": false
+            },
+            "Ordering.Domain": {
+              "level": 0,
+              "unproven": false
+            },
+            "Ordering.Infrastructure": {
+              "level": 0,
+              "unproven": false
+            },
+            "WebApp": {
+              "level": 0,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "Application.UnitTests",
+            "Basket.API",
+            "Basket.FunctionalTests",
+            "Basket.UnitTests",
+            "Catalog.FunctionalTests",
+            "ClientApp.UnitTests",
+            "EventBus",
+            "EventBusRabbitMQ",
+            "HybridApp",
+            "IntegrationEventLogEF",
+            "OrderProcessor",
+            "Ordering.FunctionalTests",
+            "Ordering.UnitTests",
+            "PaymentProcessor",
+            "WebAppComponents",
+            "WebhookClient",
+            "Webhooks.API",
+            "Webhooks.FunctionalTests",
+            "eShop.AppHost.UnitTests"
+          ],
+          "instructionFailures": [],
+          "blockingSafety": [],
+          "headline": "Level 1 is undetermined for eshop: no check failed for a reason in the repo, but the audit couldn't tell how its tests run: it has 3 test files, and the audit found nothing that runs them."
+        }
+      }
     },
     {
       "id": "mastodon",
       "repo": "mastodon/mastodon",
       "commit": "6c29cb4b9c1f8b3f9a1be23f0efb9c5ac64155a3",
       "runtime": "docker",
-      "minutes": 7,
+      "minutes": 0.4,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-26T12:00:00Z",
       "notes": "Rails app with a Yarn 4 frontend at the same root and an Aptfile of system libraries, about 10,000 files. rspec needs Postgres, Redis and precompiled assets; yarn test:js runs from the same root. streaming/ is a small Node server with no tests.",
@@ -773,31 +1079,83 @@
       ],
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "recorded": {}
+      "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": false,
+          "couldBe": 1,
+          "components": {
+            "mastodon": {
+              "level": 0,
+              "unproven": true
+            },
+            "streaming": {
+              "level": 0,
+              "unproven": false
+            },
+            "mastodon-ruby": {
+              "level": null,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": [],
+          "headline": "Level 1 is undetermined for mastodon and mastodon-ruby: no check failed for a reason in the repo, but test not run because the install failed."
+        }
+      }
     },
     {
       "id": "jellyfin",
       "repo": "jellyfin/jellyfin",
       "commit": "6b786b36eed49bf83860d9b652b96f475aeb2668",
       "runtime": "docker",
-      "minutes": 7,
+      "minutes": 3.7,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-26T12:00:00Z",
-      "notes": "About 40 .NET projects in one solution, pinned at a commit whose upstream run-tests job is red on Linux, Windows and macOS: the first truth with a failing clean run. Reproduced in mcr.microsoft.com/dotnet/sdk:10.0: two test projects don't compile (MigrateRatingLevelsTests.cs CS1061, ConfigurationControllerTests.cs CS7036), so a level above 0 for the root is over-claiming (K2).",
+      "notes": "About 40 .NET projects in one solution, pinned at a commit whose upstream run-tests job is red on Linux, Windows and macOS: the first truth with a failing clean run. Reproduced in mcr.microsoft.com/dotnet/sdk:10.0: two test projects don't compile (MigrateRatingLevelsTests.cs CS1061, ConfigurationControllerTests.cs CS7036), so a level above 0 for the root is over-claiming (K2). Its ceiling of 3 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
       "egress": [
         "mcr.microsoft.com",
         "api.nuget.org"
       ],
       "realInstructionFindings": [],
-      "falseInstructionFindings": 0,
-      "recorded": {}
+      "falseInstructionFindings": 3,
+      "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "Jellyfin": {
+              "level": 0,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [
+            "README.md:104",
+            "README.md:116",
+            "README.md:120"
+          ],
+          "blockingSafety": [],
+          "headline": "Jellyfin doesn't build from a clean checkout because /work/tests/Jellyfin.Server.Tests/Migrations/MigrateRatingLevelsTests.cs(229,201): error CS1061: 'MigrateRatingLevels' does not contain a definition for 'Perform' and no accessible extension method 'P."
+        }
+      }
     },
     {
       "id": "command-line-api",
       "repo": "dotnet/command-line-api",
       "commit": "1b0c04a4ac1651129c72533ceae51e791430429e",
       "runtime": "docker",
-      "minutes": 2,
+      "minutes": 1,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-11T12:00:00Z",
       "notes": "System.CommandLine: Azure Pipelines CI, a NuGet.config that clears nuget.org for the public dnceng Azure Artifacts feeds, and a prerelease SDK pin (12.0.100-alpha) that only ./build.sh installs from ci.dot.net, so a stock SDK image can't satisfy global.json. eng/common is Arcade's vendored build scripts and is excluded.",
@@ -807,70 +1165,682 @@
       ],
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "recorded": {}
+      "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "System.CommandLine": {
+              "level": 0,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "internal"
+          ],
+          "instructionFailures": [],
+          "blockingSafety": [],
+          "headline": "System.CommandLine doesn't build from a clean checkout because /work/src/System.CommandLine.Benchmarks/Helpers/NullStreamWriter.cs(4,26): error CS0234: The type or namespace name 'IO' does not exist in the namespace 'System.CommandLine' (are you missing an assemb."
+        }
+      }
     },
     {
       "id": "langfuse",
       "repo": "langfuse/langfuse",
       "commit": "c2557ba42437a947026bcfa29570df4f075350db",
       "runtime": "docker",
-      "minutes": 2,
+      "minutes": 0.6,
       "tier": "read-only",
       "review": "trial-representativeness-review.md",
       "now": "2026-11-26T12:00:00Z",
-      "notes": "pnpm and Turborepo monorepo (web, worker, packages/shared, a Rust ai-gateway) with 21 AGENTS.md files, 240 skill files and a skills-lock.json, and a .cursor/environment.json with its own Dockerfile. Scanned only: discovery, placement and safety findings at customer size.",
+      "notes": "pnpm and Turborepo monorepo (web, worker, packages/shared, a Rust ai-gateway) with 21 AGENTS.md files, 240 skill files and a skills-lock.json, and a .cursor/environment.json with its own Dockerfile. Scanned only: discovery, placement and safety findings at customer size. Its ceiling of 58 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
+      "tracking": {
+        "R2": "defect found by a new trial, fix pending: ai-gateway (Rust, cargo test in CI) gets pnpm run test, and packages/in-app-agent-sandbox-runtime gets no test command"
+      },
       "realInstructionFindings": [],
-      "falseInstructionFindings": 0,
-      "recorded": {}
+      "falseInstructionFindings": 58,
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": 1,
+          "components": {
+            "langfuse": {
+              "level": null,
+              "unproven": false
+            },
+            "ai-gateway": {
+              "level": null,
+              "unproven": false
+            },
+            "ee": {
+              "level": 0,
+              "unproven": false
+            },
+            "eslint-plugin": {
+              "level": null,
+              "unproven": false
+            },
+            "icons": {
+              "level": null,
+              "unproven": false
+            },
+            "langfuse-skills": {
+              "level": 0,
+              "unproven": false
+            },
+            "native": {
+              "level": null,
+              "unproven": false
+            },
+            "shared": {
+              "level": null,
+              "unproven": false
+            },
+            "web": {
+              "level": null,
+              "unproven": false
+            },
+            "worker": {
+              "level": null,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "config-oxlint",
+            "config-typescript",
+            "in-app-agent-sandbox-runtime"
+          ],
+          "instructionFailures": [
+            "CONTRIBUTING.md:238",
+            "CONTRIBUTING.md:239",
+            "CONTRIBUTING.md:240",
+            "CONTRIBUTING.md:242",
+            "CONTRIBUTING.md:243",
+            "CONTRIBUTING.md:356",
+            "CONTRIBUTING.md:359",
+            "CONTRIBUTING.md:457",
+            "packages/shared/scripts/seeder/AGENTS.md:9",
+            "packages/shared/scripts/seeder/AGENTS.md:10",
+            "packages/shared/scripts/seeder/AGENTS.md:11",
+            "packages/shared/scripts/seeder/AGENTS.md:12",
+            "packages/shared/scripts/seeder/AGENTS.md:13",
+            "packages/shared/scripts/seeder/AGENTS.md:14",
+            "packages/shared/scripts/seeder/AGENTS.md:15",
+            "packages/shared/scripts/seeder/AGENTS.md:16",
+            "packages/shared/scripts/seeder/AGENTS.md:17",
+            "packages/shared/scripts/seeder/AGENTS.md:18",
+            "packages/shared/scripts/seeder/AGENTS.md:19",
+            "packages/shared/scripts/seeder/AGENTS.md:20",
+            "packages/shared/scripts/seeder/AGENTS.md:21",
+            "packages/shared/scripts/seeder/AGENTS.md:23",
+            "packages/shared/scripts/seeder/AGENTS.md:24",
+            "packages/shared/scripts/seeder/AGENTS.md:25",
+            "packages/shared/scripts/seeder/AGENTS.md:26",
+            "packages/shared/scripts/seeder/AGENTS.md:27",
+            "packages/shared/scripts/seeder/AGENTS.md:28",
+            "packages/shared/scripts/seeder/AGENTS.md:29",
+            "packages/shared/scripts/seeder/AGENTS.md:30",
+            "packages/shared/scripts/seeder/AGENTS.md:31",
+            "packages/shared/scripts/seeder/AGENTS.md:32",
+            "packages/shared/scripts/seeder/AGENTS.md:33",
+            "packages/shared/scripts/seeder/AGENTS.md:34",
+            "packages/shared/scripts/seeder/AGENTS.md:35",
+            "packages/shared/scripts/seeder/AGENTS.md:36",
+            "packages/shared/scripts/seeder/AGENTS.md:37",
+            "packages/shared/scripts/seeder/AGENTS.md:38",
+            "packages/shared/scripts/seeder/AGENTS.md:39",
+            "packages/shared/scripts/seeder/AGENTS.md:40",
+            "packages/shared/scripts/seeder/AGENTS.md:42",
+            "packages/shared/scripts/seeder/AGENTS.md:43",
+            "packages/shared/scripts/seeder/AGENTS.md:44",
+            "packages/shared/scripts/seeder/AGENTS.md:45",
+            "packages/shared/scripts/seeder/AGENTS.md:46",
+            "packages/shared/scripts/seeder/AGENTS.md:57",
+            "packages/shared/scripts/seeder/AGENTS.md:63",
+            "web/AGENTS.md:220",
+            "web/AGENTS.md:255",
+            "web/AGENTS.md:322",
+            "web/AGENTS.md:322",
+            ".agents/skills/illustrations/SKILL.md:51",
+            ".agents/skills/illustrations/SKILL.md:51",
+            ".agents/skills/langfuse-previews/SKILL.md:121",
+            ".agents/skills/langfuse-previews/SKILL.md:199",
+            ".agents/skills/langfuse-previews/SKILL.md:216",
+            ".agents/skills/linear-work-rhythm/SKILL.md:160",
+            ".agents/skills/seed-test-data/SKILL.md:53",
+            ".agents/skills/turborepo/SKILL.md:951"
+          ],
+          "blockingSafety": [
+            "secret web/src/features/ai-gateway/server/auth/ingestionTokenVerifier.servertest.ts:13"
+          ],
+          "headline": "Level 1 is undetermined for shared and web: no check failed for a reason in the repo, but the clean install hasn't run."
+        }
+      }
     },
     {
       "id": "airflow",
       "repo": "apache/airflow",
       "commit": "619a787ac81e8b7c8a9102fc78e3f0b00625d04e",
       "runtime": "docker",
-      "minutes": 3,
+      "minutes": 0.9,
       "tier": "read-only",
       "review": "trial-representativeness-review.md",
       "now": "2026-11-06T12:00:00Z",
-      "notes": "uv workspace of about 155 members (airflow-core, task-sdk, every provider on its own), a pnpm UI and Go, TypeScript and Java SDKs, about 15,700 files. Scanned only: discovery and placement at customer size.",
+      "notes": "uv workspace of about 155 members (airflow-core, task-sdk, every provider on its own), a pnpm UI and Go, TypeScript and Java SDKs, about 15,700 files. Scanned only: discovery and placement at customer size. Its ceiling of 17 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
+      "tracking": {
+        "R1": "defect found by a new trial, fix pending: the pnpm UI nested in a Python package, airflow-core/src/airflow/ui (0.188 of changes), isn't discovered",
+        "R2": "defect found by a new trial, fix pending: java-sdk (Gradle, ./gradlew test in CI) gets no test command, and the root's planned pytest isn't the breeze or run_unit_tests.sh CI runs"
+      },
       "realInstructionFindings": [],
-      "falseInstructionFindings": 0,
-      "recorded": {}
+      "falseInstructionFindings": 17,
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "not_assessed",
+          "unproven": false,
+          "couldBe": 1,
+          "components": {
+            "apache-airflow": {
+              "level": null,
+              "unproven": false
+            },
+            "apache-airflow-core": {
+              "level": null,
+              "unproven": false
+            },
+            "apache-airflow-breeze": {
+              "level": null,
+              "unproven": false
+            },
+            "apache-airflow-providers-amazon": {
+              "level": null,
+              "unproven": false
+            },
+            "apache-airflow-providers-common-ai": {
+              "level": null,
+              "unproven": false
+            },
+            "apache-airflow-providers-google": {
+              "level": null,
+              "unproven": false
+            },
+            "apache-airflow-scripts": {
+              "level": null,
+              "unproven": false
+            },
+            "apache-airflow-task-sdk": {
+              "level": null,
+              "unproven": false
+            },
+            "go-sdk": {
+              "level": null,
+              "unproven": false
+            },
+            "ts-sdk": {
+              "level": null,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "apache-airflow-ctl",
+            "apache-airflow-ctl-tests",
+            "apache-airflow-dev",
+            "apache-airflow-devel-common",
+            "apache-airflow-docker-stack",
+            "apache-airflow-docker-tests",
+            "apache-airflow-e2e-tests",
+            "apache-airflow-helm-chart",
+            "apache-airflow-kubernetes-tests",
+            "apache-airflow-mypy",
+            "apache-airflow-providers",
+            "apache-airflow-providers-airbyte",
+            "apache-airflow-providers-akeyless",
+            "apache-airflow-providers-alibaba",
+            "apache-airflow-providers-anthropic",
+            "apache-airflow-providers-apache-arrow",
+            "apache-airflow-providers-apache-beam",
+            "apache-airflow-providers-apache-cassandra",
+            "apache-airflow-providers-apache-drill",
+            "apache-airflow-providers-apache-druid",
+            "apache-airflow-providers-apache-flink",
+            "apache-airflow-providers-apache-hdfs",
+            "apache-airflow-providers-apache-hive",
+            "apache-airflow-providers-apache-iceberg",
+            "apache-airflow-providers-apache-impala",
+            "apache-airflow-providers-apache-kafka",
+            "apache-airflow-providers-apache-kylin",
+            "apache-airflow-providers-apache-livy",
+            "apache-airflow-providers-apache-pig",
+            "apache-airflow-providers-apache-pinot",
+            "apache-airflow-providers-apache-spark",
+            "apache-airflow-providers-apache-tinkerpop",
+            "apache-airflow-providers-apprise",
+            "apache-airflow-providers-arangodb",
+            "apache-airflow-providers-asana",
+            "apache-airflow-providers-atlassian-jira",
+            "apache-airflow-providers-celery",
+            "apache-airflow-providers-clickhousedb",
+            "apache-airflow-providers-cloudant",
+            "apache-airflow-providers-cncf-kubernetes",
+            "apache-airflow-providers-cohere",
+            "apache-airflow-providers-common-compat",
+            "apache-airflow-providers-common-dataquality",
+            "apache-airflow-providers-common-io",
+            "apache-airflow-providers-common-messaging",
+            "apache-airflow-providers-common-sql",
+            "apache-airflow-providers-databricks",
+            "apache-airflow-providers-datadog",
+            "apache-airflow-providers-dbt-cloud",
+            "apache-airflow-providers-dingding",
+            "apache-airflow-providers-discord",
+            "apache-airflow-providers-docker",
+            "apache-airflow-providers-duckdb",
+            "apache-airflow-providers-edge3",
+            "apache-airflow-providers-elasticsearch",
+            "apache-airflow-providers-exasol",
+            "apache-airflow-providers-fab",
+            "apache-airflow-providers-facebook",
+            "apache-airflow-providers-ftp",
+            "apache-airflow-providers-git",
+            "apache-airflow-providers-github",
+            "apache-airflow-providers-grpc",
+            "apache-airflow-providers-hashicorp",
+            "apache-airflow-providers-http",
+            "apache-airflow-providers-ibm-db2",
+            "apache-airflow-providers-ibm-mq",
+            "apache-airflow-providers-imap",
+            "apache-airflow-providers-influxdb",
+            "apache-airflow-providers-informatica",
+            "apache-airflow-providers-jdbc",
+            "apache-airflow-providers-jenkins",
+            "apache-airflow-providers-keycloak",
+            "apache-airflow-providers-microsoft-azure",
+            "apache-airflow-providers-microsoft-mssql",
+            "apache-airflow-providers-microsoft-psrp",
+            "apache-airflow-providers-microsoft-winrm",
+            "apache-airflow-providers-modal",
+            "apache-airflow-providers-mongo",
+            "apache-airflow-providers-mysql",
+            "apache-airflow-providers-neo4j",
+            "apache-airflow-providers-odbc",
+            "apache-airflow-providers-openai",
+            "apache-airflow-providers-openfaas",
+            "apache-airflow-providers-openlineage",
+            "apache-airflow-providers-opensearch",
+            "apache-airflow-providers-opsgenie",
+            "apache-airflow-providers-oracle",
+            "apache-airflow-providers-pagerduty",
+            "apache-airflow-providers-papermill",
+            "apache-airflow-providers-pgvector",
+            "apache-airflow-providers-pinecone",
+            "apache-airflow-providers-postgres",
+            "apache-airflow-providers-presto",
+            "apache-airflow-providers-qdrant",
+            "apache-airflow-providers-redis",
+            "apache-airflow-providers-salesforce",
+            "apache-airflow-providers-samba",
+            "apache-airflow-providers-segment",
+            "apache-airflow-providers-sendgrid",
+            "apache-airflow-providers-sftp",
+            "apache-airflow-providers-singularity",
+            "apache-airflow-providers-slack",
+            "apache-airflow-providers-smtp",
+            "apache-airflow-providers-snowflake",
+            "apache-airflow-providers-sqlite",
+            "apache-airflow-providers-ssh",
+            "apache-airflow-providers-standard",
+            "apache-airflow-providers-tableau",
+            "apache-airflow-providers-telegram",
+            "apache-airflow-providers-teradata",
+            "apache-airflow-providers-trino",
+            "apache-airflow-providers-vertica",
+            "apache-airflow-providers-vespa",
+            "apache-airflow-providers-weaviate",
+            "apache-airflow-providers-yandex",
+            "apache-airflow-providers-ydb",
+            "apache-airflow-providers-zendesk",
+            "apache-airflow-registry-tools",
+            "apache-airflow-shared-configuration",
+            "apache-airflow-shared-dagnode",
+            "apache-airflow-shared-listeners",
+            "apache-airflow-shared-logging",
+            "apache-airflow-shared-module-loading",
+            "apache-airflow-shared-observability",
+            "apache-airflow-shared-plugins-manager",
+            "apache-airflow-shared-providers-discovery",
+            "apache-airflow-shared-secrets-backend",
+            "apache-airflow-shared-secrets-masker",
+            "apache-airflow-shared-serialization",
+            "apache-airflow-shared-state",
+            "apache-airflow-shared-template-rendering",
+            "apache-airflow-shared-timezones",
+            "apache-airflow-task-sdk-integration-tests",
+            "java-sdk",
+            "registry"
+          ],
+          "instructionFailures": [
+            "AGENTS.md:168",
+            "airflow-core/src/airflow/api_fastapi/execution_api/AGENTS.md:19",
+            "providers/elasticsearch/AGENTS.md:13",
+            "providers/elasticsearch/AGENTS.md:14",
+            "providers/elasticsearch/AGENTS.md:15",
+            "providers/opensearch/AGENTS.md:13",
+            "providers/opensearch/AGENTS.md:14",
+            "providers/opensearch/AGENTS.md:15",
+            "registry/AGENTS.md:399",
+            "registry/AGENTS.md:408",
+            "registry/AGENTS.md:471",
+            "registry/AGENTS.md:570",
+            "scripts/ci/prek/AGENTS.md:17",
+            "task-sdk/src/airflow/sdk/execution_time/schema/AGENTS.md:46",
+            ".agents/skills/airflow-java-sdk/SKILL.md:93",
+            ".agents/skills/airflow-java-sdk/SKILL.md:94",
+            ".agents/skills/airflow-java-sdk/SKILL.md:100"
+          ],
+          "blockingSafety": [
+            "secret chart/values.yaml:404",
+            "secret chart/values.yaml:405"
+          ],
+          "headline": "This read-only audit ran no repo code, so it gives no level yet. A local-exec audit can give one."
+        }
+      }
     },
     {
       "id": "dd-trace-go",
       "repo": "DataDog/dd-trace-go",
       "commit": "48d446a8f02c83ec30a1067a471218606593a4a5",
       "runtime": "docker",
-      "minutes": 1,
+      "minutes": 0.2,
       "tier": "read-only",
       "review": "trial-representativeness-review.md",
       "now": "2026-11-26T12:00:00Z",
-      "notes": "154 go.mod modules tied by go.work, with GitLab CI beside GitHub Actions. Scanned only: discovery across many modules and non-GitHub CI.",
+      "notes": "154 go.mod modules tied by go.work, with GitLab CI beside GitHub Actions. Scanned only: discovery across many modules and non-GitHub CI. Its ceiling of 13 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
       "realInstructionFindings": [],
-      "falseInstructionFindings": 0,
-      "recorded": {}
+      "falseInstructionFindings": 13,
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "not_assessed",
+          "unproven": false,
+          "couldBe": 1,
+          "components": {
+            "v2": {
+              "level": null,
+              "unproven": false
+            },
+            "all": {
+              "level": null,
+              "unproven": false
+            },
+            "otelc-all": {
+              "level": null,
+              "unproven": false
+            },
+            "aws-sdk-go-v2": {
+              "level": null,
+              "unproven": false
+            },
+            "datadog-lambda-go": {
+              "level": null,
+              "unproven": false
+            },
+            "chi.v5": {
+              "level": null,
+              "unproven": false
+            },
+            "http": {
+              "level": null,
+              "unproven": false
+            },
+            "fasthttp": {
+              "level": null,
+              "unproven": false
+            },
+            "otelc-external-app": {
+              "level": null,
+              "unproven": false
+            },
+            "_integration": {
+              "level": null,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "_stage",
+            "_tools",
+            "aerospike-client-go.v7",
+            "api",
+            "apim-callout",
+            "apps",
+            "autoreleasetagger",
+            "aws-sdk-go",
+            "awsv1dep",
+            "awsv2dep",
+            "bun",
+            "buntdb",
+            "chi",
+            "chidep",
+            "client-go",
+            "configaudit",
+            "configinverter",
+            "confluentkafkadep",
+            "connect",
+            "consul",
+            "containers",
+            "contrib-Shopify-sarama",
+            "contrib-aws-aws-sdk-go-otelc",
+            "contrib-aws-aws-sdk-go-v2-otelc",
+            "contrib-cloud.google.com-go-pubsub.v1-otelc",
+            "contrib-cloud.google.com-go-pubsub.v2-otelc",
+            "contrib-confluentinc-confluent-kafka-go-kafka-otelc",
+            "contrib-confluentinc-confluent-kafka-go-kafka.v2-otelc",
+            "contrib-database-sql-otelc",
+            "contrib-gin-gonic-gin-otelc",
+            "contrib-go-chi-chi-otelc",
+            "contrib-go-chi-chi.v5-otelc",
+            "contrib-go-redis-redis-otelc",
+            "contrib-go-redis-redis.v7-otelc",
+            "contrib-go-redis-redis.v8-otelc",
+            "contrib-go.mongodb.org-mongo-driver-otelc",
+            "contrib-go.mongodb.org-mongo-driver.v2-otelc",
+            "contrib-gofiber-fiber.v2-otelc",
+            "contrib-gomodule-redigo-otelc",
+            "contrib-google.golang.org-grpc-otelc",
+            "contrib-gorilla-mux-otelc",
+            "contrib-gorm.io-gorm.v1-otelc",
+            "contrib-jackc-pgx.v5-otelc",
+            "contrib-julienschmidt-httprouter-otelc",
+            "contrib-k8s.io-client-go-otelc",
+            "contrib-labstack-echo.v4-otelc",
+            "contrib-labstack-echo.v5-otelc",
+            "contrib-net-http-otelc",
+            "contrib-redis-go-redis.v9-otelc",
+            "contrib-rs-zerolog-otelc",
+            "contrib-segmentio-kafka-go-otelc",
+            "contrib-valyala-fasthttp-otelc",
+            "dns",
+            "echo.v4",
+            "echo.v5",
+            "echodep",
+            "elastic.v5",
+            "exectracetest",
+            "fasthttpdep",
+            "fiber.v2",
+            "fiberdep",
+            "fixmodules",
+            "franz-go",
+            "gateway-api",
+            "gen_endpoints",
+            "gencontribdoc",
+            "gencontribs",
+            "gin",
+            "gindep",
+            "go-control-plane",
+            "go-elasticsearch.v6",
+            "go-redis.v9",
+            "go-restful.v3",
+            "go-sdk",
+            "gocql",
+            "goleveldb",
+            "gomemcache",
+            "goredisdep",
+            "gorillamuxdep",
+            "gorm.v1",
+            "gormdep",
+            "gqlgen",
+            "gqlgendep",
+            "graphql",
+            "graphql-go",
+            "grpc",
+            "grpcdep",
+            "httpdep",
+            "httprouter",
+            "httprouterdep",
+            "httptreemux.v5",
+            "instrumentation-testutils-grpc",
+            "integration_tests",
+            "k8sclientgodep",
+            "kafka",
+            "kafka-go",
+            "kafka.v2",
+            "logrus",
+            "mcp-go",
+            "mgo",
+            "mongo-driver",
+            "mongo-driver.v2",
+            "mongodep",
+            "mux",
+            "namingschematest",
+            "negroni",
+            "opensearch-go.v4",
+            "otelc",
+            "pg.v10",
+            "pgx.v5",
+            "pgxdep",
+            "pubsub.v1",
+            "pubsub.v2",
+            "pubsubdep",
+            "redigo",
+            "redis",
+            "redis.v7",
+            "redis.v8",
+            "rueidis",
+            "sarama",
+            "sdk-go.v2",
+            "setup-smoke-test",
+            "slog",
+            "sql",
+            "sqlx",
+            "stream-processing-offload",
+            "traceproftest",
+            "twirp",
+            "v2fix",
+            "validationtest",
+            "valkey-go",
+            "vault",
+            "zap",
+            "zerolog",
+            "zerologdep"
+          ],
+          "instructionFailures": [
+            "CONTRIBUTING.md:57",
+            "CONTRIBUTING.md:61",
+            "CONTRIBUTING.md:182",
+            "CONTRIBUTING.md:192",
+            "CONTRIBUTING.md:193",
+            "CONTRIBUTING.md:196",
+            "CONTRIBUTING.md:197",
+            "CONTRIBUTING.md:299",
+            "CONTRIBUTING.md:302",
+            "internal/appsec/AGENTS.md:121",
+            ".claude/skills/migrate-orchestrion-to-otelc/SKILL.md:49",
+            ".claude/skills/migrate-orchestrion-to-otelc/SKILL.md:55",
+            ".claude/skills/migrate-orchestrion-to-otelc/SKILL.md:114"
+          ],
+          "blockingSafety": [],
+          "headline": "This read-only audit ran no repo code, so it gives no level yet. A local-exec audit can give one."
+        }
+      }
     },
     {
       "id": "apollo-client",
       "repo": "apollographql/apollo-client",
       "commit": "0ff461cb235b98f9940b0e333ad7d6b5c2c71ffb",
       "runtime": "docker",
-      "minutes": 1,
+      "minutes": 0.1,
       "tier": "read-only",
       "review": "trial-representativeness-review.md",
       "now": "2026-11-20T12:00:00Z",
       "notes": "TypeScript library whose main CI is CircleCI, with CLAUDE.md and .github/instructions/. integration-tests is its own pnpm workspace tested with browsers. Scanned only: non-GitHub CI and agent files.",
+      "tracking": {
+        "R2": "defect found by a new trial, fix pending: integration-tests, a separate pnpm workspace CircleCI tests per framework with pnpm --filter <framework> test, gets no test command"
+      },
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "recorded": {}
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": 1,
+          "components": {
+            "client": {
+              "level": null,
+              "unproven": false
+            },
+            "codegen": {
+              "level": null,
+              "unproven": false
+            },
+            "ac3-to-ac4": {
+              "level": null,
+              "unproven": false
+            },
+            "integration-tests": {
+              "level": null,
+              "unproven": false
+            },
+            "memory": {
+              "level": null,
+              "unproven": false
+            },
+            "data-masking": {
+              "level": 0,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": [],
+          "headline": "Level 1 is undetermined for client: no check failed for a reason in the repo, but the clean install hasn't run."
+        }
+      }
     },
     {
       "id": "cleo",
       "repo": "python-poetry/cleo",
       "commit": "fd264efa3702c6de0231b8235741881d70bb4e3e",
       "runtime": "docker",
-      "minutes": 1,
+      "minutes": 0.4,
       "review": "trial-representativeness-review.md",
       "now": "2026-10-16T12:00:00Z",
       "notes": "Small Poetry library, the commit supported.md cites as Poetry's proof; its tests need nothing beyond the install, so this re-verifies that claim.",
@@ -880,54 +1850,227 @@
       ],
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "recorded": {}
+      "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 1,
+          "outcome": "proven",
+          "unproven": false,
+          "couldBe": null,
+          "components": {
+            "cleo": {
+              "level": 1,
+              "unproven": false
+            }
+          },
+          "notAssessed": [],
+          "instructionFailures": [],
+          "blockingSafety": [],
+          "headline": "Agents can build and test cleo, but its tests can't yet catch wrong changes."
+        }
+      }
     },
     {
       "id": "saleor",
       "repo": "saleor/saleor",
       "commit": "dfbf13948fa0f71094555fcbbbe4ceccf9ce4eff",
       "runtime": "docker",
-      "minutes": 1.5,
+      "minutes": 0.2,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-03T12:00:00Z",
-      "notes": "Django app (uv) beside a root package.json that only holds release-it for version bumps and is no project. Its unit tests need Postgres and Valkey. The commit supported.md cites for a Python app next to a root package.json.",
+      "notes": "Django app (uv) beside a root package.json that only holds release-it for version bumps and is no project. Its unit tests need Postgres and Valkey. The commit supported.md cites for a Python app next to a root package.json. Its ceiling of 3 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
+      "tracking": {
+        "R2": "unsupported feature: a Python app beside a root package.json gets no level yet (supported.md, python-behind-root-package), so no test command is planned"
+      },
       "egress": [
         "pypi.org",
         "files.pythonhosted.org"
       ],
       "realInstructionFindings": [],
-      "falseInstructionFindings": 0,
-      "recorded": {}
+      "falseInstructionFindings": 3,
+      "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "not_assessed",
+          "unproven": false,
+          "couldBe": null,
+          "components": {},
+          "notAssessed": [
+            "saleor",
+            "saleor-python"
+          ],
+          "instructionFailures": [
+            "CONTRIBUTING.md:216",
+            "CONTRIBUTING.md:402",
+            ".claude/skills/filter-benchmark/SKILL.md:158"
+          ],
+          "blockingSafety": [],
+          "headline": "No component could be assessed, so this audit can't give a level yet: it skipped 2 components whose toolchains the audit doesn't support yet."
+        }
+      }
     },
     {
       "id": "spree",
       "repo": "spree/spree",
       "commit": "cdd9a02b3c91f9572a009d3f3ec0f19bde8a335b",
       "runtime": "docker",
-      "minutes": 3,
+      "minutes": 19.1,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-03T12:00:00Z",
-      "notes": "Ruby gems (core, api, emails, dashboard, providers) each tested from its own folder, beside a pnpm and Turborepo workspace of JS packages tested through the root task graph. No Gemfile.lock or .ruby-version. The commit supported.md cites for task-graph builds, which aren't supported yet.",
+      "notes": "Ruby gems (core, api, emails, dashboard, providers) each tested from its own folder, beside a pnpm and Turborepo workspace of JS packages tested through the root task graph. No Gemfile.lock or .ruby-version. The commit supported.md cites for task-graph builds, which aren't supported yet. Its ceiling of 38 false instruction findings is a defect found by a new trial, fix pending: commands in its agent files and contributor guides that the replay misreads; the follow-up on missed test commands lowers it.",
+      "tracking": {
+        "R1": "unsupported feature: the root is a pnpm and Turborepo task graph (supported.md, task-graph), and the Ruby gems under spree/, each with a gemspec and no Gemfile.lock, aren't discovered",
+        "R2": "unsupported feature: the gems under spree/ aren't discovered, so none gets the rake or rspec command its CI job runs in its folder",
+        "R3": "unsupported feature: the gems under spree/ aren't discovered, so none is replayed",
+        "R6": "unsupported feature: with the gems and the task-graph root undiscovered, their changes count as unowned"
+      },
       "egress": [
         "rubygems.org",
         "registry.npmjs.org"
       ],
       "realInstructionFindings": [],
-      "falseInstructionFindings": 0,
-      "recorded": {}
+      "falseInstructionFindings": 38,
+      "recorded": {
+        "open": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": "docker",
+          "level": 0,
+          "outcome": "blocked",
+          "unproven": false,
+          "couldBe": 1,
+          "components": {
+            "admin-sdk": {
+              "level": 0,
+              "unproven": true
+            },
+            "cli": {
+              "level": 0,
+              "unproven": true
+            },
+            "create-spree-app": {
+              "level": 1,
+              "unproven": false
+            },
+            "dashboard": {
+              "level": 0,
+              "unproven": true
+            },
+            "dashboard-core": {
+              "level": 0,
+              "unproven": true
+            },
+            "dashboard-ui": {
+              "level": 0,
+              "unproven": false
+            },
+            "sdk": {
+              "level": 0,
+              "unproven": true
+            },
+            "seller-dashboard": {
+              "level": 0,
+              "unproven": false
+            },
+            "seller-sdk": {
+              "level": 0,
+              "unproven": true
+            },
+            "spree": {
+              "level": null,
+              "unproven": false
+            }
+          },
+          "notAssessed": [
+            "core",
+            "dashboard-plugin-example",
+            "dashboard-starter",
+            "docs",
+            "sdk-core",
+            "seller-dashboard-starter"
+          ],
+          "instructionFailures": [
+            ".github/CONTRIBUTING.md:75",
+            ".github/CONTRIBUTING.md:98",
+            ".github/CONTRIBUTING.md:110",
+            ".github/CONTRIBUTING.md:111",
+            ".github/CONTRIBUTING.md:112",
+            ".github/CONTRIBUTING.md:134",
+            ".github/CONTRIBUTING.md:135",
+            ".github/CONTRIBUTING.md:135",
+            ".github/CONTRIBUTING.md:165",
+            ".github/CONTRIBUTING.md:214",
+            ".github/CONTRIBUTING.md:221",
+            ".github/CONTRIBUTING.md:232",
+            ".github/CONTRIBUTING.md:255",
+            ".github/CONTRIBUTING.md:297",
+            ".github/CONTRIBUTING.md:326",
+            ".github/CONTRIBUTING.md:358",
+            ".github/CONTRIBUTING.md:386",
+            ".github/CONTRIBUTING.md:392",
+            ".github/CONTRIBUTING.md:393",
+            ".github/CONTRIBUTING.md:431",
+            ".github/CONTRIBUTING.md:441",
+            ".github/CONTRIBUTING.md:444",
+            "AGENTS.md:41",
+            "AGENTS.md:42",
+            "AGENTS.md:43",
+            "AGENTS.md:44",
+            "AGENTS.md:45",
+            "AGENTS.md:48",
+            "AGENTS.md:49",
+            "packages/AGENTS.md:18",
+            "packages/AGENTS.md:40",
+            "packages/dashboard-starter/AGENTS.md:81",
+            "packages/dashboard-starter/AGENTS.md:84",
+            "packages/dashboard-starter/AGENTS.md:87",
+            "packages/seller-dashboard-starter/AGENTS.md:89",
+            "packages/seller-dashboard-starter/AGENTS.md:92",
+            "packages/seller-dashboard-starter/AGENTS.md:95",
+            "spree/AGENTS.md:81"
+          ],
+          "blockingSafety": [],
+          "headline": "Level 1 is undetermined for dashboard and spree: no check failed for a reason in the repo, but the audit couldn't tell how its tests run: it has 1337 test files, and the audit found nothing that runs them."
+        }
+      }
     },
     {
       "id": "ios-oss",
       "repo": "kickstarter/ios-oss",
       "commit": "209075796e43944ba4e925658f56aa6d495ad8e1",
       "runtime": "docker",
-      "minutes": 1,
+      "minutes": 0.1,
       "review": "trial-representativeness-review.md",
       "now": "2026-11-17T12:00:00Z",
       "notes": "Kickstarter's Xcode iOS app with Swift packages, tested only on macOS with a simulator (CircleCI). No supported ecosystem, so the honest result is no level and \"needs macOS\"; nothing runs.",
+      "tracking": {
+        "R1": "unsupported feature: an Xcode app needs macOS; the Swift packages beside it (Kickstarter-Framework, Library, KsApi, KDS) aren't listed at all"
+      },
       "realInstructionFindings": [],
       "falseInstructionFindings": 0,
-      "recorded": {}
+      "recorded": {
+        "any": {
+          "exit": 0,
+          "sealed": true,
+          "runtime": null,
+          "level": 0,
+          "outcome": "not_assessed",
+          "unproven": false,
+          "couldBe": null,
+          "components": {},
+          "notAssessed": [
+            "Kickstarter"
+          ],
+          "instructionFailures": [],
+          "blockingSafety": [],
+          "headline": "No component could be assessed, so this audit can't give a level yet: Kickstarter needs macOS with Xcode to build; it's blocked on this machine, not broken."
+        }
+      }
     }
   ]
 }

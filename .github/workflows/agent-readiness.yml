@@ -44,17 +44,18 @@ jobs:
         run: support/tools/no-skips.sh "$RUNNER_TEMP/check.log"
 
   trials:
-    name: Pinned trial repos (Docker, shard ${{ matrix.shard }}/3)
+    name: Pinned trial repos (Docker, shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04
     # Each shard on its own runner, so no shard slows another's audits. support/trials/shards.ts
-    # splits the trials by their recorded minutes; tests/trials.test.ts keeps the count in step.
+    # splits the trials by their minutes on these runners; sentry-javascript alone takes about an hour,
+    # so four shards keep each near it. tests/trials.test.ts keeps the count in step.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     timeout-minutes: 120
     env:
-      SA_TRIALS_SHARD: ${{ matrix.shard }}/3
+      SA_TRIALS_SHARD: ${{ matrix.shard }}/4
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

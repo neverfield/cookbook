@@ -61,7 +61,8 @@ interface Trial {
   // "read-only" scans without running repo code: a repo too large to audit within the run, checked
   // for discovery, placement, test commands and safety findings. Unset, the audit runs at local-exec.
   tier?: "read-only";
-  // Wall minutes of the trial's audits when last recorded, which split the run into shards.
+  // Wall minutes of the trial's audits on the machines the shards run on (CI's runners), which split
+  // the run into shards.
   minutes: number;
   // A time budget decides the result, so it depends on the machine's speed: where several shards
   // share a machine, its audit runs with no other audit beside it.
@@ -94,7 +95,8 @@ const FILE = join(SUPPORT, "trials", "trials.json");
 const spec = JSON.parse(readFileSync(FILE, "utf8")) as TrialsFile;
 const CACHE = process.env.SA_TRIALS_CACHE || join(tmpdir(), "agent-readiness-trials");
 const RECORD = process.env.SA_TRIALS_RECORD === "1";
-// SA_TRIALS_RECORD=minutes checks every result as usual and rewrites only each trial's minutes.
+// SA_TRIALS_RECORD=minutes checks every result as usual and rewrites only each trial's minutes. Run
+// it where the shards run, since the minutes balance them; a result recording leaves them as they are.
 const RECORD_MINUTES = process.env.SA_TRIALS_RECORD === "minutes";
 const ONLY = (process.env.SA_TRIALS_ONLY ?? "").split(",").filter(Boolean);
 const SHARD = parseShard(process.env.SA_TRIALS_SHARD);
@@ -203,7 +205,7 @@ function falseFindings(t: Trial, o: Observed): string[] {
 const selected = SHARD ? shards(spec.trials, SHARD.count)[SHARD.index - 1] : spec.trials;
 const trials = selected.filter((t) => ONLY.length === 0 || ONLY.includes(t.id));
 const runtime = detectRuntime("docker");
-if (SHARD) process.stdout.write(`# shard ${SHARD.index}/${SHARD.count}: ${selected.map((t) => t.id).join(", ")} (${minutesOf(selected)} recorded minutes)\n`);
+if (SHARD) process.stdout.write(`shard ${SHARD.index}/${SHARD.count}: ${selected.map((t) => t.id).join(", ")} (${minutesOf(selected)} recorded minutes)\n`);
 
 interface TrialRun {
   key: string;
@@ -326,7 +328,6 @@ describe("pinned trial repos", () => {
           await updateTrials(t.id, (entry) => {
             entry.recorded[run.key as keyof Trial["recorded"]] = run.o;
             entry.falseInstructionFindings = falseFindings(t, run.o).length;
-            entry.minutes = run.minutes;
           });
           return;
         }
@@ -359,7 +360,6 @@ describe("pinned trial repos", () => {
             if (RECORD) {
               await updateTrials(t.id, (entry) => {
                 entry.recordedAlso = { ...entry.recordedAlso, [v.key]: v.o };
-                entry.minutes = Math.round((entry.minutes + v.minutes) * 10) / 10;
               });
               return;
             }
