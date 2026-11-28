@@ -1042,14 +1042,14 @@ async function controlRun(audit: Audit, ex: Executor, comp: Component, testCmd: 
   if (overBudget(budget, comp.id) || budgetLeftSec(budget, comp.id) < 1) return record("no fault was planted: the time budget ran out first", { blocked: BUDGET_OUT });
   const filePath = join(ex.root, file);
   const original = readText(filePath);
-  writeFileSync(filePath, withControlComment(file, original)!);
+  writeStamped(filePath, withControlComment(file, original)!);
   let out: RunOutcome;
   const limit = capped(budget, comp.id, faultSec);
   try {
     out = await fresh(testCmd.command, testCmd.cwd, limit.sec);
     charge(budget, comp.id, out.durationMs);
   } finally {
-    writeFileSync(filePath, original);
+    writeStamped(filePath, original);
   }
   if (out.timedOut) return record(`no fault was planted: the test run with only a comment added to ${file} timed out`, limit.byBudget ? { blocked: BUDGET_OUT } : {});
   if (out.exitCode !== 0 && diagnose(out.output, false, "test", out.exitCode).cause === "resource") return record(`no fault was planted: the test run with only a comment added to ${file} was stopped at the audit's memory limit`, { blocked: "the control run was stopped at the audit's memory limit, so the fault check couldn't start" });

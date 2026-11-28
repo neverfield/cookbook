@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
@@ -367,6 +367,24 @@ describe("planting faults within the budget", () => {
     assert.match(ev.summary, /test command failed when only a comment was added to app\/src\/pricing\.js, a change that can't alter behaviour, so a failure with a planted fault couldn't be told from a failure on any edit/);
     assert.equal(componentStates(audit, next, "app").faults.state, "unknown");
     assert.equal(readFileSync(join(repo, "app/src/pricing.js"), "utf8"), PRICING, "the file is put back");
+  });
+
+  test("the comment-only run writes the comment and the original back each a whole second later, as the faults are", async () => {
+    const repo = gitRepo(files);
+    const pricing = join(repo, "app/src/pricing.js");
+    const start = Math.floor(Date.now() / 1000);
+    utimesSync(pricing, start, start);
+    const seen: number[] = [];
+    const base = fakeExecutor(repo, 1000, () => true, () => false, true);
+    const ex: Executor = { ...base, async exec(c, cwd, sec, o) { seen.push(statSync(pricing).mtimeMs / 1000); return base.exec(c, cwd, sec, o); } };
+    const audit = faultAudit(repo, "2026-12-beta");
+    await plantFaults(audit, repo, repo, ex, next, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {});
+    assert.equal(audit.mutants.length, 0, "only the comment-only run ran");
+    const commented = seen.at(-1)!;
+    const restored = statSync(pricing).mtimeMs / 1000;
+    assert.equal(readFileSync(pricing, "utf8"), PRICING);
+    assert.ok(Number.isInteger(commented) && commented > start, `the commented file is stamped after ${start}, not ${commented}`);
+    assert.ok(Number.isInteger(restored) && restored > commented, `the original is stamped after ${commented}, not ${restored}`);
   });
 
   test("a suite that passes the comment-only run says so on its faults row", async () => {
