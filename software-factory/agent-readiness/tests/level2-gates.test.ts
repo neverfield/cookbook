@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { OOM_MARK } from "../skill/agent-readiness/scripts/lib/diagnose.ts";
-import { atLook, chooseSites, faultEstimate, faultId, keepPlanting, scopedCommand, testsReaching } from "../skill/agent-readiness/scripts/lib/mutate.ts";
+import { CONTROL_COMMENT, atLook, chooseSites, faultEstimate, faultId, keepPlanting, scopedCommand, testsReaching, withControlComment } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import type { EstimateRule } from "../skill/agent-readiness/scripts/lib/mutate.ts";
 import { charge, newBudget, plantFaults } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
@@ -181,9 +181,10 @@ describe("scoped fault runs", () => {
 });
 
 // Runs every command instantly, reporting `durationMs` and the outcome `caught(i)` gives for the i-th
-// run with a planted fault.
-function fakeExecutor(root: string, durationMs: number, caught: (i: number) => boolean, timesOut: (i: number) => boolean = () => false): Executor {
+// run with a planted fault. The control run, with only a comment added, passes unless `controlFails`.
+function fakeExecutor(root: string, durationMs: number, caught: (i: number) => boolean, timesOut: (i: number) => boolean = () => false, controlFails = false): Executor {
   let i = 0;
+  const pricing = join(root, "app/src/pricing.js");
   return {
     where: "container",
     strength: "clean_replay",
@@ -191,6 +192,7 @@ function fakeExecutor(root: string, durationMs: number, caught: (i: number) => b
     imageSource: "audit",
     root,
     async exec() {
+      if (existsSync(pricing) && readFileSync(pricing, "utf8").includes(CONTROL_COMMENT)) return { exitCode: controlFails ? 1 : 0, timedOut: false, durationMs, output: controlFails ? "# pass 4\n# fail 1\n" : "# pass 5\n# fail 0\n" };
       const n = i++;
       if (timesOut(n)) return { exitCode: null, timedOut: true, durationMs, output: "" };
       const c = caught(n);
@@ -246,7 +248,8 @@ describe("planting faults within the budget", () => {
   test("a run with a planted fault stopped at the audit's memory limit counts neither way, and the check says why", async () => {
     const oom = (root: string): Executor => ({
       ...fakeExecutor(root, 1000, () => true),
-      async exec() {
+      async exec(c, cwd, sec, o) {
+        if (readFileSync(join(root, "app/src/pricing.js"), "utf8").includes(CONTROL_COMMENT)) return fakeExecutor(root, 1000, () => false).exec(c, cwd, sec, o);
         return { exitCode: 137, timedOut: false, durationMs: 1000, output: `Killed\n${OOM_MARK}: the kernel stopped a process at the container's 2048 MB memory limit\n` };
       },
     });
@@ -271,20 +274,55 @@ describe("planting faults within the budget", () => {
     }
   });
 
-  test("faults planted again from the last audit can't decide the estimate without a fresh batch", async () => {
-    const repo = gitRepo(files);
-    const named = chooseSites(repo, repo, app(), "", 30, "HEAD", { identity: "fault" }).slice(10, 15);
-    const sealed = { mutants: named.map((s, i) => ({ id: `mut-app-${i + 1}`, component: "app", file: s.file, line: s.line, operator: s.operator, before: s.before, after: s.after, result: "survived", exitCodes: [0], faultId: faultId(s) })) };
+  // A sealed earlier audit that missed `missed` and caught `caught`, as the report names them.
+  function sealEarlier(repo: string, missed: ReturnType<typeof chooseSites>, caught: ReturnType<typeof chooseSites> = []): void {
+    const m = (s: (typeof missed)[number], i: number, result: string) => ({ id: `mut-app-${i + 1}`, component: "app", file: s.file, line: s.line, operator: s.operator, before: s.before, after: s.after, result, exitCodes: [result === "caught" ? 1 : 0], faultId: faultId(s) });
+    const sealed = { mutants: [...missed.map((s, i) => m(s, i, "survived")), ...caught.map((s, i) => m(s, missed.length + i, "caught"))] };
     mkdirSync(join(repo, ".agent-readiness/history/audits/aud-earlier"), { recursive: true });
     writeFileSync(join(repo, ".agent-readiness/history/audits/aud-earlier/audit.json"), JSON.stringify(sealed));
     writeFileSync(join(repo, ".agent-readiness/history/history.jsonl"), JSON.stringify({ id: "aud-earlier", kind: "audit", date: "2026-11-20" }) + "\n");
+  }
+
+  test("tests written against the last report's named faults don't raise the verdict: only new faults count", async () => {
+    const repo = gitRepo(files);
+    const named = chooseSites(repo, repo, app(), "", 30, "HEAD", { identity: "fault" }).slice(10, 15);
+    sealEarlier(repo, named);
     const audit = faultAudit(repo, "2026-12-beta");
-    await plantFaults(audit, repo, repo, fakeExecutor(repo, 1000, () => true), next, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {});
+    // The suite now catches exactly the five named faults, planted first, and nothing new.
+    await plantFaults(audit, repo, repo, fakeExecutor(repo, 1000, (i) => i < 5), next, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {});
     const ev = audit.evidence.find((e) => e.condition === "faults")!;
-    assert.deepEqual([ev.estimate?.carried, ev.estimate?.decided, ev.estimate?.verdict], [5, 10, "strong"], ev.summary);
+    assert.deepEqual([ev.estimate?.carried, ev.estimate?.carriedCaught, ev.estimate?.caught, ev.estimate?.decided, ev.estimate?.verdict, ev.result], [5, 5, 0, 5, "weak", "fail"], ev.summary);
     const details = JSON.parse(readFileSync(join(repo, "..", "mutants.json"), "utf8")) as { faultId: string }[];
     assert.deepEqual(details.slice(0, 5).map((d) => d.faultId), named.map(faultId), "the named faults go first");
-    assert.match(ev.summary, /5 of them planted again from the last audit/);
+    assert.match(ev.summary, /^caught 0 of 5 new planted faults \(0%\): weak/);
+    assert.match(ev.summary, /; 5 of the 5 faults the last audit missed are now caught, planted again and not counted/);
+  });
+
+  test("15 named faults now caught and 0 of 5 new is not strong, and named faults past the carry cap never come back as new", async () => {
+    const repo = gitRepo(files);
+    const named = chooseSites(repo, repo, app(), "", 30, "HEAD", { identity: "fault" }).slice(0, 15);
+    sealEarlier(repo, named);
+    const audit = faultAudit(repo, "2026-12-beta");
+    const original = PRICING.split("\n");
+    const namedEdits = new Set(named.map((s) => `${s.line}:${s.after}`));
+    const ex = fakeExecutor(repo, 1000, () => false);
+    const exec = ex.exec;
+    // Caught exactly when the planted fault is one the report named.
+    ex.exec = async (c, cwd, sec, o) => {
+      const lines = readFileSync(join(repo, "app/src/pricing.js"), "utf8").split("\n");
+      const at = lines.findIndex((l, i) => l !== original[i]);
+      if (at < 0 || lines.join("\n").includes(CONTROL_COMMENT)) return exec(c, cwd, sec, o);
+      const hit = namedEdits.has(`${at + 1}:${lines[at]}`);
+      return { exitCode: hit ? 1 : 0, timedOut: false, durationMs: 1000, output: hit ? "# pass 4\n# fail 1\n" : "# pass 5\n# fail 0\n" };
+    };
+    await plantFaults(audit, repo, repo, ex, next, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {});
+    const ev = audit.evidence.find((e) => e.condition === "faults")!;
+    assert.notEqual(ev.estimate?.verdict, "strong", ev.summary);
+    assert.deepEqual([ev.estimate?.carried, ev.estimate?.carriedCaught, ev.estimate?.caught, ev.estimate?.decided], [5, 5, 0, 5], ev.summary);
+    const planted = (JSON.parse(readFileSync(join(repo, "..", "mutants.json"), "utf8")) as { faultId: string }[]).map((d) => d.faultId);
+    const isNamed = new Set(named.map(faultId));
+    assert.equal(planted.length, 10);
+    assert.deepEqual(planted.slice(5).filter((id) => isNamed.has(id)), [], "a named fault past the carry cap is never planted as a new one");
   });
 
   test("two runs with planted faults that time out stop planting only when they come in a row", async () => {
@@ -316,6 +354,42 @@ describe("planting faults within the budget", () => {
     limits.length = 0;
     await plantFaults(faultAudit(repo, "2026-12-beta"), repo, repo, ex, next, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {}, 90_000);
     assert.deepEqual([...new Set(limits)], [next.mutation.runTimeoutSec]);
+  });
+
+  test("tests that fail on a comment alone check the source's text, so no fault is planted and the check is undetermined", async () => {
+    const repo = gitRepo(files);
+    const audit = faultAudit(repo, "2026-12-beta");
+    await plantFaults(audit, repo, repo, fakeExecutor(repo, 1000, () => true, () => false, true), next, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {});
+    const ev = audit.evidence.find((e) => e.condition === "faults")!;
+    assert.equal(audit.mutants.length, 0, "no fault was planted");
+    assert.equal(ev.result, "not_run");
+    assert.equal(ev.blocked, undefined);
+    assert.match(ev.summary, /test command failed when only a comment was added to app\/src\/pricing\.js, a change that can't alter behaviour, so a failure with a planted fault couldn't be told from a failure on any edit/);
+    assert.equal(componentStates(audit, next, "app").faults.state, "unknown");
+    assert.equal(readFileSync(join(repo, "app/src/pricing.js"), "utf8"), PRICING, "the file is put back");
+  });
+
+  test("a suite that passes the comment-only run says so on its faults row", async () => {
+    const repo = gitRepo(files);
+    const audit = faultAudit(repo, "2026-12-beta");
+    await plantFaults(audit, repo, repo, fakeExecutor(repo, 1000, () => true), next, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {});
+    assert.match(audit.evidence.find((e) => e.condition === "faults")!.summary, /; a comment added to app\/src\/pricing\.js left the tests passing/);
+  });
+
+  test("the comment-only change is a comment in each language, and none where a line would be output", () => {
+    assert.equal(withControlComment("a.py", "x = 1\n"), `x = 1\n\n# ${CONTROL_COMMENT}\n`);
+    assert.equal(withControlComment("a.rb", "x = 1"), `x = 1\n\n# ${CONTROL_COMMENT}\n`);
+    assert.equal(withControlComment("a.py", "x = 1\n\n\n"), `x = 1\n\n# ${CONTROL_COMMENT}\n`, "one blank line before it, never more");
+    for (const f of ["a.ts", "a.mjs", "a.go", "a.rs", "A.java", "a.kt", "A.cs", "a.php"]) assert.equal(withControlComment(f, "}\r\n"), `}\r\n\r\n// ${CONTROL_COMMENT}\r\n`, f);
+    assert.equal(withControlComment("a.php", "<?php echo 1; ?>\n"), null);
+    assert.equal(withControlComment("a.vue", "<template/>\n"), null);
+  });
+
+  test("the 2026-11-beta rubric plants without the comment-only run, as its audits did", async () => {
+    const repo = gitRepo(files);
+    const audit = faultAudit(repo, "2026-11-beta");
+    await plantFaults(audit, repo, repo, fakeExecutor(repo, 1000, () => true, () => false, true), beta, audit.contract.find((c) => c.kind === "test")!, newBudget(15, 60), () => {});
+    assert.ok(audit.mutants.length > 0);
   });
 
   test("each fault's id is kept with its hidden details, not in the draft", async () => {

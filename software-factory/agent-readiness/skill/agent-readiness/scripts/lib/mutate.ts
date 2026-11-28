@@ -607,6 +607,8 @@ export interface PickOptions {
   identity?: "fault";
   // Fault ids an earlier sealed audit planted, replanted first where the same fault still exists.
   prior?: string[];
+  // Fault ids never to pick: ones an earlier sealed report named as missed that `prior` doesn't replant.
+  exclude?: string[];
 }
 
 // The pick depends on the component's code and on `seed`. An empty seed leaves the code alone to
@@ -628,7 +630,8 @@ export function chooseSites(repo: string, tree: string, comp: Component, seed: s
     const rand = seededRandom(seed ? `${code}:${seed}` : code, comp.id);
     shuffled = sites.map((s) => ({ s, k: rand() })).sort((a, b) => a.k - b.k).map((x) => x.s);
   }
-  const tiered = [...shuffled.filter((s) => recentTier.has(s.file)), ...shuffled.filter((s) => !recentTier.has(s.file))];
+  const excluded = new Set(opts.exclude ?? []);
+  const tiered = [...shuffled.filter((s) => recentTier.has(s.file)), ...shuffled.filter((s) => !recentTier.has(s.file))].filter((s) => !excluded.has(faultId(s)));
   if (opts.prior?.length) {
     const order = new Map(opts.prior.map((id, i) => [id, i]));
     const again = tiered.filter((s) => order.has(faultId(s))).sort((a, b) => order.get(faultId(a))! - order.get(faultId(b))!);
@@ -673,6 +676,21 @@ export function typeCanarySite(repo: string, tree: string, comp: Component, comm
 export function withCanary(text: string, line: string): string {
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
   return `${text}${text === "" || text.endsWith("\n") ? "" : eol}${line}${eol}`;
+}
+
+// A change that can't alter what a file does: a comment line at its end, after one blank line, written
+// as a capitalised sentence so the linters a build or test script runs first accept it (xo's
+// capitalized-comments, StyleCop's SA1513 and SA1515 with warnings as errors). Null for a file of
+// another kind, and for a PHP file that ends by closing its PHP block, where a line after `?>` would
+// be printed.
+export const CONTROL_COMMENT = "Agent readiness control comment.";
+export function withControlComment(file: string, text: string): string | null {
+  if (/\.php$/.test(file) && text.trimEnd().endsWith("?>")) return null;
+  const marker = /\.(py|rb)$/.test(file) ? "#" : /\.([cm]?[jt]sx?|go|rs|java|kts?|cs|php)$/.test(file) ? "//" : null;
+  if (!marker) return null;
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  const body = text.replace(/(\r?\n)+$/, "");
+  return `${body}${body ? eol + eol : ""}${marker} ${CONTROL_COMMENT}${eol}`;
 }
 
 export function applySite(text: string, site: Site): string {
@@ -740,12 +758,16 @@ export function wilsonBound(k: number, n: number, confidence: number, side: "low
   return Math.min(1, Math.max(0, bound));
 }
 
-export function faultEstimate(caught: number, decided: number, rule: EstimateRule, minForPass: number, planted = decided, carried = 0): FaultEstimate {
+// `caught` and `decided` count only faults no sealed audit planted before. Faults planted again from
+// the last audit are reported beside the estimate (`carried`, `carriedCaught`) and never move it: the
+// sealed report names the lines of missed ones, so tests written against those lines alone would
+// otherwise turn a weak suite strong.
+export function faultEstimate(caught: number, decided: number, rule: EstimateRule, minForPass: number, planted = decided, carried = 0, carriedCaught = 0): FaultEstimate {
   const low = wilsonBound(caught, decided, rule.strongConfidence, "low");
   const high = wilsonBound(caught, decided, rule.weakConfidence, "high");
   const rate = decided ? caught / decided : 0;
   const verdict = decided < minForPass ? "inconclusive" : low >= rule.strongLow - 1e-12 && rate >= rule.strongRate - 1e-12 ? "strong" : high < rule.weakHigh ? "weak" : "inconclusive";
-  return { planted, decided, caught, rate, low, high, verdict, carried };
+  return { planted, decided, caught, rate, low, high, verdict, carried, carriedCaught };
 }
 
 // Whether to plant another batch: the estimate is still open and neither cap is reached.
@@ -753,16 +775,15 @@ export function keepPlanting(est: FaultEstimate, rule: EstimateRule): boolean {
   return est.verdict === "inconclusive" && est.decided < rule.maxDecided && est.planted < rule.maxPlanted;
 }
 
-// The looks fall at whole batches of decided faults, the points the rule's error rates were set at.
-// When earlier faults were planted again, none is taken before a whole batch of faults no sealed
-// report has named, so tests written against the named ones can't decide the estimate alone.
-export function atLook(decided: number, rule: EstimateRule, carriedDecided = 0): boolean {
-  return decided > 0 && decided % rule.batch === 0 && (carriedDecided === 0 || decided - carriedDecided >= rule.batch);
+// The looks fall at whole batches of decided new faults, the points the rule's error rates were set at.
+export function atLook(decided: number, rule: EstimateRule): boolean {
+  return decided > 0 && decided % rule.batch === 0;
 }
 
-// How many earlier faults may be planted again: enough room is always left for one fresh batch.
+// How many of the last audit's missed faults may be planted again. They don't count toward the
+// estimate, so they are extra runs; one batch shows whether those misses are now caught.
 export function carriedCap(rule: EstimateRule): number {
-  return Math.max(0, rule.maxDecided - rule.batch);
+  return rule.batch;
 }
 
 // The fault check's result from its counts: not_run when too few faults gave a clear result.
