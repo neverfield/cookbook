@@ -863,6 +863,7 @@ The 17 should-fix items of the offline production-readiness review land before t
 - **Remeasure:** with round 21, at the Mac release session.
 - **Verdict:** pending.
 
+<<<<<<< HEAD
 ## Round 23 (pending measurement): Plan A trial defects in the report's wording (November 27, 2026)
 
 The Plan A trial recording ([#68](https://github.com/neverfield/cookbook/pull/68)) found five critical events. Their fixes are script changes; three of them change what the reader sees, logged as one round under the Nov 24 decision. Scoring rules, level rules, each fixture's `expected.json`, the trial truth, the judge prompts and the calibration are unchanged.
@@ -875,6 +876,17 @@ The Plan A trial recording ([#68](https://github.com/neverfield/cookbook/pull/68
 - **Tests:** `tests/report-consistency.test.ts` (same command in two folders, checked with the holdout's K6 checker), `tests/environment.test.ts` (Node and corepack too old in host mode), `tests/lang-dotnet.test.ts` (the solution decides the build; the SDK pin is blocked), `tests/secrets.test.ts` (placeholders and test keys).
 - **Expected:** no change on the hard gates. Explanations get longer where commands run in folders; the headline judge reads the heading, which doesn't change.
 - **Remeasure:** with rounds 21 and 22, at the Mac release session.
+=======
+## Round 24 (pending measurement): one verdict word per result (November 27, 2026)
+
+The failing-verdict review's changes 1, 3, 4 and 7 (Andrew, Nov 27). They change which rows the reader sees as failed, so the wording is logged as one round. Each fixture's `expected.json`, the judge prompts and the calibration are unchanged.
+
+- **Failure mode:** a step blocked on this machine, or one the audit couldn't pin on the repo, read as failed in the headline, the counts, the roadmap titles and `(fail)` in the explanations; a host-mode failure read as Level 0 while a host-mode pass read as unproven; a recheck could fail where the audit, with its experiments, had passed.
+- **Change:** the headline's failing commands, the cause rows narration may choose, the roadmap's step titles and evidence, the explanations' result words, the check counts and the evidence log read each row's verdict from `lib/verdict.ts`; a host-mode failure of a Level 1 check reads "blocked on this machine" with why; an unproven instruction says why it isn't shown wrong.
+- **Tests:** `tests/one-verdict.test.ts`; each block fails on the base scripts.
+- **Expected:** no change on the hard gates. The headline names fewer failing commands only where a named one was blocked. The risk to watch is a host-mode audit that now reads as unproven where a reader expected Level 0.
+- **Remeasure:** with rounds 21 to 23, at the Mac release session.
+>>>>>>> f787ae2 (agent-readiness: one verdict word per result (lib/verdict.ts), host-mode symmetry, the recheck through the audit's gate, and instruction verdicts)
 - **Verdict:** pending.
 
 ## Round 24 (pending measurement): planted-fault wording after the architecture review (November 27, 2026)

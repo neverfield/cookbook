@@ -616,6 +616,31 @@ function phaseAttributionInput(ex: Pick<Executor, "where">, r: PhaseResult): Att
   return { result: r.status, kind: r.cmd.kind, where: ex.where, blocked: r.blocked, diagnosis: r.diagnosis ?? undefined, timedOut: r.outcome?.timedOut, summary: r.diagnosis?.detail ?? "", outputTail: r.outcome?.output };
 }
 
+// A result as an evidence row that isn't added to any audit, so the recheck judges it as the audit would.
+export function phaseRow(ex: Executor, r: PhaseResult): Evidence {
+  const map = KIND_CHECK[r.cmd.kind];
+  const attribution = r.attribution ?? attribute(phaseAttributionInput(ex, r), ex.imageSource) ?? undefined;
+  return {
+    id: r.cmd.id,
+    checkId: map.check,
+    condition: map.condition,
+    component: r.cmd.component,
+    kind: r.cmd.kind,
+    contractId: r.cmd.id,
+    strength: ex.strength,
+    where: ex.where,
+    result: r.status,
+    command: r.cmd.command,
+    timedOut: r.outcome?.timedOut ?? false,
+    summary: r.status === "fail" ? `${r.cmd.kind} failed: ${r.diagnosis?.detail ?? "non-zero exit"}` : `${r.cmd.kind} ${r.status === "pass" ? "passed" : r.note || "not run"}`,
+    diagnosis: r.diagnosis ?? undefined,
+    blocked: r.blocked,
+    ...(attribution ? { attribution } : {}),
+    ...(r.networkOn ? { network: "on" as const } : {}),
+    at: "",
+  };
+}
+
 // The output's last 4 KB, led by the build tool's root error when that falls outside them, as
 // Maven's does once its stack trace and resume hint fill the end.
 export function outputTail(redacted: string): string {

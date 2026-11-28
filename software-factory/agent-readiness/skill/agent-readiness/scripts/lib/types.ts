@@ -782,7 +782,7 @@ export interface ReportProgress {
 
 export interface ReportDetails {
   steps: { itemId: string; title: string; steps: { title: string; detail: string }[] }[];
-  checks: { id: string; name: string; why: string; sources: { claim: string; caveat: string; url: string }[]; result: string; ok: boolean | null; counts: { passed: number; failed: number; notRun: number; skipped?: number }; evidence: string[] }[];
+  checks: { id: string; name: string; why: string; sources: { claim: string; caveat: string; url: string }[]; result: string; ok: boolean | null; counts: { passed: number; failed: number; blocked?: number; undetermined?: number; notRun: number; skipped?: number }; evidence: string[] }[];
   notAssessed: string[];
   levelRules: { level1: string; level2: string; scenarios: { id: ScenarioId; label: string; bar: string }[] };
   outcomes: {
