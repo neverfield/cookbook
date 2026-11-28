@@ -30,6 +30,26 @@ npm run evals -- --release-check support/evals/runs/result.json
 
 `npm run evals` needs a `CURSOR_API_KEY` for agent arms. Compare against `support/evals/baseline.json`. See [evals/README.md](evals/README.md) and [RELEASE.md](RELEASE.md).
 
+## Adding a language
+
+A language is one file in `../skill/agent-readiness/scripts/lib/languages/`, listed once in `index.ts`, implementing `LanguageDef` from `language.ts`. Nothing outside that folder should need to change. If a check elsewhere needs a fact about your language, add it to `LanguageChecks` in `language.ts` and give it in every language file instead of testing the language by name.
+
+1. Copy the closest file: `go.ts` for a toolchain with its own image, `others.ts` for a language the scan recognizes but doesn't score. Set `id` (the file name), `label`, `codes` and `stacks`. A new code goes in the `Language` union in `scripts/lib/types.ts`, and a new ecosystem id in `PackageManager`. Both also go in the records in `tests/languages.test.ts`.
+2. `detect`: the manifests and sources that make a folder a project, with ranks, and the lockfile names.
+3. `ecosystems`: one per package manager, with its lockfiles, its frozen `install`, `unpinned`, and a `rule` sentence that matches its row in `references/levels.md`.
+4. `checks`: every rule. Use `null` where the language has none, so the report says "not checked for <label>" instead of an all-clear:
+   - `weakening.isTest` (which files are tests) and `weakening.markers` (skip markers and test cases) for `readiness diff`
+   - `lockfiles.diff` (changes `readiness diff` lists), `lockfiles.secretScanSkips` (`[]` when none), and `lockfiles.foreign` (the lockfile a PR adds when it switches package managers)
+   - `manifestScripts` (install hooks, sudo, network pipes and deploys in the manifest's scripts)
+   - `tool` (the first program of a command line that belongs to this language)
+   - `countedTests` (the files that show the run plan a component has tests; the fault hooks' `isTest` when there are hooks)
+   - `ciTest` (the test command the repo's CI runs for a component, which outranks the manifest's)
+5. `mutation`, or `null` when faults aren't planted: which files are tests and sources, which sources the tests cover, the fault sites on a line, the lines that are text rather than code, and how to tell a planted fault compiles. Without `sites` and `quoted`, the C-like rules in `fault-sites.ts` apply.
+6. `replay`, required before any stack is `supported`: `classify`, `image` and `images` (each digest also goes in `scripts/lib/images.ts`), `doctor`, `pins` and `commands`. A new language gets `replay`: each component installs in its own folder and runs in its own image. `sharedRoot` is the other model, where components share the repo root's install and image unless they commit a lockfile of their own. Only Node and Python use it.
+   Optional: `output` (runner totals and build-tool root errors that `diagnose.ts` reads from any command's output) and `hostGap` (a toolchain on the host older than the committed files need).
+7. Proof: a fixture under `fixtures/` with an `expected.json`, a `tests/lang-<id>.test.ts`, a pinned public repo in the stack's `proof`, and the stack's row in `references/supported.md`.
+8. Run `npm run check`. `tests/languages.test.ts` fails if a rule is undeclared or has the wrong shape, if a code or ecosystem is missing from the unions, if a rubric counts a lockfile no language declares, or if a language file imports anything at runtime beyond its folder, `util.ts` and `patterns.ts`. Then run `npm run release-manifest`.
+
 ## Pinned trial repos
 
 `npm run trials` audits each repo in `trials/trials.json` at its pinned commit, with the skill copied into the repo as the quickstart does, a fixed seed and a fixed clock. A run fails when its result differs from the one recorded, or when its false instruction findings (failing items not listed in `realInstructionFindings`) rise above the recorded ceiling. After a change that moves a result on purpose, re-record with `SA_TRIALS_RECORD=1 npm run trials` and say why in the PR. Each trial's truth, written from the repo and its upstream CI in the holdout's schema (`trials/truth/<id>.json`, see [holdout/PROTOCOL.md](holdout/PROTOCOL.md)), is scored on every run by the holdout's scorer, one guard per critical event and rate; a guard the tool doesn't meet yet is listed in `../tests/known-failures.json`. `SA_TRIALS_ONLY=zustand,zap` runs a subset. Results that depend on blocked hosts (`egress`) are recorded separately for open and restricted networks.

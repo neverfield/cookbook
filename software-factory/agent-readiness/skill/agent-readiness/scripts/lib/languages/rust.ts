@@ -373,6 +373,24 @@ export const rust: LanguageDef = {
     ownUnit: (tree, parent) => !isWorkspace(tree, parent),
   },
   ecosystems: [cargo],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: /^(cargo|rustc|rustup)$/,
+    countedTests: isRustTest,
+    ciTest: null,
+  },
+  mutation: {
+    isTest: isRustTest,
+    isSource: isRustSource,
+    covered: (tree, comp, tests, files) => rustCovered(tree, comp.path, tests, files),
+    sites: (line) => braceSites(line, RUST_SYNTAX),
+    quoted: rustQuoted,
+    // A lone crate is a workspace of one, so this checks it, or every member a fault can be in.
+    compileProbe: (comp) => ({ command: "cargo check --locked --offline -q --workspace", cwd: comp.path }),
+    compileError: (output) => /^error\[E\d+\]|^error: could not compile /m.test(output),
+  },
   replay: {
     classify: () => ({ language: "rust", packageManager: "cargo" }),
     image: rustImage,
@@ -397,15 +415,5 @@ export const rust: LanguageDef = {
     // toolchain file names, downloading that toolchain first when it isn't the image's own.
     setup: (tree, dir) => clippyDeclared(tree, dir) === null ? [] : [{ tool: "clippy", spec: rustChannel(tree, dir) ? `clippy for Rust ${rustChannel(tree, dir)}` : "clippy", install: `${dir === "." ? "" : `cd ${shellQuote(dir)} && `}rustup component add clippy` }],
     budget: { commandTimeoutSec: 1200, componentMinutes: 30, mutationRunTimeoutSec: 600 },
-    mutation: {
-      isTest: isRustTest,
-      isSource: isRustSource,
-      covered: (tree, comp, tests, files) => rustCovered(tree, comp.path, tests, files),
-      sites: (line) => braceSites(line, RUST_SYNTAX),
-      quoted: rustQuoted,
-      // A lone crate is a workspace of one, so this checks it, or every member a fault can be in.
-      compileProbe: (comp) => ({ command: "cargo check --locked --offline -q --workspace", cwd: comp.path }),
-      compileError: (output) => /^error\[E\d+\]|^error: could not compile /m.test(output),
-    },
   },
 };

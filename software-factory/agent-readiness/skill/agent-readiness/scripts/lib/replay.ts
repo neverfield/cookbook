@@ -9,20 +9,21 @@ import { addEvidence, registryValuesOf } from "./evidence.ts";
 import { attribute, networkVerdict, rerunsOnline } from "./attribute.ts";
 import type { AttributionInput } from "./attribute.ts";
 import { fmtDuration } from "./format.ts";
+import { SUDO } from "./patterns.ts";
 import { digestOf } from "./images.ts";
 import { replayInstructions } from "./instructions.ts";
-import { ecosystemOf } from "./languages/index.ts";
-import { lockedEngineGap } from "./languages/node.ts";
+import { LANGUAGES, codesOfTool, ecosystemOf, languageOf } from "./languages/index.ts";
 import { TYPE_CANARIES, applySite, atLook, carriedCap, chooseSites, estimateRule, faultEstimate, faultId, faultsVerdict, keepPlanting, killRateOf, scopedCommand, testsReaching, typeCanarySite, withCanary, withControlComment } from "./mutate.ts";
+import { typecheckProbe } from "./languages/probes.ts";
 import { Progress, budgetSummary } from "./progress.ts";
 import { redact, tail } from "./redact.ts";
 import type { Rubric } from "./rubric.ts";
 import { SUDO_SHIM_MARK, disposeHome, endGroups, runCommand, scrubbedEnv } from "./run.ts";
 import type { RunOutcome } from "./run.ts";
-import type { Attribution, Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Language, Mutant, Profile, Strength, Where } from "./types.ts";
+import type { Attribution, Audit, CommandKind, CondId, Component, ContractCommand, Diagnosis, Evidence, ImageRun, Mutant, Profile, Strength, Where } from "./types.ts";
 import { onTeardown, removeOrphanedTempDirs, tempDir } from "./teardown.ts";
 import type { TempDir } from "./teardown.ts";
-import { assertFreeSpace, containedPath, exists, fail, treeBytes, listFiles, randomHex, readJson, readText, sha256, shellQuote, writeJson } from "./util.ts";
+import { assertFreeSpace, containedPath, exists, fail, treeBytes, listFiles, randomHex, readJson, readText, sha256, writeJson } from "./util.ts";
 import { commandsFor } from "./score.ts";
 import { BUDGET_OUT, CUT_OFF } from "./scope.ts";
 import { makeRecipe } from "./static.ts";
@@ -81,7 +82,6 @@ export function banRepeats(ex: Executor, timedOut: Set<string>): Executor {
   return ex;
 }
 
-export const SUDO = /(^|[\s;&|(`]|\$\()sudo(\s|$)/;
 export const SUDO_REFUSED = "not run on the host: it uses sudo, which the audit only runs inside a container";
 export const NETWORK_ON = "the network couldn't be switched off for the test phase, so this pass doesn't prove a clean checkout";
 export const NEEDS_NETWORK = "the tests pass only with the network on, and it couldn't be switched back on to plant faults";
@@ -248,7 +248,7 @@ export function countTests(profile: Profile | null | undefined, component: strin
 
 // Whether output says the code doesn't compile, by the component's language file when it has a rule.
 function compileFailed(comp: Component, output: string, kind: CommandKind): boolean {
-  const own = hooked(comp)?.mutation.compileError;
+  const own = languageOf(comp.language)?.mutation?.compileError;
   return own ? own(output) : diagnose(output, false, kind).cause === "compile";
 }
 
@@ -446,17 +446,22 @@ export async function runContract(
     if (failedInstalls.has(cmd.component) && !rescued.has(cmd.component)) return true;
     return failedInstalls.has("*") && !rescued.has(cmd.component) && !rescued.has("*");
   };
-  // Outside a container the repo's commands run on this machine's Node. One older than a locked
-  // dependency's engines.node allows, as undici 8 needs 22.19 where the machine has 22.14, is a
-  // limit of the machine: the same lockfile passes in an image with a Node it supports.
-  let hostNode: string | null | undefined;
+  // Outside a container the repo's commands run on this machine's toolchains. One older than the
+  // locked dependencies allow is a limit of the machine, by the language files that check it; each
+  // asks this machine for its version once.
+  const hostVersions = new Map<string, string | null>();
   const hostEngineGap = async (cwd: string): Promise<Diagnosis | null> => {
-    if (hostNode === undefined) {
-      const v = await ex.exec("node --version", ".", 30);
-      hostNode = v.exitCode === 0 ? (v.output.trim().split("\n").pop() ?? null) : null;
+    for (const l of LANGUAGES) {
+      if (!l.hostGap) continue;
+      if (!hostVersions.has(l.id)) {
+        const v = await ex.exec(l.hostGap.probe, ".", 30);
+        hostVersions.set(l.id, v.exitCode === 0 ? (v.output.trim().split("\n").pop() ?? null) : null);
+      }
+      const version = hostVersions.get(l.id);
+      const gap = version ? l.hostGap.gap(ex.root, cwd, version) : null;
+      if (gap) return gap;
     }
-    const gap = hostNode ? lockedEngineGap(ex.root, cwd, hostNode) : null;
-    return gap ? { cause: "missing_tool", detail: `Node ${gap.range}, which the locked ${gap.pkg} needs, is not installed; Node ${hostNode} is` } : null;
+    return null;
   };
   const attempt = async (cmd: ContractCommand): Promise<PhaseResult | null> => {
     if (cmd.fallbackFor && (ex.unavailable || !blockedIds.has(cmd.fallbackFor))) return null;
@@ -800,17 +805,10 @@ function lockfileEvidence(audit: Audit, ex: Executor, profile: Profile, tree: st
 
 export const NO_MUTANTS = "planted faults skipped by --no-mutants";
 
-// How to tell whether a planted fault compiles, on its own: the component's type-check command, or
-// the TypeScript compiler the install put in place. A test script that runs tsc next to the tests
-// can't tell it, because which of them reports first depends on how fast the machine is.
+// How to tell whether a planted fault compiles, on its own, by the component's language file.
 function compileProbe(audit: Audit, ex: Executor, comp: Component): { command: string; cwd: string } | null {
-  const hooks = hooked(comp);
-  if (hooks) return hooks.mutation.compileProbe(comp);
-  const typecheck = audit.contract.find((c) => c.kind === "typecheck" && (c.component === comp.id || c.component === "*"));
-  if (typecheck) return { command: typecheck.command, cwd: typecheck.cwd };
-  if (comp.language !== "ts" || !exists(join(ex.root, comp.path, "tsconfig.json"))) return null;
-  const tsc = [comp.path, "."].map((d) => join(d, "node_modules", ".bin", "tsc")).find((p) => exists(join(ex.root, p)));
-  return tsc ? { command: `${shellQuote(tsc)} --noEmit -p ${shellQuote(join(comp.path, "tsconfig.json"))}`, cwd: "." } : null;
+  const hooks = languageOf(comp.language)?.mutation;
+  return hooks ? hooks.compileProbe(comp, { contract: audit.contract, root: ex.root }) : typecheckProbe(comp, audit.contract);
 }
 
 // How long one test run with a planted fault may take: the rubric's, or a slow toolchain's floor.
@@ -1198,19 +1196,6 @@ function executorSet(groups: ExecutorGroup[], profile: Profile): Executors {
   return { groups, forComponent, repo, close: () => groups.forEach((g) => g.ex.close()) };
 }
 
-// The tool a command starts with, and the component languages it belongs to. A command that runs
-// one of these goes to an assessed component of that language, in that component's image.
-const TOOL_LANGUAGES: { tool: RegExp; codes: Language[] }[] = [
-  { tool: /^(go|gofmt|golangci-lint)$/, codes: ["go"] },
-  { tool: /^(cargo|rustc|rustup)$/, codes: ["rust"] },
-  { tool: /^(mvn|\.\/mvnw|mvnw|gradle|\.\/gradlew|gradlew|java|javac|kotlinc)$/, codes: ["java", "kotlin"] },
-  { tool: /^dotnet$/, codes: ["csharp"] },
-  { tool: /^(composer|php|phpunit|vendor\/bin\/\S+)$/, codes: ["php"] },
-  { tool: /^(bundle|bundler|ruby|rake|rspec|rails|bin\/rails|bin\/rake)$/, codes: ["ruby"] },
-  { tool: /^(python3?|pip3?|pytest|uv|uvx|poetry|tox|nox)$/, codes: ["py"] },
-  { tool: /^(npm|npx|pnpm|pnpx|yarn|node|bun|bunx|corepack|tsc|vitest|jest)$/, codes: ["ts", "js"] },
-];
-
 // The program a command line runs first, past `cd dir &&` and variable assignments.
 function leadingTool(command: string): string {
   const first = command.split(/\s*(?:&&|;|\|\|)\s*/).map((p) => p.trim()).find((p) => p && !/^cd\s/.test(p)) ?? "";
@@ -1230,7 +1215,7 @@ export function instructionExecutor(exs: Pick<Executors, "forComponent" | "repo"
     const target = command.trim().split(/\s+/).slice(1).find((w) => !w.startsWith("-")) ?? "";
     tool = target ? leadingTool(makeRecipe(tree, cwd, target).split("\n")[0] ?? "") : "";
   }
-  const codes = TOOL_LANGUAGES.find((t) => t.tool.test(tool))?.codes ?? [];
+  const codes = codesOfTool(tool);
   const byTool = assessed.filter((c) => codes.includes(c.language)).sort((a, b) => Number(holds(b)) - Number(holds(a)) || b.changeShare - a.changeShare)[0];
   if (byTool) return exs.forComponent(byTool.id);
   const root = assessed.find((c) => c.path === ".");
@@ -1262,10 +1247,12 @@ function startContainer(audit: Audit, runtime: NonNullable<ReturnType<typeof det
   }
   const digest = digestOf(image);
   log(`Replaying${forWhom} in a clean ${runtime.bin} container (${image}${digest ? `, pinned at ${digest.slice(0, 19)}` : ""}; ${limits.cpus ? `${limits.cpus} CPUs, ` : ""}${limits.memoryMb} MB, ${limits.pids} processes).`);
-  // Python components in the Node image, as with --image, need the venv module it lacks.
-  if (image.startsWith("node:") && comps.some((c) => c.language === "py")) {
-    const added = session.asImageUser("python3 -m venv /tmp/venv-probe >/dev/null 2>&1 || (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv >/dev/null)", 600000);
-    log(added.ok ? "Added python3-venv to the Node image for the Python components." : `Couldn't add python3-venv for the Python components: ${tail(added.output, 300)}`);
+  // Components of one language in another's image, as with --image, may need what that image lacks.
+  for (const l of LANGUAGES) {
+    const need = l.sharedRoot?.foreignImage?.(image);
+    if (!need || !comps.some((c) => l.codes.includes(c.language))) continue;
+    const added = session.asImageUser(need.command, 600000);
+    log(added.ok ? need.added : `${need.failed}: ${tail(added.output, 300)}`);
   }
   // A tool missing from the repo's own image is the repo's to add, so only the audit's images get
   // one. Poetry needs the venv module above.
@@ -1607,7 +1594,7 @@ async function replayIn(audit: Audit, repo: string, tree: string, rubric: Rubric
     }
     if (r.blocked && r.diagnosis?.cause === "missing_tool" && rex.where === "container") {
       const tool = r.diagnosis.detail.replace(/ is not installed$/, "");
-      const failed = audit.environment.tools?.find((t) => !t.added && (t.spec.split(/[@=]/)[0] === tool || t.spec === tool.replace(/^\.NET SDK /, "dotnet-sdk@")));
+      const failed = audit.environment.tools?.find((t) => !t.added && (t.spec.split(/[@=]/)[0] === tool || t.spec === tool || LANGUAGES.some((l) => l.replay?.specFor?.(tool) === t.spec)));
       if (failed) r.blocked += `: the audit couldn't add ${failed.spec} to it on this machine`;
     }
     const ev = evidenceFromPhase(audit, rex, r, registryValues);

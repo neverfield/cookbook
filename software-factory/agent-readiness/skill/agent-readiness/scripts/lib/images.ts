@@ -29,9 +29,7 @@ const BASE_DIGESTS: Record<string, string> = {
 
 export const IMAGE_DIGESTS: Record<string, string> = { ...BASE_DIGESTS, ...languageImages() };
 
-// Node majors the audit has a pinned image for. Even majors are the LTS lines.
-export const NODE_MAJORS = [16, 18, 20, 22, 24, 26];
-export const DEFAULT_NODE = 22;
+export { DEFAULT_NODE, NODE_MAJORS } from "./languages/node.ts";
 export const PYTHON_MINORS = ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"];
 
 // The reference to pull: the tag pinned to its digest when the table has it.

@@ -47,11 +47,21 @@ export const swift: LanguageDef = {
       { match: /^Package\.swift$/, stack: "swift", rank: 70 },
     ],
     sources: [{ ext: /\.swift$/, stack: "swift", rank: 80 }],
-    lockfiles: ["Package.resolved"],
+    // CocoaPods' too, for an Xcode project.
+    lockfiles: ["Package.resolved", "Podfile.lock"],
     projectName: (_tree, manifest, text) => (manifest === "Package.swift" ? text.match(/\bname:\s*"([^"]+)"/)?.[1] : manifest.match(XCODE)?.[1]),
     notes: (tree, dir, stackId) => (stackId === "xcode" ? xcodeNotes(tree, dir) : []),
   },
   ecosystems: [],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: null,
+    countedTests: null,
+    ciTest: null,
+  },
+  mutation: null,
 };
 
 export const dart: LanguageDef = {
@@ -68,6 +78,15 @@ export const dart: LanguageDef = {
     workspaceOnly: (manifest, text) => manifest.endsWith("pubspec.yaml") && /^workspace:/m.test(text),
   },
   ecosystems: [],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: null,
+    countedTests: null,
+    ciTest: null,
+  },
+  mutation: null,
 };
 
 export const elixir: LanguageDef = {
@@ -82,6 +101,15 @@ export const elixir: LanguageDef = {
     projectName: (_tree, manifest, text) => (manifest === "mix.exs" ? text.match(/\bapp:\s*:(\w+)/)?.[1] : undefined),
   },
   ecosystems: [],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: null,
+    countedTests: null,
+    ciTest: null,
+  },
+  mutation: null,
 };
 
 // A folder of .tf files is a Terraform module, so a root module and nested root modules are found
@@ -97,6 +125,15 @@ export const terraform: LanguageDef = {
     lockfiles: [".terraform.lock.hcl"],
   },
   ecosystems: [],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: null,
+    countedTests: null,
+    ciTest: null,
+  },
+  mutation: null,
 };
 
 // Found by its build file only: a .c or .cc file next to a Node addon or a Python extension is part
@@ -110,4 +147,13 @@ export const cpp: LanguageDef = {
     manifests: [{ match: /^(CMakeLists\.txt|meson\.build)$/, stack: "cpp", rank: 85 }],
   },
   ecosystems: [],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: null,
+    countedTests: null,
+    ciTest: null,
+  },
+  mutation: null,
 };
