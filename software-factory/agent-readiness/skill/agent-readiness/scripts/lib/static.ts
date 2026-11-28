@@ -257,10 +257,39 @@ function scriptsAt(tree: string, dir: string): { scripts: Record<string, string>
   }
 }
 
-function makeTargets(tree: string, dir: string): string[] | null {
+// The names GNU make reads in a folder, in the order it tries them.
+const MAKEFILES = ["GNUmakefile", "makefile", "Makefile"];
+
+function makefileIn(tree: string, dir: string): string | null {
+  const name = MAKEFILES.find((n) => existsExact(tree, join(dir, n)));
+  return name ? join(dir, name) : null;
+}
+
+// The targets `make` sees from a folder: its makefile's and those of the files it includes. open:
+// an include the audit couldn't read, such as one named by a variable or a glob, or one not in the
+// tree, so a target it didn't find may still be defined.
+function makeTargets(tree: string, dir: string): { targets: string[]; open: boolean } | null {
   for (const d of [dir, "."]) {
-    const f = join(tree, d, "Makefile");
-    if (existsExact(tree, join(d, "Makefile"))) return targetsIn(readText(f));
+    const file = makefileIn(tree, d);
+    if (!file) continue;
+    const targets: string[] = [];
+    const seen = new Set<string>();
+    let open = false;
+    const read = (rel: string) => {
+      if (seen.has(rel)) return;
+      seen.add(rel);
+      const text = readText(join(tree, rel));
+      targets.push(...targetsIn(text));
+      for (const m of text.matchAll(/^[ \t]*-?s?include[ \t]+(.+)$/gm)) {
+        for (const name of m[1].replace(/#.*$/, "").trim().split(/\s+/).filter(Boolean)) {
+          const inc = normalize(join(d, name));
+          if (/[$*?[]/.test(name) || !existsExact(tree, inc)) open = true;
+          else read(inc);
+        }
+      }
+    };
+    read(file);
+    return { targets, open };
   }
   return null;
 }
@@ -270,9 +299,9 @@ const OTHER_STACK_RECIPES: Record<string, RegExp> = { go: /^\s*(go|golangci-lint
 // The commands a Make target runs, without the @ and - prefixes.
 export function makeRecipe(tree: string, dir: string, target: string): string {
   for (const d of [dir, "."]) {
-    const f = join(tree, d, "Makefile");
-    if (!existsExact(tree, join(d, "Makefile"))) continue;
-    const text = readText(f);
+    const file = makefileIn(tree, d);
+    if (!file) continue;
+    const text = readText(join(tree, file));
     const rule = makeRuleFor(targetsIn(text), target);
     if (!rule) continue;
     const lines = text.split("\n");
@@ -513,10 +542,11 @@ function checkOne(ctx: CheckCtx, dir: string, words: string[]): Check {
   if (tool === "make") {
     const cIdx = words.indexOf("-C");
     const mdir = cIdx > 0 && words[cIdx + 1] ? normalize(join(dir, words[cIdx + 1])) : ctx.fileDir;
-    const targets = makeTargets(ctx.tree, mdir);
+    const found = makeTargets(ctx.tree, mdir);
     const target = words.slice(1).find((w, i) => !w.startsWith("-") && !w.includes("=") && words[i] !== "-C");
-    if (!targets) return { result: "fail", rule: "make-target", reason: "there is no Makefile" };
-    if (target && !makeRuleFor(targets, target)) return { result: "fail", rule: "make-target", reason: `the Makefile has no "${target}" target` };
+    if (!found) return { result: "fail", rule: "make-target", reason: "there is no Makefile" };
+    // A target the files read don't define is wrong only when nothing it includes went unread.
+    if (target && !makeRuleFor(found.targets, target)) return found.open ? { ...PASS, rule: "make-target", repo: true } : { result: "fail", rule: "make-target", reason: `the Makefile has no "${target}" target` };
     const recipe = target ? makeRecipe(ctx.tree, mdir, target) : "";
     const stack = Object.entries(OTHER_STACK_RECIPES).find(([, re]) => re.test(recipe))?.[0];
     if (stack && !ctx.profile.components.some((c) => c.assessed && c.stack === stack)) {

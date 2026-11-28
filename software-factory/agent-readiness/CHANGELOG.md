@@ -59,6 +59,13 @@ New audits use rubric `2026-12-beta`. Audits sealed under earlier rubrics are ne
 - **A draft whose temp folder is gone is refused.** Every step after `init`, the seal included, refuses a draft whose temp folder or `draft.digest` is missing (a temp cleaner or a reboot removes them), since edits to `audit.json` can no longer be ruled out and the planted-fault details are lost. `readiness init --force` starts over.
 - **Hygiene.** `history push` runs none of the repo's hooks or signing; `cleanup` removes only folders an audit marked; host-mode background processes end with the replay; a printed private key is redacted whole; Microsoft's .NET install script is pinned and checked.
 
+### Failing verdicts
+
+- **One word per result.** Every step that ran reads as passed, failed, blocked, undetermined or not run, from one module (`lib/verdict.ts`): in the headline, the check counts, the roadmap, the explanations, the evidence log, `readiness run`, `readiness status` and the recheck record. "Failed" means the repo's fault. A check's `counts` gain `blocked` and `undetermined`, and `failed` no longer counts them; the evidence log's `result` gains "undetermined".
+- **A place that can't prove a pass can't prove a failure (2026-12-beta).** A failed install, build or test in host mode, or on a VM the rubric doesn't count, is blocked on this machine, so the report reads "Unproven on this machine" instead of Level 0. An experiment there still shows the repo's fault. A lint or type-check, whose pass counts on the host, keeps its failure.
+- **The recheck uses the audit's gate.** It runs the audit's experiments (the network rerun, adding git) with the audited tree and workspace packages, and only the repo's fault lowers a level or fails it. A blocked or undetermined step makes it "blocked", with no level, and the record stores each step's verdict, why it was held and its attribution.
+- **Instructions.** An instruction replayed in a clean container that fails for a reason the audit's image could explain, such as a missing system library, is unproven rather than wrong. One that fails under `readiness run --instructions` on the host is never wrong. Make instructions are read against GNUmakefile, makefile or Makefile, as make reads them, and the files they include; a target behind an include the audit can't read is replayed rather than called missing. `scan --strict` fails only on instructions that gate.
+
 ### Install and release
 
 - The README Quickstart clones `--branch agent-readiness-v0.2.0`, and the example CI workflows name that release and ask you to pin the commit it points to. `npm run release-manifest` refuses to write `RELEASE.json` when the Quickstart or either workflow names another release.

@@ -9,7 +9,7 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "db08ff6647cfaf3b50c55b6786d3dbbcc4181589aba53f022e2b5ae8596473af",
+    "scriptsDigest": "5c068f8d692fdc1a0d9f7dbd40ce9c907e08b08e8612b39a8c8beb845968cdf1",
     "seedPinned": true,
     "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
@@ -294,6 +294,8 @@
         "counts": {
           "passed": 0,
           "failed": 0,
+          "blocked": 0,
+          "undetermined": 0,
           "notRun": 0
         },
         "evidence": []
@@ -308,6 +310,8 @@
         "counts": {
           "passed": 0,
           "failed": 0,
+          "blocked": 0,
+          "undetermined": 0,
           "notRun": 0
         },
         "evidence": []
@@ -328,6 +332,8 @@
         "counts": {
           "passed": 6,
           "failed": 0,
+          "blocked": 0,
+          "undetermined": 0,
           "notRun": 0
         },
         "evidence": [
@@ -349,6 +355,8 @@
         "counts": {
           "passed": 3,
           "failed": 0,
+          "blocked": 0,
+          "undetermined": 0,
           "notRun": 0
         },
         "evidence": [
@@ -373,6 +381,8 @@
         "counts": {
           "passed": 1,
           "failed": 0,
+          "blocked": 0,
+          "undetermined": 0,
           "notRun": 0
         },
         "evidence": [
@@ -513,7 +523,7 @@
         "where": "ran on host",
         "result": "pass",
         "summary": "doctor passed",
-        "durationMs": 82,
+        "durationMs": 80,
         "repro": "bash -lc 'node --version && npm --version'",
         "supersededBy": null
       },
@@ -525,7 +535,7 @@
         "where": "ran on host",
         "result": "pass",
         "summary": "install passed",
-        "durationMs": 270,
+        "durationMs": 275,
         "repro": "bash -lc 'npm ci'",
         "supersededBy": null
       },
@@ -549,7 +559,7 @@
         "where": "ran on host",
         "result": "pass",
         "summary": "build passed",
-        "durationMs": 112,
+        "durationMs": 106,
         "repro": "bash -lc 'npm ci && npm run build'",
         "supersededBy": null
       },
@@ -561,7 +571,7 @@
         "where": "ran on host",
         "result": "pass",
         "summary": "test passed (5 of 5 tests)",
-        "durationMs": 164,
+        "durationMs": 149,
         "repro": "bash -lc 'npm ci && npm run build && npm run test'",
         "supersededBy": null
       },
@@ -581,10 +591,10 @@
         "id": "ev-009",
         "check": "verify.behavioral_oracle",
         "component": "healthy-node",
-        "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip)",
+        "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip); a comment added to src/pricing.js left the tests passing",
         "where": "ran on host",
         "result": "pass",
-        "summary": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip)",
+        "summary": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip); a comment added to src/pricing.js left the tests passing",
         "durationMs": null,
         "repro": null,
         "supersededBy": null
@@ -617,7 +627,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "db08ff6647cf"
+        "value": "5c068f8d692f"
       },
       {
         "label": "Planted faults",
@@ -706,9 +716,9 @@
       "kind": "condition",
       "subject": "healthy-node: tests catch planted faults",
       "result": "met",
-      "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip)",
+      "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip); a comment added to src/pricing.js left the tests passing",
       "where": "in a fresh copy on the host, with no container",
-      "happened": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip)",
+      "happened": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip); a comment added to src/pricing.js left the tests passing",
       "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed."
     },
     {
