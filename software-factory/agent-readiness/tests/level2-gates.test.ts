@@ -377,9 +377,10 @@ describe("planting faults within the budget", () => {
   });
 
   test("the comment-only change is a comment in each language, and none where a line would be output", () => {
-    assert.equal(withControlComment("a.py", "x = 1\n"), `x = 1\n# ${CONTROL_COMMENT}\n`);
-    assert.equal(withControlComment("a.rb", "x = 1"), `x = 1\n# ${CONTROL_COMMENT}\n`);
-    for (const f of ["a.ts", "a.mjs", "a.go", "a.rs", "A.java", "a.kt", "A.cs", "a.php"]) assert.equal(withControlComment(f, "x\r\n"), `x\r\n// ${CONTROL_COMMENT}\r\n`, f);
+    assert.equal(withControlComment("a.py", "x = 1\n"), `x = 1\n\n# ${CONTROL_COMMENT}\n`);
+    assert.equal(withControlComment("a.rb", "x = 1"), `x = 1\n\n# ${CONTROL_COMMENT}\n`);
+    assert.equal(withControlComment("a.py", "x = 1\n\n\n"), `x = 1\n\n# ${CONTROL_COMMENT}\n`, "one blank line before it, never more");
+    for (const f of ["a.ts", "a.mjs", "a.go", "a.rs", "A.java", "a.kt", "A.cs", "a.php"]) assert.equal(withControlComment(f, "}\r\n"), `}\r\n\r\n// ${CONTROL_COMMENT}\r\n`, f);
     assert.equal(withControlComment("a.php", "<?php echo 1; ?>\n"), null);
     assert.equal(withControlComment("a.vue", "<template/>\n"), null);
   });

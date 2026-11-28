@@ -678,16 +678,19 @@ export function withCanary(text: string, line: string): string {
   return `${text}${text === "" || text.endsWith("\n") ? "" : eol}${line}${eol}`;
 }
 
-// A change that can't alter what a file does: a comment line at its end, written as a capitalised
-// sentence so linters a test script runs first (xo's capitalized-comments, ruff's E265) accept it.
-// Null for a file of another kind, and for a PHP file that ends by closing its PHP block, where a
-// line after `?>` would be printed.
+// A change that can't alter what a file does: a comment line at its end, after one blank line, written
+// as a capitalised sentence so the linters a build or test script runs first accept it (xo's
+// capitalized-comments, StyleCop's SA1513 and SA1515 with warnings as errors). Null for a file of
+// another kind, and for a PHP file that ends by closing its PHP block, where a line after `?>` would
+// be printed.
 export const CONTROL_COMMENT = "Agent readiness control comment.";
 export function withControlComment(file: string, text: string): string | null {
   if (/\.php$/.test(file) && text.trimEnd().endsWith("?>")) return null;
-  if (/\.(py|rb)$/.test(file)) return withCanary(text, `# ${CONTROL_COMMENT}`);
-  if (/\.([cm]?[jt]sx?|go|rs|java|kts?|cs|php)$/.test(file)) return withCanary(text, `// ${CONTROL_COMMENT}`);
-  return null;
+  const marker = /\.(py|rb)$/.test(file) ? "#" : /\.([cm]?[jt]sx?|go|rs|java|kts?|cs|php)$/.test(file) ? "//" : null;
+  if (!marker) return null;
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  const body = text.replace(/(\r?\n)+$/, "");
+  return `${body}${body ? eol + eol : ""}${marker} ${CONTROL_COMMENT}${eol}`;
 }
 
 export function applySite(text: string, site: Site): string {
