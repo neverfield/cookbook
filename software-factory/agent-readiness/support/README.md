@@ -19,7 +19,7 @@ This folder is for people who change the agent-readiness skill and need to valid
 ```bash
 npm ci
 npm run check
-npm run trials             # needs Docker and network; about 3 hours serial, or SA_TRIALS_SHARD=k/3 for one shard of about an hour
+npm run trials             # needs Docker and network; about 3.5 hours serial on a CI runner, or SA_TRIALS_SHARD=k/4 for one shard of about an hour
 npm run evals -- --tag smoke
 npm run evals -- --tag negative
 npm run goldens
@@ -39,7 +39,7 @@ A trial's other fields:
 - `tier: "read-only"` scans a repo too large to audit in the run, without running its code. Its truth still scores discovery, placement, test commands, the unowned share and safety findings; R3 needs a container run, so it counts nothing there.
 - `tracking` maps a truth guard to why it misses: the guard prints `tracking miss: <trial> <guard> (<why>): ...` and doesn't fail the run. It is only for a miss that comes from a feature the tool doesn't support yet, such as task-graph builds, and such a guard is never listed in `known-failures.json`. A tracking guard that meets its truth prints that it can leave tracking.
 - `alsoRun` audits the trial again with no container runtime (`none`, the same on every machine) or in host mode (`host`, recorded by the environment the audit reports: `host/disposable_vm` on a Cursor Cloud Agent VM, `host/host` elsewhere). A machine with no host-mode result recorded for its environment prints what it saw instead of failing.
-- `minutes` is the wall time of the trial's audits when last recorded. `SA_TRIALS_SHARD=k/n` runs the k-th of n shards, split by these minutes (`trials/shards.ts`); `SA_TRIALS_RECORD=minutes` checks every result as usual and rewrites only the minutes.
+- `minutes` is the wall time of the trial's audits on CI's runners, where the shards run. `SA_TRIALS_SHARD=k/n` runs the k-th of n shards, split by these minutes (`trials/shards.ts`); `SA_TRIALS_RECORD=minutes` checks every result as usual and rewrites only the minutes; a result recording leaves them alone.
 - `budgetEdge` marks a trial whose result a time budget decides. Shards started side by side on one machine share a lock in `SA_TRIALS_CACHE`: `SA_TRIALS_HOST_SLOTS` audits run at once (1 by default), and a `budgetEdge` trial waits until it runs alone. Shards on separate machines, as in CI, don't affect each other.
 
-CI (`.github/workflows/agent-readiness.yml` at the cookbook root) runs `npm run check`, and `npm run trials` in three shards on separate runners, with Docker, and `tools/no-skips.sh` fails the run when any test or trial is skipped.
+CI (`.github/workflows/agent-readiness.yml` at the cookbook root) runs `npm run check`, and `npm run trials` in four shards on separate runners, with Docker, and `tools/no-skips.sh` fails the run when any test or trial is skipped.
