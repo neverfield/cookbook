@@ -10,9 +10,12 @@ import { componentLevel, repoLevel, statesOf } from "../skill/agent-readiness/sc
 import { ciCommands, ciEnvFor, ciTestScript, scriptCalled, testScriptOf } from "../skill/agent-readiness/scripts/lib/plan/ci.ts";
 import { ownTestFiles } from "../skill/agent-readiness/scripts/lib/plan/test-files.ts";
 import { DELEGATES } from "../skill/agent-readiness/scripts/lib/profile.ts";
-import { addToolCommand } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import { currentEvidence } from "../skill/agent-readiness/scripts/lib/evidence.ts";
+import { addToolCommand, evidenceFromPhase, newBudget, runContract } from "../skill/agent-readiness/scripts/lib/replay.ts";
+import type { Executor } from "../skill/agent-readiness/scripts/lib/replay.ts";
 import { loadRubric } from "../skill/agent-readiness/scripts/lib/rubric.ts";
 import { componentStates } from "../skill/agent-readiness/scripts/lib/score.ts";
+import { buildSealedReport, compute } from "../skill/agent-readiness/scripts/lib/seal.ts";
 import type { Component, Profile } from "../skill/agent-readiness/scripts/lib/types.ts";
 import { factConflicts } from "../support/holdout/observe.ts";
 import { makeAudit, reportFor } from "./helpers.ts";
@@ -60,6 +63,57 @@ describe("attribution: whose failure a failed step is", () => {
     assert.equal(networkVerdict(first, false, "x failed").verdict, "repo");
     const runner = attribute(fail("sh: 1: vitest: not found"));
     assert.ok(!rerunsOnline(runner), "a missing test runner isn't the network's to settle");
+  });
+
+  // pocketbase@7f2773e: TestRecordAuthWithOAuth2 needs the network, and the rerun with it on now and
+  // then fails a test flaky on its own (TestNotifyWatcher_SettingsUpdate, TestRandomStringByRegex).
+  const flakyRun = async (online: { exitCode: number; output: string }[]) => {
+    const audit = makeAudit({ components: [{ id: "app", share: 1 }] });
+    audit.evidence = [];
+    const testCmd = audit.contract.find((c) => c.kind === "test")!;
+    const answers = [{ exitCode: 1, output: "--- FAIL: TestRecordAuthWithOAuth2 (0.01s)\n    dial tcp: lookup pocketbase.io: no such host\nFAIL\n" }, ...online];
+    let testRuns = 0;
+    const ex: Executor = {
+      where: "container",
+      strength: "clean_replay",
+      image: "golang:1.27",
+      imageSource: "audit",
+      root: "/work",
+      exec: async (command) => ({ timedOut: false, durationMs: 1, ...(command === testCmd.command ? answers[testRuns++] : { exitCode: 0, output: "" }) }),
+      offline: () => (ex.networkOff = true),
+      online: () => (ex.networkOff = false, true),
+      networkOff: null,
+      close: () => {},
+    };
+    const results = await runContract(ex, audit.contract, { components: new Set(["app"]), budget: newBudget(10, 10), registryValues: [], reruns: ["network"] });
+    for (const r of results) evidenceFromPhase(audit, ex, r, []);
+    const tests = currentEvidence(audit).filter((e) => e.condition === "clean.test");
+    return { testRuns, state: componentStates(audit, next, "app")["clean.test"].state, tests, offline: audit.evidence.find((e) => e.condition === "clean.test")! };
+  };
+  const pass = { exitCode: 0, output: "--- PASS: TestRecordAuthWithOAuth2 (0.01s)\nok\n" };
+  const flake = { exitCode: 1, output: "--- FAIL: TestNotifyWatcher_SettingsUpdate (1.00s)\nFAIL\n" };
+
+  test("a rerun with the network on that passes is the only extra run", async () => {
+    const r = await flakyRun([pass]);
+    assert.equal(r.testRuns, 2);
+    assert.equal(r.state, "met");
+  });
+
+  test("a rerun with the network on that fails gets one more try, and a pass there records the tests as flaky", async () => {
+    const r = await flakyRun([flake, pass]);
+    assert.equal(r.testRuns, 3);
+    assert.equal(r.state, "met", "a test flaky on its own isn't a clean checkout's failing tests");
+    assert.equal(r.tests.length, 1);
+    assert.match(r.tests[0].summary, /on a second try: the first with it on failed \(TestNotifyWatcher_SettingsUpdate failed\), so the tests are flaky/);
+    assert.equal(r.offline.attribution?.verdict, "environment");
+  });
+
+  test("a third failure is the repo's, as a second was before", async () => {
+    const r = await flakyRun([flake, flake]);
+    assert.equal(r.testRuns, 3);
+    assert.equal(r.state, "not_met");
+    assert.equal(r.tests[0].attribution?.verdict, "repo");
+    assert.match(r.tests[0].summary, /it failed again with the network on/);
   });
 
   test("diagnoses Python's missing module, GitPython's missing git and a missing shared library", () => {
@@ -118,6 +172,19 @@ describe("Level 0 needs a repo failure (2026-12-beta)", () => {
     assert.match(r.executive.headline, /^Level 1 is undetermined for web: /);
     const statesOfWeb = statesOf(componentStates(audit, next, "web"));
     assert.equal(statesOfWeb["clean.test"], "unknown");
+  });
+
+  // fixtures/standalone-nested-mixed: commerce-core undetermined, identity-dev at Level 0 by a repo failure.
+  test("the history line gives an undetermined component no level, as the report does, next to a component at Level 0", () => {
+    const audit = makeAudit({ components: [{ id: "web", share: 0.6, test: "missing", testFiles: 3 }, { id: "api", share: 0.4, test: "fail", reason: "test failed: total is 9, not 10" }] });
+    const { report, line } = buildSealedReport(audit, next, [], null, tree({ "README.md": "x\n" }), ".agent-readiness/history/audits/x");
+    const reported = Object.fromEntries(report.components.included.map((c) => [c.id, c.level]));
+    assert.deepEqual(reported, { web: null, api: 0 });
+    assert.equal(line.noLevel, undefined, "api's Level 0 sets the repo level, so the line has one");
+    assert.deepEqual([line.levels, line.undeterminedComponents, line.repoLevel], [{ api: 0 }, ["web"], 0]);
+    for (const [id, l] of compute(audit, next, []).levels) if (line.levels[id] !== undefined) assert.equal(line.levels[id], l.level, id);
+    const again = reportFor(makeAudit({ id: "aud-2026-10-28-abc1234-0002", components: [{ id: "web", share: 0.6, test: "missing", testFiles: 3 }, { id: "api", share: 0.4, test: "pass" }] }), [line]);
+    assert.deepEqual(again.progress?.history[0].levels, { api: 0, web: null });
   });
 });
 
@@ -193,11 +260,13 @@ describe("tool pins the audit honors", () => {
   test("an exact engines pin for pnpm, with no packageManager, sets corepack to it", () => {
     const dir = tree({ "package.json": JSON.stringify({ name: "x", engines: { pnpm: "12.3.4" } }), "pnpm-lock.yaml": "" });
     const profile = { packageManager: "pnpm", components: [{ id: "x", path: ".", language: "ts", manifest: "package.json", scripts: {}, changes: 1, changeShare: 1, assessed: true, packageManager: "pnpm" }] } as unknown as Profile;
-    const setup = toolSetup(profile, dir);
+    // Corepack itself, added where the image lacks it, is checked in tests/trial-misses.test.ts.
+    const pins = (p: Profile) => toolSetup(p, dir).filter((t) => t.tool !== "corepack");
+    const setup = pins(profile);
     assert.deepEqual(setup.map((t) => [t.spec, t.install]), [["pnpm@12.3.4", "COREPACK_HOME=/tmp/home/.cache/node/corepack corepack prepare 'pnpm@12.3.4' --activate"]]);
     assert.match(setup[0].present!, /corepack pnpm --version/);
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", packageManager: "pnpm@12.3.4", engines: { pnpm: "12.3.4" } }));
-    assert.deepEqual(toolSetup(profile, dir), []);
+    assert.deepEqual(pins(profile), []);
   });
 });
 

@@ -1,0 +1,123 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "mastodon/mastodon",
+  "commit": "6c29cb4b9c1f8b3f9a1be23f0efb9c5ac64155a3",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/mastodon/mastodon/commits/6c29cb4b9c1f8b3f9a1be23f0efb9c5ac64155a3/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/mastodon/mastodon/commits/6c29cb4b9c1f8b3f9a1be23f0efb9c5ac64155a3/status (every check succeeded: 'test (.ruby-version)' rspec, 'End to End testing', 'Elastic Search integration testing' x3, 'test' (JavaScript Testing, yarn test:js), migration tests on Postgres 14-17, lint, build (production), CodeQL, image builds; combined status success)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "ruby",
+      "placement": "component",
+      "changeShare": 0.996,
+      "hasTests": true,
+      "install": [
+        "bundle install",
+        "yarn install --immutable",
+        "yarn install"
+      ],
+      "test": [
+        "bin/flatware rspec",
+        "bin/rspec",
+        "bundle exec rspec",
+        "yarn test:js",
+        "yarn run test:js"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "Rails app and its Yarn 4 frontend share the root manifests (Gemfile and package.json with workspaces '.' and 'streaming'); CI tests both from the root, rspec in Ruby Testing and vitest (yarn test:js, no services) in JavaScript Testing. RSpec needs Postgres and Redis plus apt packages (libidn11-dev, libvips42, ffmpeg, libpam-dev) and precompiled assets; system specs need Playwright Chromium; search specs need Elasticsearch/OpenSearch."
+    },
+    {
+      "path": "streaming",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.004,
+      "hasTests": false,
+      "install": [
+        "yarn install --immutable",
+        "yarn workspaces focus @mastodon/streaming --production"
+      ],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Node streaming server (yarn workspace @mastodon/streaming) with its own Dockerfile, built as its own image by CI; no tests, only linted and typechecked from the root. Exercised indirectly by the rspec e2e '--tag streaming' specs."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": ".env.development",
+      "line": 2,
+      "real": false,
+      "why": "development-only ActiveRecord encryption key committed for local dev"
+    },
+    {
+      "file": ".env.development",
+      "line": 3,
+      "real": false,
+      "why": "development-only ActiveRecord encryption salt"
+    },
+    {
+      "file": ".env.development",
+      "line": 4,
+      "real": false,
+      "why": "development-only ActiveRecord encryption key"
+    },
+    {
+      "file": ".env.test",
+      "line": 9,
+      "real": false,
+      "why": "test key labeled DO_NOT_USE_IN_PRODUCTION"
+    },
+    {
+      "file": ".env.test",
+      "line": 11,
+      "real": false,
+      "why": "test key labeled DO_NOT_USE_IN_PRODUCTION"
+    },
+    {
+      "file": "spec/fabricators/fasp/provider_fabricator.rb",
+      "line": 9,
+      "real": false,
+      "why": "test fixture private key for FASP provider fabricator"
+    },
+    {
+      "file": "spec/requests/signature_verification_spec.rb",
+      "line": 18,
+      "real": false,
+      "why": "test RSA key for HTTP signature specs"
+    },
+    {
+      "file": "spec/requests/signature_verification_spec.rb",
+      "line": 700,
+      "real": false,
+      "why": "test private key for HTTP signature specs"
+    },
+    {
+      "file": "spec/requests/signature_verification_spec.rb",
+      "line": 742,
+      "real": false,
+      "why": "test private key for HTTP signature specs"
+    },
+    {
+      "file": "spec/support/signing_keys_helpers.rb",
+      "line": 17,
+      "real": false,
+      "why": "test RSA signing key helper"
+    },
+    {
+      "file": "docker-compose.yml",
+      "line": 32,
+      "real": false,
+      "why": "commented-out placeholder Elasticsearch password"
+    }
+  ],
+  "nextAction": {
+    "kind": "add_agent_instructions",
+    "text": "Add an AGENTS.md giving the CI test recipe: apt packages, Postgres and Redis with DB_HOST/DB_USER/DB_PASS, assets:precompile, bin/rails db:setup, then bin/flatware rspec, and yarn test:js for the frontend."
+  },
+  "dropped": 0
+}

@@ -1,0 +1,170 @@
+{
+  "schema": "agent-readiness/holdout-truth@1",
+  "repo": "netbox-community/netbox",
+  "commit": "4cfaa8f7b45fc2e8bf95309909880c70e80bef64",
+  "writtenAt": "2026-11-27",
+  "ci": {
+    "conclusion": "success",
+    "source": "gh api repos/netbox-community/netbox/commits/4cfaa8f7b45fc2e8bf95309909880c70e80bef64/check-runs --paginate --jq '.check_runs[] | [.name, .conclusion] | @tsv'; gh api repos/netbox-community/netbox/commits/4cfaa8f7b45fc2e8bf95309909880c70e80bef64/status (CI 'Tests (Python 3.12/3.13/3.14, coverage)', 'Lint (Python)', 'Frontend', 'Documentation', release packaging checks and CodeQL all succeeded; only triage bots skipped; legacy status API has no contexts)"
+  },
+  "components": [
+    {
+      "path": ".",
+      "ecosystem": "python",
+      "placement": "component",
+      "changeShare": 0.718,
+      "hasTests": true,
+      "install": [
+        "pip install -r requirements.txt && pip install -r requirements_testing.txt",
+        "pip install -r requirements.txt",
+        "pip install -r requirements_testing.txt"
+      ],
+      "test": [
+        "python netbox/manage.py test netbox/ --parallel --keepdb --timing",
+        "coverage run netbox/manage.py test netbox/ --parallel --keepdb --timing",
+        "python netbox/manage.py test netbox/",
+        "python netbox/manage.py test netbox/ --parallel",
+        "cd netbox && python manage.py test"
+      ],
+      "testsNeed": "service",
+      "cleanPasses": "yes",
+      "notes": "Django test runner with NETBOX_CONFIGURATION=netbox.configuration_testing; needs PostgreSQL (netbox/netbox on localhost:5432) and Redis on localhost:6379, as CI's service containers provide. CI also runs makemigrations --check and collectstatic before tests, and swaps psycopg[c] for psycopg[binary] on non-release runs."
+    },
+    {
+      "path": "netbox/project-static",
+      "ecosystem": "node",
+      "placement": "component",
+      "changeShare": 0.023,
+      "hasTests": false,
+      "install": [
+        "yarn",
+        "yarn install",
+        "yarn --cwd netbox/project-static"
+      ],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Yarn 1 workspace for the TypeScript/SCSS frontend; CI's Frontend job runs yarn validate (tsc --noEmit, eslint, prettier check) and scripts/verify-bundles.sh, which passed. It has no test suite."
+    },
+    {
+      "path": "netbox/project-static/netbox-graphiql",
+      "ecosystem": "node",
+      "placement": "member",
+      "of": "netbox/project-static",
+      "changeShare": 0.0,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Yarn workspace member (GraphiQL front end) installed through netbox/project-static."
+    },
+    {
+      "path": "netbox/project-static/dist",
+      "ecosystem": "node",
+      "placement": "excluded",
+      "changeShare": 0.026,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "Committed esbuild output bundles, checked by scripts/verify-bundles.sh."
+    },
+    {
+      "path": "netbox/translations",
+      "ecosystem": "other",
+      "placement": "excluded",
+      "changeShare": 0.182,
+      "hasTests": false,
+      "install": [],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "gettext .po/.mo catalogs: the en source is regenerated daily by the update-translation-strings workflow (makemessages, 49 bot commits in the window) and other locales are pulled from Transifex at release."
+    },
+    {
+      "path": "docs",
+      "ecosystem": "python",
+      "placement": "satellite",
+      "of": ".",
+      "changeShare": 0.052,
+      "hasTests": false,
+      "install": [
+        "pip install -r requirements.txt"
+      ],
+      "test": [],
+      "testsNeed": "nothing",
+      "cleanPasses": "undetermined",
+      "notes": "MkDocs-format docs site (mkdocs.yml at root) built in CI with zensical build from the root requirements; passed at the commit."
+    }
+  ],
+  "unownedShare": 0.0,
+  "secrets": [
+    {
+      "file": "netbox/netbox/configuration_testing.py",
+      "line": 47,
+      "real": false,
+      "why": "alphabet placeholder SECRET_KEY in the test-only configuration"
+    },
+    {
+      "file": "netbox/netbox/configuration_testing.py",
+      "line": 12,
+      "real": false,
+      "why": "test database password matching CI's postgres service"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "line": 120,
+      "real": false,
+      "why": "CI postgres service container password"
+    },
+    {
+      "file": "docs/configuration/required-parameters.md",
+      "line": 90,
+      "real": false,
+      "why": "documented example database password"
+    },
+    {
+      "file": "docs/installation/3-netbox.md",
+      "line": 152,
+      "real": false,
+      "why": "documented example database password"
+    },
+    {
+      "file": "docs/configuration/system.md",
+      "line": 337,
+      "real": false,
+      "why": "'secret key' placeholder in storage config example"
+    },
+    {
+      "file": "docs/integrations/rest-api.md",
+      "line": 944,
+      "real": false,
+      "why": "example password in API docs"
+    },
+    {
+      "file": "netbox/core/tests/test_data_backends.py",
+      "line": 89,
+      "real": false,
+      "why": "test fixture password"
+    },
+    {
+      "file": "netbox/dcim/tests/test_views.py",
+      "line": 3395,
+      "real": false,
+      "why": "test fixture config-context password"
+    },
+    {
+      "file": "netbox/users/tests/test_api.py",
+      "line": 50,
+      "real": false,
+      "why": "test user passwords"
+    }
+  ],
+  "nextAction": {
+    "kind": "declare_environment",
+    "text": "Declare the PostgreSQL and Redis services the tests need (for example a compose file or devcontainer matching CI's postgres:18 and redis:8 with the netbox/netbox credentials), since AGENTS.md only says they must run on localhost."
+  },
+  "dropped": 0
+}

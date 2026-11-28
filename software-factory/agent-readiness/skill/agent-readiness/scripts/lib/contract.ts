@@ -1,79 +1,46 @@
 import { isAbsolute, join, normalize } from "node:path";
-import { DEFAULT_NODE, NODE_MAJORS } from "./images.ts";
-import { ecosystemOf, languageOf } from "./languages/index.ts";
-import type { ToolchainCopy, ToolSetup } from "./languages/language.ts";
-import { POETRY_ENV, VENV, poetryVersion, pyproject, testGroups, toxRuns } from "./languages/python.ts";
+import { LANGUAGES, ecosystemOf, languageOf } from "./languages/index.ts";
+import type { ContractContext, SharedRootHooks, ToolchainCopy, ToolSetup } from "./languages/language.ts";
+import { POETRY_ENV, VENV, poetryVersion, testGroups } from "./languages/python.ts";
 import type { Rubric } from "./rubric.ts";
-import { readPackageJson } from "./languages/node.ts";
-import type { CommandKind, Component, ContractCommand, Profile, SafetyFinding } from "./types.ts";
-import { exists, fail, listFiles, readText, shellQuote } from "./util.ts";
+import type { CommandKind, Component, ContractCommand, PackageManager, Profile, SafetyFinding } from "./types.ts";
+import { fail } from "./util.ts";
 import { ciCommands, ciEnvFor, ciTestScript, scriptCalled } from "./plan/ci.ts";
 import { DELEGATES } from "./profile.ts";
 import { HOME_DIR } from "./container.ts";
 
 export { POETRY_ENV, VENV, poetryVersion, testGroups };
+export { nodeMajor, rootTestRunner } from "./languages/node.ts";
+export { requiredPython } from "./languages/python.ts";
 export type { ToolchainCopy, ToolSetup };
-
-const PLACEHOLDER_TEST = /no test specified/;
-
-const SCRIPT_ALIASES: Record<"build" | "lint" | "typecheck" | "test", string[]> = {
-  build: ["build"],
-  lint: ["lint"],
-  typecheck: ["typecheck", "type-check", "check-types", "tsc"],
-  test: ["test"],
-};
 
 // The ecosystem's frozen install, from its language file.
 function frozenInstall(pm: Profile["packageManager"], tree: string, path: string, ignoreScripts: boolean): { command: string; reason: string } {
   return ecosystemOf(pm)?.install(tree, path, { ignoreScripts }) ?? { command: "true", reason: "no package manager found" };
 }
 
-const nodeLang = (c: Component) => c.language === "ts" || c.language === "js";
-
-// A component a language file's replay hooks install, build and test, rather than contract.ts.
+// A component a language file's replay hooks install, build and test in an image of its own.
 export function hooked(c: Component) {
   return languageOf(c.language)?.replay;
 }
 
-function runScript(pm: string | null, script: string): string {
-  if (pm === "pnpm") return `corepack pnpm run ${script}`;
-  if (pm === "yarn") return `corepack yarn run ${script}`;
-  if (pm === "bun") return `bun run ${script}`;
-  return `npm run ${script}`;
+// A component that shares the repo root's install and image unless it has a lockfile of its own.
+function sharedOf(c: Component): SharedRootHooks | undefined {
+  return languageOf(c.language)?.sharedRoot;
 }
 
-// uv sync and Poetry install into .venv; a uv workspace has one, at its root.
-function pythonTest(tree: string, path: string, pm: Profile["packageManager"], workspaceMember: boolean): string | null {
-  const dir = join(tree, path);
-  const up = workspaceMember ? path.split("/").map(() => "..").join("/") + "/" : "";
-  const python = pm === "uv" || pm === "poetry" ? `${up}.venv/bin/python` : `${VENV}/bin/python`;
-  // A workspace member runs the root's pytest when the root declares it.
-  const dirs = workspaceMember ? [dir, tree] : [dir];
-  const reqs = dirs.flatMap((d) => ["requirements.txt", "requirements-dev.txt", "pyproject.toml"].map((f) => (exists(join(d, f)) ? readText(join(d, f)) : ""))).join("\n");
-  if (/pytest/.test(reqs) || dirs.some((d) => exists(join(d, "pytest.ini")) || exists(join(d, "conftest.py")))) return `${python} -m pytest -q`;
-  if (pm === "pip" && toxRuns(dir)) return `${python} -m tox`;
-  if (exists(join(dir, "tests"))) return `${python} -m unittest discover -s tests -t .`;
-  return null;
-}
+const SHARED = LANGUAGES.filter((l) => l.sharedRoot);
 
-// The toolchains a set of Node and Python components use; a hooked component's language file
-// gives its own.
+// The toolchains the components one image runs use: the shared-root languages' checks for the
+// package managers they name, then each hooked component's own.
 function doctorCommand(profile: Profile, comps: Component[]): string {
-  const pms = new Set(comps.map((c) => c.packageManager ?? profile.packageManager).filter((x): x is NonNullable<Profile["packageManager"]> => Boolean(x)));
-  const parts: string[] = [];
-  if ([...pms].some((p) => p === "npm" || p === "pnpm" || p === "yarn")) parts.push("node --version");
-  if (pms.has("bun")) parts.push("bun --version");
-  if (pms.has("npm")) parts.push("npm --version");
-  if (pms.has("pnpm")) parts.push("corepack pnpm --version");
-  if (pms.has("yarn")) parts.push("corepack yarn --version");
-  if (pms.has("pip") || pms.has("uv") || pms.has("poetry") || comps.some((c) => c.language === "py")) parts.push("python3 --version");
-  if (pms.has("uv")) parts.push("uv --version");
-  if (pms.has("poetry")) parts.push("poetry --version");
+  const pms = new Set(comps.map((c) => c.packageManager ?? profile.packageManager).filter((x): x is PackageManager => Boolean(x)));
+  const parts = SHARED.flatMap((l) => l.sharedRoot!.doctor(pms, comps));
   for (const c of comps) {
     const doctor = hooked(c)?.doctor;
     if (doctor && !parts.includes(doctor)) parts.push(doctor);
   }
-  return parts.length ? parts.join(" && ") : "node --version";
+  return parts.length ? parts.join(" && ") : SHARED.find((l) => l.sharedRoot!.fallback)!.sharedRoot!.fallback!.doctor;
 }
 
 // The script a command runs, so `pnpm test` and `corepack pnpm run test` count as one command.
@@ -202,7 +169,7 @@ export function checkOnlyCommand(cmd: ContractCommand, scripts: Record<string, s
 }
 
 export function hasNetworkPipedHook(findings: SafetyFinding[]): boolean {
-  return findings.some((f) => f.kind === "network_piped" && f.file.endsWith("package.json"));
+  return findings.some((f) => f.kind === "network_piped" && LANGUAGES.some((l) => l.checks.manifestScripts?.manifest(f.file)));
 }
 
 export function discoverContract(profile: Profile, tree: string, rubric: Rubric, safety: SafetyFinding[]): ContractCommand[] {
@@ -252,41 +219,27 @@ export function discoverContract(profile: Profile, tree: string, rubric: Rubric,
       cmds.push(checkOnlyCommand({ id: `cmd-${c.id}-${d.kind}`, kind: d.kind, component: c.id, cwd, command: d.command, source: d.source, reason: d.reason, timeoutSec: commandTimeout(rubric, c), tier: "convention", confidence: "derived" }, {}, null));
     }
   }
-  for (const c of assessed.filter((x) => !hooked(x))) {
-    if (c.language === "py") {
-      const test = pythonTest(tree, c.path, c.packageManager ?? pm, c.stack === "uv-workspace" && c.path !== "." && !c.packageManager);
-      if (test) cmds.push({ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: c.path, command: test, source: c.manifest ?? "readiness", reason: "discovered test runner", timeoutSec: timeout, tier: "convention", confidence: "derived" });
-      continue;
-    }
-    for (const kind of ["build", "lint", "typecheck", "test"] as const) {
-      const script = SCRIPT_ALIASES[kind].find((s) => c.scripts[s] && !(kind === "test" && PLACEHOLDER_TEST.test(c.scripts[s])));
-      // From 2026-12-beta the test script CI runs in the component's folder outranks the manifest's
-      // test script, when it is a different one.
-      const fromCi = kind === "test" && rubric.attribution ? ciTestScript(ci(), c.path, c.scripts, DELEGATES) : null;
-      if (fromCi && fromCi.script !== script) {
-        const via = fromCi.called === fromCi.script ? "" : `, through its ${fromCi.called} script`;
-        cmds.push(checkOnlyCommand({ id: `cmd-${c.id}-test`, kind, component: c.id, cwd: c.path, command: runScript(c.packageManager ?? pm, fromCi.script), source: fromCi.source, reason: `the test script CI runs${via}`, timeoutSec: timeout, tier: "ci", confidence: fromCi.called === fromCi.script ? "declared" : "derived" }, c.scripts, c.packageManager ?? pm));
-        continue;
-      }
-      if (!script) continue;
-      const cmd: ContractCommand = { id: `cmd-${c.id}-${kind}`, kind, component: c.id, cwd: c.path, command: runScript(c.packageManager ?? pm, script), source: `${c.manifest} scripts.${script}`, reason: `discovered ${kind} script`, timeoutSec: timeout, tier: "manifest", confidence: "declared" };
-      cmds.push(checkOnlyCommand(cmd, c.scripts, c.packageManager ?? pm));
-    }
-    // No test script, but a Make target that runs the tests, such as `make test` calling a test:unit
-    // script: the repo's own entry point is the test command.
-    if (!cmds.some((k) => k.component === c.id && k.kind === "test")) {
-      const makefile = c.path === "." ? "Makefile" : `${c.path}/Makefile`;
-      const make = makeTestTarget(exists(join(tree, makefile)) ? readText(join(tree, makefile)) : null);
-      if (make) cmds.push({ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: c.path, command: `make ${make.target}`, source: `${makefile}:${make.line}`, reason: `the Makefile's ${make.target} target runs the tests`, timeoutSec: timeout, tier: "task_runner", confidence: "derived" });
-    }
-  }
-  // From 2026-12-beta a Node component's commands run with the literal variables CI sets for the step
+  const ctx: ContractContext = {
+    profile,
+    rubric,
+    timeoutSec: timeout,
+    ci,
+    ciTestScript: (path, scripts) => ciTestScript(ci(), path, scripts, DELEGATES),
+    ciEnvFor: (path, script, source) => ciEnvFor(ci(), path, script, source),
+    scriptCalled,
+    checkOnly: checkOnlyCommand,
+    makeTestTarget,
+  };
+  for (const c of assessed) cmds.push(...(sharedOf(c)?.commands(tree, c, ctx) ?? []));
+  // From 2026-12-beta a component's commands run with the literal variables CI sets for the step
   // that runs its tests, such as a placeholder database URL its build and tests read.
   if (rubric.attribution) {
-    for (const c of assessed.filter((x) => !hooked(x) && nodeLang(x))) {
+    for (const c of assessed) {
+      const testEnv = sharedOf(c)?.testEnv;
+      if (!testEnv) continue;
       const test = cmds.find((k) => k.component === c.id && k.kind === "test");
       if (!test) continue;
-      const env = ciEnvFor(ci(), c.path, scriptCalled(test.command), test.source);
+      const env = testEnv(c, test, ctx);
       if (!Object.keys(env).length) continue;
       const names = Object.keys(env).sort().join(", ");
       for (const k of cmds.filter((x) => x.component === c.id || (c.path === "." && x.component === "*" && x.kind !== "doctor"))) {
@@ -295,37 +248,12 @@ export function discoverContract(profile: Profile, tree: string, rubric: Rubric,
       }
     }
   }
-  // A workspace whose tests run from the root (`"test": "vitest"`) has packages with no test script
-  // of their own. Each package that has test files gets the root run scoped to its folder, so it is
-  // credited with its own tests and one failing package doesn't fail the others.
-  const root = rootTestRunner(tree);
-  if (root) {
-    for (const c of assessed.filter((x) => nodeLang(x) && x.path !== "." && !cmds.some((k) => k.component === x.id && k.kind === "test"))) {
-      if (!hasTestFiles(join(tree, c.path))) continue;
-      cmds.push({ id: `cmd-${c.id}-test`, kind: "test", component: c.id, cwd: ".", command: scopedRun(pm, root.script, c.path), source: `package.json scripts.${root.script}`, reason: `the root ${root.runner} run, scoped to ${c.path}`, timeoutSec: timeout, tier: "manifest", confidence: "derived" });
-    }
+  // A component below the root with no test command may be tested by the root's run, scoped to it.
+  for (const c of assessed.filter((x) => x.path !== "." && !cmds.some((k) => k.component === x.id && k.kind === "test"))) {
+    const scoped = sharedOf(c)?.scopedTest?.(tree, c, ctx);
+    if (scoped) cmds.push(scoped);
   }
   return cmds;
-}
-
-// The root test script when it is a bare vitest or jest run that a path argument narrows.
-const ROOT_RUNNER = /^(?:npx\s+|(?:corepack\s+)?(?:pnpm|yarn)\s+(?:exec\s+)?)?(vitest|jest)((?:\s+(?:run|--?[\w-]+(?:=\S+)?))*)\s*$/;
-
-export function rootTestRunner(tree: string): { script: string; runner: string } | null {
-  const scripts = readPackageJson(tree)?.scripts ?? {};
-  const m = scripts.test?.trim().match(ROOT_RUNNER);
-  return m ? { script: "test", runner: m[1] } : null;
-}
-
-const TEST_FILE = /(^|\/)(__tests__\/.+|[^/]+\.(test|spec)\.[cm]?[jt]sx?)$/;
-
-function hasTestFiles(dir: string): boolean {
-  return exists(dir) && listFiles(dir).some((f) => !f.includes("node_modules/") && TEST_FILE.test(f));
-}
-
-function scopedRun(pm: string | null, script: string, path: string): string {
-  const arg = /^[\w./@-]+$/.test(path) ? path : shellQuote(path);
-  return pm === "npm" || !pm ? `npm run ${script} -- ${arg}` : `${runScript(pm, script)} ${arg}`;
 }
 
 // Replay runs only commands for "*" and assessed components, so anything else would be dropped silently.
@@ -348,11 +276,11 @@ function escapes(path: string): boolean {
 
 // Explicit targets and pattern rules such as `test-%`, but not `VAR := value`.
 export function makeTargets(text: string | null): string[] {
-  return text ? [...text.matchAll(/^([\w.%-]+)\s*:(?!=)/gm)].map((m) => m[1]) : [];
+  return text ? [...text.matchAll(/^([\w.%/-]+)\s*:(?!=)/gm)].map((m) => m[1]) : [];
 }
 
 const TEST_RUN = /\b(npm|pnpm|yarn|bun)\s+(run\s+)?test[\w:.-]*|\b(pytest|vitest|jest|mocha|tox|nox|phpunit|rspec)\b|\b(go|cargo|dotnet|mix)\s+test\b|\bnode\s+--test\b|\bpython3?\s+-m\s+(pytest|unittest)\b/;
-const MAKE_CALL = /(?:\$\(MAKE\)|\$\{MAKE\}|\bmake)\s+(?:-\S+\s+)*([\w.-]+)/g;
+const MAKE_CALL = /(?:\$\(MAKE\)|\$\{MAKE\}|\bmake)\s+(?:-\S+\s+)*([\w./-]+)/g;
 
 // The Make target that runs the tests, as `make test` does when its recipe, or a target it depends on
 // or calls with $(MAKE), runs a test runner. With the line of the target, for the contract's source.
@@ -362,7 +290,7 @@ export function makeTestTarget(text: string | null): { target: string; line: num
   const rules = new Map<string, { line: number; deps: string[]; recipe: string[] }>();
   let current: { line: number; deps: string[]; recipe: string[] } | null = null;
   lines.forEach((l, i) => {
-    const head = l.match(/^([\w.-]+(?:\s+[\w.-]+)*)\s*:(?!=)(.*)$/);
+    const head = l.match(/^([\w./-]+(?:\s+[\w./-]+)*)\s*:(?!=)(.*)$/);
     if (head) {
       current = { line: i + 1, deps: head[2].replace(/[|;].*$/, "").trim().split(/\s+/).filter(Boolean), recipe: head[2].includes(";") ? [head[2].split(";").slice(1).join(";")] : [] };
       for (const t of head[1].split(/\s+/)) if (!rules.has(t)) rules.set(t, current);
@@ -431,7 +359,7 @@ function checkSource(read: CommitReader, profile: Profile, input: { component: s
   if (CHAINED.test(command)) fail(`\`${command}\` chains commands; add each one the repo defines on its own, citing where with --source file:line.`);
   if (script && !BARE_SCRIPT.test(command)) fail(`\`${command}\` passes extra arguments to the ${script} script; add the script as the repo defines it.`);
   const comp = profile.components.find((c) => c.id === input.component);
-  const make = command.match(/^make\s+([\w.-]+)$/);
+  const make = command.match(/^make\s+([\w./-]+)$/);
   if (script && (comp?.scripts[script] || profile.components.some((c) => c.path === input.cwd && c.scripts[script]))) return;
   if (make && makeRuleFor(makeTargets(read(join(input.cwd, "Makefile"))), make[1])) return;
   fail(`\`${command}\` doesn't run a script or Make target the repo defines. Add only commands the repo defines, and cite where with --source file:line.`);
@@ -476,8 +404,8 @@ export function addContractCommand(cmds: ContractCommand[], rawInput: { kind: Co
 }
 
 // The package managers of the assessed components, each with the folder that pins its version.
-function assessedManagers(profile: Profile, only?: Set<string>): Map<string, string> {
-  const out = new Map<string, string>();
+function assessedManagers(profile: Profile, only?: Set<string>): Map<PackageManager, string> {
+  const out = new Map<PackageManager, string>();
   for (const c of profile.components.filter((x) => x.assessed && !hooked(x) && (!only || only.has(x.id)))) {
     const pm = c.packageManager ?? profile.packageManager;
     if (pm && !out.has(pm)) out.set(pm, c.packageManager && c.path !== "." ? c.path : ".");
@@ -485,38 +413,14 @@ function assessedManagers(profile: Profile, only?: Set<string>): Map<string, str
   return out;
 }
 
-// Tools a frozen install needs that the audit's base images don't ship: Bun in the Node image and
-// Poetry in the Python one, and whatever a language file's setup adds. Each goes in at the version
-// the repo pins, as the image's own user and with the network on, before the install runs. Without
-// it the install is blocked, not failed. `only` limits it to the components one image runs.
+// Tools a frozen install needs that the audit's base images don't ship, such as Bun in the Node image
+// and Poetry in the Python one: the shared-root languages' for the package managers their components
+// use, then each hooked component's own. Each goes in at the version the repo pins, as the image's
+// own user and with the network on, before the install runs. Without it the install is blocked, not
+// failed. `only` limits it to the components one image runs.
 export function toolSetup(profile: Profile, tree: string, only?: Set<string>): ToolSetup[] {
   const pms = assessedManagers(profile, only);
-  const out: ToolSetup[] = [];
-  const bunDir = pms.get("bun");
-  if (bunDir !== undefined) {
-    const pkg = readPackageJson(join(tree, bunDir));
-    const pin = pkg?.packageManager?.match(/^bun@(\d[\w.+-]*)/)?.[1] ?? pkg?.engines?.bun;
-    const spec = `bun@${pin ?? "1"}`;
-    out.push({ tool: "bun", spec, install: `npm install -g --silent --no-fund --no-audit ${shellQuote(spec)}` });
-  }
-  // Corepack runs the version packageManager names, or its own default. With no packageManager, an
-  // exact engines pin is the version the repo's engine check accepts, so corepack is set to it.
-  for (const pm of ["pnpm", "yarn"] as const) {
-    const dir = pms.get(pm);
-    if (dir === undefined) continue;
-    const pkg = readPackageJson(join(tree, dir));
-    const pin = pkg?.packageManager ? null : pkg?.engines?.[pm]?.trim().match(/^=?v?(\d+\.\d+\.\d+)$/)?.[1];
-    // Setup runs under its own home; the repo's commands read corepack's default from theirs.
-    const home = `COREPACK_HOME=${HOME_DIR}/.cache/node/corepack`;
-    if (pin) out.push({ tool: pm, spec: `${pm}@${pin}`, install: `${home} corepack prepare ${shellQuote(`${pm}@${pin}`)} --activate`, present: `test "$(${home} corepack ${pm} --version 2>/dev/null)" = ${pin}` });
-  }
-  const poetryDir = pms.get("poetry");
-  if (poetryDir !== undefined) {
-    const version = poetryVersion(join(tree, poetryDir));
-    const spec = version ? `poetry==${version}` : "poetry";
-    const venv = "/opt/readiness-poetry";
-    out.push({ tool: "poetry", spec, install: `python3 -m venv ${venv} && ${venv}/bin/pip install -q --disable-pip-version-check ${shellQuote(spec)} && ln -sf ${venv}/bin/poetry /usr/local/bin/poetry` });
-  }
+  const out: ToolSetup[] = SHARED.flatMap((l) => l.sharedRoot!.setup(tree, pms, HOME_DIR));
   for (const c of profile.components.filter((x) => x.assessed && (!only || only.has(x.id)))) {
     for (const t of hooked(c)?.setup?.(tree, c.path) ?? []) if (!out.some((o) => o.spec === t.spec)) out.push(t);
   }
@@ -538,75 +442,25 @@ export function commandTimeout(rubric: Rubric, c: Component): number {
   return Math.max(rubric.budgets.commandTimeoutSec, hooked(c)?.budget?.commandTimeoutSec ?? 0);
 }
 
-const DEFAULT_PYTHON = "3.12";
-
-// The lowest Python a project's requires-python, or Poetry's python dependency, allows.
-export function requiredPython(dir: string): string | null {
-  const text = pyproject(dir);
-  const poetry = text.match(/^\[tool\.poetry\.dependencies\][^\n]*\n([\s\S]*?)(?=^\[|(?![\s\S]))/m)?.[1] ?? "";
-  const spec = text.match(/^requires-python\s*=\s*["']([^"']+)["']/m)?.[1] ?? poetry.match(/^python\s*=\s*["']([^"']+)["']/m)?.[1];
-  const m = spec?.match(/(?:>=|\^|~=|==|~)\s*(\d+)\.(\d+)/);
-  return m ? `${m[1]}.${m[2]}` : null;
-}
-
-const newer = (a: string, b: string) => {
-  const [x, y] = [a, b].map((v) => v.split(".").map(Number));
-  return x[0] !== y[0] ? x[0] > y[0] : x[1] > y[1];
-};
-
-// The default Python, or a newer one when a project needs it, so the image satisfies requires-python.
-function pythonFor(dirs: string[]): string {
-  return dirs.map(requiredPython).filter((v): v is string => v !== null).reduce((best, v) => (newer(v, best) ? v : best), DEFAULT_PYTHON);
-}
-
-function pythonImage(tree: string, dir: string, pm: Profile["packageManager"]): string {
-  const file = [dir, "."].map((d) => join(tree, d, ".python-version")).find(exists);
-  const pv = file ? readText(file).trim().match(/^(\d+\.\d+)/)?.[1] : null;
-  const version = pv ?? pythonFor([join(tree, dir)]);
-  return pm === "uv" ? `ghcr.io/astral-sh/uv:python${version}-trixie-slim` : `python:${version}-slim`;
-}
-
-function nodeImage(tree: string, dirs: string[]): string {
-  let major: number | null = null;
-  for (const dir of dirs) {
-    for (const f of [".nvmrc", ".node-version"]) {
-      if (exists(join(tree, dir, f))) major = nodeMajor(readText(join(tree, dir, f)), true);
-      if (major) break;
-    }
-    if (!major && exists(join(tree, dir, "package.json"))) {
-      try {
-        const engines = (JSON.parse(readText(join(tree, dir, "package.json"))) as { engines?: { node?: string } }).engines?.node ?? "";
-        major = engines.trim() ? nodeMajor(engines, false) : null;
-      } catch {
-        major = null;
-      }
-    }
-    if (major) break;
-  }
-  // The full image, like a CI runner, has python3, make and g++ for native npm builds.
-  return `node:${major ?? DEFAULT_NODE}-bookworm`;
-}
-
-const PY_MANAGERS = new Set<Profile["packageManager"]>(["pip", "uv", "poetry"]);
-
-// The repo's image: the one the repo-wide commands, and the Node and Python components that share
-// the root's toolchain, run in.
+// The repo's image: the one the repo-wide commands, and the components of shared-root languages that
+// share the root's toolchain, run in. The fallback language decides when no other does.
 export function containerImage(profile: Profile, tree: string): string {
-  if (PY_MANAGERS.has(profile.packageManager)) return pythonImage(tree, ".", profile.packageManager);
-  const standalone = profile.components.filter((c) => c.packageManager && c.path !== "." && !hooked(c));
-  if (!profile.packageManager && standalone.length > 0 && standalone.every((c) => c.language === "py")) return `python:${pythonFor(standalone.map((c) => join(tree, c.path)))}-slim`;
-  return nodeImage(tree, [".", ...standalone.filter((c) => c.language !== "py").map((c) => c.path)]);
+  const standalone = profile.components.filter((c) => c.packageManager && c.path !== "." && sharedOf(c));
+  const order = [...SHARED.filter((l) => !l.sharedRoot!.fallback), ...SHARED.filter((l) => l.sharedRoot!.fallback)];
+  for (const l of order) {
+    const image = l.sharedRoot!.repoImage(tree, profile, standalone);
+    if (image) return image;
+  }
+  return fail("no language file decides the repo's image");
 }
 
-// A component's own image when it differs from the repo's: a hooked language's, a Python project
-// with its own manager next to Node ones, or a Node project with its own lockfile next to Python.
+// A component's own image when it differs from the repo's: a hooked language's, or one with its
+// own package manager that its shared-root language says can't run in the repo's image.
 function componentImage(tree: string, c: Component, repoImage: string): string | null {
   const hooks = hooked(c);
   if (hooks) return hooks.image(tree, c.path);
   if (c.path === "." || !c.packageManager) return null;
-  if (c.language === "py" && repoImage.startsWith("node:")) return pythonImage(tree, c.path, c.packageManager);
-  if (nodeLang(c) && !repoImage.startsWith("node:")) return nodeImage(tree, [c.path]);
-  return null;
+  return sharedOf(c)?.ownImage(tree, c, repoImage) ?? null;
 }
 
 export interface ImageGroup {
@@ -628,31 +482,4 @@ export function imagePlan(profile: Profile, tree: string, single?: string): Imag
     g.components.push(c.id);
   }
   return groups;
-}
-
-const LTS_NAMES: Record<string, number> = { argon: 4, boron: 6, carbon: 8, dubnium: 10, erbium: 12, fermium: 14, gallium: 16, hydrogen: 18, iron: 20, jod: 22, krypton: 24 };
-
-// The Node major to run, always one the audit has an image for. A version file names one line, and
-// keeps it when there is an image, else the nearest newer LTS: node:12-bookworm doesn't exist. An
-// engines range runs on the default LTS when it allows it, as a CI runner would, so ">=12.20.0"
-// gets Node 22 rather than a Node 12 that has no image and couldn't run current tooling.
-export function nodeMajor(spec: string, versionFile: boolean): number | null {
-  const s = spec.trim().toLowerCase();
-  if (!s) return null;
-  if (s === "node" || s === "latest" || s === "lts/*" || s === "*" || s === "x") return DEFAULT_NODE;
-  const lts = s.match(/^lts\/([a-z]+)/)?.[1];
-  const range = s.split("||").map((p) => p.trim()).filter(Boolean).pop() ?? s;
-  const lower = lts && LTS_NAMES[lts] ? LTS_NAMES[lts] : Number(range.match(/(\d+)/)?.[1] ?? NaN);
-  if (!Number.isFinite(lower)) return null;
-  // "<21" and "<21.0" stop at 20; "<=21" and "<21.4" allow 21.
-  const um = range.match(/<(=?)\s*v?(\d+)(?:\.(\d+))?/);
-  const upper = !um ? Infinity : um[1] === "=" || Number(um[3] ?? 0) > 0 ? Number(um[2]) : Number(um[2]) - 1;
-  const open = !versionFile && !lts && /^>/.test(range) && upper === Infinity;
-  const within = NODE_MAJORS.filter((m) => m >= lower && m <= upper);
-  const atOrAbove = NODE_MAJORS.filter((m) => m >= lower);
-  if (open) return lower <= DEFAULT_NODE ? DEFAULT_NODE : (atOrAbove[0] ?? NODE_MAJORS[NODE_MAJORS.length - 1]);
-  const bounded = !versionFile && upper !== Infinity && upper > lower;
-  if (bounded && within.length) return within.filter((m) => m <= DEFAULT_NODE).pop() ?? within[0];
-  if (NODE_MAJORS.includes(lower)) return lower;
-  return atOrAbove[0] ?? NODE_MAJORS[NODE_MAJORS.length - 1];
 }

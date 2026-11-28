@@ -243,8 +243,19 @@ export function aotProjects(tree: string, path: string): string[] {
   return portable(tree, path).filter((f) => /<PublishAot>\s*true\s*</i.test(readText(join(tree, path, f))));
 }
 
+// The Arcade SDK, which dotnet/* repos build with, makes a project named *.Tests, *.UnitTests or
+// *.IntegrationTests a test project and adds its test packages itself, so its .csproj names none.
+const ARCADE_TEST_NAME = /\.(Tests|UnitTests|IntegrationTests)\.(cs|fs|vb)proj$/;
+const ARCADE = /Microsoft\.DotNet\.Arcade\.Sdk/;
+
+function usesArcade(tree: string, path: string): boolean {
+  const dirs = path === "." ? ["."] : [path, "."];
+  return dirs.some((d) => ["global.json", "Directory.Build.props"].some((f) => exists(join(tree, d, f)) && ARCADE.test(readText(join(tree, d, f)))));
+}
+
 function testProjects(tree: string, path: string): string[] {
-  return portable(tree, path).filter((f) => TEST_PROJECT.test(readText(join(tree, path, f))));
+  const arcade = usesArcade(tree, path);
+  return portable(tree, path).filter((f) => TEST_PROJECT.test(readText(join(tree, path, f))) || (arcade && ARCADE_TEST_NAME.test(f)));
 }
 
 function dotnetCommands(tree: string, path: string): DraftCommand[] {
@@ -253,7 +264,32 @@ function dotnetCommands(tree: string, path: string): DraftCommand[] {
   const left = windows.length ? `; ${windows.map((p) => basename(p.file)).join(", ")} ${windows.length === 1 ? "needs" : "need"} Windows and ${windows.length === 1 ? "is" : "are"} listed apart` : "";
   const out: DraftCommand[] = [{ kind: "build", command: each("build", on, " --no-restore"), source: "readiness", reason: `the .NET SDK's build of the restored projects${left}` }];
   const tests = testProjects(tree, path).filter(inBuild(tree, path));
-  if (tests.length) out.push({ kind: "test", command: each("test", windows.length ? tests.map((t) => ` ${t}`) : on, " --no-restore"), source: "readiness", reason: `the .NET SDK's test run of ${tests.length === 1 ? tests[0] : `${tests.length} test projects`}, offline${left}` });
+  const modern = modernFrameworks(tree, path, tests);
+  if (modern) out.push({ kind: "test", command: tests.map((t) => `dotnet test ${t} --no-restore --framework ${modern.get(t)}`).join(" && "), source: "readiness", reason: `the .NET SDK's test run of ${tests.length === 1 ? tests[0] : `${tests.length} test projects`}, offline, each on its .NET target, since a test project also targets .NET Framework, whose tests run only on Windows${left}` });
+  else if (tests.length) out.push({ kind: "test", command: each("test", windows.length ? tests.map((t) => ` ${t}`) : on, " --no-restore"), source: "readiness", reason: `the .NET SDK's test run of ${tests.length === 1 ? tests[0] : `${tests.length} test projects`}, offline${left}` });
+  return out;
+}
+
+// `net472`, or a property such as `$(NetFrameworkMinimum)`: a target `dotnet test` can't run off Windows.
+const FRAMEWORK_TARGET = /^net(4\d*|[1-3]\d)$|^\$\([^)]*Framework[^)]*\)$/i;
+const MODERN_TARGET = /^net\d+\.\d+$|^\$\((?![^)]*(Framework|Standard))[^)]*\)$/i;
+
+// When a test project targets .NET Framework beside .NET, `dotnet test` aborts the .NET Framework run
+// on Linux, so each test project runs on one .NET target: the newest it names, or the value of the
+// MSBuild property it names, as the Arcade SDK's `$(NetMinimum)`, read when the command runs. Null
+// when no test project targets .NET Framework, or one names no .NET target.
+function modernFrameworks(tree: string, path: string, tests: string[]): Map<string, string> | null {
+  const targetsOf = (t: string) => [...readText(join(tree, path, t)).matchAll(/<TargetFrameworks?>([^<]+)</g)].flatMap((m) => m[1].split(";").map((s) => s.trim()).filter(Boolean));
+  if (!tests.some((t) => targetsOf(t).some((f) => FRAMEWORK_TARGET.test(f)))) return null;
+  const out = new Map<string, string>();
+  for (const t of tests) {
+    const modern = targetsOf(t).filter((f) => MODERN_TARGET.test(f));
+    const literal = modern.filter((f) => !f.startsWith("$")).sort((a, b) => Number(b.slice(3)) - Number(a.slice(3)))[0];
+    const property = modern.find((f) => f.startsWith("$"))?.slice(2, -1);
+    if (literal) out.set(t, literal);
+    else if (property) out.set(t, `"$(dotnet msbuild ${t} -getProperty:${property} -nologo)"`);
+    else return null;
+  }
   return out;
 }
 
@@ -302,6 +338,9 @@ export const dotnet: LanguageDef = {
       { match: PROJECT, stack: "dotnet", rank: 11 },
     ],
     sources: [{ ext: /\.(cs|fs)$/, stack: "dotnet", rank: 50 }],
+    // A solution at the root next to a root package.json, such as a Playwright harness beside it.
+    rootApp: { names: [], match: SOLUTION, stack: "dotnet", toolchain: ".NET", suffix: "dotnet", rank: 60 },
+    runners: /\bdotnet\s+test\b/,
     lockfiles: ["packages.lock.json"],
     // Several solutions in one folder name the project only when one matches the repo, so ShareX
     // isn't named after ShareX.ImageEditor.sln.
@@ -329,8 +368,31 @@ export const dotnet: LanguageDef = {
       });
     },
     notes: (tree, dir, stackId) => (stackId === "dotnet-windows" ? windowsNotes(tree, dir) : []),
+    // A folder with a solution of its own, such as a MAUI client's, is built from that solution, apart
+    // from the enclosing one, even when the enclosing solution lists its projects too.
+    ownUnit: (tree, _parent, dir) => readdirSync(join(tree, dir)).some((n) => SOLUTION.test(n)),
   },
   ecosystems: [nuget],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: /^dotnet$/,
+    countedTests: isTest,
+    ciTest: null,
+  },
+  mutation: {
+    isTest,
+    isSource,
+    covered: (tree, comp, tests, files) => {
+      const windows = windowsProjects(tree, comp.path).filter((p) => dirname(p.file) !== ".").map((p) => posix.join(comp.path, dirname(p.file)));
+      return namedAfter(tests, files.filter((f) => !windows.some((w) => f.startsWith(`${w}/`))), isSource);
+    },
+    sites: (line) => cLikeSites(line, true),
+    quoted: (text) => cLikeQuoted(text, true),
+    compileProbe: (comp) => ({ command: `dotnet build${comp.manifest ? ` ${basename(comp.manifest)}` : ""} --no-restore -v q -nologo`, cwd: comp.path }),
+    compileError: (output) => /\berror CS\d{4}\b/.test(output),
+  },
   replay: {
     classify: () => ({ language: "csharp", packageManager: "nuget" }),
     image: (tree, dir) => `mcr.microsoft.com/dotnet/sdk:${sdkFor(tree, dir)}.0`,
@@ -344,6 +406,7 @@ export const dotnet: LanguageDef = {
     // A global.json that pins a feature band the image doesn't ship, such as 10.0.100 under the
     // default `patch` policy next to the image's 10.0.404, gets that exact SDK added from Microsoft's
     // install script, as a CI's setup-dotnet would. Where that can't be fetched the install is blocked.
+    specFor: (tool) => (tool.startsWith(".NET SDK ") ? tool.replace(/^\.NET SDK /, "dotnet-sdk@") : null),
     setup: (tree, dir) => {
       const out: ToolSetup[] = [];
       const pin = sdkPin(tree, dir);
@@ -370,17 +433,5 @@ export const dotnet: LanguageDef = {
     },
     testCounts: dotnetTestCounts,
     budget: { commandTimeoutSec: 1200, componentMinutes: 45, mutationRunTimeoutSec: 900 },
-    mutation: {
-      isTest,
-      isSource,
-      covered: (tree, comp, tests, files) => {
-        const windows = windowsProjects(tree, comp.path).filter((p) => dirname(p.file) !== ".").map((p) => posix.join(comp.path, dirname(p.file)));
-        return namedAfter(tests, files.filter((f) => !windows.some((w) => f.startsWith(`${w}/`))), isSource);
-      },
-      sites: (line) => cLikeSites(line, true),
-      quoted: (text) => cLikeQuoted(text, true),
-      compileProbe: (comp) => ({ command: `dotnet build${comp.manifest ? ` ${basename(comp.manifest)}` : ""} --no-restore -v q -nologo`, cwd: comp.path }),
-      compileError: (output) => /\berror CS\d{4}\b/.test(output),
-    },
   },
 };

@@ -13,6 +13,7 @@ import type { Rubric } from "./rubric.ts";
 import { provingPlace } from "./rubric.ts";
 import type { CompStates } from "./score.ts";
 import { UNDETERMINED, blockedBy, checkCounts, gatingInstruction } from "./score.ts";
+import { RECORD_WORD, countVerdicts, verdictOf } from "./verdict.ts";
 import { sampledScope } from "./scope.ts";
 import type { ComponentResult } from "./seal.ts";
 import { NOT_SUPPORTED, STACKS, SUPPORTED_DOC } from "./support.ts";
@@ -390,12 +391,13 @@ function headlineFor(input: ModelInput, ready: string[], setByShare: number): st
     const cause = because(input, "clean.test", their) || failedTests(input);
     return fit(`Agents can't pass the tests in ${names} from a clean checkout${cause}${share}.${readyLine}`, `Agents can't pass the tests in ${names} from a clean checkout${share}.${readyLine}`);
   }
-  const resultOf = (id: string) => {
+  const verdictFor = (id: string) => {
     const evs = [...input.audit.evidence].reverse().filter((e) => e.contractId === id);
-    return (evs.find((e) => e.where === "container" || e.where === "fresh_copy" || e.where === "disposable_vm") ?? evs[0])?.result;
+    const ev = evs.find((e) => e.where === "container" || e.where === "fresh_copy" || e.where === "disposable_vm") ?? evs[0];
+    return ev ? verdictOf(ev, rubric) : "not_run";
   };
-  const failingKinds = [...new Set(input.audit.contract.filter((c) => (rollup.setBy.includes(c.component) || c.component === "*") && ["build", "lint", "typecheck", "test"].includes(c.kind) && resultOf(c.id) === "fail").map((c) => (c.kind === "typecheck" ? "type-check" : c.kind)))];
-  const canaryMissed = input.audit.evidence.some((e) => e.canary?.kind === "typecheck" && e.result === "fail" && rollup.setBy.includes(e.component ?? ""));
+  const failingKinds = [...new Set(input.audit.contract.filter((c) => (rollup.setBy.includes(c.component) || c.component === "*") && ["build", "lint", "typecheck", "test"].includes(c.kind) && verdictFor(c.id) === "repo_fault").map((c) => (c.kind === "typecheck" ? "type-check" : c.kind)))];
+  const canaryMissed = input.audit.evidence.some((e) => e.canary?.kind === "typecheck" && verdictOf(e, rubric) === "repo_fault" && rollup.setBy.includes(e.component ?? ""));
   const why: Partial<Record<CondId, string>> = {
     commands: failingKinds.length ? `${their} ${list(failingKinds)} ${failingKinds.length > 1 ? "commands fail" : "command fails"}` : canaryMissed ? `${their} type-check passes with a type error planted in the code` : `${their} checks don't all pass`,
     faults: `${their} tests can't yet catch wrong changes`,
@@ -468,7 +470,7 @@ function leadFirst(input: ModelInput, ids: string[]): string[] {
 }
 
 function because(input: ModelInput, cond: CondId, their: string): string {
-  const fails = input.audit.evidence.filter((e) => e.condition === cond && e.result === "fail" && e.diagnosis);
+  const fails = input.audit.evidence.filter((e) => e.condition === cond && e.diagnosis && verdictOf(e, input.rubric) === "repo_fault");
   const d = causeRow(input, fails)?.diagnosis;
   if (!d) return "";
   if (d.cause === "service") return ` because ${their} tests need ${serviceLabel(d, (p) => `a service on port ${p}`)} running, which the setup doesn't start`;
@@ -485,7 +487,7 @@ function quotable(input: ModelInput, text: string): boolean {
 
 // The failing tests an unexplained test failure names ("X and 5 more failed"), as a clause.
 function failedTests(input: ModelInput): string {
-  const fails = input.audit.evidence.filter((e) => e.condition === "clean.test" && e.result === "fail" && e.diagnosis?.cause === "unknown");
+  const fails = input.audit.evidence.filter((e) => e.condition === "clean.test" && e.diagnosis?.cause === "unknown" && verdictOf(e, input.rubric) === "repo_fault");
   const d = causeRow(input, fails)?.diagnosis;
   return d && / failed$/.test(d.detail) && !/\s/.test(d.detail.replace(/ and \d+ more failed$| failed$/, "")) && quotable(input, d.detail) ? `: ${d.detail}` : "";
 }
@@ -750,7 +752,7 @@ function checkResult(input: ModelInput, checkId: string): { result: string; ok: 
     return { result: parts.join("; "), ok: r.ok };
   }
   if (checkId === "context.instructions_verified") {
-    const k = checkCounts(audit, checkId);
+    const k = checkCounts(audit, input.rubric, checkId);
     const skipped = k.skipped ?? 0;
     const total = k.passed + k.failed + k.notRun + skipped;
     const gating = audit.instructions.filter((i) => gatingInstruction(input.rubric, i));
@@ -823,13 +825,13 @@ export function narrationChoices(raw: ModelInput): NarrationChoices {
   if (!none && !unproven(input) && !undetermined(input)) {
     if (input.rollup.level === 0) {
       const cond = level0Cause(input);
-      if (cond) for (const e of evidence) if (e.condition === cond && e.result === "fail" && e.diagnosis && setBy.includes(e.component ?? "")) row(e, e.component!, cond);
+      if (cond) for (const e of evidence) if (e.condition === cond && e.diagnosis && setBy.includes(e.component ?? "") && verdictOf(e, input.rubric) === "repo_fault") row(e, e.component!, cond);
     } else if (input.rollup.level === 1) {
       for (const id of setBy) {
         for (const c of input.rubric.level2) {
           const s = input.states.get(id)?.[c];
           if (s?.state !== "not_met") continue;
-          for (const e of evidence) if (s.evidence.includes(e.id) && e.result === "fail") row(e, id, c);
+          for (const e of evidence) if (s.evidence.includes(e.id) && verdictOf(e, input.rubric) === "repo_fault") row(e, id, c);
         }
       }
     }
@@ -993,7 +995,7 @@ export function buildReport(raw: ModelInput): ReportJson {
   const progress =
     prevAudits.length > 0
       ? {
-          history: allLines.map((h) => ({ date: h.date, kind: h.kind, result: h.result, note: h.note ?? null, levels: Object.fromEntries(Object.entries(h.levels ?? {}).map(([k, v]) => [k, h.noLevel || typeof v !== "number" ? null : v])), repoLevel: h.noLevel || typeof h.repoLevel !== "number" ? null : h.repoLevel, rubric: h.rubric })),
+          history: allLines.map((h) => ({ date: h.date, kind: h.kind, result: h.result, note: h.note ?? null, levels: Object.fromEntries([...Object.entries(h.levels ?? {}).map(([k, v]) => [k, h.noLevel || typeof v !== "number" ? null : v]), ...(h.undeterminedComponents ?? []).map((k) => [k, null])]), repoLevel: h.noLevel || typeof h.repoLevel !== "number" ? null : h.repoLevel, rubric: h.rubric })),
           closed: roadmap.items
             .filter((i) => i.status === "done" && i.closedAt && i.kind === "fix")
             .map((i) => ({
@@ -1086,10 +1088,10 @@ export function buildReport(raw: ModelInput): ReportJson {
         if (c.id === "verify.canonical_interface") {
           const ids = new Set([...input.states.values()].flatMap((s) => s.commands.evidence));
           const evs = audit.evidence.filter((e) => ids.has(e.id));
-          const counts = { passed: evs.filter((e) => e.result === "pass").length, failed: evs.filter((e) => e.result === "fail").length, notRun: evs.filter((e) => e.result === "not_run").length };
+          const counts = countVerdicts(evs, rubric);
           return { id: c.id, name: c.title, why: c.why, sources: c.sources, result: r.result, ok: r.ok, counts, evidence: evs.map((e) => e.id) };
         }
-        return { id: c.id, name: c.title, why: c.why, sources: c.sources, result: r.result, ok: r.ok, counts: checkCounts(audit, c.id), evidence: audit.evidence.filter((e) => e.checkId === c.id).map((e) => e.id) };
+        return { id: c.id, name: c.title, why: c.why, sources: c.sources, result: r.result, ok: r.ok, counts: checkCounts(audit, rubric, c.id), evidence: audit.evidence.filter((e) => e.checkId === c.id).map((e) => e.id) };
       }),
       notAssessed: rubric.notAssessed,
       levelRules: {
@@ -1126,7 +1128,7 @@ export function buildReport(raw: ModelInput): ReportJson {
           component: e.component && e.component !== "*" ? e.component : null,
           ran: e.command ?? e.summary,
           where: e.result === "not_run" ? "not run" : rubric.strengthLabels[e.strength],
-          result: blocked ? "blocked" : e.result,
+          result: RECORD_WORD[verdictOf(e, rubric)],
           summary: blocked && e.result === "fail" ? `${e.kind ?? "step"} blocked: ${blocked}` : blocked && !e.summary.includes(blocked) ? `${e.summary}; blocked: ${blocked}` : e.summary,
           durationMs: e.result === "not_run" ? null : (e.durationMs ?? null),
           repro: reproOf(raw.audit, e),

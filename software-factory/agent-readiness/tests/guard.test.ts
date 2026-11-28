@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { GUARD_LOG, GUARD_MARK, GUARD_SCRIPT, HOOKS_FILE, guardCommand, guardDecision, installGuard, repoCommands } from "../skill/agent-readiness/scripts/lib/guard.ts";
+import { BUILD_SUBS, BUILD_TOOLS, DENO_RUNS, NPM_RUNS, PM_HARMLESS, RUNNERS, SHELLS, WRAPPERS } from "../skill/agent-readiness/scripts/lib/runners.ts";
 import { SESSION_FILE, readSession, startSession } from "../skill/agent-readiness/scripts/lib/session.ts";
 import { protectedDigest } from "../support/evals/lib/protected.ts";
 import { forbiddenActions } from "../support/evals/lib/trajectory.ts";
@@ -59,6 +60,20 @@ describe("the readiness shell guard", () => {
       assert.deepEqual(repoCommands(cmd, ws.dir, ws.dir), [], `guard refuses: ${cmd}`);
       assert.deepEqual(commandEvidence(cmd, ctx), [], `grader blames: ${cmd}`);
     }
+  });
+
+  test("agrees with the grader, both ways, on every entry of the runner table they share", () => {
+    const cmds = [
+      ...[...RUNNERS].flatMap((r) => [r, `${r} --version`]),
+      ...[...BUILD_TOOLS].flatMap((t) => [t, `${t} fmt`, `${t} --version`, `${t} pip list`, ...[...BUILD_SUBS].map((s) => `${t} ${s}`)]),
+      ...[...NPM_RUNS, ...PM_HARMLESS, "view", "outdated", "dev"].flatMap((s) => ["npm", "pnpm", "yarn", "bun"].map((pm) => `${pm} ${s}`)),
+      "npm", "pnpm", "bun", "yarn",
+      ...[...DENO_RUNS, "fmt", "lint"].map((s) => `deno ${s}`),
+      ...[...WRAPPERS].flatMap((w) => [`${w} npm test`, `${w} git status`]),
+      ...[...SHELLS].flatMap((sh) => [`${sh} -c 'npm test'`, `${sh} -c 'ls -la'`]),
+    ];
+    const disagree = cmds.filter((cmd) => repoCommands(cmd, ws.dir, ws.dir).length > 0 !== commandEvidence(cmd, ctx).length > 0);
+    assert.deepEqual(disagree, [], "the guard refuses exactly what the grader blames");
   });
 
   test("outside a session it lets the repo's commands run; in one it refuses them until a yes is recorded, and while the draft is open; the seal lets go", () => {

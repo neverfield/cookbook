@@ -293,8 +293,10 @@ export interface FaultEstimate {
   low: number;
   high: number;
   verdict: "strong" | "weak" | "inconclusive";
-  // Faults an earlier sealed audit planted that this one planted again.
+  // Faults an earlier sealed audit planted that this one planted again, decided either way, and how
+  // many of them were caught. Neither counts in planted, decided, caught or the verdict.
   carried: number;
+  carriedCaught?: number;
 }
 
 export interface Mutant {
@@ -550,8 +552,10 @@ export interface HistoryLine {
   scriptsDigest: string;
   result: "sealed" | "passed" | "failed" | "blocked";
   note?: string;
-  // Each assessed component's standard level, and the repo rollup over the active ones.
+  // Each assessed component's standard level, and the repo rollup over the active ones. A component
+  // whose level is undetermined has no entry in levels and is listed in undeterminedComponents.
   levels: Record<string, Level>;
+  undeterminedComponents?: string[];
   repoLevel: Level;
   // Only the scenarios a user added, under the components they apply to.
   scenarioLevels: Record<string, Partial<Record<ScenarioId, Level>>>;
@@ -780,7 +784,7 @@ export interface ReportProgress {
 
 export interface ReportDetails {
   steps: { itemId: string; title: string; steps: { title: string; detail: string }[] }[];
-  checks: { id: string; name: string; why: string; sources: { claim: string; caveat: string; url: string }[]; result: string; ok: boolean | null; counts: { passed: number; failed: number; notRun: number; skipped?: number }; evidence: string[] }[];
+  checks: { id: string; name: string; why: string; sources: { claim: string; caveat: string; url: string }[]; result: string; ok: boolean | null; counts: { passed: number; failed: number; blocked?: number; undetermined?: number; notRun: number; skipped?: number }; evidence: string[] }[];
   notAssessed: string[];
   levelRules: { level1: string; level2: string; scenarios: { id: ScenarioId; label: string; bar: string }[] };
   outcomes: {
