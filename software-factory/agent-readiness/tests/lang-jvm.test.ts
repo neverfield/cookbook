@@ -356,7 +356,7 @@ describe("JVM: the contract", () => {
   });
 
   test("a compile error from javac, Maven or kotlinc means the fault doesn't compile", () => {
-    const err = hooks.mutation.compileError!;
+    const err = jvm.mutation!.compileError!;
     assert.ok(err("[ERROR] COMPILATION ERROR : \n[ERROR] /work/src/main/java/A.java:[14,12] cannot find symbol"));
     assert.ok(err("e: file:///work/src/main/kotlin/Points.kt:20:16 Unresolved reference 'bronze'."));
     assert.ok(err("A.java:3: error: ';' expected"));
@@ -370,8 +370,8 @@ describe("JVM and C#: fault sites and quoting", () => {
     const comp = buildProfile(dir, dir, rubric).components[0];
     assert.deepEqual(testFiles(dir, comp), ["src/test/java/com/example/orders/PricingTest.java"]);
     assert.deepEqual(targetFiles(dir, comp), ["src/main/java/com/example/orders/Pricing.java"]);
-    assert.ok(hooks.mutation.isTest("src/jvmTest/kotlin/x/A.kt") && hooks.mutation.isTest("lib/src/main/java/x/OrderIT.java"));
-    assert.ok(!hooks.mutation.isSource("build/generated/source/A.java") && !hooks.mutation.isSource("src/main/java/x/package-info.java"));
+    assert.ok(jvm.mutation!.isTest("src/jvmTest/kotlin/x/A.kt") && jvm.mutation!.isTest("lib/src/main/java/x/OrderIT.java"));
+    assert.ok(!jvm.mutation!.isSource("build/generated/source/A.java") && !jvm.mutation!.isSource("src/main/java/x/package-info.java"));
   });
 
   test("every fault is still valid code: no `void 0`, and Kotlin's dropped throw becomes Unit", () => {

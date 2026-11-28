@@ -1,3 +1,4 @@
+import { foreignLockfileOf } from "./languages/index.ts";
 import { componentLevel } from "./levels.ts";
 import { describeRate, rate, windowLabel } from "./outcomes.ts";
 import type { Rubric, RubricTemplate } from "./rubric.ts";
@@ -35,7 +36,6 @@ interface Candidate {
 }
 
 const EFFORT_ORDER: Record<Effort, number> = { small: 0, medium: 1, large: 2 };
-const LOCK_FOR: Record<string, string> = { npm: "package-lock.json", yarn: "yarn.lock", pnpm: "pnpm-lock.yaml" };
 
 function stateMaps(ctx: RoadmapContext): Map<string, StateMap> {
   const out = new Map<string, StateMap>();
@@ -213,7 +213,8 @@ function expectedFor(c: Candidate, ctx: RoadmapContext): RoadmapItem["expected"]
   if (c.template === "instructions") {
     const wrongPm = audit.instructions.find((i) => i.result === "fail" && /^uses (npm|pnpm|yarn),/.test(i.reason ?? ""));
     const pm = wrongPm?.reason?.match(/^uses (\w+)/)?.[1];
-    if (pm && LOCK_FOR[pm]) return { outcome: `Agents stop following stale steps, such as running ${pm} in a repo that doesn't use it.`, watch: watchFor("prs_adding_path", "repo", outcomes, rubric, LOCK_FOR[pm]) };
+    const lock = pm ? foreignLockfileOf(pm) : undefined;
+    if (lock) return { outcome: `Agents stop following stale steps, such as running ${pm} in a repo that doesn't use it.`, watch: watchFor("prs_adding_path", "repo", outcomes, rubric, lock) };
     return { outcome: "Agents stop following stale steps.", watch: watchFor("changes_requested", "repo", outcomes, rubric) };
   }
   if (c.template.startsWith("safety")) return { outcome: "Agents can do normal work without production access.", watch: watchFor("first_time_ci_pass", "repo", outcomes, rubric) };

@@ -1,5 +1,5 @@
 import { basename, dirname, join } from "node:path";
-import { LANGUAGES, languageOf as languageFile, languageOfStack, lockfileNames, manifestRules, rootAppRules, sourceRules } from "./languages/index.ts";
+import { LANGUAGES, ecosystemOf, languageOf as languageFile, languageOfStack, lockfileNames, manifestRules, rootAppRules, sourceRules } from "./languages/index.ts";
 import type { LanguageDef } from "./languages/language.ts";
 import { NODE_LOCKFILES, readPackageJson, yarnBerry, yarnPath, yarnPinned } from "./languages/node.ts";
 import { PY_LOCKFILES, UV_WORKSPACE, pyproject, uvWorkspaceMembers } from "./languages/python.ts";
@@ -96,9 +96,8 @@ function sanitizeId(name: string): string {
   return name.replace(/^@[^/]+\//, "").replace(/[^A-Za-z0-9._-]/g, "-") || "root";
 }
 
-// Lockfiles of the toolchains no language file covers yet, so a component still reports the one it has.
-const OTHER_LOCKFILES = ["Podfile.lock"];
-const LOCKFILES = [...new Set([...NODE_LOCKFILES, ...PY_LOCKFILES, ...lockfileNames(), ...OTHER_LOCKFILES])];
+// Every language file's lockfile names, so a component reports the one it has.
+const LOCKFILES = lockfileNames();
 // Pods/ and Carthage/ hold an Xcode app's vendored dependencies, often committed, and DerivedData/ its build output.
 const VENDORED = /^(Pods|Carthage|DerivedData)$/;
 // An Xcode project or workspace is a folder of its own files; the scan sees it as one name, and
@@ -713,9 +712,9 @@ export function instructionFiles(files: string[]): string[] {
     .map((x) => x.f);
 }
 
-// Lockfiles of package managers supported after a rubric's list was written. A frozen install has
-// to reproduce them too; the rubric's list still decides which commits count toward shares.
-const LATER_LOCKFILES = ["bun.lock", "bun.lockb"];
+// Bun's lockfiles, supported after the rubrics' lists were written. A frozen install has to reproduce
+// them too; the rubric's list still decides which commits count toward shares.
+const LATER_LOCKFILES = ecosystemOf("bun")!.lockfiles;
 
 export function buildProfile(repo: string, tree: string, rubric: Rubric, commit = "HEAD", maxFiles = MAX_FILES): Profile {
   const { files, cut } = listFilesScoped(tree, { includeHidden: true, maxFiles, outputDirs: true });

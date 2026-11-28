@@ -8,6 +8,7 @@ import { levelResult } from "./lib/format.ts";
 import { ghAvailable, ghJson } from "./lib/gh.ts";
 import { HOOKS_FILE, guardInstalled, installGuard, probeGuard, uninstallGuard } from "./lib/guard.ts";
 import { auditIds, loadSealedAudit, pushHistory, readHistory, readRoadmap, writeRoadmap } from "./lib/history.ts";
+import { foreignLockfiles } from "./lib/languages/index.ts";
 import { MAX_PRS, computeOutcomes, fetchPrs, loadPrsFile } from "./lib/outcomes.ts";
 import { PREVIEW } from "./lib/preview.ts";
 import { buildProfile } from "./lib/profile.ts";
@@ -339,7 +340,7 @@ function cmdRecord(a: Args): void {
 }
 
 function lockPatterns(audit: Audit): string[] {
-  return ["package-lock.json", "yarn.lock", "pnpm-lock.yaml"].filter((f) => !audit.profile?.lockfiles.includes(f));
+  return foreignLockfiles().filter((f) => !audit.profile?.lockfiles.includes(f));
 }
 
 async function cmdOutcomes(a: Args): Promise<void> {

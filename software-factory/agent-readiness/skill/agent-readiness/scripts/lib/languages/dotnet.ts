@@ -373,6 +373,26 @@ export const dotnet: LanguageDef = {
     ownUnit: (tree, _parent, dir) => readdirSync(join(tree, dir)).some((n) => SOLUTION.test(n)),
   },
   ecosystems: [nuget],
+  checks: {
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
+    manifestScripts: null,
+    tool: /^dotnet$/,
+    countedTests: isTest,
+    ciTest: null,
+  },
+  mutation: {
+    isTest,
+    isSource,
+    covered: (tree, comp, tests, files) => {
+      const windows = windowsProjects(tree, comp.path).filter((p) => dirname(p.file) !== ".").map((p) => posix.join(comp.path, dirname(p.file)));
+      return namedAfter(tests, files.filter((f) => !windows.some((w) => f.startsWith(`${w}/`))), isSource);
+    },
+    sites: (line) => cLikeSites(line, true),
+    quoted: (text) => cLikeQuoted(text, true),
+    compileProbe: (comp) => ({ command: `dotnet build${comp.manifest ? ` ${basename(comp.manifest)}` : ""} --no-restore -v q -nologo`, cwd: comp.path }),
+    compileError: (output) => /\berror CS\d{4}\b/.test(output),
+  },
   replay: {
     classify: () => ({ language: "csharp", packageManager: "nuget" }),
     image: (tree, dir) => `mcr.microsoft.com/dotnet/sdk:${sdkFor(tree, dir)}.0`,
@@ -386,6 +406,7 @@ export const dotnet: LanguageDef = {
     // A global.json that pins a feature band the image doesn't ship, such as 10.0.100 under the
     // default `patch` policy next to the image's 10.0.404, gets that exact SDK added from Microsoft's
     // install script, as a CI's setup-dotnet would. Where that can't be fetched the install is blocked.
+    specFor: (tool) => (tool.startsWith(".NET SDK ") ? tool.replace(/^\.NET SDK /, "dotnet-sdk@") : null),
     setup: (tree, dir) => {
       const out: ToolSetup[] = [];
       const pin = sdkPin(tree, dir);
@@ -412,17 +433,5 @@ export const dotnet: LanguageDef = {
     },
     testCounts: dotnetTestCounts,
     budget: { commandTimeoutSec: 1200, componentMinutes: 45, mutationRunTimeoutSec: 900 },
-    mutation: {
-      isTest,
-      isSource,
-      covered: (tree, comp, tests, files) => {
-        const windows = windowsProjects(tree, comp.path).filter((p) => dirname(p.file) !== ".").map((p) => posix.join(comp.path, dirname(p.file)));
-        return namedAfter(tests, files.filter((f) => !windows.some((w) => f.startsWith(`${w}/`))), isSource);
-      },
-      sites: (line) => cLikeSites(line, true),
-      quoted: (text) => cLikeQuoted(text, true),
-      compileProbe: (comp) => ({ command: `dotnet build${comp.manifest ? ` ${basename(comp.manifest)}` : ""} --no-restore -v q -nologo`, cwd: comp.path }),
-      compileError: (output) => /\berror CS\d{4}\b/.test(output),
-    },
   },
 };

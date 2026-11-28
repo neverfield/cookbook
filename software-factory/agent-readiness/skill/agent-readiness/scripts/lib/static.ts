@@ -1,7 +1,9 @@
 import { realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, normalize } from "node:path";
 import { checkOnly, makeRuleFor, makeTargets as targetsIn } from "./contract.ts";
+import { LANGUAGES, secretScanSkips } from "./languages/index.ts";
 import { pyproject, readPackageJson } from "./profile.ts";
+import { SUDO, insideString } from "./patterns.ts";
 import { secretFindings } from "./secrets.ts";
 import type { InstructionItem, Profile, SafetyFinding, ScanBound, SecretClass } from "./types.ts";
 import { MAX_FILES, existsExact, inTreePath, listFiles, ownSkillPath, readText, sha256 } from "./util.ts";
@@ -703,12 +705,10 @@ function checkCommand(cmd: string, ctx: CheckCtx, start: string): Check {
 
 const MACHINE_PATH = /(^|\s|=)(~\/|\$HOME\b|\/Users\/|\/home\/[a-z])/;
 
-export const ELEVATED = /(^|[\s;&|(`]|\$\()sudo(\s|$)/;
-
 // `tree` and `dir` let a Make target whose recipe only launches a server count as long-running too.
 function categorize(cmd: string, tree?: string, dir?: string): InstructionItem["category"] {
   if (isRisky(cmd)) return "risky";
-  if (ELEVATED.test(cmd)) return "needs_access";
+  if (SUDO.test(cmd)) return "needs_access";
   if (INSTALL.test(cmd)) return "install";
   if (LONG_RUNNING.test(cmd)) return "long_running";
   const target = tree !== undefined ? cmd.trim().match(/^make\s+([\w./-]+)\s*$/)?.[1] : undefined;
@@ -1013,8 +1013,8 @@ export function instructionItems(tree: string, profile: Profile): InstructionIte
         rule = "install-static";
       } else if (category === "risky" || category === "long_running" || category === "needs_access") {
         result = "not_run";
-        reason = category === "risky" ? "not replayed: it deploys, publishes, deletes or pipes the network into a shell" : category === "long_running" ? "not replayed: it starts a long-running process" : ELEVATED.test(e.text) ? "not replayed: it uses sudo" : "not replayed: it refers to a path on the author's machine";
-        rule = category === "risky" ? "risky" : category === "long_running" ? "long-running" : ELEVATED.test(e.text) ? "sudo" : "machine-path";
+        reason = category === "risky" ? "not replayed: it deploys, publishes, deletes or pipes the network into a shell" : category === "long_running" ? "not replayed: it starts a long-running process" : SUDO.test(e.text) ? "not replayed: it uses sudo" : "not replayed: it refers to a path on the author's machine";
+        rule = category === "risky" ? "risky" : category === "long_running" ? "long-running" : SUDO.test(e.text) ? "sudo" : "machine-path";
       } else {
         result = "not_run";
         reason = "waiting for replay";
@@ -1074,18 +1074,7 @@ export const SAFETY_RULES: Record<string, string> = {
   waived: INSTRUCTION_RULES.waived,
 };
 
-// An environment read written inside a string, such as test data for the scanner itself, reads nothing.
-function insideString(line: string, index: number): boolean {
-  let quote: string | null = null;
-  for (let i = 0; i < index; i++) {
-    const ch = line[i];
-    if (quote) {
-      if (ch === "\\") i++;
-      else if (ch === quote) quote = null;
-    } else if (ch === '"' || ch === "'" || ch === "`") quote = ch;
-  }
-  return quote !== null;
-}
+const SECRET_SCAN_SKIPS = new Set(secretScanSkips());
 
 // Past the scan's time bound, the secret scan stops and records how many files it read; the
 // manifest and script checks after it are cheap and always run.
@@ -1104,7 +1093,7 @@ export function safetyScan(tree: string, profile: Profile, bound?: ScanBound, bl
     if (bound && Date.now() > bound.until) break;
     if (bound) bound.scope.secrets.scanned++;
     if (ownSkillPath(file)) continue;
-    if (/(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|uv\.lock|poetry\.lock|bun\.lock)$/.test(file)) continue;
+    if (SECRET_SCAN_SKIPS.has(basename(file))) continue;
     const full = join(tree, file);
     if (!isText(full)) continue;
     const text = readText(full);
@@ -1121,21 +1110,22 @@ export function safetyScan(tree: string, profile: Profile, bound?: ScanBound, bl
   }
   const env = profile.environmentJson;
   for (const [field, cmd] of [["install", env?.install], ["start", env?.start]] as const) {
-    if (cmd && ELEVATED.test(cmd)) add({ kind: "elevated", file: env!.path, detail: `${field} runs sudo (\`${cmd}\`); the audit runs it only inside a container, never on the host`, blocking: false, rule: "elevated" });
+    if (cmd && SUDO.test(cmd)) add({ kind: "elevated", file: env!.path, detail: `${field} runs sudo (\`${cmd}\`); the audit runs it only inside a container, never on the host`, blocking: false, rule: "elevated" });
   }
-  for (const manifest of profile.manifests.filter((m) => m.endsWith("package.json"))) {
-    const pkg = readPackageJson(join(tree, dirname(manifest)));
-    for (const [name, cmd] of Object.entries(pkg?.scripts ?? {})) {
-      const hook = /^(pre|post)?install$|^prepare$|^prepublish$/.test(name);
-      if (ELEVATED.test(cmd)) add({ kind: "elevated", file: manifest, detail: `scripts.${name} runs sudo; the audit runs it only inside a container, never on the host`, blocking: false, rule: "elevated" });
-      if (NETWORK_PIPED.test(cmd)) add({ kind: "network_piped", file: manifest, detail: `scripts.${name} pipes a download into a shell`, blocking: hook, rule: "network-piped" });
-      else if (hook) add({ kind: "lifecycle_hook", file: manifest, detail: `scripts.${name} runs on every install`, blocking: false, rule: "lifecycle-hook" });
-      if (DESTRUCTIVE.test(cmd)) add({ kind: "destructive", file: manifest, detail: `scripts.${name} deletes data`, blocking: false, rule: "destructive" });
-      if (DEPLOY.test(cmd) || /^(deploy|publish|release)/.test(name)) add({ kind: "deploy_publish", file: manifest, detail: `scripts.${name} deploys or publishes`, blocking: false, rule: "deploy-publish" });
+  for (const rule of LANGUAGES.flatMap((l) => (l.checks.manifestScripts ? [l.checks.manifestScripts] : []))) {
+    for (const manifest of profile.manifests.filter((m) => rule.manifest(m))) {
+      for (const [name, cmd] of Object.entries(rule.read(tree, manifest) ?? {})) {
+        const hook = rule.installHook.test(name);
+        if (SUDO.test(cmd)) add({ kind: "elevated", file: manifest, detail: `scripts.${name} runs sudo; the audit runs it only inside a container, never on the host`, blocking: false, rule: "elevated" });
+        if (NETWORK_PIPED.test(cmd)) add({ kind: "network_piped", file: manifest, detail: `scripts.${name} pipes a download into a shell`, blocking: hook, rule: "network-piped" });
+        else if (hook) add({ kind: "lifecycle_hook", file: manifest, detail: `scripts.${name} runs on every install`, blocking: false, rule: "lifecycle-hook" });
+        if (DESTRUCTIVE.test(cmd)) add({ kind: "destructive", file: manifest, detail: `scripts.${name} deletes data`, blocking: false, rule: "destructive" });
+        if (DEPLOY.test(cmd) || /^(deploy|publish|release)/.test(name)) add({ kind: "deploy_publish", file: manifest, detail: `scripts.${name} deploys or publishes`, blocking: false, rule: "deploy-publish" });
+      }
     }
   }
   for (const file of files.filter((f) => /(^|\/)Makefile$/.test(f) || /^(scripts|\.cursor)\/[^/]+\.sh$/.test(f))) {
-    if (readText(join(tree, file)).split("\n").some((l) => !l.trim().startsWith("#") && ELEVATED.test(l))) add({ kind: "elevated", file, detail: "runs sudo; the audit runs it only inside a container, never on the host", blocking: false, rule: "elevated" });
+    if (readText(join(tree, file)).split("\n").some((l) => !l.trim().startsWith("#") && SUDO.test(l))) add({ kind: "elevated", file, detail: "runs sudo; the audit runs it only inside a container, never on the host", blocking: false, rule: "elevated" });
   }
   for (const file of files.filter((f) => /(^|\/)Makefile$/.test(f) || /^scripts\/.+\.sh$/.test(f))) {
     const text = readText(join(tree, file));
