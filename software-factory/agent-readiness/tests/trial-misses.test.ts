@@ -125,6 +125,14 @@ describe("discovery (airflow, eShop, langfuse)", () => {
     assert.equal(testsOf(plain).size, 0, "without Arcade, the name alone doesn't make a test project");
   });
 
+  test("a test project that also targets .NET Framework runs on its .NET target, which Linux can run (command-line-api)", () => {
+    const tfm = (t: string) => `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFrameworks>${t}</TargetFrameworks></PropertyGroup><ItemGroup><PackageReference Include="xunit" Version="2.9.0" /></ItemGroup></Project>\n`;
+    const files = { "Lib.sln": "", "src/Lib/Lib.csproj": `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>netstandard2.0</TargetFramework></PropertyGroup></Project>\n`, "src/Lib/A.cs": "", "tests/A.Tests/A.Tests.csproj": tfm("net8.0;net472"), "tests/A.Tests/ATests.cs": "", "tests/B.Tests/B.Tests.csproj": tfm("$(NetMinimum);$(NetFrameworkMinimum)"), "tests/B.Tests/BTests.cs": "" };
+    assert.equal([...testsOf(files).values()][0], `dotnet test tests/A.Tests/A.Tests.csproj --no-restore --framework net8.0 && dotnet test tests/B.Tests/B.Tests.csproj --no-restore --framework "$(dotnet msbuild tests/B.Tests/B.Tests.csproj -getProperty:NetMinimum -nologo)"`);
+    const modernOnly = { ...files, "tests/A.Tests/A.Tests.csproj": tfm("net8.0"), "tests/B.Tests/B.Tests.csproj": tfm("net8.0;net9.0") };
+    assert.equal([...testsOf(modernOnly).values()][0], "dotnet test --no-restore");
+  });
+
   const wrapper = {
     "package.json": pkg("mono", { test: "turbo run test" }, { devDependencies: { turbo: "2" } }),
     "pnpm-workspace.yaml": "packages:\n  - web\n  - gateway\n",
