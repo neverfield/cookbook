@@ -9,7 +9,7 @@
     "dirtyTree": false,
     "rubric": "2026-12-beta",
     "tier": "local-exec",
-    "scriptsDigest": "bbe976acc22fc4df910184b0c6849bc2df0ed9db9a7df86b89cd4f5243bea4bd",
+    "scriptsDigest": "5c068f8d692fdc1a0d9f7dbd40ce9c907e08b08e8612b39a8c8beb845968cdf1",
     "seedPinned": true,
     "sealStatus": "Scripts match the agent-readiness-v0.2.0 manifest bundled with this copy; the published release isn't checked here, and the seal is an unkeyed digest, which shows edits but not who sealed it",
     "staleCopy": null,
@@ -595,7 +595,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "doctor passed",
-        "durationMs": 84,
+        "durationMs": 81,
         "repro": "bash -lc 'node --version && npm --version'",
         "supersededBy": null
       },
@@ -607,7 +607,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "install passed",
-        "durationMs": 283,
+        "durationMs": 304,
         "repro": "bash -lc 'npm ci'",
         "supersededBy": null
       },
@@ -619,7 +619,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "lint passed",
-        "durationMs": 113,
+        "durationMs": 106,
         "repro": "bash -lc 'npm ci && npm run lint'",
         "supersededBy": null
       },
@@ -631,7 +631,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "build passed",
-        "durationMs": 116,
+        "durationMs": 107,
         "repro": "bash -lc 'npm ci && npm run build'",
         "supersededBy": null
       },
@@ -643,7 +643,7 @@
         "where": "ran in a clean container",
         "result": "pass",
         "summary": "test passed (5 of 5 tests)",
-        "durationMs": 187,
+        "durationMs": 170,
         "repro": "bash -lc 'npm ci && npm run build && npm run test'",
         "supersededBy": null
       },
@@ -663,10 +663,10 @@
         "id": "ev-009",
         "check": "verify.behavioral_oracle",
         "component": "healthy-node",
-        "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip)",
+        "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip); a comment added to src/pricing.js left the tests passing",
         "where": "ran in a clean container",
         "result": "pass",
-        "summary": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip)",
+        "summary": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip); a comment added to src/pricing.js left the tests passing",
         "durationMs": null,
         "repro": null,
         "supersededBy": null
@@ -699,7 +699,7 @@
       },
       {
         "label": "Skill digest",
-        "value": "bbe976acc22f"
+        "value": "5c068f8d692f"
       },
       {
         "label": "Planted faults",
@@ -784,9 +784,9 @@
       "kind": "condition",
       "subject": "healthy-node: tests catch planted faults",
       "result": "met",
-      "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip)",
+      "ran": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip); a comment added to src/pricing.js left the tests passing",
       "where": "in a fresh copy on a disposable VM, with no container",
-      "happened": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip)",
+      "happened": "caught 5 of 5 planted faults (100%): strong, at least 57% with 97.5% confidence (tried: change_constant, shift_by_one, boundary_flip); a comment added to src/pricing.js left the tests passing",
       "rule": "Level 2 needs it: tests catch planted faults (Tests catch planted faults). Met means it ran at the strength the check requires and passed."
     },
     {
