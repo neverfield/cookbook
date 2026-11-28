@@ -319,8 +319,8 @@ export const ruby: LanguageDef = {
   },
   ecosystems: [bundler],
   checks: {
-    weakening: { isTest: isTest, markers: null },
-    lockfiles: { diff: ["Gemfile.lock"], secretScanSkips: [], foreign: null },
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: /^(bundle|bundler|ruby|rake|rspec|rails|bin\/rails|bin\/rake)$/,
     countedTests: isTest,

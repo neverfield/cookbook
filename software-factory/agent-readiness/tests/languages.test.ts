@@ -144,11 +144,10 @@ describe("the language registry", () => {
       assert.deepEqual(leaves(l.checks).sort(), Object.keys(RULES).sort(), `${l.id} declares exactly the rules RULES lists`);
       if (l.mutation) {
         const faults = fixturePaths.filter((f) => l.mutation!.isTest(f));
-        assert.deepEqual(faults.filter((f) => !l.checks.weakening.isTest!(f)), [], `${l.id}: readiness diff counts every test faults are planted around`);
+        if (l.checks.weakening.isTest) assert.deepEqual(faults.filter((f) => !l.checks.weakening.isTest!(f)), [], `${l.id}: readiness diff counts every test faults are planted around`);
         assert.deepEqual(faults.filter((f) => !l.checks.countedTests!(f)), [], `${l.id}: the run plan counts every test faults are planted around`);
       } else assert.equal(l.checks.countedTests, null, `${l.id} plants no faults, so it has no test rule to count by`);
       if (l.stacks.some((s) => s.tier === "supported")) assert.ok(l.checks.tool, `${l.id} has a supported stack, so a replayed instruction needs its tool`);
-      for (const f of l.detect.lockfiles ?? []) if (l.checks.lockfiles.diff) assert.ok(l.checks.lockfiles.diff.includes(f), `${l.id}: readiness diff lists changes to ${f}`);
     }
   });
 

@@ -38,7 +38,7 @@ A language is one file in `../skill/agent-readiness/scripts/lib/languages/`, lis
 2. `detect`: the manifests and sources that make a folder a project, with ranks, and the lockfile names.
 3. `ecosystems`: one per package manager, with its lockfiles, its frozen `install`, `unpinned`, and a `rule` sentence that matches its row in `references/levels.md`.
 4. `checks`: every rule. Use `null` where the language has none, so the report says "not checked for <label>" instead of an all-clear:
-   - `weakening.isTest` (the fault hooks' `isTest` when there are hooks) and `weakening.markers` (skip markers and test cases) for `readiness diff`
+   - `weakening.isTest` (which files are tests) and `weakening.markers` (skip markers and test cases) for `readiness diff`
    - `lockfiles.diff` (changes `readiness diff` lists), `lockfiles.secretScanSkips` (`[]` when none), and `lockfiles.foreign` (the lockfile a PR adds when it switches package managers)
    - `manifestScripts` (install hooks, sudo, network pipes and deploys in the manifest's scripts)
    - `tool` (the first program of a command line that belongs to this language)

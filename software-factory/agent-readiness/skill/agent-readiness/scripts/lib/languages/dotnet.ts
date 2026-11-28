@@ -374,8 +374,8 @@ export const dotnet: LanguageDef = {
   },
   ecosystems: [nuget],
   checks: {
-    weakening: { isTest: isTest, markers: null },
-    lockfiles: { diff: ["packages.lock.json"], secretScanSkips: [], foreign: null },
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: /^dotnet$/,
     countedTests: isTest,

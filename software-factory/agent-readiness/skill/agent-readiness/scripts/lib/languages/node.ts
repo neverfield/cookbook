@@ -378,7 +378,7 @@ export const node: LanguageDef = {
       markers: { skip: /\b(it|test|describe)\.(skip|only|todo)\(|\bx(it|describe|test)\(/, testCase: /\b(it|test)\(\s*['"`]/ },
     },
     lockfiles: {
-      diff: NODE_LOCKFILES,
+      diff: ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"],
       secretScanSkips: ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"],
       foreign: { npm: "package-lock.json", yarn: "yarn.lock", pnpm: "pnpm-lock.yaml" },
     },

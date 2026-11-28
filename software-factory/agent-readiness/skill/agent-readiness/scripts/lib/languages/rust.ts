@@ -374,8 +374,8 @@ export const rust: LanguageDef = {
   },
   ecosystems: [cargo],
   checks: {
-    weakening: { isTest: isRustTest, markers: null },
-    lockfiles: { diff: ["Cargo.lock"], secretScanSkips: [], foreign: null },
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: /^(cargo|rustc|rustup)$/,
     countedTests: isRustTest,

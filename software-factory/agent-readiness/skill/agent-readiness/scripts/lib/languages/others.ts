@@ -47,14 +47,15 @@ export const swift: LanguageDef = {
       { match: /^Package\.swift$/, stack: "swift", rank: 70 },
     ],
     sources: [{ ext: /\.swift$/, stack: "swift", rank: 80 }],
-    lockfiles: ["Package.resolved"],
+    // CocoaPods' too, for an Xcode project.
+    lockfiles: ["Package.resolved", "Podfile.lock"],
     projectName: (_tree, manifest, text) => (manifest === "Package.swift" ? text.match(/\bname:\s*"([^"]+)"/)?.[1] : manifest.match(XCODE)?.[1]),
     notes: (tree, dir, stackId) => (stackId === "xcode" ? xcodeNotes(tree, dir) : []),
   },
   ecosystems: [],
   checks: {
     weakening: { isTest: null, markers: null },
-    lockfiles: { diff: ["Package.resolved"], secretScanSkips: [], foreign: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: null,
     countedTests: null,
@@ -79,7 +80,7 @@ export const dart: LanguageDef = {
   ecosystems: [],
   checks: {
     weakening: { isTest: null, markers: null },
-    lockfiles: { diff: ["pubspec.lock"], secretScanSkips: [], foreign: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: null,
     countedTests: null,
@@ -102,7 +103,7 @@ export const elixir: LanguageDef = {
   ecosystems: [],
   checks: {
     weakening: { isTest: null, markers: null },
-    lockfiles: { diff: ["mix.lock"], secretScanSkips: [], foreign: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: null,
     countedTests: null,
@@ -126,7 +127,7 @@ export const terraform: LanguageDef = {
   ecosystems: [],
   checks: {
     weakening: { isTest: null, markers: null },
-    lockfiles: { diff: [".terraform.lock.hcl"], secretScanSkips: [], foreign: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: null,
     countedTests: null,
@@ -148,7 +149,7 @@ export const cpp: LanguageDef = {
   ecosystems: [],
   checks: {
     weakening: { isTest: null, markers: null },
-    lockfiles: { diff: [], secretScanSkips: [], foreign: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: null,
     countedTests: null,

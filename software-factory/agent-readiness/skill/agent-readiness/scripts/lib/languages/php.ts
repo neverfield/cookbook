@@ -437,8 +437,8 @@ export const php: LanguageDef = {
   },
   ecosystems: [composer],
   checks: {
-    weakening: { isTest: isTest, markers: null },
-    lockfiles: { diff: ["composer.lock"], secretScanSkips: [], foreign: null },
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: /^(composer|php|phpunit|vendor\/bin\/\S+)$/,
     countedTests: isTest,

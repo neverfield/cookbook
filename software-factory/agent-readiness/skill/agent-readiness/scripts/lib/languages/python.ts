@@ -224,7 +224,7 @@ export const python: LanguageDef = {
     },
     lockfiles: {
       // pip pins in requirements.txt, which is its lockfile.
-      diff: [...PY_LOCKFILES, "requirements.txt"],
+      diff: ["uv.lock", "poetry.lock", "Pipfile.lock", "requirements.txt"],
       secretScanSkips: ["uv.lock", "poetry.lock"],
       foreign: null,
     },

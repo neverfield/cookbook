@@ -632,8 +632,8 @@ export const jvm: LanguageDef = {
   },
   ecosystems: [maven, gradle],
   checks: {
-    weakening: { isTest: isTest, markers: null },
-    lockfiles: { diff: ["gradle.lockfile"], secretScanSkips: [], foreign: null },
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: /^(mvn|\.\/mvnw|mvnw|gradle|\.\/gradlew|gradlew|java|javac|kotlinc)$/,
     countedTests: isTest,

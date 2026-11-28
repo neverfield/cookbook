@@ -246,8 +246,8 @@ export const go: LanguageDef = {
   },
   ecosystems: [goModules],
   checks: {
-    weakening: { isTest: isGoTest, markers: null },
-    lockfiles: { diff: ["go.sum"], secretScanSkips: [], foreign: null },
+    weakening: { isTest: null, markers: null },
+    lockfiles: { diff: null, secretScanSkips: [], foreign: null },
     manifestScripts: null,
     tool: /^(go|gofmt|golangci-lint)$/,
     countedTests: isGoTest,

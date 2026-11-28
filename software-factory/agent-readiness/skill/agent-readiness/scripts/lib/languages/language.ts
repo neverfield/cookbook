@@ -235,7 +235,7 @@ export interface ManifestScripts {
 // than an all-clear (notCheckedFor in index.ts).
 export interface LanguageChecks {
   // `readiness diff`: which paths are test files, and which added lines are skip markers or test
-  // cases. A language with fault hooks uses their `isTest`.
+  // cases.
   weakening: {
     isTest: ((path: string) => boolean) | null;
     markers: { skip: RegExp; testCase: RegExp } | null;
