@@ -2042,7 +2042,7 @@
       "minutes": 0.4,
       "review": "trial-representativeness-review.md",
       "now": "2026-10-16T12:00:00Z",
-      "notes": "Small Poetry library, the commit supported.md cites as Poetry's proof; its tests need nothing beyond the install, so this re-verifies that claim. Recorded from a run with no other audit beside it, as on CI's runners. With another audit running beside it on the same host (SA_TRIALS_HOST_SLOTS=2) four planted faults (mut-cleo-6 to 9) survived and it read Level 1: a contention-dependent outcome, a defect, fix pending; keep SA_TRIALS_HOST_SLOTS at 1 for cleo's shard.",
+      "notes": "Small Poetry library, the commit supported.md cites as Poetry's proof; its tests need nothing beyond the install, so this re-verifies that claim. With #93 (a planted fault can't outlive its run) it reads Level 1 in every run: the same four planted faults (mut-cleo-6 to 9, in command.py:281, stream_output.py:55 and argv_input.py:256 and :55) survive, the audit plants 20 and catches 10. Before #93 a fault's write could leak into later runs, which caught them and read Level 2 in some runs.",
       "egress": [
         "pypi.org",
         "files.pythonhosted.org"
@@ -2054,20 +2054,20 @@
           "exit": 0,
           "sealed": true,
           "runtime": "docker",
-          "level": 2,
+          "level": 1,
           "outcome": "proven",
           "unproven": false,
           "couldBe": null,
           "components": {
             "cleo": {
-              "level": 2,
+              "level": 1,
               "unproven": false
             }
           },
           "notAssessed": [],
           "instructionFailures": [],
           "blockingSafety": [],
-          "headline": "Nothing blocks agents in cleo: from a clean checkout it installs and passes its tests, and its tests caught the planted bugs. Start giving agents work there."
+          "headline": "Agents can build and test cleo, but its tests can't yet catch wrong changes."
         }
       }
     },

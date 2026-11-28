@@ -267,10 +267,13 @@ async function auditTrial(t: Trial, variant?: Variant): Promise<TrialRun> {
   mkdirSync(tmp, { recursive: true });
   const runtimeOf = variant ? "none" : t.runtime;
   const env: Record<string, string> = { SA_READINESS_EVAL_SEED: spec.seed, SA_READINESS_NOW: t.now ?? spec.now, SA_READINESS_RUNTIME: runtimeOf, TMPDIR: tmp };
-  if (runtimeOf === "none") env.PATH = noRuntimePath();
-  // "none" is the same on every machine: no runtime and, so no machine reads as a disposable VM,
-  // detection off. "host" keeps the machine's own detection.
-  if (variant === "none") env.SA_READINESS_VM_DETECT = "off";
+  // A trial without a container runtime records host mode, wherever the trials run: the machine
+  // (a GitHub runner, a cloud VM) never proves Level 1 as a disposable one.
+  if (t.runtime === "none") Object.assign(env, { PATH: noRuntimePath(), SA_READINESS_VM_DETECT: "off" });
+  // The "none" variant is the same. "host" keeps the machine's own detection and is recorded by the
+  // environment the audit reports.
+  if (variant) Object.assign(env, { PATH: noRuntimePath(), SA_READINESS_VM_DETECT: "off" });
+  if (variant === "host") delete env.SA_READINESS_VM_DETECT;
   // Copied into the repo and run from there, as the quickstart has a customer do, so the repo's
   // own package.json (such as "type": "commonjs") applies to the scripts.
   const skill = join(repo, ".cursor", "skills", "agent-readiness");
