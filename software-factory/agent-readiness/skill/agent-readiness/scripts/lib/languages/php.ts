@@ -403,6 +403,7 @@ export const php: LanguageDef = {
     manifestScripts: null,
     tool: /^(composer|php|phpunit|vendor\/bin\/\S+)$/,
     countedTests: isTest,
+    ciTest: null,
   },
   mutation: {
     isTest,

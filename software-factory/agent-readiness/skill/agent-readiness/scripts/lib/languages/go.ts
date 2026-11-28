@@ -251,6 +251,7 @@ export const go: LanguageDef = {
     manifestScripts: null,
     tool: /^(go|gofmt|golangci-lint)$/,
     countedTests: isGoTest,
+    ciTest: null,
   },
   mutation: {
     isTest: isGoTest,

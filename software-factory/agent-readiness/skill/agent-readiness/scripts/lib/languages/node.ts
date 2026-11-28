@@ -266,6 +266,8 @@ export function nodeMajor(spec: string, versionFile: boolean): number | null {
   return atOrAbove[0] ?? NODE_MAJORS[NODE_MAJORS.length - 1];
 }
 
+const ciTest = (c: Component, ctx: ContractContext) => ctx.ciTestScript(c.path, c.scripts);
+
 // A component's build, lint, type-check and test scripts. From 2026-12-beta the test script CI runs
 // in the component's folder outranks the manifest's test script, when it is a different one. With
 // no test script, a Make target that runs the tests, such as `make test` calling a test:unit script:
@@ -276,7 +278,7 @@ function nodeCommands(tree: string, c: Component, ctx: ContractContext): Contrac
   const timeout = ctx.timeoutSec;
   for (const kind of ["build", "lint", "typecheck", "test"] as const) {
     const script = SCRIPT_ALIASES[kind].find((s) => c.scripts[s] && !(kind === "test" && PLACEHOLDER_TEST.test(c.scripts[s])));
-    const fromCi = kind === "test" && ctx.rubric.attribution ? ctx.ciTestScript(c.path, c.scripts) : null;
+    const fromCi = kind === "test" && ctx.rubric.attribution ? ciTest(c, ctx) : null;
     if (fromCi && fromCi.script !== script) {
       const via = fromCi.called === fromCi.script ? "" : `, through its ${fromCi.called} script`;
       out.push(ctx.checkOnly({ id: `cmd-${c.id}-test`, kind, component: c.id, cwd: c.path, command: runScript(c.packageManager ?? pm, fromCi.script), source: fromCi.source, reason: `the test script CI runs${via}`, timeoutSec: timeout, tier: "ci", confidence: fromCi.called === fromCi.script ? "declared" : "derived" }, c.scripts, c.packageManager ?? pm));
@@ -363,6 +365,7 @@ export const node: LanguageDef = {
     tool: /^(npm|npx|pnpm|pnpx|yarn|node|bun|bunx|corepack|tsc|vitest|jest)$/,
     // Unlike the fault hooks' rule, .jsx tests count, and nothing under node_modules does.
     countedTests: (f) => JS_COUNTED.test(f) && isTestFile(f) && !f.includes("node_modules/"),
+    ciTest,
   },
   mutation: {
     isTest: isJsTest,

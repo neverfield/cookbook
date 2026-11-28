@@ -218,6 +218,7 @@ export const python: LanguageDef = {
     manifestScripts: null,
     tool: /^(python3?|pip3?|pytest|uv|uvx|poetry|tox|nox)$/,
     countedTests: isPyTest,
+    ciTest: null,
   },
   mutation: {
     isTest: isPyTest,

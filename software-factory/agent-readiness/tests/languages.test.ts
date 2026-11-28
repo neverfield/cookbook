@@ -122,6 +122,7 @@ describe("the language registry", () => {
     manifestScripts: (v) => v instanceof Object && typeof (v as ManifestScripts).manifest === "function" && typeof (v as ManifestScripts).read === "function" && (v as ManifestScripts).installHook instanceof RegExp,
     tool: (v) => v instanceof RegExp,
     countedTests: (v) => typeof v === "function",
+    ciTest: (v) => typeof v === "function",
   };
   const at = (checks: unknown, path: string) => path.split(".").reduce<unknown>((o, k) => (o instanceof Object ? (o as Record<string, unknown>)[k] : undefined), checks);
   const leaves = (o: object, prefix = ""): string[] => Object.entries(o).flatMap(([k, v]) => (v instanceof Object && !(v instanceof RegExp) && !Array.isArray(v) && typeof v !== "function" && ["weakening", "lockfiles"].includes(k) ? leaves(v, `${k}.`) : [`${prefix}${k}`]));

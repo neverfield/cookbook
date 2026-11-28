@@ -58,6 +58,7 @@ export const swift: LanguageDef = {
     manifestScripts: null,
     tool: null,
     countedTests: null,
+    ciTest: null,
   },
   mutation: null,
 };
@@ -82,6 +83,7 @@ export const dart: LanguageDef = {
     manifestScripts: null,
     tool: null,
     countedTests: null,
+    ciTest: null,
   },
   mutation: null,
 };
@@ -104,6 +106,7 @@ export const elixir: LanguageDef = {
     manifestScripts: null,
     tool: null,
     countedTests: null,
+    ciTest: null,
   },
   mutation: null,
 };
@@ -127,6 +130,7 @@ export const terraform: LanguageDef = {
     manifestScripts: null,
     tool: null,
     countedTests: null,
+    ciTest: null,
   },
   mutation: null,
 };
@@ -148,6 +152,7 @@ export const cpp: LanguageDef = {
     manifestScripts: null,
     tool: null,
     countedTests: null,
+    ciTest: null,
   },
   mutation: null,
 };

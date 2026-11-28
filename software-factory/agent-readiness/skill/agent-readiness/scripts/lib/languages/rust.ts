@@ -379,6 +379,7 @@ export const rust: LanguageDef = {
     manifestScripts: null,
     tool: /^(cargo|rustc|rustup)$/,
     countedTests: isRustTest,
+    ciTest: null,
   },
   mutation: {
     isTest: isRustTest,

@@ -324,6 +324,7 @@ export const ruby: LanguageDef = {
     manifestScripts: null,
     tool: /^(bundle|bundler|ruby|rake|rspec|rails|bin\/rails|bin\/rake)$/,
     countedTests: isTest,
+    ciTest: null,
   },
   mutation: {
     isTest,

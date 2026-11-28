@@ -43,6 +43,7 @@ A language is one file in `../skill/agent-readiness/scripts/lib/languages/`, lis
    - `manifestScripts` (install hooks, sudo, network pipes and deploys in the manifest's scripts)
    - `tool` (the first program of a command line that belongs to this language)
    - `countedTests` (the files that show the run plan a component has tests; the fault hooks' `isTest` when there are hooks)
+   - `ciTest` (the test command the repo's CI runs for a component, which outranks the manifest's)
 5. `mutation`, or `null` when faults aren't planted: which files are tests and sources, which sources the tests cover, the fault sites on a line, the lines that are text rather than code, and how to tell a planted fault compiles. Without `sites` and `quoted`, the C-like rules in `fault-sites.ts` apply.
 6. `replay`, required before any stack is `supported`: `classify`, `image` and `images` (each digest also goes in `scripts/lib/images.ts`), `doctor`, `pins` and `commands`. A new language gets `replay`: each component installs in its own folder and runs in its own image. `sharedRoot` is the other model, where components share the repo root's install and image unless they commit a lockfile of their own. Only Node and Python use it.
 7. Proof: a fixture under `fixtures/` with an `expected.json`, a `tests/lang-<id>.test.ts`, a pinned public repo in the stack's `proof`, and the stack's row in `references/supported.md`.

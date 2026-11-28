@@ -600,6 +600,7 @@ export const jvm: LanguageDef = {
     manifestScripts: null,
     tool: /^(mvn|\.\/mvnw|mvnw|gradle|\.\/gradlew|gradlew|java|javac|kotlinc)$/,
     countedTests: isTest,
+    ciTest: null,
   },
   mutation: {
     isTest,

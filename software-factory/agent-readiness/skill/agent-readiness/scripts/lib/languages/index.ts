@@ -49,7 +49,7 @@ export function lockfileNames(): string[] {
 }
 
 // The checks a language file may say it has no rule for, by their place in LanguageChecks.
-export type CheckName = "weakening.isTest" | "weakening.markers" | "lockfiles.diff" | "lockfiles.foreign" | "manifestScripts" | "tool" | "countedTests";
+export type CheckName = "weakening.isTest" | "weakening.markers" | "lockfiles.diff" | "lockfiles.foreign" | "manifestScripts" | "tool" | "countedTests" | "ciTest";
 
 const RULE: Record<CheckName, (c: LanguageChecks) => unknown> = {
   "weakening.isTest": (c) => c.weakening.isTest,
@@ -59,6 +59,7 @@ const RULE: Record<CheckName, (c: LanguageChecks) => unknown> = {
   manifestScripts: (c) => c.manifestScripts,
   tool: (c) => c.tool,
   countedTests: (c) => c.countedTests,
+  ciTest: (c) => c.ciTest,
 };
 
 export function hasRule(l: LanguageDef, check: CheckName): boolean {

@@ -379,6 +379,7 @@ export const dotnet: LanguageDef = {
     manifestScripts: null,
     tool: /^dotnet$/,
     countedTests: isTest,
+    ciTest: null,
   },
   mutation: {
     isTest,

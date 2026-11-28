@@ -254,6 +254,9 @@ export interface LanguageChecks {
   // The files that show the run plan a component has tests at all (plan/test-files.ts). A language
   // with fault hooks uses their `isTest`.
   countedTests: ((path: string) => boolean) | null;
+  // From 2026-12-beta: the test command the repo's CI runs for a component, read from its GitHub
+  // Actions run steps, which outranks the one the manifest names.
+  ciTest: ((comp: Component, ctx: ContractContext) => { script: string; called: string; source: string } | null) | null;
 }
 
 export interface LanguageDef {
